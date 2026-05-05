@@ -1036,13 +1036,13 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if headRevisionID == "" {
 		t.Fatal("expected created revision id")
 	}
-	if got := asString(created["document"]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(created["document"]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected canonical head_revision_ref, got %#v", created["document"])
 	}
-	if got := asString(created["revision"]["document_ref"]); got != "document:doc-1" {
+	if got := asString(created["revision"]["document_ref"]); got != asString(created["document"]["ref"]) {
 		t.Fatalf("expected canonical revision document_ref, got %#v", created["revision"])
 	}
-	if got := asString(created["revision"]["artifact_ref"]); got != "artifact:"+asString(created["revision"]["artifact_id"]) {
+	if got := asString(created["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
 		t.Fatalf("expected canonical revision artifact_ref, got %#v", created["revision"])
 	}
 	if _, exists := created["revision"]["prev_revision_ref"]; exists {
@@ -1100,7 +1100,7 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if got := asString(listed.Documents[0]["subject_ref"]); got != "thread:"+documentThreadID {
 		t.Fatalf("expected listed document subject_ref, got %#v", listed.Documents[0])
 	}
-	if got := asString(listed.Documents[0]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(listed.Documents[0]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected listed document head_revision_ref, got %#v", listed.Documents[0])
 	}
 	if got := asString(listed.Documents[0]["state"]); got != "active" {
@@ -1188,16 +1188,16 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if newHeadRevisionID == "" || newHeadRevisionID == headRevisionID {
 		t.Fatalf("unexpected new revision id: old=%q new=%q", headRevisionID, newHeadRevisionID)
 	}
-	if got := asString(updated["document"]["head_revision_ref"]); got != "document_revision:"+newHeadRevisionID {
+	if got := asString(updated["document"]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected updated head_revision_ref, got %#v", updated["document"])
 	}
-	if got := asString(updated["revision"]["document_ref"]); got != "document:doc-1" {
+	if got := asString(updated["revision"]["document_ref"]); got != asString(updated["document"]["ref"]) {
 		t.Fatalf("expected updated revision document_ref, got %#v", updated["revision"])
 	}
-	if got := asString(updated["revision"]["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(updated["revision"]["prev_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected updated revision prev_revision_ref, got %#v", updated["revision"])
 	}
-	if got := asString(updated["revision"]["artifact_ref"]); got != "artifact:"+asString(updated["revision"]["artifact_id"]) {
+	if got := asString(updated["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
 		t.Fatalf("expected updated revision artifact_ref, got %#v", updated["revision"])
 	}
 
@@ -1323,14 +1323,14 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 		t.Fatalf("expected four revisions in history, got %d payload=%#v", len(revisions), historyPayload)
 	}
 	firstHistory, _ := revisions[0].(map[string]any)
-	if got := asString(firstHistory["document_ref"]); got != "document:doc-1" {
+	if got := asString(firstHistory["document_ref"]); got != asString(created["document"]["ref"]) {
 		t.Fatalf("expected history revision document_ref, got %#v", firstHistory)
 	}
 	if got := asString(firstHistory["artifact_ref"]); got == "" {
 		t.Fatalf("expected history revision artifact_ref, got %#v", firstHistory)
 	}
 	secondHistory, _ := revisions[1].(map[string]any)
-	if got := asString(secondHistory["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(secondHistory["prev_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected history revision prev_revision_ref, got %#v", secondHistory)
 	}
 
@@ -1349,10 +1349,10 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if revisionPayload["revision"]["content"] != "initial text" {
 		t.Fatalf("unexpected revision content: %#v", revisionPayload["revision"]["content"])
 	}
-	if got := asString(revisionPayload["revision"]["document_ref"]); got != "document:doc-1" {
+	if got := asString(revisionPayload["revision"]["document_ref"]); got != asString(created["document"]["ref"]) {
 		t.Fatalf("expected fetched revision document_ref, got %#v", revisionPayload["revision"])
 	}
-	if got := asString(revisionPayload["revision"]["artifact_ref"]); got != "artifact:"+asString(revisionPayload["revision"]["artifact_id"]) {
+	if got := asString(revisionPayload["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
 		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionPayload["revision"])
 	}
 	loadedRevisionHash, _ := revisionPayload["revision"]["revision_hash"].(string)

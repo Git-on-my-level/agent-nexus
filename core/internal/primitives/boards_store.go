@@ -2730,7 +2730,11 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	baseRevisionID := strings.TrimSpace(cardRow.HeadRevisionID.String)
 	if input.IfBaseRevision != nil {
 		expected := strings.TrimSpace(*input.IfBaseRevision)
-		expected = strings.TrimPrefix(expected, "card_revision:")
+		if resolved, err := resolveRevisionResourceRef(ctx, tx, "card_revision", strings.TrimPrefix(expected, "card_revision:")); err == nil {
+			expected = resolved.ID
+		} else {
+			expected = strings.TrimPrefix(expected, "card_revision:")
+		}
 		if expected != "" && baseRevisionID != "" && expected != baseRevisionID {
 			_ = tx.Rollback()
 			return BoardCardMutationResult{}, nil, ErrConflict
@@ -4292,10 +4296,15 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		headRevisionNumber = r.Version
 	}
 	headRevisionID := strings.TrimSpace(r.HeadRevisionID.String)
+	cardHandle := firstNonEmpty(strings.TrimSpace(r.Handle.String), r.CardID)
+	headRevisionRef := boardTypedRefOrNil("card_revision", headRevisionID)
+	if headRevisionID != "" && headRevisionNumber > 0 {
+		headRevisionRef = "card_revision:" + revisionHandle(cardHandle, headRevisionNumber)
+	}
 	m := map[string]any{
 		"id":                   r.CardID,
-		"ref":                  "card:" + firstNonEmpty(strings.TrimSpace(r.Handle.String), r.CardID),
-		"handle":               firstNonEmpty(strings.TrimSpace(r.Handle.String), r.CardID),
+		"ref":                  "card:" + cardHandle,
+		"handle":               cardHandle,
 		"board_id":             r.BoardID,
 		"board_ref":            "board:" + strings.TrimSpace(r.BoardID),
 		"thread_id":            nullableBoardString(threadID),
@@ -4303,7 +4312,7 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"rank":                 r.Rank,
 		"title":                r.Title,
 		"summary":              r.Body,
-		"head_revision_ref":    boardTypedRefOrNil("card_revision", headRevisionID),
+		"head_revision_ref":    headRevisionRef,
 		"head_revision_number": headRevisionNumber,
 		"document_ref":         boardTypedRefOrNil("document", r.PinnedDocumentID.String),
 		"risk":                 canonicalBoardCardRisk(r.Risk),

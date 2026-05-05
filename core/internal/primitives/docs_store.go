@@ -704,6 +704,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
 	})
+	publicizeDocumentRevisionMap(ctx, tx, revisionMap)
+	revisionMap["document_ref"] = docMap["ref"]
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
 	return docMap, revisionMap, nil
 }
@@ -811,6 +813,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	doc, err := s.loadDocumentRow(ctx, documentID)
 	if err != nil {
 		return nil, nil, err
+	}
+	if resolved, err := resolveRevisionResourceRef(ctx, s.db, "document_revision", strings.TrimPrefix(ifBaseRevision, "document_revision:")); err == nil {
+		ifBaseRevision = resolved.ID
 	}
 	if doc.HeadRevisionID != ifBaseRevision {
 		return nil, nil, ErrConflict
@@ -1192,6 +1197,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		"revision_hash":    revisionHash,
 		"artifact":         artifactMetadata,
 	})
+	publicizeDocumentRevisionMap(ctx, tx, revisionMap)
+	revisionMap["document_ref"] = docMap["ref"]
 	setDocumentContentValue(revisionMap, encodedContent, contentType)
 	if revisionProvenance != nil {
 		revisionMap["provenance"] = cloneProvenance(revisionProvenance)
@@ -1756,16 +1763,19 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 		revisionHashVal  string
 		createdAt        string
 		createdBy        string
+		documentHandle   string
 		artifactMetaJSON string
 		contentType      string
 		contentHash      string
+		artifactHandle   sql.NullString
 	)
 
 	err := s.db.QueryRowContext(
 		ctx,
 		`SELECT dr.document_id, dr.revision_id, dr.revision_number, dr.prev_revision_id, dr.artifact_id, dr.thread_id, dr.refs_json, dr.revision_hash, dr.created_at, dr.created_by,
-		        a.metadata_json, a.content_type, a.content_hash
+		        COALESCE(d.handle, d.id, dr.document_id), a.metadata_json, a.content_type, a.content_hash, a.handle
 		 FROM document_revisions dr
+		 LEFT JOIN documents d ON d.id = dr.document_id
 		 JOIN artifacts a ON a.id = dr.artifact_id
 		 WHERE dr.document_id = ? AND dr.revision_id = ?`,
 		documentID,
@@ -1781,9 +1791,11 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 		&revisionHashVal,
 		&createdAt,
 		&createdBy,
+		&documentHandle,
 		&artifactMetaJSON,
 		&contentType,
 		&contentHash,
+		&artifactHandle,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1801,14 +1813,19 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 		return nil, fmt.Errorf("decode document revision artifact: %w", err)
 	}
 
+	publicRevisionHandle := revisionHandle(documentHandle, revisionNumber)
+	publicArtifactHandle := firstNonEmpty(strings.TrimSpace(artifactHandle.String), artifactID)
+	publicizeArtifactMetadata(ctx, s.db, artifact, artifactID, publicArtifactHandle)
 	revision := map[string]any{
+		"ref":             "document_revision:" + publicRevisionHandle,
+		"handle":          publicRevisionHandle,
 		"document_id":     outDocumentID,
-		"document_ref":    "document:" + outDocumentID,
+		"document_ref":    "document:" + documentHandle,
 		"revision_id":     outRevisionID,
 		"artifact_id":     artifactID,
-		"artifact_ref":    "artifact:" + artifactID,
+		"artifact_ref":    "artifact:" + publicArtifactHandle,
 		"revision_number": revisionNumber,
-		"refs":            refs,
+		"refs":            publicTypedRefs(ctx, s.db, refs),
 		"created_at":      createdAt,
 		"created_by":      createdBy,
 		"content_type":    contentType,
@@ -1820,10 +1837,11 @@ func (s *Store) loadDocumentRevision(ctx context.Context, documentID string, rev
 	}
 	if prevRevisionID.Valid && strings.TrimSpace(prevRevisionID.String) != "" {
 		revision["prev_revision_id"] = prevRevisionID.String
-		revision["prev_revision_ref"] = "document_revision:" + strings.TrimSpace(prevRevisionID.String)
+		revision["prev_revision_ref"] = makePublicTypedRef(ctx, s.db, "document_revision", strings.TrimSpace(prevRevisionID.String))
 	}
 	if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
 		revision["thread_id"] = threadID.String
+		revision["thread_ref"] = makePublicTypedRef(ctx, s.db, "thread", threadID.String)
 	}
 	if summary := strings.TrimSpace(anyStringValue(artifact["summary"])); summary != "" {
 		revision["summary"] = summary
@@ -1866,7 +1884,7 @@ func (r documentRow) toMap() (map[string]any, error) {
 		"state":                state,
 		"supersedes":           supersedes,
 		"head_revision_id":     r.HeadRevisionID,
-		"head_revision_ref":    "document_revision:" + r.HeadRevisionID,
+		"head_revision_ref":    "document_revision:" + revisionHandle(firstNonEmpty(strings.TrimSpace(r.Handle.String), r.ID), r.HeadRevisionNum),
 		"head_revision_number": r.HeadRevisionNum,
 		"created_at":           r.CreatedAt,
 		"created_by":           r.CreatedBy,
@@ -1969,6 +1987,37 @@ func applyDocumentRevisionAliases(revision map[string]any) map[string]any {
 		}
 	}
 	return revision
+}
+
+func publicizeDocumentRevisionMap(ctx context.Context, q queryRower, revision map[string]any) {
+	if revision == nil {
+		return
+	}
+	revisionID := strings.TrimSpace(anyStringValue(revision["revision_id"]))
+	if revisionID != "" {
+		if resolved, err := resolveRevisionResourceRef(ctx, q, "document_revision", revisionID); err == nil {
+			revision["handle"] = resolved.Handle
+			revision["ref"] = resolved.CanonicalRef
+		}
+	}
+	if documentID := strings.TrimSpace(anyStringValue(revision["document_id"])); documentID != "" {
+		revision["document_ref"] = makePublicTypedRef(ctx, q, "document", documentID)
+	}
+	if artifactID := strings.TrimSpace(anyStringValue(revision["artifact_id"])); artifactID != "" {
+		revision["artifact_ref"] = makePublicTypedRef(ctx, q, "artifact", artifactID)
+		if artifact, _ := revision["artifact"].(map[string]any); artifact != nil {
+			publicizeArtifactMetadata(ctx, q, artifact, artifactID, "")
+		}
+	}
+	if prevRevisionID := strings.TrimSpace(anyStringValue(revision["prev_revision_id"])); prevRevisionID != "" {
+		revision["prev_revision_ref"] = makePublicTypedRef(ctx, q, "document_revision", prevRevisionID)
+	}
+	if refs, err := normalizeStringSlice(revision["refs"]); err == nil {
+		revision["refs"] = publicTypedRefs(ctx, q, refs)
+	}
+	if threadID := strings.TrimSpace(anyStringValue(revision["thread_id"])); threadID != "" {
+		revision["thread_ref"] = makePublicTypedRef(ctx, q, "thread", threadID)
+	}
 }
 
 func buildDocumentLifecycleEvent(eventType, threadID, documentID, revisionID, artifactID string, revisionNumber int, title string, extraPayload map[string]any) map[string]any {

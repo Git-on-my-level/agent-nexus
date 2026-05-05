@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -22,6 +23,17 @@ func resolveHTTPResourceID(w http.ResponseWriter, r *http.Request, opts handlerO
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve "+label)
 		}
+		return "", false
+	}
+	return resolved.ID, true
+}
+
+func resolveResourceIDForInternalUse(ctx context.Context, opts handlerOptions, typ, raw string) (string, bool) {
+	if opts.primitiveStore == nil {
+		return "", false
+	}
+	resolved, err := opts.primitiveStore.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: typ, Ref: raw})
+	if err != nil {
 		return "", false
 	}
 	return resolved.ID, true

@@ -323,7 +323,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	cardID := cardResult.Card["id"].(string)
 
 	t.Run("forward lookup by source_ref", func(t *testing.T) {
-		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "")
+		edges, err := store.ListRefEdgesBySource(ctx, anyStringValue(board["ref"]), "")
 		if err != nil {
 			t.Fatalf("ListRefEdgesBySource: %v", err)
 		}
@@ -331,7 +331,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 			t.Fatal("expected ref edges for board")
 		}
 		for _, e := range edges {
-			if e.SourceRef != "board:"+boardID {
+			if e.SourceRef != anyStringValue(board["ref"]) {
 				t.Fatalf("expected source_ref board:%s, got %s", boardID, e.SourceRef)
 			}
 			if !strings.HasPrefix(e.TargetRef, "card:") && e.Relation != "ref" {
@@ -347,7 +347,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	})
 
 	t.Run("reverse lookup by target_ref", func(t *testing.T) {
-		edges, err := store.ListRefEdgesByTarget(ctx, "card:"+cardID, "")
+		edges, err := store.ListRefEdgesByTarget(ctx, anyStringValue(cardResult.Card["ref"]), "")
 		if err != nil {
 			t.Fatalf("ListRefEdgesByTarget: %v", err)
 		}
@@ -355,14 +355,14 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 			t.Fatal("expected ref edges pointing at card")
 		}
 		for _, e := range edges {
-			if e.TargetRef != "card:"+cardID {
+			if e.TargetRef != anyStringValue(cardResult.Card["ref"]) {
 				t.Fatalf("expected target_ref card:%s, got %s", cardID, e.TargetRef)
 			}
 		}
 	})
 
 	t.Run("relation filter", func(t *testing.T) {
-		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "board_card")
+		edges, err := store.ListRefEdgesBySource(ctx, anyStringValue(board["ref"]), "board_card")
 		if err != nil {
 			t.Fatalf("ListRefEdgesBySource with relation filter: %v", err)
 		}
@@ -372,7 +372,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 		if edges[0].Relation != "board_card" {
 			t.Fatalf("expected relation board_card, got %s", edges[0].Relation)
 		}
-		if edges[0].TargetRef != "card:"+cardID {
+		if edges[0].TargetRef != anyStringValue(cardResult.Card["ref"]) {
 			t.Fatalf("expected target_ref card:%s, got %s", cardID, edges[0].TargetRef)
 		}
 	})

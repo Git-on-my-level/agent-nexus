@@ -55,6 +55,9 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		typ = prefix
 		value = suffix
 	}
+	if typ == "document_revision" || typ == "card_revision" {
+		return resolveRevisionResourceRef(ctx, s.db, typ, value)
+	}
 	table := resourceTables[typ]
 	if table == "" {
 		return ResolvedResourceRef{}, fmt.Errorf("%w: unknown resource type %q", ErrInvalidResourceRef, typ)
@@ -102,6 +105,104 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		}
 	}
 	return ResolvedResourceRef{}, ErrNotFound
+}
+
+func resolveRevisionResourceRef(ctx context.Context, q queryRower, typ, value string) (ResolvedResourceRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ResolvedResourceRef{}, ErrInvalidResourceRef
+	}
+	if typ == "document_revision" {
+		return resolveDocumentRevisionRef(ctx, q, value)
+	}
+	if typ == "card_revision" {
+		return resolveCardRevisionRef(ctx, q, value)
+	}
+	return ResolvedResourceRef{}, fmt.Errorf("%w: unknown resource type %q", ErrInvalidResourceRef, typ)
+}
+
+func resolveDocumentRevisionRef(ctx context.Context, q queryRower, value string) (ResolvedResourceRef, error) {
+	normalized := handles.Normalize(value)
+	if normalized != "" {
+		var revisionID, docHandle string
+		var revisionNumber int
+		err := q.QueryRowContext(ctx, `
+			SELECT dr.revision_id, COALESCE(d.handle, d.id, dr.document_id), dr.revision_number
+			  FROM document_revisions dr
+			  LEFT JOIN documents d ON d.id = dr.document_id
+			 WHERE lower(COALESCE(d.handle, d.id, dr.document_id) || '-r' || dr.revision_number) = ?`,
+			normalized,
+		).Scan(&revisionID, &docHandle, &revisionNumber)
+		if err == nil {
+			handle := revisionHandle(docHandle, revisionNumber)
+			return ResolvedResourceRef{Type: "document_revision", ID: revisionID, Handle: handle, CanonicalRef: "document_revision:" + handle}, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return ResolvedResourceRef{}, fmt.Errorf("query document revision by handle: %w", err)
+		}
+	}
+
+	var docHandle string
+	var revisionNumber int
+	err := q.QueryRowContext(ctx, `
+		SELECT COALESCE(d.handle, d.id, dr.document_id), dr.revision_number
+		  FROM document_revisions dr
+		  LEFT JOIN documents d ON d.id = dr.document_id
+		 WHERE dr.revision_id = ?`,
+		value,
+	).Scan(&docHandle, &revisionNumber)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedResourceRef{}, ErrNotFound
+	}
+	if err != nil {
+		return ResolvedResourceRef{}, fmt.Errorf("query document revision by id: %w", err)
+	}
+	handle := revisionHandle(docHandle, revisionNumber)
+	return ResolvedResourceRef{Type: "document_revision", ID: value, Handle: handle, CanonicalRef: "document_revision:" + handle}, nil
+}
+
+func resolveCardRevisionRef(ctx context.Context, q queryRower, value string) (ResolvedResourceRef, error) {
+	normalized := handles.Normalize(value)
+	if normalized != "" {
+		var revisionID, cardHandle string
+		var revisionNumber int
+		err := q.QueryRowContext(ctx, `
+			SELECT cr.revision_id, COALESCE(c.handle, c.id), cr.revision_number
+			  FROM card_revisions cr
+			  JOIN cards c ON c.id = cr.card_id
+			 WHERE lower(COALESCE(c.handle, c.id) || '-r' || cr.revision_number) = ?`,
+			normalized,
+		).Scan(&revisionID, &cardHandle, &revisionNumber)
+		if err == nil {
+			handle := revisionHandle(cardHandle, revisionNumber)
+			return ResolvedResourceRef{Type: "card_revision", ID: revisionID, Handle: handle, CanonicalRef: "card_revision:" + handle}, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return ResolvedResourceRef{}, fmt.Errorf("query card revision by handle: %w", err)
+		}
+	}
+
+	var cardHandle string
+	var revisionNumber int
+	err := q.QueryRowContext(ctx, `
+		SELECT COALESCE(c.handle, c.id), cr.revision_number
+		  FROM card_revisions cr
+		  JOIN cards c ON c.id = cr.card_id
+		 WHERE cr.revision_id = ?`,
+		value,
+	).Scan(&cardHandle, &revisionNumber)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedResourceRef{}, ErrNotFound
+	}
+	if err != nil {
+		return ResolvedResourceRef{}, fmt.Errorf("query card revision by id: %w", err)
+	}
+	handle := revisionHandle(cardHandle, revisionNumber)
+	return ResolvedResourceRef{Type: "card_revision", ID: value, Handle: handle, CanonicalRef: "card_revision:" + handle}, nil
+}
+
+func revisionHandle(parentHandle string, revisionNumber int) string {
+	return strings.TrimSpace(parentHandle) + "-r" + fmt.Sprintf("%d", revisionNumber)
 }
 
 func resolveResourceByColumn(ctx context.Context, db *sql.DB, typ, table, column, value string) (ResolvedResourceRef, error) {

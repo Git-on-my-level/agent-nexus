@@ -282,6 +282,9 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 	revisionID = strings.TrimSpace(revisionID)
+	if resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "card_revision", Ref: revisionID}); err == nil {
+		revisionID = resolved.ID
+	}
 	for _, revision := range revisions {
 		if strings.TrimSpace(anyString(revision["revision_id"])) == revisionID || strings.TrimSpace(anyString(revision["id"])) == revisionID {
 			writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revision": revision})

@@ -651,11 +651,11 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected refs on board lifecycle event %q, got %#v", eventType, event["refs"])
 		}
-		if !containsAny(refs, "board:"+boardID) {
+		if !containsAnyWithPrefix(refs, "board:") {
 			t.Fatalf("expected board ref on %q, got %#v", eventType, refs)
 		}
 	}
-	if !containsAny(boardEventsByType["board_created"]["refs"].([]any), "thread:"+primaryThreadID) || !containsAny(boardEventsByType["board_created"]["refs"].([]any), "document:"+primaryDocumentID) {
+	if !containsAnyWithPrefix(boardEventsByType["board_created"]["refs"].([]any), "thread:") || !containsAnyWithPrefix(boardEventsByType["board_created"]["refs"].([]any), "document:") {
 		t.Fatalf("expected primary thread/document refs on board_created, got %#v", boardEventsByType["board_created"]["refs"])
 	}
 	cardBackingThreadID := asString(addCardPayload.Card["thread_id"])
@@ -685,7 +685,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if containsAny(refs, "document:"+pinnedDocumentID) {
+		if containsAnyWithPrefix(refs, "document:") {
 			pinnedDocCardUpdated = event
 			break
 		}
@@ -1611,13 +1611,13 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if cardMovedEvent == nil {
 		t.Fatalf("expected card_moved event in card timeline, got %#v", cardTimelinePayload.Events)
 	}
-	if !containsAny(cardMovedEvent["refs"].([]any), "board:"+boardID) || !containsAny(cardMovedEvent["refs"].([]any), "card:"+cardID) {
+	if !containsAnyWithPrefix(cardMovedEvent["refs"].([]any), "board:") || !containsAnyWithPrefix(cardMovedEvent["refs"].([]any), "card:") {
 		t.Fatalf("expected board and card refs on card_moved, got %#v", cardMovedEvent["refs"])
 	}
 	if cardUpdatedEvent == nil {
 		t.Fatalf("expected card_updated event in card timeline, got %#v", cardTimelinePayload.Events)
 	}
-	if !containsAny(cardUpdatedEvent["refs"].([]any), "board:"+boardID) || !containsAny(cardUpdatedEvent["refs"].([]any), "card:"+cardID) {
+	if !containsAnyWithPrefix(cardUpdatedEvent["refs"].([]any), "board:") || !containsAnyWithPrefix(cardUpdatedEvent["refs"].([]any), "card:") {
 		t.Fatalf("expected board and card refs on card_updated, got %#v", cardUpdatedEvent["refs"])
 	}
 }

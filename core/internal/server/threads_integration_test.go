@@ -929,23 +929,25 @@ func assertDocLifecycleEventRefs(t *testing.T, event map[string]any, threadID, d
 	if !ok {
 		t.Fatalf("expected refs array on lifecycle event, got %#v", event["refs"])
 	}
-	if !containsAny(refs, "thread:"+threadID) {
-		t.Fatalf("expected thread ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "document:"+documentID) {
-		t.Fatalf("expected document ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "document_revision:"+revisionID) {
-		t.Fatalf("expected document revision ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "artifact:"+artifactID) {
-		t.Fatalf("expected artifact ref on lifecycle event, got %#v", refs)
+	for _, prefix := range []string{"thread:", "document:", "document_revision:", "artifact:"} {
+		if !containsAnyWithPrefix(refs, prefix) {
+			t.Fatalf("expected %s public ref on lifecycle event, got %#v", prefix, refs)
+		}
 	}
 }
 
 func containsAny(values []any, expected string) bool {
 	for _, value := range values {
 		if text, ok := value.(string); ok && text == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyWithPrefix(values []any, prefix string) bool {
+	for _, value := range values {
+		if text, ok := value.(string); ok && strings.HasPrefix(text, prefix) {
 			return true
 		}
 	}

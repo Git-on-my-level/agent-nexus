@@ -166,8 +166,12 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "event", eventID, "event")
+	if !ok {
+		return
+	}
 
-	event, err := opts.primitiveStore.GetEvent(r.Context(), eventID)
+	event, err := opts.primitiveStore.GetEvent(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
@@ -517,8 +521,12 @@ func handleGetArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "artifact", artifactID, "artifact")
+	if !ok {
+		return
+	}
 
-	artifact, err := opts.primitiveStore.GetArtifact(r.Context(), artifactID)
+	artifact, err := opts.primitiveStore.GetArtifact(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
@@ -657,7 +665,11 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), artifactID)
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "artifact", artifactID, "artifact")
+	if !ok {
+		return
+	}
+	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact content not found")

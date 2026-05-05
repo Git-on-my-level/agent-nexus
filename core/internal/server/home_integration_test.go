@@ -83,8 +83,8 @@ func TestHomeUnreadGroupsEligibleEventsAndMarksRead(t *testing.T) {
 	if unread.UnreadCount != 1 || unread.GroupCount != 1 || len(unread.Groups) != 1 {
 		t.Fatalf("expected one unread Home event, got %#v", unread)
 	}
-	if unread.Groups[0]["group_ref"] != "topic:"+topicID {
-		t.Fatalf("expected group_ref topic:%s, got %v", topicID, unread.Groups[0]["group_ref"])
+	if unread.Groups[0]["group_ref"] != asString(createdTopic.Topic["ref"]) {
+		t.Fatalf("expected group_ref %s, got %v", asString(createdTopic.Topic["ref"]), unread.Groups[0]["group_ref"])
 	}
 	if unread.Groups[0]["group_type"] != "topic" {
 		t.Fatalf("expected group_type topic, got %v", unread.Groups[0]["group_type"])
@@ -213,8 +213,8 @@ func TestHomeUnreadGroupsCardLifecycleUnderBoardWhenBoardRefPresent(t *testing.T
 	if unread.GroupCount != 1 || len(unread.Groups) != 1 {
 		t.Fatalf("expected one home group for card_moved, got %#v", unread)
 	}
-	if unread.Groups[0]["group_ref"] != "board:"+boardID {
-		t.Fatalf("expected group_ref board:%s, got %v", boardID, unread.Groups[0]["group_ref"])
+	if unread.Groups[0]["group_ref"] != asString(boardPayload.Board["ref"]) {
+		t.Fatalf("expected group_ref %s, got %v", asString(boardPayload.Board["ref"]), unread.Groups[0]["group_ref"])
 	}
 	if unread.Groups[0]["group_type"] != "board" {
 		t.Fatalf("expected group_type board, got %v", unread.Groups[0]["group_type"])

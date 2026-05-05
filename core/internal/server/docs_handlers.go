@@ -592,6 +592,9 @@ func handleGetDocumentRevision(w http.ResponseWriter, r *http.Request, opts hand
 		writeError(w, http.StatusBadRequest, "invalid_request", "revision_id is required")
 		return
 	}
+	if resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "document_revision", Ref: revisionID}); err == nil {
+		revisionID = resolved.ID
+	}
 
 	revision, err := opts.primitiveStore.GetDocumentRevision(r.Context(), documentID, revisionID)
 	if err != nil {

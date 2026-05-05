@@ -228,7 +228,8 @@ func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archiv
 }
 
 func decodeEventBodyFromRow(
-	eventID, typeValue, ts, actorID string,
+	ctx context.Context, q queryRower,
+	eventID, eventHandle, typeValue, ts, actorID string,
 	threadID sql.NullString,
 	refsJSON, payloadJSON string,
 ) (map[string]any, error) {
@@ -236,6 +237,7 @@ func decodeEventBodyFromRow(
 	if err := json.Unmarshal([]byte(refsJSON), &refsList); err != nil {
 		return nil, fmt.Errorf("decode event refs: %w", err)
 	}
+	refsList = publicTypedRefs(ctx, q, refsList)
 	// Use []any for refs so API consumers that walk raw maps (e.g. thread ref discovery) match
 	// json.Unmarshal into map[string]any, which decodes JSON arrays as []any.
 	refs := make([]any, len(refsList))
@@ -251,8 +253,14 @@ func decodeEventBodyFromRow(
 		wrapper = map[string]any{}
 	}
 
+	handle := strings.TrimSpace(eventHandle)
+	if handle == "" {
+		handle = eventID
+	}
 	out := map[string]any{
 		"id":       eventID,
+		"ref":      "event:" + handle,
+		"handle":   handle,
 		"type":     typeValue,
 		"ts":       ts,
 		"actor_id": actorID,
@@ -260,15 +268,17 @@ func decodeEventBodyFromRow(
 	}
 	if threadID.Valid {
 		out["thread_id"] = threadID.String
+		out["thread_ref"] = makePublicTypedRef(ctx, q, "thread", threadID.String)
 	}
 
 	if inner, ok := wrapper["payload"].(map[string]any); ok {
 		out["payload"] = inner
+		out["payload"] = publicRefsInValue(ctx, q, out["payload"])
 		for k, v := range wrapper {
 			if k == "payload" {
 				continue
 			}
-			out[k] = v
+			out[k] = publicRefsInValue(ctx, q, v)
 		}
 		return out, nil
 	}
@@ -288,7 +298,7 @@ func decodeEventBodyFromRow(
 	if len(flat) == 0 {
 		out["payload"] = map[string]any{}
 	} else {
-		out["payload"] = flat
+		out["payload"] = publicRefsInValue(ctx, q, flat)
 	}
 	return out, nil
 }
@@ -300,6 +310,7 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 
 	var (
 		eventID     string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorID     string
@@ -314,11 +325,11 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 	)
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		id,
-	).Scan(&eventID, &typeValue, &ts, &actorID, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -327,7 +338,7 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 		return nil, fmt.Errorf("query event: %w", err)
 	}
 
-	body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -411,6 +422,9 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("allocate artifact handle: %w", err)
 	}
+	metadata["handle"] = artifactHandle
+	metadata["ref"] = "artifact:" + artifactHandle
+	metadata["refs"] = publicTypedRefs(ctx, tx, refs)
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -549,6 +563,9 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate artifact handle: %w", err)
 	}
+	metadata["handle"] = artifactHandle
+	metadata["ref"] = "artifact:" + artifactHandle
+	metadata["refs"] = publicTypedRefs(ctx, tx, artifactRefs)
 
 	if _, err := tx.ExecContext(
 		ctx,
@@ -616,8 +633,8 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	var metadataJSON string
-	err := s.db.QueryRowContext(ctx, `SELECT metadata_json FROM artifacts WHERE id = ?`, id).Scan(&metadataJSON)
+	var metadataJSON, handle string
+	err := s.db.QueryRowContext(ctx, `SELECT metadata_json, COALESCE(handle, '') FROM artifacts WHERE id = ?`, id).Scan(&metadataJSON, &handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -629,10 +646,11 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
+	publicizeArtifactMetadata(ctx, s.db, metadata, id, handle)
 	if owner, err := s.loadArtifactOwner(ctx, s.db, id); err != nil {
 		return nil, err
 	} else if owner.Kind != "" {
-		owner.apply(metadata)
+		owner.applyPublic(ctx, s.db, metadata)
 	}
 	return metadata, nil
 }
@@ -650,6 +668,15 @@ func (o artifactOwner) apply(metadata map[string]any) {
 	metadata["system_owned"] = true
 	metadata["owner_ref"] = strings.TrimSpace(o.Kind) + ":" + strings.TrimSpace(o.ResourceID)
 	metadata["owner_revision_ref"] = strings.TrimSpace(o.Kind) + "_revision:" + strings.TrimSpace(o.RevisionID)
+}
+
+func (o artifactOwner) applyPublic(ctx context.Context, q queryRower, metadata map[string]any) {
+	o.apply(metadata)
+	if metadata == nil || strings.TrimSpace(o.Kind) == "" {
+		return
+	}
+	metadata["owner_ref"] = makePublicTypedRef(ctx, q, strings.TrimSpace(o.Kind), strings.TrimSpace(o.ResourceID))
+	metadata["owner_revision_ref"] = makePublicTypedRef(ctx, q, strings.TrimSpace(o.Kind)+"_revision", strings.TrimSpace(o.RevisionID))
 }
 
 func (s *Store) loadArtifactOwner(ctx context.Context, q queryRower, artifactID string) (artifactOwner, error) {
@@ -740,10 +767,11 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 		if err != nil {
 			return nil, err
 		}
+		publicizeArtifactMetadata(ctx, s.db, metadata, artifactID, "")
 		if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
 			return nil, err
 		} else if owner.Kind != "" {
-			owner.apply(metadata)
+			owner.applyPublic(ctx, s.db, metadata)
 		}
 
 		artifacts = append(artifacts, metadata)
@@ -1216,6 +1244,7 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1229,11 +1258,11 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1246,7 +1275,7 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, ErrAlreadyTrashed
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1297,6 +1326,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1310,11 +1340,11 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1327,7 +1357,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 		return nil, ErrNotArchived
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1373,6 +1403,7 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1386,11 +1417,11 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1399,7 +1430,7 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 		return nil, fmt.Errorf("query event for trash: %w", err)
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1456,6 +1487,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1469,11 +1501,11 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	_ = trashedBy
 	_ = trashReason
@@ -1488,7 +1520,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, ErrNotTrashed
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -2091,7 +2123,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
@@ -2107,6 +2139,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2119,12 +2152,12 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan thread event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -2224,7 +2257,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
@@ -2242,6 +2275,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2254,12 +2288,12 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan recent thread event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -2337,6 +2371,17 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 	if err != nil {
 		return fmt.Errorf("allocate event handle: %w", err)
 	}
+	prepared.Body["handle"] = handle
+	prepared.Body["ref"] = "event:" + handle
+	if prepared.ThreadID != "" {
+		prepared.Body["thread_ref"] = makePublicTypedRef(ctx, exec, "thread", prepared.ThreadID)
+	}
+	if refs, err := normalizeStringSlice(prepared.Body["refs"]); err == nil {
+		prepared.Body["refs"] = publicTypedRefs(ctx, exec, refs)
+	}
+	if payload, ok := prepared.Body["payload"]; ok {
+		prepared.Body["payload"] = publicRefsInValue(ctx, exec, payload)
+	}
 	if _, err := exec.ExecContext(
 		ctx,
 		`INSERT INTO events(id, handle, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
@@ -2397,7 +2442,7 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		return EventPage{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE COALESCE(trashed_at, '') = ''`
@@ -2526,6 +2571,7 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2538,12 +2584,12 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return EventPage{}, fmt.Errorf("scan event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return EventPage{}, err
 		}
@@ -2670,12 +2716,22 @@ func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, groupRefs [
 		return fmt.Errorf("reader_id is required")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	lookup, _ := s.homeGroupLookup(ctx)
 	for _, groupRef := range dedupeStrings(groupRefs) {
 		groupRef = strings.TrimSpace(groupRef)
 		if groupRef == "" {
 			continue
 		}
+		inputGroupRef := groupRef
+		if lookup != nil {
+			if canonical := lookup.aliasToGroupRef[groupRef]; canonical != "" {
+				groupRef = canonical
+			}
+		}
 		cursor := expected[groupRef]
+		if strings.TrimSpace(cursor.TS) == "" && inputGroupRef != groupRef {
+			cursor = expected[inputGroupRef]
+		}
 		if strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
 			event, err := s.newestHomeEventForGroup(ctx, groupRef)
 			if err != nil {
@@ -2733,7 +2789,7 @@ func (s *Store) newestHomeEventForGroup(ctx context.Context, groupRef string) (m
 
 func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[string]any, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE COALESCE(trashed_at, '') = ''
@@ -2750,6 +2806,7 @@ func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[stri
 	}
 	var (
 		eventID     string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorID     string
@@ -2762,11 +2819,11 @@ func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[stri
 		trashedBy   sql.NullString
 		trashReason sql.NullString
 	)
-	if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+	if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 		return nil, fmt.Errorf("scan newest home event for ref %s: %w", ref, err)
 	}
-	body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -2820,12 +2877,14 @@ type homeGroupMeta struct {
 
 type homeGroupLookup struct {
 	groupByRef       map[string]*homeGroupMeta
+	aliasToGroupRef  map[string]string
 	threadToGroupRef map[string]string
 }
 
 func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 	lookup := &homeGroupLookup{
 		groupByRef:       map[string]*homeGroupMeta{},
+		aliasToGroupRef:  map[string]string{},
 		threadToGroupRef: map[string]string{},
 	}
 
@@ -2839,16 +2898,16 @@ func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 }
 
 func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home topics: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, updatedAt, extensionsJSON string
+		var id, handle, updatedAt, extensionsJSON string
 		var title, summary, threadID sql.NullString
 		var discardArchivedAt, discardTrashedAt sql.NullString
-		if err := rows.Scan(&id, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &discardArchivedAt, &discardTrashedAt); err != nil {
+		if err := rows.Scan(&id, &handle, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &discardArchivedAt, &discardTrashedAt); err != nil {
 			return fmt.Errorf("scan home topic: %w", err)
 		}
 		var extensions map[string]any
@@ -2857,7 +2916,8 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 			extensions = map[string]any{}
 		}
 		priority := firstNonEmptyString(anyStringValue(extensions["priority"]), anyStringValue(extensions["filter_priority"]))
-		groupRef := "topic:" + id
+		publicHandle := firstNonEmptyString(strings.TrimSpace(handle), id)
+		groupRef := "topic:" + publicHandle
 		meta := &homeGroupMeta{
 			groupRef:    groupRef,
 			groupType:   "topic",
@@ -2865,6 +2925,7 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 			priority:    priority,
 		}
 		lookup.groupByRef[groupRef] = meta
+		lookup.aliasToGroupRef["topic:"+id] = groupRef
 		if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
 			lookup.threadToGroupRef[threadID.String] = groupRef
 		}
@@ -2876,17 +2937,18 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 }
 
 func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home boards: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, title, threadID string
-		if err := rows.Scan(&id, &title, &threadID); err != nil {
+		var id, handle, title, threadID string
+		if err := rows.Scan(&id, &handle, &title, &threadID); err != nil {
 			return fmt.Errorf("scan home board: %w", err)
 		}
-		groupRef := "board:" + id
+		publicHandle := firstNonEmptyString(strings.TrimSpace(handle), id)
+		groupRef := "board:" + publicHandle
 		meta := &homeGroupMeta{
 			groupRef:    groupRef,
 			groupType:   "board",
@@ -2894,6 +2956,7 @@ func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) er
 			priority:    "",
 		}
 		lookup.groupByRef[groupRef] = meta
+		lookup.aliasToGroupRef["board:"+id] = groupRef
 		threadID = strings.TrimSpace(threadID)
 		if threadID != "" {
 			if _, exists := lookup.threadToGroupRef[threadID]; !exists {
@@ -2923,6 +2986,9 @@ func homeBoardGroupRefFromRefs(refs []string, lookup *homeGroupLookup) string {
 			if _, ok := lookup.groupByRef[boardRef]; ok {
 				return boardRef
 			}
+			if canonical := lookup.aliasToGroupRef[boardRef]; canonical != "" {
+				return canonical
+			}
 		}
 	}
 	return ""
@@ -2940,6 +3006,9 @@ func homeGroupForEvent(event map[string]any, lookup *homeGroupLookup) string {
 			topicRef := "topic:" + strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
 			if _, ok := lookup.groupByRef[topicRef]; ok {
 				return topicRef
+			}
+			if canonical := lookup.aliasToGroupRef[topicRef]; canonical != "" {
+				return canonical
 			}
 		}
 	}
@@ -3077,7 +3146,7 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 		limit = 100
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE type = ? AND COALESCE(trashed_at, '') = ''`
@@ -3118,6 +3187,7 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -3130,12 +3200,12 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan human_attention_responded row: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -3157,7 +3227,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 		limit = 100
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE 1=1`
@@ -3201,6 +3271,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -3213,12 +3284,12 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan event after cursor: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -3683,6 +3754,22 @@ func scrubArtifactMetadataMap(metadata map[string]any) map[string]any {
 	}
 	delete(metadata, "content_path")
 	return metadata
+}
+
+func publicizeArtifactMetadata(ctx context.Context, q queryRower, metadata map[string]any, artifactID, handle string) {
+	if metadata == nil {
+		return
+	}
+	artifactID = firstNonEmpty(strings.TrimSpace(artifactID), anyStringValue(metadata["id"]))
+	handle = firstNonEmpty(strings.TrimSpace(handle), anyStringValue(metadata["handle"]), artifactID)
+	if handle == "" {
+		return
+	}
+	metadata["handle"] = handle
+	metadata["ref"] = "artifact:" + handle
+	if refs, err := normalizeStringSlice(metadata["refs"]); err == nil {
+		metadata["refs"] = publicTypedRefs(ctx, q, refs)
+	}
 }
 
 func decodeArtifactMetadataJSON(metadataJSON string) (map[string]any, error) {

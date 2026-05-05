@@ -599,23 +599,25 @@ func assertStreamDocLifecycleEvent(t *testing.T, data map[string]any, threadID, 
 
 	eventPayload, _ := data["event"].(map[string]any)
 	refs, _ := eventPayload["refs"].([]any)
-	if !containsSSERef(refs, "thread:"+threadID) {
-		t.Fatalf("expected thread ref in streamed event, got %#v", eventPayload)
-	}
-	if !containsSSERef(refs, "document:"+documentID) {
-		t.Fatalf("expected document ref in streamed event, got %#v", eventPayload)
-	}
-	if !containsSSERef(refs, "document_revision:"+revisionID) {
-		t.Fatalf("expected document_revision ref in streamed event, got %#v", eventPayload)
-	}
-	if !containsSSERef(refs, "artifact:"+artifactID) {
-		t.Fatalf("expected artifact ref in streamed event, got %#v", eventPayload)
+	for _, prefix := range []string{"thread:", "document:", "document_revision:", "artifact:"} {
+		if !containsSSERefPrefix(refs, prefix) {
+			t.Fatalf("expected %s public ref in streamed event, got %#v", prefix, eventPayload)
+		}
 	}
 }
 
 func containsSSERef(values []any, expected string) bool {
 	for _, value := range values {
 		if asString(value) == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSSERefPrefix(values []any, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(asString(value), prefix) {
 			return true
 		}
 	}

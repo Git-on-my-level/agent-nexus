@@ -484,10 +484,10 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 		return topicResourceBundle{}, err
 	}
 
-	boardIDs := collectTopicRefEdgeTargetIDs(refEdges, "board")
-	documentIDs := collectTopicRefEdgeTargetIDs(refEdges, "document")
-	threadIDs := append([]string{primaryThreadID}, collectTopicRefEdgeTargetIDs(refEdges, "thread")...)
-	reverseIDs := collectTopicReverseRefEdgeSourceIDs(reverseRefEdges)
+	boardIDs := collectTopicRefEdgeTargetIDs(ctx, opts, refEdges, "board")
+	documentIDs := collectTopicRefEdgeTargetIDs(ctx, opts, refEdges, "document")
+	threadIDs := append([]string{primaryThreadID}, collectTopicRefEdgeTargetIDs(ctx, opts, refEdges, "thread")...)
+	reverseIDs := collectTopicReverseRefEdgeSourceIDs(ctx, opts, reverseRefEdges)
 	boardIDs = append(boardIDs, reverseIDs.Boards...)
 	documentIDs = append(documentIDs, reverseIDs.Documents...)
 	threadIDs = append(threadIDs, reverseIDs.Threads...)
@@ -635,7 +635,7 @@ func buildTopicResourceBundle(ctx context.Context, opts handlerOptions, topic ma
 	}, nil
 }
 
-func collectTopicRefEdgeTargetIDs(edges []primitives.RefEdge, targetType string) []string {
+func collectTopicRefEdgeTargetIDs(ctx context.Context, opts handlerOptions, edges []primitives.RefEdge, targetType string) []string {
 	out := make([]string, 0, len(edges))
 	for _, edge := range edges {
 		if strings.TrimSpace(edge.Relation) != "ref" {
@@ -646,6 +646,9 @@ func collectTopicRefEdgeTargetIDs(edges []primitives.RefEdge, targetType string)
 			continue
 		}
 		if targetID := strings.TrimSpace(id); targetID != "" {
+			if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, targetType, edge.TargetRef); ok {
+				targetID = resolved
+			}
 			out = append(out, targetID)
 		}
 	}
@@ -659,7 +662,7 @@ type topicReverseRefSourceIDs struct {
 	Threads   []string
 }
 
-func collectTopicReverseRefEdgeSourceIDs(edges []primitives.RefEdge) topicReverseRefSourceIDs {
+func collectTopicReverseRefEdgeSourceIDs(ctx context.Context, opts handlerOptions, edges []primitives.RefEdge) topicReverseRefSourceIDs {
 	var out topicReverseRefSourceIDs
 	for _, edge := range edges {
 		if strings.TrimSpace(edge.Relation) != "ref" {
@@ -671,12 +674,24 @@ func collectTopicReverseRefEdgeSourceIDs(edges []primitives.RefEdge) topicRevers
 		}
 		switch strings.TrimSpace(prefix) {
 		case "board":
+			if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "board", edge.SourceRef); ok {
+				id = resolved
+			}
 			out.Boards = append(out.Boards, id)
 		case "card":
+			if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "card", edge.SourceRef); ok {
+				id = resolved
+			}
 			out.Cards = append(out.Cards, id)
 		case "document":
+			if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "document", edge.SourceRef); ok {
+				id = resolved
+			}
 			out.Documents = append(out.Documents, id)
 		case "thread":
+			if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "thread", edge.SourceRef); ok {
+				id = resolved
+			}
 			out.Threads = append(out.Threads, id)
 		}
 	}
