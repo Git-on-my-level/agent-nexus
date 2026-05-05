@@ -101,8 +101,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `inbox tail` (command): Stream inbox items (SSE)
 - `artifacts list` (command): List artifacts
 - `artifacts get` (command): Get artifact metadata
-- `artifacts create` (command): Create artifact
 - `artifacts content` (command): Download artifact bytes
+- `artifacts attachments` (group): Nested generated help topic.
 - `artifacts archive` (command): Archive artifact
 - `artifacts unarchive` (command): Unarchive artifact
 - `artifacts trash` (command): Move artifact to trash
@@ -139,6 +139,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
+- `artifacts create` (local-helper): Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+- `artifacts attachments create` (local-helper): Upload a local file as an attachment artifact via multipart form.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
 - `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 - `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
@@ -1654,7 +1656,17 @@ Commands:
   artifacts trash          Move artifact to trash
   artifacts unarchive      Unarchive artifact
 
-Local inspection helper:
+Common attachment flow:
+  artifacts create --file <path> --ref <typed-ref>
+                            Upload a file attachment with repeatable typed refs.
+  artifacts content <id> --output <path>
+                            Download raw artifact bytes to a file.
+  artifacts content <id> --output .
+                            Download using the server-provided filename.
+
+Lower-level helpers:
+  artifacts attachments create
+                            Explicit multipart attachment upload path.
   artifacts inspect        Fetch artifact metadata and content in one call.
 
 Global flags:
@@ -3615,38 +3627,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `artifacts create`
-
-Create artifact
-
-```text
-Generated Help: artifacts create
-
-- Command ID: `artifacts.create`
-- CLI path: `artifacts create`
-- HTTP: `POST /artifacts`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
-- Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
-- Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
-
-Inputs:
-  Required:
-  - body `artifact` (object)
-  - body `content_type` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `content` (any)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `artifacts content`
 
 Download artifact bytes
@@ -3673,6 +3653,24 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts attachments`
+
+Nested generated help topic.
+
+```text
+Generated Help: artifacts attachments
+
+Commands:
+  artifacts attachments create Upload a file attachment
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts attachments ... ; anx --json artifacts attachments ... ; anx artifacts attachments ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `artifacts archive`
@@ -4749,6 +4747,67 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx events explain ... ; anx --json events explain ... ; anx events explain ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts create`
+
+Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+
+```text
+Local Help: artifacts create
+
+- Kind: `local helper`
+- Summary: Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+- Composition: Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.
+- JSON body: With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.
+- Examples:
+  - `anx artifacts create --file ./photo.jpg --ref topic:<topic-id>`
+  - `anx artifacts create --file ./evidence.pdf --ref card:<card-id> --summary "Evidence"`
+  - `cat artifact.json | anx artifacts create`
+
+Flags:
+  --file <path>                Upload a local file as kind=attachment via multipart form.
+  --ref <typed-ref>            Typed ref to attach to, repeatable.
+  --refs <json>                Compatibility form: JSON array of typed refs.
+  --summary <text>             Optional attachment summary.
+  --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts attachments create`
+
+Upload a local file as an attachment artifact via multipart form.
+
+```text
+Local Help: artifacts attachments create
+
+- Kind: `local helper`
+- Summary: Upload a local file as an attachment artifact via multipart form.
+- Composition: Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.
+- JSON body: Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.
+- Examples:
+  - `anx artifacts attachments create --file ./notes.md --ref thread:<thread-id>`
+  - `anx artifacts attachments create --file ./photo.jpg --refs '["topic:<topic-id>"]'`
+
+Flags:
+  --file <path>                Path to the file to upload.
+  --ref <typed-ref>            Typed ref to attach to, repeatable.
+  --refs <json>                Compatibility form: JSON array of typed refs.
+  --summary <text>             Optional attachment summary.
+  --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts attachments create ... ; anx --json artifacts attachments create ... ; anx artifacts attachments create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

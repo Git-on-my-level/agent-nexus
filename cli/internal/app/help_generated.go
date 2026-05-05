@@ -426,6 +426,43 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "artifacts create",
+		Summary:     "Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.",
+		JSONShape:   "With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.",
+		Composition: "Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.",
+		Examples: []string{
+			`anx artifacts create --file ./photo.jpg --ref topic:<topic-id>`,
+			`anx artifacts create --file ./evidence.pdf --ref card:<card-id> --summary "Evidence"`,
+			`cat artifact.json | anx artifacts create`,
+		},
+		Flags: []localHelperFlag{
+			{Name: "--file <path>", Description: "Upload a local file as kind=attachment via multipart form."},
+			{Name: "--ref <typed-ref>", Description: "Typed ref to attach to, repeatable."},
+			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
+			{Name: "--summary <text>", Description: "Optional attachment summary."},
+			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "artifacts attachments create",
+		Summary:     "Upload a local file as an attachment artifact via multipart form.",
+		JSONShape:   "Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.",
+		Composition: "Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.",
+		Examples: []string{
+			`anx artifacts attachments create --file ./notes.md --ref thread:<thread-id>`,
+			`anx artifacts attachments create --file ./photo.jpg --refs '["topic:<topic-id>"]'`,
+		},
+		Flags: []localHelperFlag{
+			{Name: "--file <path>", Description: "Path to the file to upload."},
+			{Name: "--ref <typed-ref>", Description: "Typed ref to attach to, repeatable."},
+			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
+			{Name: "--summary <text>", Description: "Optional attachment summary."},
+			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
 		Path:        "artifacts inspect",
 		Summary:     "Fetch artifact metadata and resolved content in one command for operator inspection.",
 		JSONShape:   "`artifact`, `content`, `content_headers`, `content_text`, `content_base64`",
@@ -942,7 +979,17 @@ func localGroupHelpSupplement(topic string) string {
   Raw ` + "`events create`" + ` is a contract escape hatch. For ordinary discussion, use ` + "`anx topics message <topic-id>`" + `, ` + "`anx docs message <document-id>`" + `, or ` + "`anx cards message <card-id>`" + ` instead of hand-authoring a ` + "`message_posted`" + ` event.
   For details: ` + "`anx events explain <event-type>`")
 	case "artifacts":
-		return strings.TrimSpace(`Local inspection helper:
+		return strings.TrimSpace(`Common attachment flow:
+  artifacts create --file <path> --ref <typed-ref>
+                            Upload a file attachment with repeatable typed refs.
+  artifacts content <id> --output <path>
+                            Download raw artifact bytes to a file.
+  artifacts content <id> --output .
+                            Download using the server-provided filename.
+
+Lower-level helpers:
+  artifacts attachments create
+                            Explicit multipart attachment upload path.
   artifacts inspect        Fetch artifact metadata and content in one call.`)
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:
