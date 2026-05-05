@@ -51,9 +51,9 @@ func (a *App) runConfigUse(args []string) (*commandResult, error) {
 		}
 		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
 	}
-	agents, err := profile.ListAgents(homeDir)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_list_failed", "failed to inspect local profiles", err)
+	var agents []string
+	if listed, err := profile.ListAgents(homeDir); err == nil {
+		agents = listed
 	}
 	otherProfiles := make([]string, 0, len(agents))
 	for _, agent := range agents {

@@ -39,6 +39,7 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well."},
 	{Path: "profiles", Kind: "manual", Summary: "CLI profile resolution, same-machine multi-agent setup, and active profile inspection."},
 	{Path: "env", Kind: "manual", Summary: "Supported ANX_* environment variables and precedence."},
+	{Path: "config", Kind: "manual", Summary: "CLI config surface: default profile selection, effective settings, and clearing the persisted marker."},
 	{Path: "agent-bridge", Kind: "manual", Summary: "Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},

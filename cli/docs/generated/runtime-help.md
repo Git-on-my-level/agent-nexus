@@ -9,6 +9,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
 - `profiles` (manual): CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
 - `env` (manual): Supported ANX_* environment variables and precedence.
+- `config` (manual): CLI config surface: default profile selection, effective settings, and clearing the persisted marker.
 - `agent-bridge` (manual): Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
 - `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
@@ -499,6 +500,29 @@ Notes:
 - Treat `ANX_ACCESS_TOKEN` as secret material. Profile-backed auth is usually easier to refresh and audit.
 
 Inspect effective values and sources with `anx config show`.
+```
+
+## `config`
+
+CLI config surface: default profile selection, effective settings, and clearing the persisted marker.
+
+```text
+Config surface for the active CLI profile
+
+Use this group to set or inspect which local profile supplies base URL and auth when you omit --agent / --base-url.
+
+Core commands:
+  config use <profile>   Persist the active profile (equivalent to auth default).
+  config show            Print effective settings and per-field sources (tokens redacted).
+  config unset           Remove the default profile marker (~/.config/anx/default-profile).
+
+Related:
+  auth list              List profiles and which is active.
+  auth default <profile> Same selection as config use.
+
+Docs:
+  anx meta doc profiles
+  anx meta doc env
 ```
 
 ## `agent-bridge`
