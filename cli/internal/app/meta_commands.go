@@ -274,6 +274,9 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 	if listFlag.value && strings.TrimSpace(searchFlag.value) != "" {
 		return nil, errnorm.Usage("invalid_flags", "use either --list or --search, not both")
 	}
+	if strings.TrimSpace(writeDir.value) != "" && (listFlag.value || strings.TrimSpace(searchFlag.value) != "") {
+		return nil, errnorm.Usage("invalid_flags", "use --write-dir only with full `anx meta docs` output, not --list or --search")
+	}
 	if listFlag.value {
 		topics := runtimeHelpDocTopics()
 		return &commandResult{Text: RuntimeHelpDocsIndexMarkdown(topics), Data: map[string]any{

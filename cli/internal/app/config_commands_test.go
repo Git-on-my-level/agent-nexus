@@ -59,6 +59,32 @@ func TestConfigUseOmitsMultiProfileWarningForSingleProfile(t *testing.T) {
 	}
 }
 
+func TestConfigUseStillSucceedsWhenProfileListAdvisoryFails(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := profile.Save(profile.ProfilePath(home, "solo"), profile.Profile{Agent: "solo", BaseURL: "http://solo:8000"}); err != nil {
+		t.Fatalf("save solo profile: %v", err)
+	}
+	profilesDir := profile.ProfilesDir(home)
+	if err := os.Chmod(profilesDir, 0o111); err != nil {
+		t.Fatalf("chmod profiles dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(profilesDir, 0o700)
+	})
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "solo"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if strings.TrimSpace(anyStr(data["active_profile"])) != "solo" {
+		t.Fatalf("unexpected config use payload: %#v", payload)
+	}
+	if _, exists := data["warnings"]; exists {
+		t.Fatalf("did not expect warning when advisory profile listing fails: %#v", payload)
+	}
+}
+
 func TestConfigUseNormalizedSubcommandIsConfigLenient(t *testing.T) {
 	t.Parallel()
 

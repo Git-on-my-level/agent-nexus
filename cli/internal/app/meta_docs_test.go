@@ -103,6 +103,11 @@ func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
 	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_PROFILE_PATH") || !strings.Contains(env, "ANX_JSON") {
 		t.Fatalf("expected env docs via alias output=%s", env)
 	}
+
+	config := runHelpCommand(t, "meta", "doc", "configuration")
+	if !strings.Contains(config, "## `config`") || !strings.Contains(config, "Config surface for the active CLI profile") {
+		t.Fatalf("expected config docs via alias output=%s", config)
+	}
 }
 
 func TestRunMetaDocsListAndSearch(t *testing.T) {
@@ -119,6 +124,20 @@ func TestRunMetaDocsListAndSearch(t *testing.T) {
 	}
 	if strings.Contains(searchOutput, "## `threads`") {
 		t.Fatalf("expected search index, not full docs output=%s", searchOutput)
+	}
+}
+
+func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"--json", "meta", "docs", "--list", "--write-dir", t.TempDir()},
+		{"--json", "meta", "docs", "--search", "profile", "--write-dir", t.TempDir()},
+	} {
+		stdout := runCLIForTestJSONError(t, t.TempDir(), map[string]string{}, args)
+		if !strings.Contains(stdout, "use --write-dir only with full") {
+			t.Fatalf("expected write-dir conflict error for %v, got %s", args, stdout)
+		}
 	}
 }
 
