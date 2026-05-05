@@ -60,6 +60,56 @@ def test_openclaw_extract_response_falls_back_to_final_visible_text() -> None:
     assert openclaw._extract_response_text(raw) == "final fallback"
 
 
+def test_openclaw_dispatch_strips_trailing_standalone_no_reply(monkeypatch) -> None:
+    def fake_run(cmd: list[str], *, timeout: int):
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=json.dumps({"result": {"payloads": [{"text": "Full answer.\n\nNO_REPLY"}]}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(openclaw, "_resolve_bin", lambda settings, env_key, config_key, default_name: f"/bin/{default_name}")
+    monkeypatch.setattr(openclaw, "_new_wake_session_id", lambda: "anx-abc123def456")
+    monkeypatch.setattr(openclaw, "_run", fake_run)
+
+    result = openclaw._dispatch(
+        {
+            "mode": "dispatch",
+            "prompt_text": "wake prompt",
+            "wake_packet": {"thread": {"id": "thread_1", "title": "Launch plan"}},
+        },
+        {},
+    )
+
+    assert result["response_text"] == "Full answer."
+
+
+def test_openclaw_dispatch_keeps_inline_no_reply_content(monkeypatch) -> None:
+    def fake_run(cmd: list[str], *, timeout: int):
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=json.dumps({"result": {"payloads": [{"text": "Use NO_REPLY only as a sentinel."}]}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(openclaw, "_resolve_bin", lambda settings, env_key, config_key, default_name: f"/bin/{default_name}")
+    monkeypatch.setattr(openclaw, "_new_wake_session_id", lambda: "anx-abc123def456")
+    monkeypatch.setattr(openclaw, "_run", fake_run)
+
+    result = openclaw._dispatch(
+        {
+            "mode": "dispatch",
+            "prompt_text": "wake prompt",
+            "wake_packet": {"thread": {"id": "thread_1", "title": "Launch plan"}},
+        },
+        {},
+    )
+
+    assert result["response_text"] == "Use NO_REPLY only as a sentinel."
+
+
 def test_openclaw_dispatch_creates_isolated_session_and_does_not_persist_native_session(monkeypatch) -> None:
     calls: list[list[str]] = []
 

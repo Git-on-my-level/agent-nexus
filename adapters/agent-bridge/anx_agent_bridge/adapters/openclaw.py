@@ -129,7 +129,7 @@ def _dispatch(request: dict[str, Any], settings: dict[str, Any]) -> dict[str, An
             metadata={"error": err[:500], "returncode": proc.returncode},
         )
 
-    response_text = _extract_response_text(proc.stdout)
+    response_text = _sanitize_response_text(_extract_response_text(proc.stdout))
     if not response_text:
         response_text = "OpenClaw completed the agent turn without returning text."
     return {
@@ -219,6 +219,13 @@ def _extract_response_text(raw_stdout: str) -> str:
         if text:
             return text
     return ""
+
+
+def _sanitize_response_text(text: str) -> str:
+    lines = text.rstrip().splitlines()
+    if lines and lines[-1].strip() == "NO_REPLY":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
 
 
 def _last_payload_text(payloads: Any) -> str:
