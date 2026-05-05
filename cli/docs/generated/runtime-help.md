@@ -1447,9 +1447,9 @@ Read paths:
   boards cards list               Existing cards and titles before adding more.
 
   Examples:
-    anx boards cards list <board-id>
-    anx boards cards get <board-id> <card-id>
-    anx boards cards get --board-id <board-id> --card-id <card-id>
+    anx boards cards list board:<board-handle>
+    anx boards cards get board:<board-handle> card:<card-handle>
+    anx boards cards get --board-id board:<board-handle> --card-id card:<card-handle>
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1501,7 +1501,7 @@ Local inspection helpers:
   Mutation flow:
   docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
   docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
-  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise <id> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
+  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise <document-ref-or-handle> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2395,7 +2395,7 @@ Inputs:
   - body `card.risk` (string)
   - body `card.summary` (string)
   - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
   - body `request_key` (string)
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: done; card.risk: critical, high, low, medium
 
@@ -2429,16 +2429,16 @@ Inputs:
   - body `items` (list<any>)
   Optional:
   - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
   - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
 
 CLI input:
   - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
-  - Board id: `--board-id <id>` or a single positional `<board-id>` before flags (no other positionals).
+  - Board target: `--board-id <board-ref-or-handle>` or a single positional `<board-ref-or-handle>` before flags (no other positionals).
   - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
   - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run `anx boards get --board-id <board-id> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
+Agent tip: run `anx boards get --board-id <board-ref-or-handle> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2902,7 +2902,7 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2934,7 +2934,7 @@ Inputs:
   - body `reason` (string)
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2995,7 +2995,7 @@ Inputs:
   - path `card_id`
   Optional:
   - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response.
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4278,15 +4278,15 @@ Local Help: boards create
 - Composition: Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.
 - JSON body: Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.
 - Examples:
-  - `anx boards create --topic <topic-id> --title "Launch board"`
-  - `anx boards create --title "Launch board" --summary "Active launch work" --document-ref document:<doc-id>`
+  - `anx boards create --topic topic:<topic-handle> --title "Launch board"`
+  - `anx boards create --title "Launch board" --summary "Active launch work" --document-ref document:<document-handle>`
   - `cat board.json | anx boards create`
 
 Flags:
   --title <text>               Board title.
   --summary <text>             Optional board summary.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
-  --topic <topic-id>           Primary topic id; plain ids are normalized to topic:<id>.
+  --topic <topic-ref-or-handle> Primary topic typed ref or handle.
   --document-ref <typed-ref>   Linked document typed ref, repeatable.
   --ref <typed-ref>            Pinned/related typed ref, repeatable.
   --from-file <path>           Advanced JSON request body from file.
@@ -4311,12 +4311,12 @@ Local Help: docs create
 - Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
 - JSON body: Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
 - Examples:
-  - `anx docs create --topic <topic-id> --title "Runbook" --content-file runbook.md`
-  - `anx docs create --subject-ref topic:<topic-id> --title "Runbook" --summary "Durable context" --content-file runbook.md`
+  - `anx docs create --topic topic:<topic-handle> --title "Runbook" --content-file runbook.md`
+  - `anx docs create --subject-ref topic:<topic-handle> --title "Runbook" --summary "Durable context" --content-file runbook.md`
   - `cat doc-create.json | anx docs create`
 
 Flags:
-  --topic <topic-id>           Anchor the document to a topic; plain ids are normalized to topic:<id>.
+  --topic <topic-ref-or-handle> Anchor the document to a topic typed ref or handle.
   --subject-ref <typed-ref>    Explicit document subject ref when not using --topic.
   --title <text>               Document title for flag-built text docs.
   --summary <text>             Optional document summary for list/detail headers.
@@ -4345,15 +4345,15 @@ Local Help: cards create
 - Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.
 - JSON body: Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
 - Examples:
-  - `anx cards create --board <board-id> --topic <topic-id> --title "Implement login" --content-file card.md`
-  - `anx cards create --board <board-id> --title "Implement login" --content-file card.md --assignee-ref actor:<actor-id>`
+  - `anx cards create --board board:<board-handle> --topic topic:<topic-handle> --title "Implement login" --content-file card.md`
+  - `anx cards create --board board:<board-handle> --title "Implement login" --content-file card.md --assignee-ref actor:<actor-handle>`
   - `cat card-create.json | anx cards create`
 
 Flags:
-  --board <board-id>           Board id for the new work card.
+  --board <board-ref-or-handle> Board typed ref or handle for the new work card.
   --title <text>               Card title.
   --content-file <path>        Load card summary/body text from a local file.
-  --topic <topic-id>           Related topic id; plain ids are normalized to topic:<id>.
+  --topic <topic-ref-or-handle> Related topic typed ref or handle.
   --column <key>               Initial board column; defaults to backlog.
   --assignee-ref <typed-ref>   Assignee actor ref, repeatable.
   --document-ref <typed-ref>   Pinned document ref for the card.
@@ -4848,14 +4848,14 @@ Local Help: boards workspace
 
 - Kind: `local helper`
 - Summary: Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
-- Composition: Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
+- Composition: Resolves a board by typed ref or handle, fetches the projection workspace with per-card thread backing, and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
 - JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
 - Examples:
-  - `anx boards workspace <board-id>`
+  - `anx boards workspace board:<board-handle>`
   - `anx boards workspace board_product_launch`
 
 Flags:
-  <board-id>                   Board id, typed ref, or handle to load.
+  <board-ref-or-handle>        Board typed ref or handle to load.
 
 
 Global flags:
@@ -4873,14 +4873,14 @@ Local Help: boards cards list
 
 - Kind: `local helper`
 - Summary: List all cards on a board in canonical column order without hydrating thread details.
-- Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.
+- Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with card refs and titles; thread refs are secondary context.
 - JSON body: `board_id`, `cards`
 - Examples:
-  - `anx boards cards list <board-id>`
-  - `anx boards cards list <board-id> --full-id`
+  - `anx boards cards list board:<board-handle>`
+  - `anx boards cards list board:<board-handle> --full-id`
 
 Flags:
-  <board-id>                   Board id, typed ref, or handle to list cards for.
+  <board-ref-or-handle>        Board typed ref or handle to list cards for.
   --full-id                    Render full card ids in default text output.
 
 

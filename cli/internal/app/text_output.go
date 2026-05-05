@@ -1844,8 +1844,11 @@ func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 		} else {
 			cardID := strings.TrimSpace(anyString(card["id"]))
 			title := strings.TrimSpace(anyString(card["title"]))
-			subject := cardID
-			if title != "" && title != cardID {
+			subject := displayPublicIdentity(card, "card")
+			if subject == "(unknown)" {
+				subject = cardID
+			}
+			if title != "" && title != subject {
 				if subject != "" {
 					subject = subject + " — " + title
 				} else {
@@ -1915,7 +1918,11 @@ func formatBoardCardsBatchCreateResult(body any) string {
 		if !ok {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- [%d] %s — %s", i, anyString(card["id"]), strings.TrimSpace(anyString(card["title"]))))
+		cardID := displayPublicIdentity(card, "card")
+		if cardID == "(unknown)" {
+			cardID = anyString(card["id"])
+		}
+		lines = append(lines, fmt.Sprintf("- [%d] %s — %s", i, cardID, strings.TrimSpace(anyString(card["title"]))))
 	}
 	return strings.Join(lines, "\n")
 }

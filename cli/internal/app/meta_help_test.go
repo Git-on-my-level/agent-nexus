@@ -574,7 +574,7 @@ func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
 	if !strings.Contains(output, "Local Help: docs create") {
 		t.Fatalf("expected local docs create help, got output=%s", output)
 	}
-	if !strings.Contains(output, "--topic <topic-id>") || !strings.Contains(output, "--content-file <path>") {
+	if !strings.Contains(output, "--topic <topic-ref-or-handle>") || !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected file-first docs create flags output=%s", output)
 	}
 	if strings.Contains(output, "document.body_markdown") {

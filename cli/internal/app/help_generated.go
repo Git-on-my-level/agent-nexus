@@ -133,15 +133,15 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.",
 		Composition: "Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.",
 		Examples: []string{
-			"anx boards create --topic <topic-id> --title \"Launch board\"",
-			"anx boards create --title \"Launch board\" --summary \"Active launch work\" --document-ref document:<doc-id>",
+			"anx boards create --topic topic:<topic-handle> --title \"Launch board\"",
+			"anx boards create --title \"Launch board\" --summary \"Active launch work\" --document-ref document:<document-handle>",
 			"cat board.json | anx boards create",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Board title."},
 			{Name: "--summary <text>", Description: "Optional board summary."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
-			{Name: "--topic <topic-id>", Description: "Primary topic id; plain ids are normalized to topic:<id>."},
+			{Name: "--topic <topic-ref-or-handle>", Description: "Primary topic typed ref or handle."},
 			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
 			{Name: "--ref <typed-ref>", Description: "Pinned/related typed ref, repeatable."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
@@ -154,12 +154,12 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.",
 		Composition: "Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.",
 		Examples: []string{
-			"anx docs create --topic <topic-id> --title \"Runbook\" --content-file runbook.md",
-			"anx docs create --subject-ref topic:<topic-id> --title \"Runbook\" --summary \"Durable context\" --content-file runbook.md",
+			"anx docs create --topic topic:<topic-handle> --title \"Runbook\" --content-file runbook.md",
+			"anx docs create --subject-ref topic:<topic-handle> --title \"Runbook\" --summary \"Durable context\" --content-file runbook.md",
 			"cat doc-create.json | anx docs create",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--topic <topic-id>", Description: "Anchor the document to a topic; plain ids are normalized to topic:<id>."},
+			{Name: "--topic <topic-ref-or-handle>", Description: "Anchor the document to a topic typed ref or handle."},
 			{Name: "--subject-ref <typed-ref>", Description: "Explicit document subject ref when not using --topic."},
 			{Name: "--title <text>", Description: "Document title for flag-built text docs."},
 			{Name: "--summary <text>", Description: "Optional document summary for list/detail headers."},
@@ -176,15 +176,15 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.",
 		Composition: "Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.",
 		Examples: []string{
-			"anx cards create --board <board-id> --topic <topic-id> --title \"Implement login\" --content-file card.md",
-			"anx cards create --board <board-id> --title \"Implement login\" --content-file card.md --assignee-ref actor:<actor-id>",
+			"anx cards create --board board:<board-handle> --topic topic:<topic-handle> --title \"Implement login\" --content-file card.md",
+			"anx cards create --board board:<board-handle> --title \"Implement login\" --content-file card.md --assignee-ref actor:<actor-handle>",
 			"cat card-create.json | anx cards create",
 		},
 		Flags: []localHelperFlag{
-			{Name: "--board <board-id>", Description: "Board id for the new work card."},
+			{Name: "--board <board-ref-or-handle>", Description: "Board typed ref or handle for the new work card."},
 			{Name: "--title <text>", Description: "Card title."},
 			{Name: "--content-file <path>", Description: "Load card summary/body text from a local file."},
-			{Name: "--topic <topic-id>", Description: "Related topic id; plain ids are normalized to topic:<id>."},
+			{Name: "--topic <topic-ref-or-handle>", Description: "Related topic typed ref or handle."},
 			{Name: "--column <key>", Description: "Initial board column; defaults to backlog."},
 			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor ref, repeatable."},
 			{Name: "--document-ref <typed-ref>", Description: "Pinned document ref for the card."},
@@ -476,26 +476,26 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "boards workspace",
 		Summary:     "Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.",
 		JSONShape:   "`board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`",
-		Composition: "Resolves a board by id, fetches the projection workspace with per-card thread backing and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).",
+		Composition: "Resolves a board by typed ref or handle, fetches the projection workspace with per-card thread backing, and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).",
 		Examples: []string{
-			"anx boards workspace <board-id>",
+			"anx boards workspace board:<board-handle>",
 			"anx boards workspace board_product_launch",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<board-id>", Description: "Board id, typed ref, or handle to load."},
+			{Name: "<board-ref-or-handle>", Description: "Board typed ref or handle to load."},
 		},
 	},
 	{
 		Path:        "boards cards list",
 		Summary:     "List all cards on a board in canonical column order without hydrating thread details.",
 		JSONShape:   "`board_id`, `cards`",
-		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with canonical card ids and titles; thread ids are secondary context.",
+		Composition: "Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with card refs and titles; thread refs are secondary context.",
 		Examples: []string{
-			"anx boards cards list <board-id>",
-			"anx boards cards list <board-id> --full-id",
+			"anx boards cards list board:<board-handle>",
+			"anx boards cards list board:<board-handle> --full-id",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<board-id>", Description: "Board id, typed ref, or handle to list cards for."},
+			{Name: "<board-ref-or-handle>", Description: "Board typed ref or handle to list cards for."},
 			{Name: "--full-id", Description: "Render full card ids in default text output."},
 		},
 	},
@@ -953,7 +953,7 @@ func localGroupHelpSupplement(topic string) string {
   Mutation flow:
   docs create              Create durable context from flags plus ` + "`--content-file`" + `, or from advanced JSON.
   docs revise              Revise from ` + "`--content-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
-  Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise <id> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
+  Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise <document-ref-or-handle> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
@@ -974,9 +974,9 @@ Read paths:
   boards cards list               Existing cards and titles before adding more.
 
   Examples:
-    anx boards cards list <board-id>
-    anx boards cards get <board-id> <card-id>
-    anx boards cards get --board-id <board-id> --card-id <card-id>`)
+    anx boards cards list board:<board-handle>
+    anx boards cards get board:<board-handle> card:<card-handle>
+    anx boards cards get --board-id board:<board-handle> --card-id card:<card-handle>`)
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
   cards create             Create a board work card from flags plus ` + "`--content-file`" + `.
@@ -1215,9 +1215,9 @@ func fieldHelpText(commandID string, name string) string {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "if_board_updated_at" && commandID == "boards.cards.batch_add":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON."
 	case name == "if_board_updated_at":
-		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-id>`, `anx boards workspace <board-id>`, or the latest board mutation response."
+		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response."
 	case name == "actor_id" && commandID == "boards.cards.batch_add":
 		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
@@ -1338,11 +1338,11 @@ Inbox kinds:
 	case "boards.cards.batch_add":
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
-  - Board id: ` + "`--board-id <id>`" + ` or a single positional ` + "`<board-id>`" + ` before flags (no other positionals).
+  - Board target: ` + "`--board-id <board-ref-or-handle>`" + ` or a single positional ` + "`<board-ref-or-handle>`" + ` before flags (no other positionals).
   - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
   - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run ` + "`anx boards get --board-id <board-id> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
+Agent tip: run ` + "`anx boards get --board-id <board-ref-or-handle> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
 	default:
 		return ""
 	}
