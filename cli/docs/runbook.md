@@ -177,31 +177,31 @@ anx --agent agent-a events stream --max-events 1
 anx --agent agent-a inbox stream --max-events 1
 anx --agent agent-a events stream --follow
 # Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
-anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --full-id --max-events 20
-anx --agent agent-a provenance walk --from event:event_123 --depth 2
-anx --agent agent-a topics get topic_123
+anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --max-events 20
+anx --agent agent-a provenance walk --from event:incident-42 --depth 2
+anx --agent agent-a topics get incident-42
 anx --agent agent-a topics create --title "Launch" --summary "Coordinate launch work"
-anx --agent agent-a topics message topic_123 --body-file message.md
-anx --agent agent-a topics messages topic_123 --max-events 10
-anx --agent agent-a topics workspace topic_123 --full-id
+anx --agent agent-a topics message incident-42 --body-file message.md
+anx --agent agent-a topics messages incident-42 --max-events 10
+anx --agent agent-a topics workspace incident-42
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
-anx --agent agent-a threads inspect thread_123 --max-events 50 --full-id
-anx --agent agent-a threads context --state active --full-id
-anx --agent agent-a threads workspace thread_123 --full-id
+anx --agent agent-a threads inspect thread_123 --max-events 50
+anx --agent agent-a threads context --state active
+anx --agent agent-a threads workspace thread_123
 anx --agent agent-a docs content product-constitution
 anx --agent agent-a docs message product-constitution --body-file note.md
 anx --agent agent-a docs messages product-constitution --max-events 10
-anx --agent agent-a artifacts inspect --artifact-id artifact_123
+anx --agent agent-a artifacts inspect --artifact-id incident-42-log
 anx --agent agent-a workspace summary
 anx --agent agent-a boards list --state active
-anx --agent agent-a boards create --topic topic_123 --title "Launch board"
-anx --agent agent-a boards workspace board_product_launch
+anx --agent agent-a boards create --topic incident-42 --title "Launch board"
+anx --agent agent-a boards workspace product-launch
 # Cards: draft prose locally, then use domain verbs for active work.
-anx --agent agent-a cards create --board board_product_launch --topic topic_123 --title "Rescue digest" --content-file card.md
-anx --agent agent-a cards revise card_789 --content-file card.md
-anx --agent agent-a cards assign card_789 --assignee-ref actor:agent-a
-anx --agent agent-a cards move card_789 --column review
-anx --agent agent-a cards resolve card_789 --body-file evidence.md
+anx --agent agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --content-file card.md
+anx --agent agent-a cards revise rescue-digest --content-file card.md
+anx --agent agent-a cards assign rescue-digest --assignee-ref actor:agent-a
+anx --agent agent-a cards move rescue-digest --column review
+anx --agent agent-a cards resolve rescue-digest --body-file evidence.md
 # Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
 anx --agent agent-a receipts create --from-file receipt.json
 anx --agent agent-a reviews create --from-file review.json
