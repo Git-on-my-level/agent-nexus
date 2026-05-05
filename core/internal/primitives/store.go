@@ -1843,6 +1843,8 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 
 	out := cloneMap(body)
 	out["id"] = threadID
+	out["ref"] = "thread:" + handle
+	out["handle"] = handle
 	// Thread domain `type` is provided by caller (thread_type enum).
 	out["thread_id"] = threadID
 	out["updated_at"] = updatedAt
@@ -1862,7 +1864,7 @@ func (s *Store) GetThread(ctx context.Context, id string) (map[string]any, error
 	if row.Kind != "thread" {
 		return nil, ErrNotFound
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (ThreadMutationResult, error) {
@@ -1893,7 +1895,7 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 		if err != nil {
 			return nil, "", err
 		}
-		threadMap, err := row.ToThreadMap()
+		threadMap, err := row.ToThreadMapPublic(ctx, s.db)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1940,7 +1942,7 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 		return nil, ErrAlreadyTrashed
 	}
 	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
-		return row.ToThreadMap()
+		return row.ToThreadMapPublic(ctx, s.db)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
@@ -1953,7 +1955,7 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
@@ -1988,7 +1990,7 @@ func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason string) (map[string]any, error) {
@@ -2011,7 +2013,7 @@ func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason strin
 		return nil, ErrNotFound
 	}
 	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
-		return row.ToThreadMap()
+		return row.ToThreadMapPublic(ctx, s.db)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
@@ -2024,7 +2026,7 @@ func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason strin
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
@@ -2059,7 +2061,7 @@ func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
@@ -2381,6 +2383,14 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 	}
 	if payload, ok := prepared.Body["payload"]; ok {
 		prepared.Body["payload"] = publicRefsInValue(ctx, exec, payload)
+	}
+	for k, v := range prepared.Body {
+		switch k {
+		case "id", "type", "ts", "actor_id", "thread_id", "thread_ref", "refs", "payload":
+			continue
+		default:
+			prepared.Body[k] = publicRefsInValue(ctx, exec, v)
+		}
 	}
 	if _, err := exec.ExecContext(
 		ctx,
@@ -3304,6 +3314,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 
 type threadRow struct {
 	ID             string
+	Handle         sql.NullString
 	Kind           string
 	ThreadID       sql.NullString
 	UpdatedAt      string
@@ -3329,9 +3340,9 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 	row := threadRow{}
 	err := db.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM %s WHERE id = ?`, tableName),
+		fmt.Sprintf(`SELECT id, COALESCE(handle, ''), kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM %s WHERE id = ?`, tableName),
 		id,
-	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
+	).Scan(&row.ID, &row.Handle, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return threadRow{}, ErrNotFound
 	}
@@ -3343,7 +3354,7 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 
 func scanThreadRow(scanner interface{ Scan(dest ...any) error }) (threadRow, error) {
 	row := threadRow{}
-	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason); err != nil {
+	if err := scanner.Scan(&row.ID, &row.Handle, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason); err != nil {
 		return threadRow{}, fmt.Errorf("scan threads row: %w", err)
 	}
 	return row, nil
@@ -3371,6 +3382,12 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 	}
 
 	body["id"] = r.ID
+	handle := strings.TrimSpace(r.Handle.String)
+	if handle == "" {
+		handle = r.ID
+	}
+	body["ref"] = "thread:" + handle
+	body["handle"] = handle
 	if _, hasType := body["type"]; !hasType {
 		body["type"] = r.Kind
 	}
@@ -3401,6 +3418,14 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 	body["state"] = canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 
 	return body, nil
+}
+
+func (r threadRow) ToThreadMapPublic(ctx context.Context, q queryRower) (map[string]any, error) {
+	body, err := r.ToThreadMap()
+	if err != nil {
+		return nil, err
+	}
+	return publicRefsInValue(ctx, q, body).(map[string]any), nil
 }
 
 // StripThreadPlanningFieldsForAPI removes planning-only fields that belong on topics from a thread
@@ -3514,7 +3539,7 @@ func uniqueNormalizedStrings(values []string) []string {
 }
 
 func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
-	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
+	query := `SELECT threads.id, COALESCE(threads.handle, ''), threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
 		 FROM threads`
 	args := make([]any, 0, 9)
 	hasWhere := false

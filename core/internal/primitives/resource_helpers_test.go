@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"reflect"
 	"sort"
 	"strings"
@@ -405,7 +406,127 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	})
 }
 
+func TestInfrastructureRefsUsePublicRefsWithInternalJoinMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	topicResult, err := store.CreateTopic(ctx, "actor-1", map[string]any{
+		"id":            "topic-internal-public-ref",
+		"title":         "Public Topic Ref",
+		"summary":       "summary",
+		"owner_refs":    []string{},
+		"document_refs": []string{},
+		"board_refs":    []string{},
+		"related_refs":  []string{},
+		"provenance":    map[string]any{"sources": []string{"inferred"}},
+	})
+	if err != nil {
+		t.Fatalf("create topic: %v", err)
+	}
+	topicID := topicResult.Topic["id"].(string)
+	topicRef := topicResult.Topic["ref"].(string)
+	if topicRef == "topic:"+topicID || !strings.HasPrefix(topicRef, "topic:") {
+		t.Fatalf("expected topic public ref, got topicRef=%q topicID=%q", topicRef, topicID)
+	}
+
+	threadID := topicResult.Topic["thread_id"].(string)
+	thread, err := store.GetThread(ctx, threadID)
+	if err != nil {
+		t.Fatalf("get topic backing thread: %v", err)
+	}
+	if got := anyStringValue(thread["subject_ref"]); got != topicRef {
+		t.Fatalf("thread subject_ref should be public: got %q want %q", got, topicRef)
+	}
+	if got := anyStringValue(thread["ref"]); got == "" || got == "thread:"+threadID {
+		t.Fatalf("thread ref should be public handle-backed ref, got %q for id %q", got, threadID)
+	}
+
+	event, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"id":        "event-public-ref-normalize",
+		"type":      "message_posted",
+		"thread_id": threadID,
+		"refs":      []string{"thread:" + threadID, "topic:" + topicID},
+		"payload": map[string]any{
+			"subject_ref": "topic:" + topicID,
+			"related_refs": []any{
+				"topic:" + topicID,
+			},
+		},
+		"provenance": map[string]any{"sources": []string{"topic:" + topicID}},
+	})
+	if err != nil {
+		t.Fatalf("append event: %v", err)
+	}
+	if refs := stringListFromAny(event["refs"]); !containsStringForResourceTest(refs, topicRef) || containsStringForResourceTest(refs, "topic:"+topicID) {
+		t.Fatalf("event refs should expose public topic ref: got %#v", refs)
+	}
+	payload := event["payload"].(map[string]any)
+	if got := anyStringValue(payload["subject_ref"]); got != topicRef {
+		t.Fatalf("event payload subject_ref should be public: got %q want %q", got, topicRef)
+	}
+	provenance := event["provenance"].(map[string]any)
+	if sources := stringListFromAny(provenance["sources"]); !reflect.DeepEqual(sources, []string{topicRef}) {
+		t.Fatalf("event provenance sources should be public: got %#v want %#v", sources, []string{topicRef})
+	}
+
+	var metadataJSON string
+	if err := workspace.DB().QueryRowContext(ctx, `
+		SELECT metadata_json
+		  FROM ref_edges
+		 WHERE source_type = 'event'
+		   AND source_id = ?
+		   AND target_type = 'topic'
+		   AND target_id = ?
+		   AND edge_type = 'ref'`,
+		event["id"], topicID,
+	).Scan(&metadataJSON); err != nil {
+		t.Fatalf("query event topic ref edge: %v", err)
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		t.Fatalf("decode ref edge metadata: %v", err)
+	}
+	if got := anyStringValue(metadata["target_ref"]); got != topicRef {
+		t.Fatalf("ref edge target_ref metadata should be public: got %q want %q", got, topicRef)
+	}
+	if got := anyStringValue(metadata["resolved_target_id"]); got != topicID {
+		t.Fatalf("ref edge resolved_target_id should preserve internal join id: got %q want %q", got, topicID)
+	}
+}
+
 func stringPointer(value string) *string {
 	value = strings.TrimSpace(value)
 	return &value
+}
+
+func stringListFromAny(raw any) []string {
+	var out []string
+	switch values := raw.(type) {
+	case []string:
+		out = append(out, values...)
+	case []any:
+		for _, value := range values {
+			if text, ok := value.(string); ok {
+				out = append(out, text)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func containsStringForResourceTest(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

@@ -651,7 +651,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	if len(payload.KeyArtifacts) != 1 {
 		t.Fatalf("expected 1 key artifact, got %d", len(payload.KeyArtifacts))
 	}
-	if asString(payload.KeyArtifacts[0]["ref"]) != "artifact:ctx-artifact-1" {
+	if asString(payload.KeyArtifacts[0]["ref"]) != "artifact:context-artifact" {
 		t.Fatalf("unexpected key artifact ref: %#v", payload.KeyArtifacts[0])
 	}
 	artifactObj, _ := payload.KeyArtifacts[0]["artifact"].(map[string]any)
@@ -881,7 +881,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if payload.ThreadID != rootThreadID || asString(payload.Thread["id"]) != rootThreadID {
 		t.Fatalf("unexpected workspace thread payload: %#v", payload)
 	}
-	if len(payload.Context.KeyArtifacts) != 1 || asString(payload.Context.KeyArtifacts[0]["ref"]) != "artifact:workspace-artifact-1" {
+	if len(payload.Context.KeyArtifacts) != 1 || asString(payload.Context.KeyArtifacts[0]["ref"]) != "artifact:workspace-artifact" {
 		t.Fatalf("expected key artifact in workspace context, got %#v", payload.Context.KeyArtifacts)
 	}
 	if len(payload.Context.OpenCards) != 0 {
