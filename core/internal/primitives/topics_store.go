@@ -218,6 +218,7 @@ func (s *Store) loadTopicRefBucketsBatch(ctx context.Context, topicIDs []string,
 
 var topicExtensionsMergeDenylist = map[string]struct{}{
 	"id": {}, "type": {}, "title": {}, "summary": {}, "thread_id": {},
+	"handle": {}, "ref": {},
 	"owner_refs": {}, "document_refs": {}, "board_refs": {}, "related_refs": {},
 	"thread_ref": {}, "primary_thread_ref": {}, "primary_thread_id": {},
 	"status": {}, "state": {},
