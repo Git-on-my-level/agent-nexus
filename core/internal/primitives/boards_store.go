@@ -2644,8 +2644,8 @@ func (s *Store) ListBoardCardHistory(ctx context.Context, cardID string) ([]map[
 func (s *Store) listBoardCardHistoryTx(ctx context.Context, q sqlRowsQuerier, cardID string) ([]map[string]any, error) {
 	rows, err := q.QueryContext(
 		ctx,
-		`SELECT cr.revision_id, cr.card_id, cr.revision_number, cr.prev_revision_id, cr.artifact_id, cr.revision_hash,
-		        c.board_id, cr.thread_id,
+		`SELECT cr.revision_id, cr.card_id, c.handle, cr.revision_number, cr.prev_revision_id, cr.artifact_id, cr.revision_hash,
+		        c.board_id, b.handle, cr.thread_id,
 		        COALESCE(json_extract(a.metadata_json, '$.title'), c.title),
 		        COALESCE(json_extract(a.metadata_json, '$.summary'), c.summary),
 		        c.due_at,
@@ -2654,6 +2654,7 @@ func (s *Store) listBoardCardHistoryTx(ctx context.Context, q sqlRowsQuerier, ca
 		        cr.created_at, cr.created_by, c.provenance_json
 		   FROM card_revisions cr
 		   JOIN cards c ON c.id = cr.card_id
+		   LEFT JOIN boards b ON b.id = c.board_id
 		   JOIN artifacts a ON a.id = cr.artifact_id
 		  WHERE cr.card_id = ?
 		  ORDER BY cr.revision_number ASC`,
@@ -3788,11 +3789,13 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 type boardCardVersionRow struct {
 	RevisionID           string
 	CardID               string
+	CardHandle           string
 	Version              int
 	PrevRevisionID       sql.NullString
 	ArtifactID           string
 	RevisionHash         string
 	BoardID              string
+	BoardHandle          string
 	ColumnKey            string
 	Rank                 string
 	Title                string
@@ -3817,11 +3820,13 @@ func scanBoardCardVersionRow(scanner interface{ Scan(dest ...any) error }) (boar
 	if err := scanner.Scan(
 		&row.RevisionID,
 		&row.CardID,
+		&row.CardHandle,
 		&row.Version,
 		&row.PrevRevisionID,
 		&row.ArtifactID,
 		&row.RevisionHash,
 		&row.BoardID,
+		&row.BoardHandle,
 		&row.ThreadID,
 		&row.Title,
 		&row.Body,
@@ -4357,7 +4362,8 @@ func (r boardCardVersionRow) toMap() (map[string]any, error) {
 		"id":                 r.RevisionID,
 		"revision_id":        r.RevisionID,
 		"card_id":            r.CardID,
-		"card_ref":           "card:" + strings.TrimSpace(r.CardID),
+		"card_ref":           "card:" + strings.TrimSpace(firstNonEmpty(r.CardHandle, r.CardID)),
+		"card_handle":        strings.TrimSpace(firstNonEmpty(r.CardHandle, r.CardID)),
 		"revision_number":    r.Version,
 		"prev_revision_ref":  boardTypedRefOrNil("card_revision", r.PrevRevisionID.String),
 		"artifact_ref":       "artifact:" + strings.TrimSpace(r.ArtifactID),
@@ -4365,7 +4371,8 @@ func (r boardCardVersionRow) toMap() (map[string]any, error) {
 		"title":              r.Title,
 		"summary":            r.Body,
 		"board_id":           r.BoardID,
-		"board_ref":          "board:" + strings.TrimSpace(r.BoardID),
+		"board_ref":          "board:" + strings.TrimSpace(firstNonEmpty(r.BoardHandle, r.BoardID)),
+		"board_handle":       strings.TrimSpace(firstNonEmpty(r.BoardHandle, r.BoardID)),
 		"thread_id":          nullableBoardString(threadID),
 		"document_ref":       boardTypedRefOrNil("document", r.PinnedDocumentID.String),
 		"risk":               canonicalBoardCardRisk(r.Risk),

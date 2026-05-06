@@ -71,6 +71,21 @@ func TestResolveResourceRef(t *testing.T) {
 	}
 }
 
+func TestResolveResourceRefRejectsMismatchedTypedRefPrefix(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer ws.Close()
+	store := NewTestStore(ws.DB(), "")
+
+	if _, err := store.ResolveResourceRef(ctx, ResourceRefInput{Type: "card", Ref: "board:roadmap"}); err == nil {
+		t.Fatal("expected mismatched typed ref prefix to fail")
+	}
+}
+
 func TestResolveResourceRefPrefersHandleBeforeLegacyIDFallback(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -52,6 +52,9 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		if err != nil {
 			return ResolvedResourceRef{}, fmt.Errorf("%w: %v", ErrInvalidResourceRef, err)
 		}
+		if typ != "" && typ != prefix {
+			return ResolvedResourceRef{}, fmt.Errorf("%w: typed ref %q does not match expected resource type %q", ErrInvalidResourceRef, prefix, typ)
+		}
 		typ = prefix
 		value = suffix
 	}

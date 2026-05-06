@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -1793,11 +1794,15 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 	if boardID == "" {
 		t.Fatal("expected board id")
 	}
+	boardRef := asString(boardEnvelope.Board["ref"])
+	if boardRef == "" {
+		t.Fatal("expected board ref")
+	}
 	boardUpdatedAt := asString(boardEnvelope.Board["updated_at"])
 
 	globalCardResp := postJSONExpectStatus(t, h.baseURL+"/cards", `{
 		"actor_id":"actor-1",
-		"board_id":"`+boardID+`",
+		"board_id":"`+boardRef+`",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
 		"title":"Created via POST /cards",
 		"column_key":"backlog",
@@ -1815,8 +1820,12 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 	if cardID == "" {
 		t.Fatal("expected card id from global create")
 	}
+	cardRef := asString(cardOut.Card["ref"])
+	if cardRef == "" {
+		t.Fatal("expected card ref from global create")
+	}
 
-	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=card:" + cardID)
+	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=" + url.QueryEscape(cardRef))
 	if err != nil {
 		t.Fatalf("GET ref-edges: %v", err)
 	}

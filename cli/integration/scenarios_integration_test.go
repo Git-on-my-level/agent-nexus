@@ -351,7 +351,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 		},
 		"content_type": "structured",
 	}, "artifacts", "create")
-	artifactID := mustStringPath(t, artifact.Payload, "data.body.artifact.id")
+	artifactRef := mustStringPath(t, artifact.Payload, "data.body.artifact.ref")
 
 	topic := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"topic": map[string]any{
@@ -361,22 +361,24 @@ func TestProvenanceWalkScenario(t *testing.T) {
 			"owner_refs":    []any{},
 			"document_refs": []any{},
 			"board_refs":    []any{},
-			"related_refs":  []any{"artifact:" + artifactID},
-			"provenance":    map[string]any{"sources": []any{"artifact:" + artifactID}},
+			"related_refs":  []any{artifactRef},
+			"provenance":    map[string]any{"sources": []any{artifactRef}},
 		},
 	}, "topics", "create")
 	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
+	topicHandle := mustStringPath(t, topic.Payload, "data.body.topic.handle")
+	threadRef := "thread:" + topicHandle
 
 	event := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"event": map[string]any{
 			"type":      "human_attention_requested",
 			"thread_id": threadID,
-			"refs":      []string{"thread:" + threadID, "artifact:" + artifactID},
+			"refs":      []string{threadRef, artifactRef},
 			"summary":   "Trace thread provenance for run " + runID,
 			"payload": map[string]any{
 				"kind":               "ask",
 				"title":              "Trace thread provenance for run " + runID,
-				"subject_ref":        "artifact:" + artifactID,
+				"subject_ref":        artifactRef,
 				"requester_actor_id": "actor-1",
 				"response_proposals": []any{"Trace the provenance graph."},
 				"run_id":             runID,
@@ -408,18 +410,18 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	if !integrationContainsNodeRef(nodes, "event:"+eventID) {
 		t.Fatalf("expected event node in walk output, payload=%#v", walk.Payload)
 	}
-	if !integrationContainsNodeRef(nodes, "thread:"+threadID) {
+	if !integrationContainsNodeRef(nodes, threadRef) {
 		t.Fatalf("expected thread node in walk output, payload=%#v", walk.Payload)
 	}
-	if !integrationContainsNodeRef(nodes, "artifact:"+artifactID) {
+	if !integrationContainsNodeRef(nodes, artifactRef) {
 		t.Fatalf("expected artifact node in walk output, payload=%#v", walk.Payload)
 	}
 
 	edges, _ := data["edges"].([]any)
-	if !integrationHasEdge(edges, "event:"+eventID, "thread:"+threadID, "refs") {
+	if !integrationHasEdge(edges, "event:"+eventID, threadRef, "refs") {
 		t.Fatalf("expected event->thread edge, payload=%#v", walk.Payload)
 	}
-	if !integrationHasEdge(edges, "event:"+eventID, "artifact:"+artifactID, "refs") {
+	if !integrationHasEdge(edges, "event:"+eventID, artifactRef, "refs") {
 		t.Fatalf("expected event->artifact refs edge, payload=%#v", walk.Payload)
 	}
 }

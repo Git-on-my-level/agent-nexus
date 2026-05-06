@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -67,14 +68,15 @@ func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, r *http.Request, r
 		}
 	}
 	if boardID != "" && refStr != "" {
-		resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "board", Ref: refStr})
-		if err == nil && strings.TrimSpace(resolved.ID) != "" && strings.TrimSpace(resolved.ID) != boardID {
+		resolvedID, idOK := resolveResourceIDForInternalUse(r.Context(), opts, "board", boardID)
+		resolvedRef, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "board", Ref: refStr})
+		if idOK && err == nil && strings.TrimSpace(resolvedRef.ID) != "" && strings.TrimSpace(resolvedRef.ID) != resolvedID {
 			writeError(w, http.StatusBadRequest, "invalid_request", "board_id and board_ref disagree")
 			return "", false
 		}
 	}
 	if boardID != "" {
-		return boardID, true
+		return resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
 	}
 	if refStr == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "board_id or board_ref is required for POST /cards")
@@ -250,6 +252,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 	if !ok {
 		return
 	}
+	cardRef, cardHandle := resolvedCardPublicIdentity(r.Context(), opts, cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -259,7 +262,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revisions")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revisions": revisions})
+	writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revisions": revisions})
 }
 
 func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID, revisionID string) {
@@ -272,6 +275,7 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
+	cardRef, cardHandle := resolvedCardPublicIdentity(r.Context(), opts, cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -287,11 +291,21 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	for _, revision := range revisions {
 		if strings.TrimSpace(anyString(revision["revision_id"])) == revisionID || strings.TrimSpace(anyString(revision["id"])) == revisionID {
-			writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revision": revision})
+			writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revision": revision})
 			return
 		}
 	}
 	writeError(w, http.StatusNotFound, "not_found", "card revision not found")
+}
+
+func resolvedCardPublicIdentity(ctx context.Context, opts handlerOptions, cardID string) (string, string) {
+	cardID = strings.TrimSpace(cardID)
+	if opts.primitiveStore != nil {
+		if resolved, err := opts.primitiveStore.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: "card", Ref: cardID}); err == nil {
+			return resolved.CanonicalRef, resolved.Handle
+		}
+	}
+	return "card:" + cardID, cardID
 }
 
 func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
