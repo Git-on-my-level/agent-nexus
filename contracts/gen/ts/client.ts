@@ -624,6 +624,7 @@ export const commandRegistry: CommandSpec[] = [
     "output_envelope": "Returns `{ artifacts }`.",
     "error_codes": [
       "auth_required",
+      "invalid_request",
       "invalid_token"
     ],
     "concepts": [
@@ -4344,6 +4345,7 @@ export const commandRegistry: CommandSpec[] = [
     "output_envelope": "Returns `{ events, page_info }`.",
     "error_codes": [
       "auth_required",
+      "invalid_request",
       "invalid_token"
     ],
     "concepts": [
@@ -4429,6 +4431,7 @@ export const commandRegistry: CommandSpec[] = [
     "output_envelope": "Each SSE message is `event: …` with JSON data `{ \"event\": \u003cevent\u003e }` (see core/docs/http-api.md).",
     "error_codes": [
       "auth_required",
+      "invalid_request",
       "invalid_token"
     ],
     "concepts": [

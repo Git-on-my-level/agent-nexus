@@ -73,8 +73,8 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	conditions = append(conditions, LifecycleStatesOrGroup("d.archived_at", "d.trashed_at", filter.States))
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
-		args = append(args, searchPattern, searchPattern, searchPattern)
+		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(COALESCE(d.handle, '')) LIKE ? OR LOWER('document:' || COALESCE(d.handle, '')) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 	if len(conditions) > 0 {
 		inner += ` WHERE ` + strings.Join(conditions, ` AND `)

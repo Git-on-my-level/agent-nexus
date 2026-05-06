@@ -196,7 +196,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Search and filter immutable artifacts across the workspace.
 - Concepts: `artifacts`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ artifacts }`.
 
 ## `artifacts.purge`
@@ -951,7 +951,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Inspect append-only event history across the workspace.
 - Concepts: `events`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ events, page_info }`.
 
 ## `events.restore`
@@ -975,7 +975,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Concepts: `events`
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 
 ## `events.trash`

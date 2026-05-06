@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -270,6 +271,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 		"key_artifacts":    []any{},
 		"provenance":       map[string]any{"sources": []any{"inferred"}},
 	})
+	threadRef, threadHandle := loadThreadPublicIdentity(t, h.baseURL, threadID)
 
 	timelineResp, err := http.Get(h.baseURL + "/threads/" + threadID + "/timeline")
 	if err != nil {
@@ -286,7 +288,7 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 		t.Fatalf("expected no thread lifecycle events in initial timeline, got %#v", timeline.Events)
 	}
 
-	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id="+threadID, "")
+	resp := openSSEStream(t, h.baseURL+"/stream/events?thread_id="+url.QueryEscape(threadHandle), "")
 	reader, stop := startSSEReader(resp.Body)
 	defer stop()
 
@@ -308,6 +310,17 @@ func TestEventsStreamEmitsDocumentLifecycleEventsForThread(t *testing.T) {
 	documentID := asString(createdDoc.Document["id"])
 	createRevisionID := asString(createdDoc.Revision["revision_id"])
 	createArtifactID := asString(createdDoc.Revision["artifact_id"])
+	mismatchedResp, err := http.Get(h.baseURL + "/stream/events?thread_id=" + url.QueryEscape("topic:not-a-thread"))
+	if err != nil {
+		t.Fatalf("GET stream with mismatched ref: %v", err)
+	}
+	mismatchedResp.Body.Close()
+	if mismatchedResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected mismatched stream thread ref to return 400, got %d", mismatchedResp.StatusCode)
+	}
+	if threadRef == "" {
+		t.Fatalf("thread ref missing for stream test")
+	}
 
 	updateDocResp := requestJSONExpectStatus(t, http.MethodPost, h.baseURL+"/docs/"+documentID+"/revisions", fmt.Sprintf(`{
 		"actor_id":"actor-1",

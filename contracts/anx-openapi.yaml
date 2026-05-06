@@ -2151,7 +2151,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ events, page_info }`."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [events]
       x-anx-stability: beta
       parameters:
@@ -2218,6 +2218,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
     post:
@@ -2325,7 +2327,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: sse }
       x-anx-output-envelope: "Each SSE message is `event: …` with JSON data `{ \"event\": <event> }` (see core/docs/http-api.md)."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [events]
       x-anx-stability: beta
       parameters:
@@ -2356,6 +2358,8 @@ paths:
             text/event-stream:
               schema:
                 type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
@@ -2525,7 +2529,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ artifacts }`."
-      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [artifacts]
       x-anx-stability: beta
       parameters:
@@ -2588,6 +2592,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ArtifactsListResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
     post:

@@ -3252,7 +3252,7 @@ Generated Help: events stream
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
 - Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
@@ -3277,7 +3277,7 @@ Generated Help: events tail
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
 - Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
 
@@ -3580,7 +3580,7 @@ Generated Help: artifacts list
 - Input mode: `none`
 - Why: Search and filter immutable artifacts across the workspace.
 - Output: Returns `{ artifacts }`.
-- Error codes: `auth_required`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `artifacts`
 - Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts get`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
 

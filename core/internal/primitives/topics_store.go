@@ -1098,8 +1098,8 @@ func buildListTopicsQuery(filter TopicListFilter) (string, []any) {
 	inner += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
-		inner += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`
-		args = append(args, pattern, pattern, pattern)
+		inner += ` AND (LOWER(id) LIKE ? OR LOWER(COALESCE(handle, '')) LIKE ? OR LOWER('topic:' || COALESCE(handle, '')) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(summary, '')) LIKE ?)`
+		args = append(args, pattern, pattern, pattern, pattern, pattern)
 	}
 	inner += ` ORDER BY updated_at DESC, id ASC`
 	if filter.Limit != nil && *filter.Limit > 0 {

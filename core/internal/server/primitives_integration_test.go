@@ -357,6 +357,7 @@ func TestListFiltersResolvePublicRefsAndHandles(t *testing.T) {
 		t.Fatalf("decode topic create: %v", err)
 	}
 	topicRef := assertPublicResourceIdentity(t, topicPayload.Topic, "topic")
+	topicID := asString(topicPayload.Topic["id"])
 	topicHandle := asString(topicPayload.Topic["handle"])
 
 	docResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
@@ -399,6 +400,12 @@ func TestListFiltersResolvePublicRefsAndHandles(t *testing.T) {
 
 	assertListDocsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), docID)
 	assertListDocsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadHandle), docID)
+	assertListDocsContains(t, h.baseURL, "q="+url.QueryEscape(docRef), docID)
+	assertListDocsContains(t, h.baseURL, "q="+url.QueryEscape(docHandle), docID)
+	assertListTopicsContains(t, h.baseURL, "q="+url.QueryEscape(topicRef), topicID)
+	assertListTopicsContains(t, h.baseURL, "q="+url.QueryEscape(topicHandle), topicID)
+	assertListThreadsContains(t, h.baseURL, "q="+url.QueryEscape(threadRef), threadID)
+	assertListThreadsContains(t, h.baseURL, "q="+url.QueryEscape(threadHandle), threadID)
 	assertListEventsContainsType(t, h.baseURL, "topic_id="+url.QueryEscape(topicRef), "topic_created")
 	assertListEventsContainsType(t, h.baseURL, "topic_id="+url.QueryEscape(topicHandle), "topic_created")
 	assertListEventsContainsType(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), "document_created")
@@ -468,6 +475,56 @@ func loadThreadPublicIdentity(t *testing.T, baseURL, threadID string) (string, s
 	ref := assertPublicResourceIdentity(t, payload.Thread, "thread")
 	handle := asString(payload.Thread["handle"])
 	return ref, handle
+}
+
+func assertListTopicsContains(t *testing.T, baseURL, query, topicID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/topics?" + query)
+	if err != nil {
+		t.Fatalf("GET topics list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET topics list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Topics []map[string]any `json:"topics"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode topics list: %v", err)
+	}
+	for _, topic := range payload.Topics {
+		if asString(topic["id"]) == topicID {
+			return
+		}
+	}
+	t.Fatalf("expected topic %q in topics list for %q, got %#v", topicID, query, payload.Topics)
+}
+
+func assertListThreadsContains(t *testing.T, baseURL, query, threadID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/threads?" + query)
+	if err != nil {
+		t.Fatalf("GET threads list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET threads list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode threads list: %v", err)
+	}
+	for _, thread := range payload.Threads {
+		if asString(thread["id"]) == threadID {
+			return
+		}
+	}
+	t.Fatalf("expected thread %q in threads list for %q, got %#v", threadID, query, payload.Threads)
 }
 
 func assertListDocsContains(t *testing.T, baseURL, query, documentID string) {

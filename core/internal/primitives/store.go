@@ -3561,8 +3561,8 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 	appendClause(LifecycleStatesOrGroup("threads.archived_at", "threads.trashed_at", filter.States))
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(threads.thread_id) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.subject_ref'), json_extract(body_json, '$.topic_ref'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.title'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.current_summary'), '')) LIKE ?)`)
-		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(threads.thread_id) LIKE ? OR LOWER(COALESCE(threads.handle, '')) LIKE ? OR LOWER('thread:' || COALESCE(threads.handle, '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.subject_ref'), json_extract(body_json, '$.topic_ref'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.title'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.current_summary'), '')) LIKE ?)`)
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 	query += ` ORDER BY threads.updated_at DESC, threads.id ASC`
 	if filter.Limit != nil && *filter.Limit > 0 {
