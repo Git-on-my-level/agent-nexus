@@ -202,12 +202,12 @@ anx --agent agent-a cards revise rescue-digest --content-file card.md
 anx --agent agent-a cards assign rescue-digest --assignee-ref actor:agent-a
 anx --agent agent-a cards move rescue-digest --column review
 anx --agent agent-a cards resolve rescue-digest --body-file evidence.md
-# Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-id>`.
+# Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-handle>`.
 anx --agent agent-a receipts create --from-file receipt.json
 anx --agent agent-a reviews create --from-file review.json
 ```
 
-Board activity uses `board:<board-id>` typed refs on emitted events. When
+Board activity uses `board:<board-handle>` typed refs on emitted events. When
 debugging board flows, inspect `boards workspace` and, when needed, the
 read-only backing-thread timeline or `threads workspace` diagnostic projection.
 Use `boards cards ...` only when you specifically need the board-scoped raw API

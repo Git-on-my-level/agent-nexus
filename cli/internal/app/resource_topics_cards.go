@@ -1040,7 +1040,7 @@ func (a *App) ensureCardRevisionBase(ctx context.Context, cfg config.Resolved, c
 		body["if_base_revision"] = baseRevision
 	}
 	if strings.TrimSpace(anyString(body["if_base_revision"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get "+cardID+"` and retry with --if-base-revision <revision_id>")
+		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get "+cardID+"` and retry with --if-base-revision <revision-ref-or-handle>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }
@@ -1073,7 +1073,7 @@ func (a *App) ensureCardMoveConcurrency(ctx context.Context, cfg config.Resolved
 		body["if_board_updated_at"] = updatedAt
 	}
 	if strings.TrimSpace(anyString(body["if_board_updated_at"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required; run `anx boards get --board-id "+boardID+"` and retry with --if-board-updated-at <updated_at>")
+		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required; run `anx boards get "+boardID+"` and retry with --if-board-updated-at <updated_at>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }

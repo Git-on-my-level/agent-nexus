@@ -328,7 +328,7 @@ func buildThreadWorkspaceFollowUpHints(thread map[string]any, threadID string, s
 	}
 	tid := strings.TrimSpace(threadID)
 	if topicID := topicIDFromThreadWorkspaceRefs(thread); topicID != "" {
-		hints["workspace_refresh_command"] = "anx topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
+		hints["workspace_refresh_command"] = "anx topics workspace topic:" + topicID + " --include-artifact-content --full-id --json"
 	} else if tid != "" {
 		hints["workspace_refresh_command"] = "anx threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
 	}

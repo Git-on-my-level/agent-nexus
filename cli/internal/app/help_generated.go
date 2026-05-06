@@ -435,7 +435,7 @@ var localHelperTopics = []localHelperTopic{
 			`anx artifacts inspect <artifact-ref-or-alias>`,
 		},
 		Flags: []localHelperFlag{
-			{Name: "--artifact-id <ref>", Description: "Artifact ref, alias, or id to inspect."},
+			{Name: "--artifact-id <ref>", Description: "Artifact ref or handle to inspect."},
 		},
 	},
 	{
@@ -976,7 +976,7 @@ Read paths:
   Examples:
     anx boards cards list board:<board-handle>
     anx boards cards get board:<board-handle> card:<card-handle>
-    anx boards cards get --board-id board:<board-handle> --card-id card:<card-handle>`)
+    anx boards cards get board:<board-handle> card:<card-handle>`)
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
   cards create             Create a board work card from flags plus ` + "`--content-file`" + `.
@@ -1223,7 +1223,7 @@ func fieldHelpText(commandID string, name string) string {
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision":
-		return "Optimistic concurrency token. Copy the current head revision id from `anx docs get <document-id>` before updating."
+		return "Optimistic concurrency token. Copy the current head revision ref from `anx docs get <doc-ref-or-handle>` before updating."
 	case strings.HasPrefix(name, "if_"):
 		return "Optimistic concurrency token. Read the latest value from the corresponding read command before mutating."
 	case commandID == "inbox.get" && name == "inbox_item_id":
@@ -1338,11 +1338,11 @@ Inbox kinds:
 	case "boards.cards.batch_add":
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
-  - Board target: ` + "`--board-id <board-ref-or-handle>`" + ` or a single positional ` + "`<board-ref-or-handle>`" + ` before flags (no other positionals).
+  - Board target: a single positional ` + "`<board-ref-or-handle>`" + ` before flags (preferred), or ` + "`--board-id <board-ref-or-handle>`" + ` for compatibility.
   - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
   - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run ` + "`anx boards get --board-id <board-ref-or-handle> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
+Agent tip: run ` + "`anx boards get <board-ref-or-handle> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
 	default:
 		return ""
 	}

@@ -238,7 +238,7 @@ func TestRouteMentionWakePacketIncludesSubjectFromThread(t *testing.T) {
 		t.Fatalf("context_fetch.preferred: %#v", capturedContent["context_fetch"])
 	}
 	cli, _ := cf["cli"].([]string)
-	if len(cli) < 1 || !strings.Contains(cli[0], "topics workspace --topic-id top-9") {
+	if len(cli) < 1 || !strings.Contains(cli[0], "topics workspace topic:top-9") {
 		t.Fatalf("context_fetch.cli: %#v", cli)
 	}
 	api, _ := cf["api"].(map[string]any)

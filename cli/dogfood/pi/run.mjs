@@ -1104,14 +1104,14 @@ function targetsGuide(role, targets) {
   const lines = [
     "# Scenario Targets",
     "",
-    "Use these resolved IDs directly. Do not spend turns rediscovering them.",
+    "Use these resolved refs and handles directly. Do not spend turns rediscovering them.",
     "",
     "Prefer topic workspace, cards, and boards for coordination; thread commands below are diagnostic (backing-thread tooling).",
     "Use `anx topics message`, `anx docs message`, or `anx cards message` for chat and replies; raw `events create` is only for unusual contract-level records.",
     "",
-    `Shared goal thread: ${targets.mainThread.id}`,
+    `Shared goal thread (debug/admin id): ${targets.mainThread.id}`,
     `Shared goal title: ${targets.mainThread.title}`,
-    `Primary thread for your role: ${targets.primaryThread.id}`,
+    `Primary thread for your role (debug/admin id): ${targets.primaryThread.id}`,
     `Primary thread title: ${targets.primaryThread.title}`,
   ];
   if (targets.topic?.id) {
@@ -1141,7 +1141,7 @@ function targetsGuide(role, targets) {
     lines.push("", "Artifacts to inspect:");
     for (const artifact of targets.artifacts) {
       const artifactRef = refOf(artifact, artifact.id);
-      lines.push(`- ${artifact.id} :: ${valueFrom(artifact, "summary", "title")}`);
+      lines.push(`- ${artifactRef} :: ${valueFrom(artifact, "summary", "title")}`);
       lines.push(`  metadata: anx artifacts get --artifact-id ${artifactRef}`);
       lines.push(`  content: anx artifacts content --artifact-id ${artifactRef}`);
     }
@@ -1151,7 +1151,7 @@ function targetsGuide(role, targets) {
     lines.push("", "Cards in scope:");
     for (const card of targets.cards) {
       const cardRef = refOf(card, card.id);
-      lines.push(`- ${card.id} :: ${valueFrom(card, "title", "summary")}`);
+      lines.push(`- ${cardRef} :: ${valueFrom(card, "title", "summary")}`);
       lines.push(`  detail: anx cards get ${cardRef}`);
     }
   }
@@ -1160,7 +1160,7 @@ function targetsGuide(role, targets) {
     lines.push("", "Documents in scope:");
     for (const document of targets.roleDocuments) {
       const docRef = refOf(document, document.id);
-      lines.push(`- ${document.id}`);
+      lines.push(`- ${docRef}`);
       lines.push(`  read: anx docs get ${docRef}`);
       lines.push(`  content: anx docs content ${docRef}`);
     }

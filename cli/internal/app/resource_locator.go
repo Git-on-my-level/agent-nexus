@@ -464,9 +464,9 @@ func readCommandHelpText() string {
 - Kind: local helper
 - Summary: Read an ANX resource from a URL or typed ref.
 - Examples:
-  - anx read https://anx.example/o/org/w/workspace/boards/<board-id>?card=<card-id>
-  - anx read document:<document-id>
-  - anx read artifact:<artifact-id>`)
+  - anx read https://anx.example/o/org/w/workspace/boards/<board-handle>?card=<card-handle>
+  - anx read document:<document-handle>
+  - anx read artifact:<artifact-handle>`)
 }
 
 func urlCommandHelpText() string {
@@ -475,7 +475,7 @@ func urlCommandHelpText() string {
 - Kind: local helper
 - Summary: Print a shareable ANX URL for a resource.
 - Examples:
-  - anx url card <card-id>
-  - anx url board <board-id>
-  - anx url document <document-id>`)
+  - anx url card <card-ref-or-handle>
+  - anx url board <board-ref-or-handle>
+  - anx url document <doc-ref-or-handle>`)
 }

@@ -184,7 +184,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 			"thread_id is required when posting directly to a backing thread timeline.",
 			"Use domain commands such as `anx cards message card:<handle>`, `anx topics message topic:<handle>`, or `anx docs message doc:<handle>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
 			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
-			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
+			`event.refs may include "event:<parent-event-handle>" for replies and "artifact:<artifact-handle>" mentions.`,
 		},
 	},
 	{
@@ -193,7 +193,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		PreferredCommand: "anx human ask|review|escalate",
 		Summary:          "Use the human command group to ask for operator attention, review, or escalation.",
 		Constraints: []string{
-			`event.refs must include "thread:<thread_id>" and a typed subject ref such as "topic:<topic_id>", "card:<card_id>", or "document:<document_id>".`,
+			`event.refs must include "thread:<thread-handle>" and a typed subject ref such as "topic:<topic-handle>", "card:<card-handle>", or "document:<document-handle>".`,
 			`event.payload must include "kind", "title", "body", "subject_ref", and ordered "response_proposals".`,
 		},
 	},
@@ -203,7 +203,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		PreferredCommand: "anx inbox respond",
 		Summary:          "Records a human response and is the only source for Completed Inbox history.",
 		Constraints: []string{
-			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.refs must include "inbox:<inbox-item-handle>".`,
 			`event.payload must include "inbox_item_id", "kind", "request_event_ref", and "response_text".`,
 		},
 	},
@@ -211,70 +211,70 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Type:  "topic_created",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
+			`event.refs must include "topic:<topic-handle>".`,
 		},
 	},
 	{
 		Type:  "topic_updated",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
+			`event.refs must include "topic:<topic-handle>".`,
 		},
 	},
 	{
 		Type:  "document_created",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>", "document_revision:<revision_id>", and "artifact:<artifact_id>".`,
+			`event.refs must include "document:<document-handle>", "document_revision:<revision-handle>", and "artifact:<artifact-handle>".`,
 		},
 	},
 	{
 		Type:  "document_revised",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>", "document_revision:<revision_id>", and "artifact:<artifact_id>".`,
+			`event.refs must include "document:<document-handle>", "document_revision:<revision-handle>", and "artifact:<artifact-handle>".`,
 		},
 	},
 	{
 		Type:  "document_trashed",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>".`,
+			`event.refs must include "document:<document-handle>".`,
 		},
 	},
 	{
 		Type:  "board_created",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "board:<board_id>".`,
+			`event.refs must include "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "board_updated",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "board:<board_id>".`,
+			`event.refs must include "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_created",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_updated",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_moved",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 			`event.payload must include "column_key".`,
 		},
 	},
@@ -282,7 +282,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Type:  "card_resolved",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 			`event.payload must include "resolution".`,
 		},
 	},
@@ -299,7 +299,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Group:            "Human Coordination",
 		PreferredCommand: "anx human ask|review|escalate",
 		Constraints: []string{
-			`event.refs must include "thread:<thread_id>".`,
+			`event.refs must include "thread:<thread-handle>".`,
 			`event.payload must include "kind", "title", "subject_ref", "requester_actor_id", and ordered "response_proposals" (1–6 strings, first is recommended).`,
 		},
 	},
@@ -308,7 +308,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Group:            "Human Coordination",
 		PreferredCommand: "anx inbox respond",
 		Constraints: []string{
-			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.refs must include "inbox:<inbox-item-handle>".`,
 			`event.payload must include "inbox_item_id", "kind", "response_text", and "responding_actor_id".`,
 		},
 	},

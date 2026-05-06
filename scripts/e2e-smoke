@@ -182,7 +182,7 @@ ensure_board_created() {
     # though the preceding authenticated board setup succeeded locally and in
     # repeated stress runs. Probe for the board first, then retry once before
     # failing the full smoke flow.
-    if run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"; then
+    if run_cli_json "$TMP_DIR/board-get.json" boards get "$BOARD_ID"; then
       return 0
     fi
 
@@ -348,7 +348,7 @@ if [[ -z "$MAIN_TOPIC_ID" || -z "$MAIN_TOPIC_THREAD_ID" ]]; then
 fi
 
 printf '{"patch":{"summary":"smoke updated"}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch --topic-id "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
 
 THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
@@ -412,7 +412,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-create.json" 'data.body.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
+  run_cli_json "$TMP_DIR/board-get.json" boards get "$BOARD_ID"
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-get.json" 'data.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
@@ -425,11 +425,11 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-run_cli_json "$TMP_DIR/board-get.json" boards get --board-id "$BOARD_ID"
+run_cli_json "$TMP_DIR/board-get.json" boards get "$BOARD_ID"
 
 printf '{"card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-a"]}}}\n' \
   "$BOARD_TOPIC_A_ID" "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" \
-  | run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards create --board-id "$BOARD_ID"
+  | run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards create "$BOARD_ID"
 BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_A_ID" ]]; then
   BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.card.id' || true)"
@@ -444,7 +444,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  run_cli_json "$TMP_DIR/board-refresh-after-card-a.json" boards get --board-id "$BOARD_ID"
+  run_cli_json "$TMP_DIR/board-refresh-after-card-a.json" boards get "$BOARD_ID"
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-a.json" 'data.board.updated_at' || true)"
   if [[ -z "$BOARD_UPDATED_AT" ]]; then
     BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-a.json" 'data.body.board.updated_at' || true)"
@@ -460,7 +460,7 @@ fi
 
 printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-b"]}}}\n' \
   "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
-  | run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards create --board-id "$BOARD_ID"
+  | run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards create "$BOARD_ID"
 BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_B_ID" ]]; then
   BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.card.id' || true)"
@@ -475,7 +475,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.board.updated_at' || true)"
 fi
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
-  run_cli_json "$TMP_DIR/board-refresh-after-card-b.json" boards get --board-id "$BOARD_ID"
+  run_cli_json "$TMP_DIR/board-refresh-after-card-b.json" boards get "$BOARD_ID"
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-b.json" 'data.board.updated_at' || true)"
   if [[ -z "$BOARD_UPDATED_AT" ]]; then
     BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-refresh-after-card-b.json" 'data.body.board.updated_at' || true)"
@@ -487,7 +487,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
 fi
 
 HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
-  --card-id "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT" >"$TMP_DIR/board-card-b-move.json"
+  "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT" >"$TMP_DIR/board-card-b-move.json"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.body.board.updated_at' || true)"
@@ -499,7 +499,7 @@ if [[ -z "$ACCESS_TOKEN" ]]; then
   exit 1
 fi
 
-run_cli_json "$TMP_DIR/board-workspace.json" boards workspace --board-id "$BOARD_ID"
+run_cli_json "$TMP_DIR/board-workspace.json" boards workspace "$BOARD_ID"
 assert_contains "$TMP_DIR/board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
 # Card B is anchored on topic B; backing thread ids are per-card (not the topic's thread_id).
 assert_contains "$TMP_DIR/board-workspace.json" '"topic:topic-smoke-board-b"'
@@ -509,7 +509,7 @@ curl -fsS -H "x-anx-organization-slug: ${UI_ORG_SLUG}" -H "x-anx-workspace-slug:
 assert_contains "$TMP_DIR/ui-board-workspace.json" "\"board_id\"[[:space:]]*:[[:space:]]*\"$BOARD_ID\""
 
 # Refresh board concurrency token (cards.move may not echo `board` in the CLI envelope).
-run_cli_json "$TMP_DIR/board-before-terminal.json" boards get --board-id "$BOARD_ID"
+run_cli_json "$TMP_DIR/board-before-terminal.json" boards get "$BOARD_ID"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-before-terminal.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-before-terminal.json" 'data.body.board.updated_at' || true)"
@@ -520,7 +520,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-run_cli_json "$TMP_DIR/card-a-backing-thread.json" cards get --card-id "$BOARD_CARD_A_ID"
+run_cli_json "$TMP_DIR/card-a-backing-thread.json" cards get "$BOARD_CARD_A_ID"
 CARD_A_THREAD_ID="$(json_get "$TMP_DIR/card-a-backing-thread.json" 'data.card.thread_id' || true)"
 if [[ -z "$CARD_A_THREAD_ID" ]]; then
   CARD_A_THREAD_ID="$(json_get "$TMP_DIR/card-a-backing-thread.json" 'data.body.card.thread_id' || true)"
@@ -548,9 +548,9 @@ fi
 printf '{"column_key":"done","resolution":"done","resolution_refs":["event:%s"],"if_board_updated_at":"%s"}\n' "$TERMINAL_RESOLUTION_EVENT_ID" "$BOARD_UPDATED_AT" \
   >"$TMP_DIR/card-a-terminal-done-move.json"
 HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
-  --card-id "$BOARD_CARD_A_ID" --from-file "$TMP_DIR/card-a-terminal-done-move.json" >"$TMP_DIR/board-card-a-terminal-done.json"
+  "$BOARD_CARD_A_ID" --from-file "$TMP_DIR/card-a-terminal-done-move.json" >"$TMP_DIR/board-card-a-terminal-done.json"
 
-run_cli_json "$TMP_DIR/board-after-terminal.json" boards get --board-id "$BOARD_ID"
+run_cli_json "$TMP_DIR/board-after-terminal.json" boards get "$BOARD_ID"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-after-terminal.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-after-terminal.json" 'data.body.board.updated_at' || true)"
@@ -561,7 +561,7 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-run_cli_json "$TMP_DIR/card-a-after-terminal-done.json" cards get --card-id "$BOARD_CARD_A_ID"
+run_cli_json "$TMP_DIR/card-a-after-terminal-done.json" cards get "$BOARD_CARD_A_ID"
 assert_contains "$TMP_DIR/card-a-after-terminal-done.json" '"resolution"[[:space:]]*:[[:space:]]*"done"'
 node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const card=data?.data?.card ?? data?.data?.body?.card; const refs=Array.isArray(card?.resolution_refs) ? card.resolution_refs : []; const expected=`event:${process.argv[2]}`; if (!refs.includes(expected)) process.exit(1);' "$TMP_DIR/card-a-after-terminal-done.json" "$TERMINAL_RESOLUTION_EVENT_ID" || {
   echo "missing expected resolution ref event:${TERMINAL_RESOLUTION_EVENT_ID}" >&2
@@ -573,13 +573,13 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
 printf '{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["event:smoke-topic-trash"]}}}\n' \
   | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics create >"$TMP_DIR/trash-topic-create.json"
 printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash --topic-id topic-smoke-trash >"$TMP_DIR/topic-trash.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash topic-smoke-trash >"$TMP_DIR/topic-trash.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?state=trashed" >"$TMP_DIR/topics-trashed-only.json"
 assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
 
 # Card trash lane (archive / archived_only inventory).
 printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive --card-id "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-archive.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-archive.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?state=archived" >"$TMP_DIR/cards-archived-only.json"
 assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
 

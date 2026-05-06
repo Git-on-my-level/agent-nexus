@@ -1449,7 +1449,7 @@ Read paths:
   Examples:
     anx boards cards list board:<board-handle>
     anx boards cards get board:<board-handle> card:<card-handle>
-    anx boards cards get --board-id board:<board-handle> --card-id card:<card-handle>
+    anx boards cards get board:<board-handle> card:<card-handle>
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2434,11 +2434,11 @@ Inputs:
 
 CLI input:
   - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
-  - Board target: `--board-id <board-ref-or-handle>` or a single positional `<board-ref-or-handle>` before flags (no other positionals).
+  - Board target: a single positional `<board-ref-or-handle>` before flags (preferred), or `--board-id <board-ref-or-handle>` for compatibility.
   - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
   - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
 
-Agent tip: run `anx boards get --board-id <board-ref-or-handle> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
+Agent tip: run `anx boards get <board-ref-or-handle> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4772,7 +4772,7 @@ Local Help: artifacts inspect
   - `anx artifacts inspect <artifact-ref-or-alias>`
 
 Flags:
-  --artifact-id <ref>          Artifact ref, alias, or id to inspect.
+  --artifact-id <ref>          Artifact ref or handle to inspect.
 
 
 Global flags:
