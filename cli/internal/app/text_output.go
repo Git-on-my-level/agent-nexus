@@ -1892,7 +1892,11 @@ func formatBoardCardCreateResult(body any) string {
 	if subject == "" {
 		subject = "card"
 	}
-	lines = append(lines, "- "+subject)
+	if strings.HasPrefix(subject, "card:") {
+		lines = append(lines, "- "+subject)
+	} else {
+		lines = append(lines, "- card: "+subject)
+	}
 	if threadID := threadRefFromCard(card); threadID != "" && threadID != cardID {
 		lines = append(lines, "  "+threadID)
 	}
