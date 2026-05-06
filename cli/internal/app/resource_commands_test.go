@@ -389,6 +389,36 @@ func TestGetCommandRejectsAmbiguousSlugPrefix(t *testing.T) {
 	}
 }
 
+func TestMutatingCommandDoesNotRetrySlugPrefixAfterNotFound(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/cards/cli/trash":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"card not found"}}`))
+		case "/cards":
+			t.Fatalf("mutating command must not list resources for prefix retry")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"wrong id"}`), []string{"--json", "--base-url", server.URL, "cards", "trash", "cli"}))
+	if got := anyStringValue(asMap(payload["error"])["code"]); got != "not_found" {
+		t.Fatalf("expected original not_found error, got %#v", payload)
+	}
+	want := []string{"/cards/cli/trash"}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected request sequence:\n%v", seen)
+	}
+}
+
 func TestCardsGetPassesTypedRefAndHandleToCore(t *testing.T) {
 	t.Parallel()
 

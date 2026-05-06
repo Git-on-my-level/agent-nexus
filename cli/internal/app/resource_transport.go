@@ -308,7 +308,7 @@ func (a *App) invokeTypedJSONWithIDResolution(
 ) (*commandResult, error) {
 	pathParams := map[string]string{pathParamName: rawID}
 	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
-	if err == nil || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
+	if err == nil || !commandAllowsPrefixRetry(commandID) || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
 		return result, err
 	}
 	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
@@ -364,6 +364,10 @@ func isRemoteNotFound(err error) bool {
 	default:
 		return false
 	}
+}
+
+func commandAllowsPrefixRetry(commandID string) bool {
+	return strings.EqualFold(resolveCommandMethod(commandID), http.MethodGet)
 }
 
 func (a *App) resolveUniqueResourcePrefix(ctx context.Context, cfg config.Resolved, spec resourceIDLookupSpec, rawID string, originalPathParams map[string]string) (string, error) {
