@@ -333,7 +333,7 @@ Higher-level concepts
 - `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
 - `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
-- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages <document-id>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
+- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages doc:<handle>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
 
 
 Standard workflow
@@ -344,7 +344,7 @@ Standard workflow
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
 
-For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message <topic-id> --body-file update.md`, `anx docs message <document-id> --body-file update.md`, or `anx cards message <card-id> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
+For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
 
 
 Configuration
@@ -1405,7 +1405,7 @@ Primary operator coordination:
   topics reply            Reply to a specific topic message.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (`--state`, `--q`, pagination, archive/trash visibility flags).
-  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with `anx topics workspace --topic-id <topic-id>`.
+	  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with `anx topics workspace topic:<handle>`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1501,7 +1501,7 @@ Local inspection helpers:
   Mutation flow:
   docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
   docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
-  Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise <document-ref-or-handle> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
+   Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise doc:<handle> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1542,7 +1542,7 @@ Agent-facing Card workflow:
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs or an evidence body.
   cards reopen             Move a resolved card back to active workflow.
-  Tip: use `cards message <card-id> --body-file update.md` for ordinary status updates. Use raw `events create` only for contract-level writes or unusual integrations.
+   Tip: use `cards message card:<handle> --body-file update.md` for ordinary status updates. Use raw `events create` only for contract-level writes or unusual integrations.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1572,7 +1572,7 @@ Read-only backing-thread diagnostics and direct thread messages:
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer domain commands like `anx cards message <card-id>` for normal authoring and `anx topics workspace --topic-id <topic-id>` for primary coordination reads. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for primary coordination reads. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1603,8 +1603,8 @@ Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
-  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` (debug/admin) for copy/paste IDs.
-  Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message <topic-id>`, `anx docs message <document-id>`, or `anx cards message <card-id>` instead of hand-authoring a `message_posted` event.
+	  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` (debug/admin) for copy/paste IDs.
+	  Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message topic:<handle>`, `anx docs message doc:<handle>`, or `anx cards message card:<handle>` instead of hand-authoring a `message_posted` event.
   For details: `anx events explain <event-type>`
 
 Global flags:
@@ -4182,11 +4182,11 @@ Local Help: topics message
 - Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.
 - Examples:
-  - `anx topics message <topic-id> --body-file message.md`
-  - `anx topics message <topic-id> --body "Decision context"`
+  - `anx topics message topic:launch --body-file message.md`
+  - `anx topics message topic:launch --body "Decision context"`
 
 Flags:
-  <topic-id>                   Topic id, typed ref, or handle to message.
+  <ref>                        Topic ref, handle, or id to message.
   --thread <thread-id>         Backing thread id for thread-scoped message fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped message fallback.
   --body <text>                Message body text.
@@ -4215,11 +4215,11 @@ Local Help: topics messages
 - Composition: Fetches the Topic, then reads its backing thread timeline and filters to messages attached to that topic.
 - JSON body: Fetches the Topic backing thread and returns an `events.list`-style filtered timeline slice with topic metadata.
 - Examples:
-  - `anx topics messages <topic-id>`
-  - `anx topics messages <topic-id> --max-events 5 --mine`
+  - `anx topics messages topic:launch`
+  - `anx topics messages topic:launch --max-events 5 --mine`
 
 Flags:
-  <topic-id>                   Topic id, typed ref, or handle whose messages should be listed.
+  <ref>                        Topic ref, handle, or id whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4244,11 +4244,11 @@ Local Help: topics reply
 - Composition: Fetches the Topic and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
 - Examples:
-  - `anx topics reply <topic-id> --to <message-id> --body "Confirmed"`
-  - `anx topics reply <topic-id> --to <message-id> --body-file reply.md`
+  - `anx topics reply topic:launch --to <message-id> --body "Confirmed"`
+  - `anx topics reply topic:launch --to <message-id> --body-file reply.md`
 
 Flags:
-  <topic-id>                   Topic id, typed ref, or handle to reply on.
+  <ref>                        Topic ref, handle, or id to reply on.
   --thread <thread-id>         Backing thread id for thread-scoped reply fallback.
   --thread-id <thread-id>      Backing thread id for thread-scoped reply fallback.
   --to <message-id>            Message/event id, typed ref, or handle being replied to.
@@ -4380,12 +4380,12 @@ Local Help: cards message
 - Composition: Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.
 - Examples:
-  - `anx cards message <card-id> --body "Implemented in 0729e75"`
-  - `anx cards message <card-id> --body-file update.md`
-  - `cat update.md | anx cards message <card-id>`
+  - `anx cards message card:implement-login --body "Implemented in 0729e75"`
+  - `anx cards message card:implement-login --body-file update.md`
+  - `cat update.md | anx cards message card:implement-login`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to message.
+  <ref>                        Card ref, handle, or id to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -4412,12 +4412,12 @@ Local Help: cards messages
 - Composition: Fetches the Card, then reads its backing thread timeline and filters to ordinary messages. Use `cards timeline` when you need lifecycle events too.
 - JSON body: Fetches the Card backing thread and returns an `events.list`-style filtered timeline slice with card metadata.
 - Examples:
-  - `anx cards messages <card-id>`
-  - `anx cards messages <card-id> --max-events 5 --mine`
-  - `anx cards messages <card-id> --full-id`
+  - `anx cards messages card:implement-login`
+  - `anx cards messages card:implement-login --max-events 5 --mine`
+  - `anx cards messages card:implement-login --full-id`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle whose messages should be listed.
+  <ref>                        Card ref, handle, or id whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -4442,11 +4442,11 @@ Local Help: cards reply
 - Composition: Fetches the Card and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
 - Examples:
-  - `anx cards reply <card-id> --to <message-id> --body "Confirmed"`
-  - `anx cards reply <card-id> --to <message-id> --body-file reply.md`
+  - `anx cards reply card:implement-login --to <message-id> --body "Confirmed"`
+  - `anx cards reply card:implement-login --to <message-id> --body-file reply.md`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to reply on.
+  <ref>                        Card ref, handle, or id to reply on.
   --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.
@@ -4474,12 +4474,12 @@ Local Help: cards revise
 - Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.
 - JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
 - Examples:
-  - `anx cards revise <card-id> --content-file card.md`
-  - `anx cards revise <card-id> --title "Updated title" --content-file card.md`
-  - `anx cards revise <card-id> --from-file card-revision.json`
+  - `anx cards revise card:implement-login --content-file card.md`
+  - `anx cards revise card:implement-login --title "Updated title" --content-file card.md`
+  - `anx cards revise card:implement-login --from-file card-revision.json`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to revise.
+  <ref>                        Card ref, handle, or id to revise.
   --content-file <path>        Load revised card summary/body text from a local file.
   --title <text>               Optional revised card title.
   --if-base-revision <revision-id> Base card revision id; discovered when omitted.
@@ -4567,11 +4567,11 @@ Local Help: cards move
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards move <card-id> --column review`
-  - `anx cards move <card-id> --column blocked --if-board-updated-at <updated-at>`
+  - `anx cards move card:implement-login --column review`
+  - `anx cards move card:implement-login --column blocked --if-board-updated-at <updated-at>`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to move.
+  <ref>                        Card ref, handle, or id to move.
   --column <key>               Target board column.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
@@ -4595,11 +4595,11 @@ Local Help: cards assign
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
 - Examples:
-  - `anx cards assign <card-id> --assignee-ref actor:<actor-id>`
-  - `anx cards assign <card-id> --clear`
+  - `anx cards assign card:implement-login --assignee-ref actor:agent-alpha`
+  - `anx cards assign card:implement-login --clear`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to assign.
+  <ref>                        Card ref, handle, or id to assign.
   --assignee-ref <typed-ref>   Assignee actor typed ref, repeatable.
   --clear                      Clear all assignees.
   --if-updated-at <timestamp>  Card optimistic concurrency token; discovered when omitted.
@@ -4623,11 +4623,11 @@ Local Help: cards resolve
 - Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards resolve <card-id> --body-file evidence.md`
-  - `anx cards resolve <card-id> --resolution-ref event:<event-id>`
+  - `anx cards resolve card:implement-login --body-file evidence.md`
+  - `anx cards resolve card:implement-login --resolution-ref event:<event-id>`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to resolve.
+  <ref>                        Card ref, handle, or id to resolve.
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
   --body <text>                Post inline evidence to the card thread before resolving.
   --body-file <path>           Load evidence text from a file before resolving.
@@ -4655,11 +4655,11 @@ Local Help: cards reopen
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards reopen <card-id>`
-  - `anx cards reopen <card-id> --column backlog`
+  - `anx cards reopen card:implement-login`
+  - `anx cards reopen card:implement-login --column backlog`
 
 Flags:
-  <card-id>                    Card id, typed ref, or handle to reopen.
+  <ref>                        Card ref, handle, or id to reopen.
   --column <key>               Target reopened column; defaults to ready.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
 
@@ -4768,11 +4768,11 @@ Local Help: artifacts inspect
 - Composition: Loads artifact metadata with `artifacts get`, then fetches content with `artifacts content` using the resolved artifact id.
 - JSON body: `artifact`, `content`, `content_headers`, `content_text`, `content_base64`
 - Examples:
-  - `anx artifacts inspect --artifact-id <artifact-id>`
-  - `anx artifacts inspect <artifact-id-or-alias>`
+  - `anx artifacts inspect artifact:notes`
+  - `anx artifacts inspect <artifact-ref-or-alias>`
 
 Flags:
-  --artifact-id <artifact-id>  Artifact id or unique alias to inspect.
+  --artifact-id <ref>          Artifact ref, alias, or id to inspect.
 
 
 Global flags:
@@ -4924,13 +4924,13 @@ Local Help: docs revise
 - Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
 - JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
 - Examples:
-  - `anx docs revise <document-id> --content-file notes.md`
+  - `anx docs revise doc:runbook --content-file notes.md`
   - `anx docs revise --apply --proposal-id <proposal-id>`
-  - `anx docs revise <document-id> --apply --content-file notes.md`
-  - `cat revision.json | anx docs revise <document-id>`
+  - `anx docs revise doc:runbook --apply --content-file notes.md`
+  - `cat revision.json | anx docs revise doc:runbook`
 
 Flags:
-  <document-id>                Document id to revise.
+  <ref>                        Document ref, alias, or id to revise.
   --content-file <path>        Load revised Markdown/text content from a local file.
   --from-file <path>           Advanced JSON revision body from a file.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
@@ -4957,10 +4957,10 @@ Local Help: docs content
 - Composition: Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.
 - JSON body: `document`, `revision`, `content`, `status_code`, `headers`
 - Examples:
-  - `anx docs content <document-id-or-alias>`
+  - `anx docs content doc:runbook`
 
 Flags:
-  <document-id>                Document id or unique alias to inspect.
+  <ref>                        Document ref, alias, or id to inspect.
 
 
 Global flags:
@@ -4981,11 +4981,11 @@ Local Help: docs messages
 - Composition: Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.
 - JSON body: Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.
 - Examples:
-  - `anx docs messages <document-id>`
-  - `anx docs messages <document-id> --max-events 5 --mine`
+  - `anx docs messages doc:runbook`
+  - `anx docs messages doc:runbook --max-events 5 --mine`
 
 Flags:
-  <document-id>                Document id or unique alias.
+  <ref>                        Document ref, alias, or id.
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
@@ -5014,11 +5014,11 @@ Local Help: docs message
 - Composition: Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.
 - Examples:
-  - `anx docs message <document-id> --body-file note.md`
-  - `anx docs message <document-id> --body "Reviewed the current revision"`
+  - `anx docs message doc:runbook --body-file note.md`
+  - `anx docs message doc:runbook --body "Reviewed the current revision"`
 
 Flags:
-  <document-id>                Document id or unique alias to message.
+  <ref>                        Document ref, alias, or id to message.
   --body <text>                Message body text.
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
@@ -5045,11 +5045,11 @@ Local Help: docs reply
 - Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
 - Examples:
-  - `anx docs reply <document-id> --to <message-id> --body "Confirmed"`
-  - `anx docs reply <document-id> --to <message-id> --body-file reply.md`
+  - `anx docs reply doc:runbook --to <message-id> --body "Confirmed"`
+  - `anx docs reply doc:runbook --to <message-id> --body-file reply.md`
 
 Flags:
-  <document-id>                Document id or unique alias to reply on.
+  <ref>                        Document ref, alias, or id to reply on.
   --to <message-id>            Message/event id, typed ref, or handle being replied to.
   --body <text>                Reply body text.
   --body-file <path>           Load reply body text from a local file.

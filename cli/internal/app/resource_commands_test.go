@@ -5080,7 +5080,7 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	if !strings.Contains(message, "expected one of: get") {
 		t.Fatalf("expected valid subcommands in required message, got %q", message)
 	}
-	if !strings.Contains(message, "`anx docs revision get <document-id> <revision-id>`") {
+	if !strings.Contains(message, "`anx docs revision get doc:runbook <revision-id>`") {
 		t.Fatalf("expected usage examples in required message, got %q", message)
 	}
 }

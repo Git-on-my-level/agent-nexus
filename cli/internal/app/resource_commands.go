@@ -182,7 +182,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Summary:          "Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.",
 		Constraints: []string{
 			"thread_id is required when posting directly to a backing thread timeline.",
-			"Use domain commands such as `anx cards message <card-id>`, `anx topics message <topic-id>`, or `anx docs message <document-id>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
+			"Use domain commands such as `anx cards message card:<handle>`, `anx topics message topic:<handle>`, or `anx docs message doc:<handle>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
 			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
 			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
 		},
@@ -904,7 +904,7 @@ func mixedThreadSelectionMessage(commandName string) string {
 	discoveryExample := "anx threads inspect --state active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace topic:<handle>` for primary coordination when you have a topic. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
 		return base + " For one thread, use `anx threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads inspect":
@@ -1003,7 +1003,7 @@ func (a *App) runArtifactsAttachmentsCommand(ctx context.Context, args []string,
 		var summary trackedString
 		var artifactJSON trackedString
 		var actorIDFlag trackedString
-		fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["thread:<uuid>"]`)
+		fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["topic:launch"]`)
 		fs.Var(&filePath, "file", "Path to file to upload")
 		fs.Var(&summary, "summary", "Optional attachment summary")
 		fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")

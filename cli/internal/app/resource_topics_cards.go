@@ -16,13 +16,13 @@ var topicsSubcommandSpec = subcommandSpec{
 		"list", "get", "create", "patch", "message", "messages", "reply", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message <topic-id> --body-file message.md", "anx topics messages <topic-id>", "anx topics reply <topic-id> --to <message-id> --body-file reply.md", "anx topics workspace <topic-id>", "anx topics archive <topic-id>"},
+	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message topic:launch --body-file message.md", "anx topics messages topic:launch", "anx topics reply topic:launch --to <message-id> --body-file reply.md", "anx topics workspace topic:launch", "anx topics archive topic:launch"},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --content-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise <card-id> --content-file card.md", "anx cards history <card-id>", "anx cards assign <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve <card-id> --body-file evidence.md", "anx cards move <card-id> --column review", "anx cards get <card-id>"},
+	examples: []string{"anx cards list", "anx cards create --board board:launch --title \"Implement login\" --content-file card.md", "anx cards message card:implement-login --body-file update.md", "anx cards messages card:implement-login", "anx cards reply card:implement-login --to <message-id> --body-file reply.md", "anx cards revise card:implement-login --content-file card.md", "anx cards history card:implement-login", "anx cards assign card:implement-login --assignee-ref actor:agent-alpha", "anx cards resolve card:implement-login --body-file evidence.md", "anx cards move card:implement-login --column review", "anx cards get card:implement-login"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -1500,7 +1500,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 var refEdgesSubcommandSpec = subcommandSpec{
 	command:  "ref-edges",
 	valid:    []string{"list"},
-	examples: []string{`anx ref-edges list --target-ref card:<card-id>`},
+	examples: []string{`anx ref-edges list --target-ref card:implement-login`},
 }
 
 func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
