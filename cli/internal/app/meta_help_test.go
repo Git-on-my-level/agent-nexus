@@ -574,7 +574,7 @@ func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
 	if !strings.Contains(output, "Local Help: docs create") {
 		t.Fatalf("expected local docs create help, got output=%s", output)
 	}
-	if !strings.Contains(output, "--topic <topic-id>") || !strings.Contains(output, "--content-file <path>") {
+	if !strings.Contains(output, "--topic <topic-ref-or-handle>") || !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected file-first docs create flags output=%s", output)
 	}
 	if strings.Contains(output, "document.body_markdown") {
@@ -1014,10 +1014,10 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	if !strings.Contains(docsRevise, "--apply") || !strings.Contains(docsRevise, "--proposal-id") {
 		t.Fatalf("expected docs revise apply/proposal flags output=%s", docsRevise)
 	}
-	if !strings.Contains(docsRevise, "anx docs revise <document-id> --apply --content-file notes.md") {
+	if !strings.Contains(docsRevise, "anx docs revise doc:runbook --apply --content-file notes.md") {
 		t.Fatalf("expected docs revise apply example to keep positional target before flags output=%s", docsRevise)
 	}
-	if strings.Contains(docsRevise, "anx docs revise --apply <document-id> --content-file notes.md") {
+	if strings.Contains(docsRevise, "anx docs revise --apply doc:runbook --content-file notes.md") {
 		t.Fatalf("unexpected docs revise example with flags before positional target output=%s", docsRevise)
 	}
 

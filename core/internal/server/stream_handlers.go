@@ -34,8 +34,27 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 
-	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
 	query := r.URL.Query()
+	threadID := strings.TrimSpace(query.Get("thread_id"))
+	var threadIDs []string
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+		threadIDs = resolvedRefStorageCandidates(resolved)
+	}
+	topicID := strings.TrimSpace(query.Get("topic_id"))
+	var topicIDs []string
+	if topicID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "topic", topicID, "topic_id")
+		if !ok {
+			return
+		}
+		topicID = resolved.ID
+		topicIDs = resolvedRefStorageCandidates(resolved)
+	}
 	eventTypes, ok := parseEventTypeFilters(w, r, opts)
 	if !ok {
 		return
@@ -62,8 +81,10 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		Types:        eventTypes,
 		BackingScope: backingScope,
 		Preset:       strings.TrimSpace(query.Get("preset")),
-		TopicID:      strings.TrimSpace(query.Get("topic_id")),
+		TopicID:      topicID,
+		TopicIDs:     topicIDs,
 		ThreadID:     threadID,
+		ThreadIDs:    threadIDs,
 		ActorID:      strings.TrimSpace(query.Get("actor_id")),
 		ActorIDs:     actorIDs,
 		ActorKind:    actorKind,
@@ -144,6 +165,15 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 
 	threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+	var threadIDs []string
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+		threadIDs = resolvedRefStorageCandidates(resolved)
+	}
 	eventTypes, ok := parseEventTypeFilters(w, r, opts)
 	if !ok {
 		return
@@ -161,7 +191,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	defer ticker.Stop()
 
 	for {
-		events, err := listEventsForStream(r, opts, threadID, eventTypes)
+		events, err := listEventsForStream(r, opts, threadID, threadIDs, eventTypes)
 		if err != nil {
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
 			return
@@ -280,6 +310,11 @@ func handleAgentNotificationReceiptsStream(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_request", "thread_id is required")
 		return
 	}
+	resolvedThread, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+	if !ok {
+		return
+	}
+	threadID = resolvedThread.ID
 
 	lastEventID := resolveLastEventID(r)
 	controller, flusher, ok := prepareSSE(w)
@@ -441,24 +476,15 @@ func inboxRecordsAfterID(records []inboxStreamRecord, lastEventID string) []inbo
 	return records
 }
 
-func listEventsForStream(r *http.Request, opts handlerOptions, threadID string, eventTypes []string) ([]map[string]any, error) {
-	if threadID != "" {
-		events, err := opts.primitiveStore.ListEventsByThread(r.Context(), threadID)
+func listEventsForStream(r *http.Request, opts handlerOptions, threadID string, threadIDs []string, eventTypes []string) ([]map[string]any, error) {
+	if threadID != "" || len(threadIDs) > 0 {
+		events, err := opts.primitiveStore.ListEvents(r.Context(), primitives.EventListFilter{
+			ThreadID:  threadID,
+			ThreadIDs: threadIDs,
+			Types:     eventTypes,
+		})
 		if err != nil {
 			return nil, err
-		}
-		if len(eventTypes) > 0 {
-			filtered := make([]map[string]any, 0, len(events))
-			eventTypeSet := map[string]struct{}{}
-			for _, eventType := range eventTypes {
-				eventTypeSet[eventType] = struct{}{}
-			}
-			for _, event := range events {
-				if _, ok := eventTypeSet[strings.TrimSpace(anyString(event["type"]))]; ok {
-					filtered = append(filtered, event)
-				}
-			}
-			events = filtered
 		}
 		sortEventsAscending(events)
 		return events, nil

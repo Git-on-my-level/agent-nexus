@@ -4,12 +4,16 @@
   "command_id": "events.stream",
   "data": {
     "event": {
+      "handle": "event_stream_1",
       "id": "event_stream_1",
+      "ref": "event:event_stream_1",
       "type": "message_posted"
     },
     "id": "es_1",
     "payload": {
+      "handle": "event_stream_1",
       "id": "event_stream_1",
+      "ref": "event:event_stream_1",
       "type": "message_posted"
     },
     "payload_key": "event",

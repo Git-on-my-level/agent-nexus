@@ -22,6 +22,10 @@
     principalRegistry,
   } from "$lib/actorSession";
   import { formatBytes } from "$lib/attachmentDisplay.js";
+  import {
+    resourceCopyValue,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   let artifactId = $derived($page.params.artifactId);
   let organizationSlug = $derived($page.params.organization);
@@ -158,7 +162,7 @@
   function buildArtifactRefHints() {
     const hints = {};
     if (!artifact) return hints;
-    hints[`artifact:${artifact.id}`] =
+    hints[resourceCopyValue("artifact", artifact)] =
       `This ${kindLabel(artifact.kind).toLowerCase()}`;
     if (artifact.kind === "doc") {
       const docId = String(artifact.document_id ?? "").trim();
@@ -416,9 +420,11 @@
       >
       <span class="shrink-0 text-fg-subtle">/</span>
       <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
-        <span class="min-w-0 shrink truncate text-fg-muted" aria-current="page"
-          >{artifact?.summary || artifactId}</span
-        >
+        <span class="min-w-0 shrink truncate text-fg-muted" aria-current="page">
+          {artifact?.summary ||
+            resourceRouteSegment(artifact, "artifact") ||
+            artifactId}
+        </span>
         <span
           class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium leading-none sm:py-0.5 sm:text-micro {kindColor(
             artifact.kind,
@@ -652,7 +658,7 @@
   <details class="mt-2 rounded-md border border-line bg-bg-soft">
     <summary
       class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
-      >Raw metadata — ID: {artifact.id}</summary
+      >Raw metadata — {resourceCopyValue("artifact", artifact)}</summary
     >
     <pre
       class="overflow-auto px-4 pb-3 text-micro text-fg-muted">{JSON.stringify(

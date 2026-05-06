@@ -242,7 +242,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 
 	headersSorted := normalizedHeaders(resp.Header)
 	parsedBody := parseResponseBody(responseBody)
-	parsedBody, enriched := enrichListBodyWithShortIDs(commandID, parsedBody)
+	parsedBody, enriched := enrichListBodyWithPublicIdentity(commandID, parsedBody)
 	if enriched {
 		if encoded, marshalErr := json.Marshal(parsedBody); marshalErr == nil {
 			responseBody = encoded
@@ -305,23 +305,8 @@ func (a *App) invokeTypedJSONWithIDResolution(
 	query []queryParam,
 	body any,
 ) (*commandResult, error) {
-	pathParams := map[string]string{pathParamName: rawID}
-	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
-	if err == nil {
-		return result, nil
-	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
-	if resolveErr != nil {
-		return nil, resolveErr
-	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
-	}
-	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: resolvedID}, query, body)
+	_ = lookupSpec
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: rawID}, query, body)
 }
 
 func (a *App) invokeArtifactContentWithIDResolution(
@@ -333,28 +318,15 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	lookupSpec resourceIDLookupSpec,
 	outputPath string,
 ) (*commandResult, error) {
-	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
-	if err == nil {
-		return result, nil
-	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
-	if resolveErr != nil {
-		return nil, resolveErr
-	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
-	}
-	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID}, outputPath)
+	_ = lookupSpec
+	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
 }
 
 func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Resolved, refsJSON, filePath, summary, artifactJSON, actorID string) (*commandResult, error) {
 	refsJSON = strings.TrimSpace(refsJSON)
 	var refsProbe []any
 	if err := json.Unmarshal([]byte(refsJSON), &refsProbe); err != nil || len(refsProbe) == 0 {
-		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"thread:<id>\"])")
+		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"topic:launch\"])")
 	}
 	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
 	file, err := os.Open(cleanPath)

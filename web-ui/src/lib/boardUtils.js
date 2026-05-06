@@ -1,3 +1,5 @@
+import { isInternalUuid, resourceRouteSegment } from "./resourceIdentity.js";
+
 /** Lifecycle `state` on boards/topics/threads (API v0.4+). */
 export const BOARD_LIFECYCLE_STATE_LABELS = {
   active: "Active",
@@ -83,12 +85,14 @@ export function boardCardLinkedThreadId(membership) {
 }
 
 /**
- * Stable key for API calls and UI state (versioned card id, else legacy thread-backed id).
+ * Stable key for API calls and UI state (public card handle/ref value, else legacy thread-backed id).
  * Falls back to a synthetic key when both are missing (corrupt/partial payload).
  */
 export function boardCardStableId(membership) {
+  const publicSegment = resourceRouteSegment(membership, "card");
+  if (publicSegment) return publicSegment;
   const id = String(membership?.id ?? "").trim();
-  if (id) return id;
+  if (id && !isInternalUuid(id)) return id;
   const legacy = String(membership?.thread_id ?? "").trim();
   if (legacy) return legacy;
   const col = String(membership?.column_key ?? "").trim();

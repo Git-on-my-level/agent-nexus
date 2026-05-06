@@ -28,6 +28,12 @@
     docCommentBodyFocus,
     docCommentBodyHover,
   } from "$lib/stores/docCommentBodyRailSync.js";
+  import {
+    isInternalUuid,
+    resourceCopyValue,
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
   import { tick } from "svelte";
 
   let { data } = $props();
@@ -83,6 +89,9 @@
   let moreActionsRoot = $state(null);
   let documentLoadRequestId = 0;
   let documentHistoryRequestId = 0;
+  let documentRouteSegment = $derived(
+    resourceRouteSegment(document, "document") || documentId,
+  );
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
   let docStashedSelection = $state("");
@@ -219,24 +228,32 @@
     }
     if (d.id) {
       rows.push({
-        label: "Document ID",
-        value: String(d.id),
-        copyLabel: "Copy document ID",
+        label: "Document ref",
+        value: resourceCopyValue("document", d),
+        copyLabel: "Copy document ref",
       });
     }
-    if (rev?.revision_id) {
+    if (rev?.revision_id || rev?.ref || rev?.handle) {
       rows.push({
-        label: "Revision ID",
-        value: String(rev.revision_id),
-        copyLabel: "Copy revision ID",
+        label: "Revision ref",
+        value:
+          String(rev?.ref ?? "").trim() ||
+          (String(rev?.handle ?? "").trim()
+            ? `document_revision:${String(rev.handle).trim()}`
+            : !isInternalUuid(rev?.revision_id)
+              ? `document_revision:${String(rev.revision_id ?? "").trim()}`
+              : ""),
+        copyLabel: "Copy revision ref",
       });
     }
     const threadId = String(d.thread_id ?? "").trim();
     if (threadId) {
       rows.push({
-        label: "Thread ID",
-        value: threadId,
-        copyLabel: "Copy thread ID",
+        label: "Thread ref",
+        value:
+          String(d.thread_ref ?? "").trim() ||
+          (threadId && !isInternalUuid(threadId) ? `thread:${threadId}` : ""),
+        copyLabel: "Copy thread ref",
       });
     }
     const subjectRef = String(d.subject_ref ?? "").trim();
@@ -1175,9 +1192,7 @@
 
   {#snippet docDesktop()}
     <h1 class="min-w-0 text-subtitle font-semibold text-fg">
-      {document.title || ""}{#if !document.title}<span
-          class="font-mono text-fg-muted">{document.id}</span
-        >{/if}
+      {resourceDisplayLabel(document, documentId)}
     </h1>
     {#if String(document.summary ?? "").trim()}
       <p
@@ -1265,7 +1280,7 @@
                 <a
                   class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-fg"
                   href={workspaceHref(
-                    `/topics/${encodeURIComponent(parentTopic.id)}`,
+                    `/topics/${encodeURIComponent(resourceRouteSegment(parentTopic, "topic"))}`,
                   )}
                   title={parentTopic.title}
                 >
@@ -1277,9 +1292,9 @@
                 <span
                   class="min-w-0 shrink truncate text-fg-muted"
                   aria-current="page"
-                  title={document?.title || documentId}
+                  title={resourceDisplayLabel(document, documentId)}
                 >
-                  {document?.title || documentId}
+                  {resourceDisplayLabel(document, documentId)}
                 </span>
                 {#if document.state}
                   <span
@@ -1301,7 +1316,8 @@
             {#snippet actions()}
               {#if !document.trashed_at}
                 <ResourceShareMenu
-                  resourceId={document.id}
+                  resourceId={resourceCopyValue("document", document)}
+                  resourceLabel="document ref"
                   rawRecord={document}
                   contentHash={headRevision?.content_hash
                     ? String(headRevision.content_hash)
@@ -1379,7 +1395,9 @@
                       <a
                         role="menuitem"
                         class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
-                        href={workspaceHref(`/docs/${documentId}/edit`)}
+                        href={workspaceHref(
+                          `/docs/${encodeURIComponent(documentRouteSegment)}/edit`,
+                        )}
                         onclick={closeMoreActions}
                       >
                         Settings

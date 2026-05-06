@@ -9,8 +9,9 @@
    */
 
   let {
-    /** Resource id shown in the page URL / API (topic id, document id, board id, card id, …). */
+    /** Public resource ref/handle shown in the page URL / API. */
     resourceId = "",
+    resourceLabel = "ref",
     /** Serialized with JSON.stringify for "Copy raw JSON". */
     rawRecord = /** @type {JsonRecord} */ (null),
     /** Head revision content hash (document detail only). */
@@ -26,7 +27,7 @@
    * brief visible label change inside the menu — `aria-live` text alone is
    * easy to miss.
    */
-  let menuItemCopied = $state(/** @type {""|"id"|"hash"|"json"} */ (""));
+  let menuItemCopied = $state(/** @type {""|"ref"|"hash"|"json"} */ (""));
   let liveStatus = $state("");
   let shareTimer;
   let menuItemTimer;
@@ -41,7 +42,7 @@
     }, 1600);
   }
 
-  function flashMenuItem(/** @type {"id"|"hash"|"json"} */ which) {
+  function flashMenuItem(/** @type {"ref"|"hash"|"json"} */ which) {
     menuItemCopied = which;
     clearTimeout(menuItemTimer);
     menuItemTimer = setTimeout(() => {
@@ -72,15 +73,15 @@
     }
   }
 
-  async function copyId() {
-    const id = String(resourceId ?? "").trim();
-    if (!id) return;
+  async function copyResourceRef() {
+    const value = String(resourceId ?? "").trim();
+    if (!value) return;
     try {
-      await navigator.clipboard.writeText(id);
-      flashStatus("ID copied");
-      flashMenuItem("id");
+      await navigator.clipboard.writeText(value);
+      flashStatus(`${resourceLabel} copied`);
+      flashMenuItem("ref");
     } catch {
-      flashStatus("Could not copy ID");
+      flashStatus(`Could not copy ${resourceLabel}`);
     }
   }
 
@@ -123,7 +124,7 @@
       document.removeEventListener("pointerdown", onDocPointerDown, true);
   });
 
-  let idCopyable = $derived(Boolean(String(resourceId ?? "").trim()));
+  let refCopyable = $derived(Boolean(String(resourceId ?? "").trim()));
   let hashCopyable = $derived(Boolean(String(contentHash ?? "").trim()));
   let jsonCopyable = $derived(
     rawRecord != null && typeof rawRecord === "object",
@@ -132,7 +133,7 @@
    * Hide-when-absent: if there are no copy-to-clipboard extras, the chevron
    * segment is omitted so we only show a single Share control.
    */
-  let hasMenuItems = $derived(idCopyable || hashCopyable || jsonCopyable);
+  let hasMenuItems = $derived(refCopyable || hashCopyable || jsonCopyable);
 </script>
 
 <div bind:this={rootEl} class="relative inline-flex shrink-0">
@@ -151,7 +152,7 @@
         <button
           type="button"
           class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-r-md border-0 border-l border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
-          aria-label="Copy ID, content hash, or raw JSON"
+          aria-label="Copy ref, content hash, or raw JSON"
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           onclick={toggleMenu}
@@ -176,14 +177,14 @@
             class="absolute right-0 z-50 mt-1 min-w-[11rem] rounded-md border border-line bg-panel py-1 shadow-lg"
             role="menu"
           >
-            {#if idCopyable}
+            {#if refCopyable}
               <button
                 type="button"
                 role="menuitem"
                 class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
-                onclick={() => void copyId()}
+                onclick={() => void copyResourceRef()}
               >
-                {menuItemCopied === "id" ? "Copied" : "Copy ID"}
+                {menuItemCopied === "ref" ? "Copied" : `Copy ${resourceLabel}`}
               </button>
             {/if}
             {#if hashCopyable}

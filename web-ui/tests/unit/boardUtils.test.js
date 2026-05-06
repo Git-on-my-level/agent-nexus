@@ -40,13 +40,24 @@ describe("boardUtils", () => {
   });
 
   describe("boardCardStableId", () => {
-    it("prefers versioned card id when present", () => {
+    it("prefers public card handle when present", () => {
       expect(
         boardCardStableId({
           id: "a7472ac6-c002-445b-ade5-b0cc7a2532cd",
+          ref: "card:launch-checklist",
+          handle: "launch-checklist",
           thread_id: null,
         }),
-      ).toBe("a7472ac6-c002-445b-ade5-b0cc7a2532cd");
+      ).toBe("launch-checklist");
+    });
+
+    it("does not expose internal UUID ids", () => {
+      expect(
+        boardCardStableId({
+          id: "a7472ac6-c002-445b-ade5-b0cc7a2532cd",
+          thread_id: "",
+        }),
+      ).toBe("anon:board-card");
     });
 
     it("falls back to thread_id for legacy thread-backed rows", () => {

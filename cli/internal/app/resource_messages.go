@@ -98,11 +98,7 @@ func (a *App) parseTopicReplyInput(ctx context.Context, args []string, cfg confi
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -166,11 +162,7 @@ func (a *App) parseDocReplyInput(ctx context.Context, args []string, cfg config.
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -234,15 +226,7 @@ func (a *App) parseCardReplyInput(ctx context.Context, args []string, cfg config
 	if err != nil {
 		return nil, nil, false, err
 	}
-	target, err := cardMessageTarget(card, strings.TrimSpace(anyString(card["id"])))
-	if err != nil {
-		return nil, nil, false, err
-	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, card, dryRun, nil
 }
 
@@ -308,11 +292,7 @@ func (a *App) parseThreadReplyInput(ctx context.Context, args []string, cfg conf
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -327,7 +307,7 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	fs.Var(&cardIDFlag, "card-id", "Card id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -391,7 +371,6 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	data := asMap(result.Data)
 	body := asMap(data["body"])
 	body["card_id"] = target.SubjectID
-	body["card_short_id"] = shortID(target.SubjectID)
 	body["card_title"] = target.Title
 	body["thread_id"] = target.ThreadID
 	data["body"] = body
@@ -411,7 +390,7 @@ func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg co
 	fs.Var(&topicIDFlag, "topic-id", "Topic id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -457,7 +436,7 @@ func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg conf
 	fs.Var(&documentIDFlag, "document-id", "Document id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -528,7 +507,6 @@ func (a *App) runTargetMessagesCommand(ctx context.Context, cfg config.Resolved,
 	body["returned_events"] = len(asSlice(body["events"]))
 	body["subject_kind"] = target.SubjectKind
 	body["subject_id"] = target.SubjectID
-	body["subject_short_id"] = shortID(target.SubjectID)
 	body["subject_title"] = target.Title
 	body["thread_id"] = target.ThreadID
 	data["body"] = body
@@ -736,40 +714,6 @@ func applyReplyToMessageBody(body map[string]any, replyToEventID string) {
 	event["refs"] = uniqueStrings(refs)
 }
 
-func (a *App) resolveMessageEventOnThread(ctx context.Context, cfg config.Resolved, threadID string, rawEventID string) (string, error) {
-	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "threads timeline", "threads.timeline", "thread_id", threadID, threadIDLookupSpec, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	body := extractNestedMap(asMap(result.Data), "body")
-	events := asSlice(body["events"])
-	matches := make([]string, 0, 2)
-	for _, raw := range events {
-		event := asMap(raw)
-		if event == nil || strings.TrimSpace(anyString(event["type"])) != "message_posted" {
-			continue
-		}
-		id := strings.TrimSpace(anyString(event["id"]))
-		if id == "" {
-			continue
-		}
-		if id == rawEventID {
-			return id, nil
-		}
-		if shouldResolveDisplayedShortID(rawEventID) && strings.HasPrefix(id, rawEventID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sortStrings(matches)
-		return "", ambiguousResourceIDError(rawEventID, eventIDLookupSpec, matches)
-	}
-	return "", errnorm.Usage("not_found", fmt.Sprintf("message %q was not found on thread %s", rawEventID, threadID))
-}
-
 func (a *App) readMessageText(body string, bodyFile string, commandName string) (string, error) {
 	body = strings.TrimSpace(body)
 	bodyFile = strings.TrimSpace(bodyFile)
@@ -840,7 +784,6 @@ func (a *App) decorateMessageWriteResult(result *commandResult, callErr error, c
 	target, targetErr := cardMessageTarget(card, strings.TrimSpace(anyString(card["id"])))
 	if targetErr == nil {
 		body["card_id"] = target.SubjectID
-		body["card_short_id"] = shortID(target.SubjectID)
 		body["card_title"] = target.Title
 		body["thread_id"] = target.ThreadID
 		body["refs"] = stringList(event["refs"])
@@ -861,7 +804,6 @@ func decorateThreadMessageWriteResult(result *commandResult, callErr error, cfg 
 	if target.SubjectKind != "" && target.SubjectKind != "thread" {
 		body["subject_kind"] = target.SubjectKind
 		body["subject_id"] = target.SubjectID
-		body["subject_short_id"] = shortID(target.SubjectID)
 		body["subject_title"] = target.Title
 	}
 	body["thread_id"] = target.ThreadID
@@ -879,7 +821,7 @@ func messageWriteText(body any, subjectLabel string) string {
 	switch subjectLabel {
 	case "Card":
 		title := strings.TrimSpace(anyString(root["card_title"]))
-		cardID := firstNonEmpty(strings.TrimSpace(anyString(root["card_short_id"])), strings.TrimSpace(anyString(root["card_id"])))
+		cardID := strings.TrimSpace(anyString(root["card_id"]))
 		if title != "" && cardID != "" {
 			lines = append(lines, "Card: "+title+" ("+cardID+")")
 		} else if cardID != "" {
@@ -887,7 +829,7 @@ func messageWriteText(body any, subjectLabel string) string {
 		}
 	case "Topic", "Document":
 		title := strings.TrimSpace(anyString(root["subject_title"]))
-		id := firstNonEmpty(strings.TrimSpace(anyString(root["subject_short_id"])), strings.TrimSpace(anyString(root["subject_id"])))
+		id := strings.TrimSpace(anyString(root["subject_id"]))
 		if title != "" && id != "" {
 			lines = append(lines, subjectLabel+": "+title+" ("+id+")")
 		} else if id != "" {
@@ -921,7 +863,7 @@ func formatSubjectMessages(body any, label string) string {
 	root := asMap(body)
 	lines := []string{label + " messages"}
 	title := strings.TrimSpace(anyString(root["subject_title"]))
-	id := firstNonEmpty(strings.TrimSpace(anyString(root["subject_short_id"])), strings.TrimSpace(anyString(root["subject_id"])))
+	id := strings.TrimSpace(anyString(root["subject_id"]))
 	if title != "" && id != "" {
 		lines = append(lines, label+": "+title+" ("+id+")")
 	} else if id != "" {
@@ -938,7 +880,7 @@ func formatCardsMessages(body any) string {
 	root := asMap(body)
 	lines := []string{"Card messages"}
 	title := strings.TrimSpace(anyString(root["card_title"]))
-	cardID := firstNonEmpty(strings.TrimSpace(anyString(root["card_short_id"])), strings.TrimSpace(anyString(root["card_id"])))
+	cardID := strings.TrimSpace(anyString(root["card_id"]))
 	if title != "" && cardID != "" {
 		lines = append(lines, "Card: "+title+" ("+cardID+")")
 	} else if cardID != "" {
@@ -949,17 +891,4 @@ func formatCardsMessages(body any) string {
 	lines = appendScalar(lines, "returned_events", root, "returned_events")
 	lines = appendEventListSection(lines, "messages", asSlice(root["events"]), asBool(root["full_id"]))
 	return strings.Join(lines, "\n")
-}
-
-func sortStrings(values []string) {
-	if len(values) < 2 {
-		return
-	}
-	for i := 0; i < len(values)-1; i++ {
-		for j := i + 1; j < len(values); j++ {
-			if values[j] < values[i] {
-				values[i], values[j] = values[j], values[i]
-			}
-		}
-	}
 }

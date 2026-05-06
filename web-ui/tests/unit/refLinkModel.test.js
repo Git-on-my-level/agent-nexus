@@ -414,7 +414,7 @@ describe("RefLink model", () => {
     });
   });
 
-  it("truncates UUID values in humanized labels to 10 chars", () => {
+  it("truncates UUID values in humanized labels as a legacy fallback", () => {
     const threadRef = resolveRefLink(
       "thread:be0ef636-4ec0-4284-b65c-a868acf124be",
       { humanize: true },

@@ -13,6 +13,10 @@
     documentLifecyclePillClass,
     documentResourceState,
   } from "$lib/documentVisibility";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   let { threadId } = $props();
 
@@ -34,7 +38,7 @@
   }
 
   function documentHref(doc) {
-    const documentId = String(doc?.id ?? "").trim();
+    const documentId = resourceRouteSegment(doc, "document");
     if (!documentId) {
       return workspaceHref("/docs");
     }
@@ -109,7 +113,7 @@
                 {/if}
               </div>
               <p class="mt-1 truncate text-meta font-medium text-fg">
-                {doc.title || doc.id}
+                {resourceDisplayLabel(doc)}
               </p>
               <p class="mt-1 text-micro text-fg-muted">
                 Updated {formatTimestamp(doc.updated_at) || "—"} by {actorName(

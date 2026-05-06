@@ -17,6 +17,10 @@
   import { formatTimestamp } from "$lib/formatDate";
   import { topicDetailStore } from "$lib/topicDetailStore";
   import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
+  import {
+    resourceCopyValue,
+    resourceDisplayLabel,
+  } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   function topicLifecycleBadgeClass(state) {
@@ -156,8 +160,9 @@
     >
     <span class="shrink-0 text-fg-subtle">/</span>
     <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
-      <span class="min-w-0 shrink truncate text-fg" aria-current="page"
-        >{topic?.title || ""}</span
+      <span class="min-w-0 shrink truncate text-fg" aria-current="page">
+        {resourceDisplayLabel(topic, threadId)}
+      </span>
       >
       {#if topic}
         <span
@@ -170,7 +175,11 @@
   {/snippet}
   {#snippet actions()}
     {#if topic?.id}
-      <ResourceShareMenu resourceId={topic.id} rawRecord={topic} />
+      <ResourceShareMenu
+        resourceId={resourceCopyValue("topic", topic)}
+        resourceLabel="topic ref"
+        rawRecord={topic}
+      />
     {/if}
     {#if topic && detailAsTopic && !topic.trashed_at && threadId}
       {#if !topic.archived_at}

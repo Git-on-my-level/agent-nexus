@@ -70,7 +70,7 @@ func normalizeResourceIDInput(raw string, expectedKind string, idLabel string) (
 		if !resourceKindMatches(kind, expectedKind) {
 			return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s typed ref points to %s, not %s", idLabel, displayResourceKind(kind), displayResourceKind(expectedKind)))
 		}
-		return value, nil
+		return canonicalResourceKind(kind) + ":" + value, nil
 	}
 	return raw, nil
 }
@@ -219,7 +219,7 @@ func (a *App) runReadCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 	}
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", "`anx read` requires an ANX URL or typed ref such as card:<id>, document:<id>, topic:<id>, board:<id>, artifact:<id>, or thread:<id>")
+		return nil, errnorm.Usage("invalid_request", "`anx read` requires an ANX URL or typed ref such as card:implement-login, document:runbook, topic:launch, board:launch, artifact:launch-notes, or thread:launch-discussion")
 	}
 	switch canonicalResourceKind(loc.Kind) {
 	case "card":
@@ -283,49 +283,24 @@ func (a *App) runURLCommand(ctx context.Context, args []string, cfg config.Resol
 func (a *App) resolveLocatorForURL(ctx context.Context, cfg config.Resolved, loc resourceLocator) (resourceLocator, error) {
 	switch canonicalResourceKind(loc.Kind) {
 	case "board":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, boardIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "topic":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, topicIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "document":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, documentIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "artifact":
-		id, err := a.resolveResourceIDFromList(ctx, cfg, loc.ID, artifactIDLookupSpec)
-		if err == nil {
-			loc.ID = id
-		} else if shouldResolveDisplayedShortID(loc.ID) {
-			return loc, err
-		}
+		return loc, nil
 	case "card":
 		cardID := loc.ID
-		if shouldResolveDisplayedShortID(cardID) {
-			resolved, err := a.resolveResourceIDFromList(ctx, cfg, cardID, cardIDLookupSpec)
-			if err != nil {
-				return loc, err
-			}
-			cardID = resolved
-			loc.ID = resolved
-		}
 		if strings.TrimSpace(loc.BoardID) == "" {
 			result, err := a.invokeTypedJSON(ctx, cfg, "cards get", "cards.get", map[string]string{"card_id": cardID}, nil, nil)
 			if err != nil {
 				return loc, err
 			}
 			card := extractNestedMap(commandResultBody(result), "card")
+			if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+				loc.ID = id
+			}
 			loc.BoardID = refID(anyString(card["board_ref"]))
 		}
 	}
@@ -489,9 +464,9 @@ func readCommandHelpText() string {
 - Kind: local helper
 - Summary: Read an ANX resource from a URL or typed ref.
 - Examples:
-  - anx read https://anx.example/o/org/w/workspace/boards/<board-id>?card=<card-id>
-  - anx read document:<document-id>
-  - anx read artifact:<artifact-id>`)
+  - anx read https://anx.example/o/org/w/workspace/boards/<board-handle>?card=<card-handle>
+  - anx read document:<document-handle>
+  - anx read artifact:<artifact-handle>`)
 }
 
 func urlCommandHelpText() string {
@@ -500,7 +475,7 @@ func urlCommandHelpText() string {
 - Kind: local helper
 - Summary: Print a shareable ANX URL for a resource.
 - Examples:
-  - anx url card <card-id>
-  - anx url board <board-id>
-  - anx url document <document-id>`)
+  - anx url card <card-ref-or-handle>
+  - anx url board <board-ref-or-handle>
+  - anx url document <doc-ref-or-handle>`)
 }

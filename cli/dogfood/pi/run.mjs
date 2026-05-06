@@ -487,41 +487,41 @@ ${authLines.join("\n")}
 
 Read workflow state:
 - List threads: \`anx threads list\`
-- Fast coordination read in one command: \`anx threads inspect --thread-id <thread-id>\`
-- Canonical thread coordination read: \`anx threads workspace --thread-id <thread-id>\`
-- Hydrated one-command coordination read: \`anx threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose\`
-- Focus workspace review: \`anx threads workspace --thread-id <thread-id>\`
-- Full related workspace content in one command: \`anx threads workspace --thread-id <thread-id> --include-related-event-content --verbose\`
-- Cross-thread aggregate context (optional): \`anx threads context --status active --type initiative --full-id\`
-- Minimal backing thread record (optional): \`anx threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
-- List recent thread events: \`anx events list --thread-id <thread-id> --max-events 10 --full-id\`
-- List recent thread messages only: \`anx events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
+- Fast coordination read (debug/admin): \`anx threads inspect --thread-id <thread-id>\`
+- Canonical thread coordination read (debug/admin): \`anx threads workspace --thread-id <thread-id>\`
+- Hydrated one-command coordination read (debug/admin): \`anx threads workspace --thread-id <thread-id> --include-related-event-content --include-artifact-content --verbose\`
+- Focus workspace review (debug/admin): \`anx threads workspace --thread-id <thread-id>\`
+- Full related workspace content in one command (debug/admin): \`anx threads workspace --thread-id <thread-id> --include-related-event-content --verbose\`
+- Cross-thread aggregate context (debug/admin): \`anx threads context --status active --type initiative --full-id\`
+- Minimal backing thread record (debug/admin): \`anx threads get --thread-id <thread-id>\` (same contract read as \`threads.inspect\`)
+- List recent thread events (debug/admin): \`anx events list --thread-id <thread-id> --max-events 10 --full-id\`
+- List recent thread messages only (debug/admin): \`anx events list --thread-id <thread-id> --type message_posted --max-events 10 --full-id\`
 - Explain the low-level message event contract only when debugging raw events: \`anx events explain message_posted\`
 - List inbox items: \`anx inbox list\`
 - List artifacts: \`anx artifacts list --thread-id <thread-id>\`
-- Read artifact metadata: \`anx artifacts get --artifact-id <artifact-id>\`
-- Read artifact content: \`anx artifacts content --artifact-id <artifact-id>\`
+- Read artifact metadata: \`anx artifacts get --artifact-id <artifact-ref>\`
+- Read artifact content: \`anx artifacts content --artifact-id <artifact-ref>\`
 - List boards: \`anx boards list\`
-- Read one board workspace: \`anx boards workspace --board-id <board-id>\`
+- Read one board workspace: \`anx boards workspace <board-ref>\`
 - List cards: \`anx cards list\`
-- Read one card: \`anx cards get --card-id <card-id>\`
-- Read a seeded scenario document: \`anx docs get --document-id <document-id>\`
-- Stage a document revision: \`anx docs revise --document-id <document-id> --from-file doc-revision-template.json\`
+- Read one card: \`anx cards get <card-ref>\`
+- Read a seeded scenario document: \`anx docs get <doc-ref>\`
+- Stage a document revision: \`anx docs revise <doc-ref> --from-file doc-revision-template.json\`
 - Apply a staged document revision: \`anx docs revise --apply --proposal-id <proposal-id>\`
-- Revise a document immediately (no proposal): \`anx docs revise --apply --document-id <document-id> --from-file doc-revision-template.json\`
+- Revise a document immediately (no proposal): \`anx docs revise --apply <doc-ref> --from-file doc-revision-template.json\`
 
 Write workflow state:
 - Topics, docs, cards, and boards are the primary mutable resources; \`anx threads patch\`, \`anx threads apply\`, and other thread mutation commands are not supported.
-- Write ordinary topic conversation with: \`anx topics message <topic-id> --body-file message.md\`
-- Reply in ordinary topic conversation with: \`anx topics reply <topic-id> --to <message-id> --body-file reply.md\`
-- Write document conversation with: \`anx docs message <document-id> --body-file message.md\`
-- Reply in document conversation with: \`anx docs reply <document-id> --to <message-id> --body-file reply.md\`
-- Write card conversation with: \`anx cards message <card-id> --body-file message.md\`
-- Reply in card conversation with: \`anx cards reply <card-id> --to <message-id> --body-file reply.md\`
-- Update a topic in one step: \`anx topics patch --topic-id <topic-id> --from-file topic-patch.json\`
+- Write ordinary topic conversation with: \`anx topics message <topic-ref> --body-file message.md\`
+- Reply in ordinary topic conversation with: \`anx topics reply <topic-ref> --to <message-id> --body-file reply.md\`
+- Write document conversation with: \`anx docs message <doc-ref> --body-file message.md\`
+- Reply in document conversation with: \`anx docs reply <doc-ref> --to <message-id> --body-file reply.md\`
+- Write card conversation with: \`anx cards message <card-ref> --body-file message.md\`
+- Reply in card conversation with: \`anx cards reply <card-ref> --to <message-id> --body-file reply.md\`
+- Update a topic in one step: \`anx topics patch <topic-ref> --from-file topic-patch.json\`
 - Create a shared board from stdin: \`cat board-template.json | anx boards create --json\`
-- Create a new card from local prose: \`anx cards create --board <board-id> --topic <topic-id> --title "Concrete task" --content-file card.md --ref thread:<role-thread-id>\`
-- Revise a card from local prose: \`anx cards revise --card <card-id> --content-file card-revision.md\`
+- Create a new card from local prose: \`anx cards create --board <board-ref> --topic <topic-ref> --title "Concrete task" --content-file card.md --ref thread:<role-thread-id>\`
+- Revise a card from local prose: \`anx cards revise <card-ref> --content-file card-revision.md\`
 - Assign, move, or resolve cards with domain verbs: \`anx cards assign\`, \`anx cards move\`, \`anx cards resolve\`.
 - Validate a raw event before sending it: \`anx events validate --from-file event-template.json\`
 - Dry-run raw event create without sending it: \`anx events create --from-file event-template.json --dry-run\`
@@ -553,6 +553,10 @@ function valueFrom(object, ...keys) {
     }
   }
   return "";
+}
+
+function refOf(resource, fallback = "") {
+  return resource?.ref ?? resource?.handle ?? resource?.id ?? fallback;
 }
 
 async function apiJSON(baseUrl, apiPath) {
@@ -862,14 +866,14 @@ function eventTemplate(role, targets) {
   }
   if (role.eventIncludeDocument) {
     if (targets.primaryDocument?.id) {
-      refs.push(`document:${targets.primaryDocument.id}`);
+      refs.push(refOf(targets.primaryDocument, `document:${targets.primaryDocument.id}`));
     }
   }
   for (const artifact of targets.artifacts) {
-    refs.push(`artifact:${artifact.id}`);
+    refs.push(refOf(artifact, `artifact:${artifact.id}`));
   }
   for (const card of targets.cards) {
-    refs.push(`card:${card.id}`);
+    refs.push(refOf(card, `card:${card.id}`));
   }
   const uniqueRefs = [...new Set(refs.filter(Boolean))];
   return `{
@@ -979,8 +983,8 @@ export function cardTemplate(role, targets, { boardID = "" } = {}) {
   const parentThread = targets.primaryThread ?? targets.mainThread;
   const relatedRefs = [
     `thread:${parentThread.id}`,
-    ...(targets.topic?.id ? [`topic:${targets.topic.id}`] : []),
-    ...targets.artifacts.slice(0, 2).map((artifact) => `artifact:${artifact.id}`),
+    ...(targets.topic?.id ? [refOf(targets.topic, `topic:${targets.topic.id}`)] : []),
+    ...targets.artifacts.slice(0, 2).map((artifact) => refOf(artifact, `artifact:${artifact.id}`)),
   ];
   return `{
   "board_id": ${JSON.stringify(boardID || "REPLACE_WITH_BOARD_ID")},
@@ -992,7 +996,7 @@ export function cardTemplate(role, targets, { boardID = "" } = {}) {
     "assignee_refs": [],
     "related_refs": ${JSON.stringify(relatedRefs, null, 4)},
     "resolution_refs": [],
-    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(`topic:${targets.topic.id}`)},` : ""}
+    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(refOf(targets.topic, `topic:${targets.topic.id}`))},` : ""}
     "provenance": {
       "sources": [
         "inferred"
@@ -1033,8 +1037,8 @@ export function roleCardState(role, targets, chapterState) {
 export function cardPatchTemplate(role, targets, cardState) {
   const relatedRefs = [
     `thread:${targets.primaryThread?.id ?? targets.mainThread.id}`,
-    ...(targets.topic?.id ? [`topic:${targets.topic.id}`] : []),
-    ...targets.artifacts.slice(0, 2).map((artifact) => `artifact:${artifact.id}`),
+    ...(targets.topic?.id ? [refOf(targets.topic, `topic:${targets.topic.id}`)] : []),
+    ...targets.artifacts.slice(0, 2).map((artifact) => refOf(artifact, `artifact:${artifact.id}`)),
   ];
   const assigneeRefs = role.actorId ? [`actor:${role.actorId}`] : [];
   return `{
@@ -1043,7 +1047,7 @@ export function cardPatchTemplate(role, targets, cardState) {
     "summary": "Replace with the updated task status, next move, or blocker for this kid.",
     "assignee_refs": ${JSON.stringify(assigneeRefs, null, 4)},
     "related_refs": ${JSON.stringify(relatedRefs, null, 4)},
-    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(`topic:${targets.topic.id}`)},` : ""}
+    ${targets.topic?.id ? `"topic_ref": ${JSON.stringify(refOf(targets.topic, `topic:${targets.topic.id}`))},` : ""}
     "provenance": {
       "sources": [
         "inferred"
@@ -1080,12 +1084,11 @@ function docRevisionTemplate(targets, config, role) {
     config.documentTemplateContent;
   const headRevision = valueFrom(primaryDocument?.response?.revision, "revision_id");
   const artifactRefs = targets.artifacts
-    .map((artifact) => artifact?.id)
-    .filter(Boolean)
-    .map((artifactId) => `artifact:${artifactId}`);
+    .map((artifact) => refOf(artifact, artifact?.id ? `artifact:${artifact.id}` : ""))
+    .filter(Boolean);
   const refs = [...new Set([
     `thread:${targets.mainThread.id}`,
-    ...(primaryDocument?.id ? [`document:${primaryDocument.id}`] : []),
+    ...(primaryDocument?.id ? [refOf(primaryDocument, `document:${primaryDocument.id}`)] : []),
     ...artifactRefs,
   ])];
   return `{
@@ -1101,20 +1104,21 @@ function targetsGuide(role, targets) {
   const lines = [
     "# Scenario Targets",
     "",
-    "Use these resolved IDs directly. Do not spend turns rediscovering them.",
+    "Use these resolved refs and handles directly. Do not spend turns rediscovering them.",
     "",
     "Prefer topic workspace, cards, and boards for coordination; thread commands below are diagnostic (backing-thread tooling).",
     "Use `anx topics message`, `anx docs message`, or `anx cards message` for chat and replies; raw `events create` is only for unusual contract-level records.",
     "",
-    `Shared goal thread: ${targets.mainThread.id}`,
+    `Shared goal thread (debug/admin id): ${targets.mainThread.id}`,
     `Shared goal title: ${targets.mainThread.title}`,
-    `Primary thread for your role: ${targets.primaryThread.id}`,
+    `Primary thread for your role (debug/admin id): ${targets.primaryThread.id}`,
     `Primary thread title: ${targets.primaryThread.title}`,
   ];
   if (targets.topic?.id) {
+    const topicRef = refOf(targets.topic, "<topic-ref>");
     lines.push(
-      `Topic workspace (primary read for this role): anx topics workspace --topic-id ${targets.topic.id}`,
-      `Topic record: anx topics get --topic-id ${targets.topic.id}`,
+      `Topic workspace (primary read for this role): anx topics workspace ${topicRef}`,
+      `Topic record: anx topics get ${topicRef}`,
     );
   }
   lines.push(
@@ -1136,26 +1140,29 @@ function targetsGuide(role, targets) {
   if (targets.artifacts.length > 0) {
     lines.push("", "Artifacts to inspect:");
     for (const artifact of targets.artifacts) {
-      lines.push(`- ${artifact.id} :: ${valueFrom(artifact, "summary", "title")}`);
-      lines.push(`  metadata: anx artifacts get --artifact-id ${artifact.id}`);
-      lines.push(`  content: anx artifacts content --artifact-id ${artifact.id}`);
+      const artifactRef = refOf(artifact, artifact.id);
+      lines.push(`- ${artifactRef} :: ${valueFrom(artifact, "summary", "title")}`);
+      lines.push(`  metadata: anx artifacts get --artifact-id ${artifactRef}`);
+      lines.push(`  content: anx artifacts content --artifact-id ${artifactRef}`);
     }
   }
 
   if (targets.cards.length > 0) {
     lines.push("", "Cards in scope:");
     for (const card of targets.cards) {
-      lines.push(`- ${card.id} :: ${valueFrom(card, "title", "summary")}`);
-      lines.push(`  detail: anx cards get --card-id ${card.id}`);
+      const cardRef = refOf(card, card.id);
+      lines.push(`- ${cardRef} :: ${valueFrom(card, "title", "summary")}`);
+      lines.push(`  detail: anx cards get ${cardRef}`);
     }
   }
 
   if (targets.roleDocuments.length > 0) {
     lines.push("", "Documents in scope:");
     for (const document of targets.roleDocuments) {
-      lines.push(`- ${document.id}`);
-      lines.push(`  read: anx docs get --document-id ${document.id}`);
-      lines.push(`  content: anx docs content --document-id ${document.id}`);
+      const docRef = refOf(document, document.id);
+      lines.push(`- ${docRef}`);
+      lines.push(`  read: anx docs get ${docRef}`);
+      lines.push(`  content: anx docs content ${docRef}`);
     }
   }
 
@@ -1167,21 +1174,23 @@ function targetsGuide(role, targets) {
   }
 
   lines.push("", `Your deliverable: ${role.deliverable}`);
+  const topicRef = refOf(targets.topic, "<topic-ref>");
   lines.push(
     "Message coordination checklist:",
     `- kickoff messages live on the main thread ${targets.mainThread.id}`,
-    `- list current visible messages with: anx events list --thread-id ${targets.mainThread.id} --type message_posted --max-events 10 --full-id`,
-    `- post kickoff messages with: anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md`,
-    `- reply with: anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message_event_id> --body-file reply.md`,
+    `- list current visible messages with: anx topics messages ${topicRef} --max-events 10`,
+    `- post kickoff messages with: anx topics message ${topicRef} --body-file message.md`,
+    `- reply with: anx topics reply ${topicRef} --to <message_event_id> --body-file reply.md`,
     "- use docs/card message commands instead when the conversation belongs on a document or card",
   );
   if (role.requireDocsRevision) {
+    const docRef = refOf(targets.primaryDocument, targets.primaryDocument?.id ?? "");
     lines.push(
       `Primary document to update: ${targets.primaryDocument?.id ?? ""}`,
-      `Read it first: anx docs get --document-id ${targets.primaryDocument?.id ?? ""}`,
-      `Stage it: anx docs revise --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-revision-template.json`,
+      `Read it first: anx docs get ${docRef}`,
+      `Stage it: anx docs revise ${docRef} --from-file doc-revision-template.json`,
       `Then apply it: anx docs revise --apply --proposal-id <proposal-id>`,
-      `Or write immediately: anx docs revise --apply --document-id ${targets.primaryDocument?.id ?? ""} --from-file doc-revision-template.json`,
+      `Or write immediately: anx docs revise --apply ${docRef} --from-file doc-revision-template.json`,
     );
   }
   lines.push(
@@ -1730,9 +1739,10 @@ ${continuationFiles.join("\n")}
   const continuationPrompt = chapterStateGuide
     ? `Read CHAPTER.md and CHAPTER_STATE.md first. Continue the existing scenario state from ${chapterID}. Do not recreate the board, docs, cards, or identities that already exist unless the chapter explicitly tells you to do so. Prefer adding new messages, new replies, card moves or updates, and new document revisions over creating duplicate resources.`
     : "";
+  const topicRef = refOf(targets.topic, "<topic-ref>");
   const prompt = role.requireDocsRevision
-    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card.md with \`anx cards create --content-file\` if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Revise doc-revision-template.json in place, stage the document revision with \`anx docs revise\`, inspect the diff, apply it with the returned \`anx docs revise --apply --proposal-id <proposal-id>\`, then post a final topic/doc/card message with the appropriate domain message command. Use \`anx topics messages ${targets.topic?.id ?? "<topic-id>"} --max-events 10 --full-id\` to find reply targets. Write result.md and then give a short final summary.`
-    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${targets.topic?.id ?? "<topic-id>"} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${targets.topic?.id ?? "<topic-id>"} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so revise it with card-revision.md via \`anx cards revise --card ${existingRoleCard.id} --content-file card-revision.md\` instead of creating a duplicate.` : "Create one role-specific task card from card.md with `anx cards create --content-file` after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx topics messages ${targets.topic?.id ?? "<topic-id>"} --max-events 10 --full-id\` to find reply targets. After the conversational work is done, post the final update with the appropriate topic/doc/card message command, write result.md, and then give a short final summary.`;
+    ? `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${topicRef} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${topicRef} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} If you are the boss kid, create the shared board early from board-template.json only if it does not already exist, add at most one coordination card from card.md with \`anx cards create --content-file\` if you do not already own one, and make the board visible to the others. ${existingRoleCard ? `If your role card ${existingRoleCard.id} already exists, revise it with card-revision.md via \`anx cards revise ${refOf(existingRoleCard, existingRoleCard.id)} --content-file card-revision.md\` instead of creating a duplicate.` : "If you need a new card, keep it tied to its intended role thread instead of attaching everything to the shared main thread."} Revise doc-revision-template.json in place, stage the document revision with \`anx docs revise\`, inspect the diff, apply it with the returned \`anx docs revise --apply --proposal-id <proposal-id>\`, then post a final topic/doc/card message with the appropriate domain message command. Use \`anx topics messages ${topicRef} --max-events 10\` to find reply targets. Write result.md and then give a short final summary.`
+    : `Read SCENARIO.md, COMMANDS.md, TARGETS.md, and ROLE_CONTEXT.md. ${continuationPrompt} Execute your role with the real anx CLI. Use \`anx topics message ${topicRef} --body-file message.md\` for a kickoff message, and use \`anx topics reply ${topicRef} --to <message-id> --body-file reply.md\` for at least one reply. If the conversation belongs on a document or card, use \`anx docs message/reply\` or \`anx cards message/reply\` instead. Do not hand-author ordinary message_posted events with \`anx events create\`.${primaryThreadHasOwnTemplates ? " Ignore raw primary-thread event templates unless you are debugging the low-level event contract." : ""} ${existingRoleCard ? `Your role card ${existingRoleCard.id} already exists, so revise it with card-revision.md via \`anx cards revise ${refOf(existingRoleCard, existingRoleCard.id)} --content-file card-revision.md\` instead of creating a duplicate.` : "Create one role-specific task card from card.md with `anx cards create --content-file` after the board exists, and keep that card tied to your primary role thread rather than the shared main thread."} Use \`anx topics messages ${topicRef} --max-events 10\` to find reply targets. After the conversational work is done, post the final update with the appropriate topic/doc/card message command, write result.md, and then give a short final summary.`;
 
   const piArgs = [
     "--print",

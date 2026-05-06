@@ -17,32 +17,32 @@
     },
     "board_created": {
       "refs_must_include": [
-        "board:\u003cboard_id\u003e"
+        "board:\u003cboard_handle\u003e"
       ]
     },
     "board_updated": {
       "refs_must_include": [
-        "board:\u003cboard_id\u003e"
+        "board:\u003cboard_handle\u003e"
       ]
     },
     "card_archived": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
       ]
     },
     "card_created": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e",
-        "card_revision:\u003crevision_id\u003e",
-        "artifact:\u003cartifact_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e",
+        "card_revision:\u003crevision_handle\u003e",
+        "artifact:\u003cartifact_handle\u003e"
       ]
     },
     "card_moved": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
       ],
       "payload_must_include": [
         "column_key"
@@ -50,8 +50,8 @@
     },
     "card_resolved": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
       ],
       "payload_must_include": [
         "resolution"
@@ -59,38 +59,38 @@
     },
     "card_trashed": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
       ]
     },
     "card_updated": {
       "refs_must_include": [
-        "card:\u003ccard_id\u003e",
-        "board:\u003cboard_id\u003e"
+        "card:\u003ccard_handle\u003e",
+        "board:\u003cboard_handle\u003e"
       ]
     },
     "document_created": {
       "refs_must_include": [
-        "document:\u003cdocument_id\u003e",
-        "document_revision:\u003crevision_id\u003e",
-        "artifact:\u003cartifact_id\u003e"
+        "document:\u003cdocument_handle\u003e",
+        "document_revision:\u003crevision_handle\u003e",
+        "artifact:\u003cartifact_handle\u003e"
       ]
     },
     "document_restored": {
       "refs_must_include": [
-        "document:\u003cdocument_id\u003e"
+        "document:\u003cdocument_handle\u003e"
       ]
     },
     "document_revised": {
       "refs_must_include": [
-        "document:\u003cdocument_id\u003e",
-        "document_revision:\u003crevision_id\u003e",
-        "artifact:\u003cartifact_id\u003e"
+        "document:\u003cdocument_handle\u003e",
+        "document_revision:\u003crevision_handle\u003e",
+        "artifact:\u003cartifact_handle\u003e"
       ]
     },
     "document_trashed": {
       "refs_must_include": [
-        "document:\u003cdocument_id\u003e"
+        "document:\u003cdocument_handle\u003e"
       ]
     },
     "exception_raised": {
@@ -126,27 +126,27 @@
     },
     "topic_archived": {
       "refs_must_include": [
-        "topic:\u003ctopic_id\u003e"
+        "topic:\u003ctopic_handle\u003e"
       ]
     },
     "topic_created": {
       "refs_must_include": [
-        "topic:\u003ctopic_id\u003e"
+        "topic:\u003ctopic_handle\u003e"
       ]
     },
     "topic_restored": {
       "refs_must_include": [
-        "topic:\u003ctopic_id\u003e"
+        "topic:\u003ctopic_handle\u003e"
       ]
     },
     "topic_trashed": {
       "refs_must_include": [
-        "topic:\u003ctopic_id\u003e"
+        "topic:\u003ctopic_handle\u003e"
       ]
     },
     "topic_updated": {
       "refs_must_include": [
-        "topic:\u003ctopic_id\u003e"
+        "topic:\u003ctopic_handle\u003e"
       ]
     }
   }

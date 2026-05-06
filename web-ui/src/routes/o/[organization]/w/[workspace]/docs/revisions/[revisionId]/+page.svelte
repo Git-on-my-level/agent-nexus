@@ -2,6 +2,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
+  import {
+    resourceRouteSegment,
+    revisionRouteSegment,
+  } from "$lib/resourceIdentity.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
@@ -50,28 +54,42 @@
 
       const headMatch = documents.find(
         (document) =>
-          String(document?.head_revision_id ?? "").trim() === targetRevisionId,
+          String(document?.head_revision_id ?? "").trim() ===
+            targetRevisionId ||
+          String(document?.head_revision_ref ?? "").trim() === targetRevisionId,
       );
       if (headMatch?.id) {
-        await goto(documentRevisionHref(headMatch.id, targetRevisionId));
+        await goto(
+          documentRevisionHref(
+            resourceRouteSegment(headMatch, "document"),
+            targetRevisionId,
+          ),
+        );
         return;
       }
 
       for (const document of documents) {
-        const documentId = String(document?.id ?? "").trim();
+        const documentId = resourceRouteSegment(document, "document");
         if (!documentId) {
           continue;
         }
 
         const historyResponse = await coreClient.getDocumentHistory(documentId);
         const revisions = historyResponse.revisions ?? [];
-        if (
-          revisions.some(
-            (revision) =>
-              String(revision?.revision_id ?? "").trim() === targetRevisionId,
-          )
-        ) {
-          await goto(documentRevisionHref(documentId, targetRevisionId));
+        const revisionMatch = revisions.find(
+          (revision) =>
+            String(revision?.revision_id ?? "").trim() === targetRevisionId ||
+            String(revision?.ref ?? "").trim() === targetRevisionId ||
+            String(revision?.handle ?? "").trim() === targetRevisionId,
+        );
+        if (revisionMatch) {
+          await goto(
+            documentRevisionHref(
+              documentId,
+              revisionRouteSegment(revisionMatch, "document_revision") ||
+                targetRevisionId,
+            ),
+          );
           return;
         }
       }

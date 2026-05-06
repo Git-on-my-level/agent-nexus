@@ -7,27 +7,33 @@
   import { splitTypedRef } from "$lib/inboxUtils";
   import { buildTopicPatch } from "$lib/topicPatch";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
+  import { isInternalUuid, resourceCopyValue } from "$lib/resourceIdentity.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
   let topic = $derived($topicDetailStore.topic);
   let topicIntegrityRows = $derived.by(() => {
     if (!topic) return [];
-    const topicRef = String(topic.topic_ref ?? "").trim();
+    const topicRef = String(topic.ref ?? topic.topic_ref ?? "").trim();
     const p = splitTypedRef(topicRef);
     const rows = [];
     if (p.prefix === "topic" && p.id) {
       rows.push({
-        label: "Topic ID",
-        value: p.id,
-        copyLabel: "Copy topic ID",
+        label: "Topic ref",
+        value: topicRef || resourceCopyValue("topic", topic),
+        copyLabel: "Copy topic ref",
       });
     }
     if (topic.id) {
+      const topicThreadId = String(topic.id ?? "").trim();
       rows.push({
-        label: "Thread ID",
-        value: String(topic.id),
-        copyLabel: "Copy thread ID",
+        label: "Thread ref",
+        value:
+          String(topic.thread_ref ?? "").trim() ||
+          (topicThreadId && !isInternalUuid(topicThreadId)
+            ? `thread:${topicThreadId}`
+            : ""),
+        copyLabel: "Copy thread ref",
       });
     }
     if (topicRef) {

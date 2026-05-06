@@ -20,6 +20,11 @@
     touchRecentAssigneeIds,
   } from "$lib/recentAssignees.js";
   import { toActorPickerOptions } from "$lib/systemActor.js";
+  import {
+    resourceDisplayLabel,
+    resourceRef,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let loading = $state(true);
@@ -58,15 +63,22 @@
     ),
   );
   let backingThreadId = $derived(board ? boardBackingThreadId(board) : "");
+  let boardRouteSegment = $derived(
+    resourceRouteSegment(board, "board") || boardId,
+  );
   let attachContextRefs = $derived(
     [
       threadId.trim() ? `thread:${threadId.trim()}` : "",
-      boardId ? `board:${boardId}` : "",
+      board ? `board:${resourceRouteSegment(board, "board") || boardId}` : "",
     ].filter(Boolean),
   );
 
   function boardHref() {
-    return workspacePath(organizationSlug, workspaceSlug, `/boards/${boardId}`);
+    return workspacePath(
+      organizationSlug,
+      workspaceSlug,
+      `/boards/${encodeURIComponent(boardRouteSegment)}`,
+    );
   }
 
   function toggleMoreOptions() {
@@ -81,12 +93,9 @@
   async function searchDocumentOptions(query) {
     const documents = await searchDocumentRecords(query);
     return documents.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
-      subtitle: [
-        document.state,
-        document.thread_id && `Timeline ${document.thread_id}`,
-      ]
+      id: resourceRouteSegment(document, "document"),
+      title: resourceDisplayLabel(document),
+      subtitle: [document.state, document.ref || document.handle]
         .filter(Boolean)
         .join(" · "),
       keywords: [],
@@ -162,7 +171,7 @@
     }
     if (!resolvedTitle && !threadTrim) {
       saveError =
-        "Enter a card title, or link a topic or backing thread (timeline ID) under More options.";
+        "Enter a card title, or link a topic or backing thread ref under More options.";
       return;
     }
     if (!resolvedTitle) {
@@ -182,6 +191,13 @@
     }
 
     const summaryOut = summaryTrim || resolvedTitle;
+    const documentTrim = documentId.trim();
+    const documentRef = documentTrim
+      ? resourceRef(
+          { ref: documentTrim.startsWith("document:") ? documentTrim : "" },
+          "document",
+        ) || `document:${documentTrim}`
+      : null;
     saving = true;
     try {
       await coreClient.addBoardCard(boardId, {
@@ -189,9 +205,7 @@
         title: resolvedTitle,
         summary: summaryOut,
         column_key: columnKey,
-        document_ref: documentId.trim()
-          ? `document:${documentId.trim()}`
-          : null,
+        document_ref: documentRef,
         assignee_refs: [...assignees],
         risk,
         resolution: null,
@@ -248,7 +262,7 @@
       class="text-micro text-fg-muted transition-colors hover:text-fg"
       href={boardHref()}
     >
-      ← {board?.title || "Board"}
+      ← {resourceDisplayLabel(board, "Board")}
     </a>
     <h1 class="mt-2 text-subtitle font-semibold text-fg">Add card</h1>
   </div>
@@ -348,13 +362,13 @@
             <div class="grid gap-3 md:grid-cols-2">
               <SearchableEntityPicker
                 bind:value={threadId}
-                advancedLabel="Use a manual thread ID"
+                advancedLabel="Use a manual thread ref"
                 disabledIds={[backingThreadId].filter(Boolean)}
-                helperText="Optional: pick a topic or paste a thread ID."
+                helperText="Optional: pick a topic or paste a thread ref."
                 label="Topic or thread"
-                manualLabel="Thread ID"
+                manualLabel="Thread ref"
                 manualPlaceholder="thread-onboarding"
-                placeholder="Search topics by title or ID"
+                placeholder="Search topics by title or ref"
                 searchFn={searchThreadOptions}
               />
 
@@ -362,7 +376,7 @@
                 bind:value={documentId}
                 helperText="Optional: surface a doc lineage on the card."
                 label="Document"
-                placeholder="Search documents by title, ID, or timeline ID"
+                placeholder="Search documents by title or ref"
                 searchFn={searchDocumentOptions}
                 showManualEntry={false}
               />

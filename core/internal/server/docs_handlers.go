@@ -39,6 +39,13 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	threadID := strings.TrimSpace(query.Get("thread_id"))
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+	}
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
 		States:   states,
 		ThreadID: threadID,
@@ -212,8 +219,9 @@ func handleGetDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
 		return
 	}
 
@@ -238,8 +246,9 @@ func handlePatchDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
 		return
 	}
 	var req struct {
@@ -300,8 +309,9 @@ func handleCreateDocumentRevision(w http.ResponseWriter, r *http.Request, opts h
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
 		return
 	}
 
@@ -415,8 +425,9 @@ func handleUpdateDocument(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
 		return
 	}
 
@@ -546,10 +557,12 @@ func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts hand
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
 		return
 	}
+	documentRef, documentHandle := resolvedPublicIdentity(r.Context(), opts, "document", documentID)
 
 	history, err := opts.primitiveStore.ListDocumentHistory(r.Context(), documentID)
 	if err != nil {
@@ -562,8 +575,10 @@ func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts hand
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"document_id": documentID,
-		"revisions":   history,
+		"document_ref":    documentRef,
+		"document_handle": documentHandle,
+		"document_id":     documentID,
+		"revisions":       publicDocumentRevisionsView(history),
 	})
 }
 
@@ -572,14 +587,24 @@ func handleGetDocumentRevision(w http.ResponseWriter, r *http.Request, opts hand
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "document", Ref: documentID})
+	if err == nil {
+		documentID = resolved.ID
+	} else if errors.Is(err, primitives.ErrInvalidResourceRef) || strings.Contains(documentID, ":") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "document is invalid")
+		return
+	} else if !errors.Is(err, primitives.ErrNotFound) {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve document")
 		return
 	}
+	documentRef, documentHandle := resolvedPublicIdentity(r.Context(), opts, "document", documentID)
 	revisionID = strings.TrimSpace(revisionID)
 	if revisionID == "" || strings.Contains(revisionID, "/") {
 		writeError(w, http.StatusBadRequest, "invalid_request", "revision_id is required")
 		return
+	}
+	if resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "document_revision", Ref: revisionID}); err == nil {
+		revisionID = resolved.ID
 	}
 
 	revision, err := opts.primitiveStore.GetDocumentRevision(r.Context(), documentID, revisionID)
@@ -593,8 +618,27 @@ func handleGetDocumentRevision(w http.ResponseWriter, r *http.Request, opts hand
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"revision": revision,
+		"document_ref":    documentRef,
+		"document_handle": documentHandle,
+		"document_id":     documentID,
+		"revision":        publicDocumentRevisionView(revision),
 	})
+}
+
+func publicDocumentRevisionsView(revisions []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(revisions))
+	for _, revision := range revisions {
+		out = append(out, publicDocumentRevisionView(revision))
+	}
+	return out
+}
+
+func publicDocumentRevisionView(revision map[string]any) map[string]any {
+	out := copyStringAnyMap(revision)
+	for _, key := range []string{"document_id", "artifact_id", "prev_revision_id", "thread_id"} {
+		delete(out, key)
+	}
+	return out
 }
 
 func validateDocumentID(value string) error {
@@ -654,8 +698,9 @@ func handleTrashDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var resolvedDocOK bool
+	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !resolvedDocOK {
 		return
 	}
 
@@ -698,8 +743,9 @@ func handleArchiveDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var resolvedDocOK bool
+	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !resolvedDocOK {
 		return
 	}
 
@@ -745,8 +791,9 @@ func handleUnarchiveDocument(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var resolvedDocOK bool
+	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !resolvedDocOK {
 		return
 	}
 
@@ -792,8 +839,9 @@ func handleRestoreDocument(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var resolvedDocOK bool
+	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !resolvedDocOK {
 		return
 	}
 
@@ -840,8 +888,9 @@ func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
-	if err := validateDocumentID(documentID); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	var resolvedDocOK bool
+	documentID, resolvedDocOK = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !resolvedDocOK {
 		return
 	}
 

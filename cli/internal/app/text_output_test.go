@@ -27,36 +27,40 @@ func TestFormatBoardCardRemoveResult_WithCardThreadBacked(t *testing.T) {
 	}
 }
 
-func TestFormatBoardCardCreateResult_IsConciseAndShowsCardShortID(t *testing.T) {
+func TestFormatBoardCardCreateResult_IsConciseAndShowsCardRef(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{
 		"board": map[string]any{"updated_at": "2026-03-08T00:00:00Z"},
 		"card": map[string]any{
 			"id":         "card_1234567890abcdef",
+			"ref":        "card:fix-cli-card-discovery",
+			"handle":     "fix-cli-card-discovery",
 			"thread_id":  "thread_1234567890abcdef",
+			"thread_ref": "thread:cli-card-discovery",
 			"title":      "Fix CLI card discovery",
 			"column_key": "backlog",
 			"rank":       "a",
 		},
 	}
 	got := formatCommandSummary("cards.create", body)
-	if strings.Contains(got, `"card"`) || strings.Contains(got, "thread_1234567890abcdef") {
+	if strings.Contains(got, `"card"`) || strings.Contains(got, "thread_1234567890abcdef") || strings.Contains(got, "card_12345") {
 		t.Fatalf("expected concise text create output, got:\n%s", got)
 	}
-	if !strings.Contains(got, "Card created:") || !strings.Contains(got, "- card: card_12345 — Fix CLI card discovery") || !strings.Contains(got, "thread: thread_123") {
-		t.Fatalf("expected card short id create output, got:\n%s", got)
+	if !strings.Contains(got, "Card created:") || !strings.Contains(got, "- card: card:fix-cli-card-discovery — Fix CLI card discovery") || !strings.Contains(got, "thread: thread:cli-card-discovery") {
+		t.Fatalf("expected card ref create output, got:\n%s", got)
 	}
 }
 
-func TestFormatBoardCardsList_LeadsWithCanonicalCardShortIDAndTitle(t *testing.T) {
+func TestFormatBoardCardsList_LeadsWithCardRefAndTitle(t *testing.T) {
 	t.Parallel()
 	body := map[string]any{
 		"board_id": "board_1234567890abcdef",
 		"cards": []any{
 			map[string]any{
 				"id":         "card_1234567890abcdef",
-				"short_id":   "card_12345",
+				"ref":        "card:fix-cli-card-discovery",
 				"thread_id":  "thread_1234567890abcdef",
+				"thread_ref": "thread:cli-card-discovery",
 				"title":      "Fix CLI card discovery",
 				"column_key": "backlog",
 				"rank":       "a",
@@ -64,9 +68,9 @@ func TestFormatBoardCardsList_LeadsWithCanonicalCardShortIDAndTitle(t *testing.T
 		},
 	}
 	got := formatBoardCardsList(body)
-	want := "- card_12345 :: backlog :: Fix CLI card discovery :: thread=thread_1234567890abcdef :: rank=a"
+	want := "- card:fix-cli-card-discovery :: backlog :: Fix CLI card discovery :: thread=thread:cli-card-discovery :: rank=a"
 	if !strings.Contains(got, want) {
-		t.Fatalf("expected canonical card id and title before thread id, got:\n%s", got)
+		t.Fatalf("expected card ref and title before thread ref, got:\n%s", got)
 	}
 }
 
@@ -85,7 +89,7 @@ func TestFormatBoardCardsList_FullIDUsesCanonicalCardID(t *testing.T) {
 		},
 	}
 	got := formatBoardCardsList(body)
-	if !strings.Contains(got, "- card_1234567890abcdef :: backlog :: Fix CLI card discovery :: thread=thread_1234567890abcdef") {
+	if !strings.Contains(got, "- card_1234567890abcdef :: backlog :: Fix CLI card discovery :: thread=thread:thread_1234567890abcdef") {
 		t.Fatalf("expected full canonical card id in full-id mode, got:\n%s", got)
 	}
 }
@@ -103,6 +107,7 @@ func TestFormatBoardWorkspaceRendersNestedBackingThreadCards(t *testing.T) {
 				map[string]any{
 					"card": map[string]any{
 						"id":         "card_1234567890abcdef",
+						"ref":        "card:fix-cli-card-discovery",
 						"title":      "Fix CLI card discovery",
 						"column_key": "backlog",
 					},
@@ -120,8 +125,8 @@ func TestFormatBoardWorkspaceRendersNestedBackingThreadCards(t *testing.T) {
 	if strings.Contains(got, "- (empty)") {
 		t.Fatalf("expected card title instead of empty row, got:\n%s", got)
 	}
-	if !strings.Contains(got, "- card_12345 :: Fix CLI card discovery :: thread=thread_123") {
-		t.Fatalf("expected nested backing thread card row led by card id, got:\n%s", got)
+	if !strings.Contains(got, "- card:fix-cli-card-discovery :: Fix CLI card discovery :: thread=thread_1234567890abcdef") {
+		t.Fatalf("expected nested backing thread card row led by card ref, got:\n%s", got)
 	}
 }
 
@@ -131,6 +136,8 @@ func TestFormatBoardCardRemoveResult_WithCardStandalone(t *testing.T) {
 		"board": map[string]any{"updated_at": "2026-03-08T00:00:00Z"},
 		"card": map[string]any{
 			"id":         "card_xyz789",
+			"ref":        "card:standalone-task",
+			"handle":     "standalone-task",
 			"title":      "Standalone task",
 			"column_key": "backlog",
 			"rank":       "a",
@@ -140,8 +147,33 @@ func TestFormatBoardCardRemoveResult_WithCardStandalone(t *testing.T) {
 	if !strings.Contains(got, "Card removed:") {
 		t.Fatalf("expected headline, got %q", got)
 	}
-	if !strings.Contains(got, "- card: card_xyz789 — Standalone task") {
-		t.Fatalf("expected card line with id and title, got %q", got)
+	if strings.Contains(got, "card_xyz789") {
+		t.Fatalf("expected public card ref instead of internal id, got %q", got)
+	}
+	if !strings.Contains(got, "- card: card:standalone-task — Standalone task") {
+		t.Fatalf("expected card line with ref and title, got %q", got)
+	}
+}
+
+func TestFormatBoardCardsBatchCreateResult_UsesCardRefs(t *testing.T) {
+	t.Parallel()
+	body := map[string]any{
+		"board": map[string]any{"updated_at": "2026-03-08T00:00:00Z"},
+		"cards": []any{
+			map[string]any{
+				"id":     "card_internal_1234567890",
+				"ref":    "card:first-task",
+				"handle": "first-task",
+				"title":  "First task",
+			},
+		},
+	}
+	got := formatBoardCardsBatchCreateResult(body)
+	if strings.Contains(got, "card_internal_1234567890") {
+		t.Fatalf("expected batch create text to hide internal id, got:\n%s", got)
+	}
+	if !strings.Contains(got, "- [0] card:first-task — First task") {
+		t.Fatalf("expected batch create text to use card ref, got:\n%s", got)
 	}
 }
 
@@ -160,27 +192,6 @@ func TestFormatCardRecord_Trashed(t *testing.T) {
 	}
 	if !strings.Contains(got, "trashed_at:") {
 		t.Fatalf("expected trashed_at, got %q", got)
-	}
-}
-
-func TestFormatBoardsList_TextScanStripsBoardPrefix(t *testing.T) {
-	t.Parallel()
-	body := map[string]any{
-		"boards": []any{
-			map[string]any{
-				"board": map[string]any{
-					"id":     "board-summer-menu-plan",
-					"title":  "Summer menu",
-					"status": "active",
-				},
-				"summary": map[string]any{"card_count": 2, "unresolved_card_count": 1, "document_count": 0},
-			},
-		},
-	}
-	got := formatBoardsList(body)
-	// Tail after "board-" is summer-menu-plan; first shortIDLength (10) runes: summer-men
-	if !strings.Contains(got, "summer-men") || strings.Contains(got, "board-su") {
-		t.Fatalf("expected scan-style id tail (10 runes) without redundant board- prefix, got:\n%s", got)
 	}
 }
 
@@ -207,42 +218,6 @@ func TestRenderBoardCardItem_UsesRiskExceptionBadge(t *testing.T) {
 	}
 	if !strings.Contains(got, "risk_exception") {
 		t.Fatalf("expected risk_exception badge, got %q", got)
-	}
-}
-
-func TestFormatNamedList_ThreadsScanStripsThreadPrefix(t *testing.T) {
-	t.Parallel()
-	body := map[string]any{
-		"threads": []any{
-			map[string]any{
-				"id":     "thread-kids-lemonade-main",
-				"title":  "Lemonade plan",
-				"status": "active",
-			},
-		},
-	}
-	got := formatNamedList(body, "threads", "Threads", "thread", renderThreadListItem)
-	// Tail after "thread-" is kids-lemonade-main; first shortIDLength (10) runes: kids-lemon
-	if !strings.Contains(got, "kids-lemon") || strings.Contains(got, "thread-k") {
-		t.Fatalf("expected scan-style id (10 runes) after thread- prefix, got:\n%s", got)
-	}
-}
-
-func TestDisambiguateListScanIDs_AppendsShortWhenCollision(t *testing.T) {
-	t.Parallel()
-	items := []map[string]any{
-		{"board": map[string]any{"id": "board-summer-menu-a", "title": "A"}},
-		{"board": map[string]any{"id": "board-summer-menu-b", "title": "B"}},
-	}
-	got := disambiguateListScanIDs(items, "board", false)
-	if len(got) != 2 {
-		t.Fatalf("expected 2 labels, got %#v", got)
-	}
-	// Both tails share the same first 10 runes (summer-men), so labels must disambiguate with brackets.
-	for i, label := range got {
-		if !strings.HasPrefix(label, "summer-men [") || !strings.Contains(label, "]") {
-			t.Fatalf("expected disambiguated 10-rune scan prefix with bracket suffix, got[%d]=%q", i, label)
-		}
 	}
 }
 
