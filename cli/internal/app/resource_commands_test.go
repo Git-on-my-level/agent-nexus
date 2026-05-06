@@ -770,6 +770,39 @@ func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	}
 }
 
+func TestInboxResolveRequiresExactIDOrAlias(t *testing.T) {
+	t.Parallel()
+
+	const targetID = "inbox:action_needed:thread_target:none:event_target"
+	alias := inboxAliasByID([]string{targetID})[targetID]
+	result := &commandResult{Data: map[string]any{
+		"body": map[string]any{
+			"items": []any{
+				map[string]any{"id": targetID, "alias": alias, "subject_ref": "thread:target"},
+			},
+		},
+	}}
+
+	for _, raw := range []string{targetID, alias, strings.ToUpper(alias)} {
+		match, err := resolveInboxItemFromListResult(result, raw)
+		if err != nil {
+			t.Fatalf("expected exact inbox id/alias %q to resolve: %v", raw, err)
+		}
+		if match.ID != targetID {
+			t.Fatalf("expected target id %q for %q, got %#v", targetID, raw, match)
+		}
+	}
+
+	for _, raw := range []string{
+		strings.TrimSuffix(targetID, "target"),
+		strings.TrimSuffix(alias, alias[len(alias)-1:]),
+	} {
+		if _, err := resolveInboxItemFromListResult(result, raw); err == nil {
+			t.Fatalf("expected partial inbox id/alias %q to be rejected", raw)
+		}
+	}
+}
+
 func TestInboxRespondPostsGenericResponse(t *testing.T) {
 	t.Parallel()
 

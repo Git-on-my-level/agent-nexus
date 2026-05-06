@@ -4250,31 +4250,6 @@ func resolveInboxItemFromListResult(result *commandResult, rawID string) (inboxL
 		}
 	}
 
-	prefixMatches := make([]inboxListMatch, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		match := strings.HasPrefix(item.ID, rawID)
-		if !match && item.Alias != "" {
-			match = strings.HasPrefix(item.Alias, rawLower)
-		}
-		if !match {
-			continue
-		}
-		if _, exists := seen[item.ID]; exists {
-			continue
-		}
-		seen[item.ID] = struct{}{}
-		prefixMatches = append(prefixMatches, item)
-	}
-	if len(prefixMatches) == 1 {
-		return prefixMatches[0], nil
-	}
-	if len(prefixMatches) > 1 {
-		sort.Slice(prefixMatches, func(i int, j int) bool {
-			return prefixMatches[i].ID < prefixMatches[j].ID
-		})
-		return inboxListMatch{}, ambiguousInboxItemIDError(rawID, prefixMatches)
-	}
 	return inboxListMatch{}, missingInboxItemIDError(rawID)
 }
 
@@ -4315,25 +4290,6 @@ func listInboxMatches(result *commandResult) []inboxListMatch {
 		})
 	}
 	return out
-}
-
-func ambiguousInboxItemIDError(rawID string, matches []inboxListMatch) error {
-	samples := make([]string, 0, minInt(3, len(matches)))
-	for idx, match := range matches {
-		if idx >= 3 {
-			break
-		}
-		samples = append(samples, fmt.Sprintf("%s (alias=%s)", match.ID, match.Alias))
-	}
-	return errnorm.Usage(
-		"invalid_request",
-		fmt.Sprintf(
-			"inbox item id %q is ambiguous: %d inbox items match. Run `anx inbox list` and retry with the exact displayed alias. Matches: %s",
-			rawID,
-			len(matches),
-			strings.Join(samples, ", "),
-		),
-	)
 }
 
 func missingInboxItemIDError(rawID string) error {
