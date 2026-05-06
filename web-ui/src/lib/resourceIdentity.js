@@ -31,18 +31,20 @@ export function refValue(refValue, expectedKind = "") {
 }
 
 export function resourceRouteSegment(resource, kind = "") {
+  const id = asText(resource?.id);
   return (
     resourceHandle(resource) ||
     refValue(resourceRef(resource, kind), kind) ||
-    asText(resource?.id)
+    (id && !UUID_RE.test(id) ? id : "")
   );
 }
 
 export function revisionRouteSegment(revision, kind = "") {
+  const rid = asText(revision?.revision_id);
   return (
     resourceHandle(revision) ||
     refValue(resourceRef(revision, kind), kind) ||
-    asText(revision?.revision_id)
+    (rid && !UUID_RE.test(rid) ? rid : "")
   );
 }
 

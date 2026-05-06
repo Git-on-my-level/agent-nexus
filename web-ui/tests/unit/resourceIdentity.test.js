@@ -53,4 +53,20 @@ describe("resourceIdentity", () => {
     expect(resourceCopyValue("topic", topic)).toBe("");
     expect(resourceDisplayLabel(topic)).toBe("Untitled resource");
   });
+
+  it("does not expose raw UUID id as route segment", () => {
+    const board = {
+      id: "42a2f537-894e-49ca-a167-a67059e89155",
+    };
+
+    expect(resourceRouteSegment(board, "board")).toBe("");
+  });
+
+  it("does not expose raw UUID revision_id as route segment", () => {
+    const revision = {
+      revision_id: "c9c4bbba-e076-4909-8c86-7aeef88cab4a",
+    };
+
+    expect(revisionRouteSegment(revision, "document_revision")).toBe("");
+  });
 });

@@ -189,9 +189,9 @@ control then switches cookie-backed sessions among seeded principals.
 Primary board UI entry points:
 
 - `/:workspace/boards`
-- `/:workspace/boards/:boardId`
+- `/:workspace/boards/:boardRef`
 
-The board detail page relies on `GET /boards/{board_id}/workspace` for the
+The board detail page relies on `GET /boards/{board_ref}/workspace` for the
 canonical read model and reloads that workspace after mutations or `409
 conflict` responses.
 
