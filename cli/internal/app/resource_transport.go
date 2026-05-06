@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -48,6 +49,13 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	}
 
 	outPath := strings.TrimSpace(outputPath)
+	if outPath == "." {
+		resolved, resolveErr := a.resolveArtifactContentOutputPath(ctx, authCfg, strings.TrimSpace(pathParams["artifact_id"]), resp.Headers)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		outPath = resolved
+	}
 	if outPath != "" {
 		if err := os.WriteFile(outPath, body, 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "artifact_content_write_failed", fmt.Sprintf("failed to write %s", outPath), err)
@@ -84,6 +92,76 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	}
 	text := fmt.Sprintf("%s status: %d\nbytes: %d", commandName, resp.StatusCode, len(body))
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) resolveArtifactContentOutputPath(ctx context.Context, cfg config.Resolved, artifactID string, headers http.Header) (string, error) {
+	if filename := artifactContentDispositionFilename(headers); filename != "" {
+		return filename, nil
+	}
+	filename, err := a.artifactFilenameFromMetadata(ctx, cfg, artifactID)
+	if err != nil {
+		return "", err
+	}
+	if filename == "" {
+		return "", errnorm.Usage("artifact_filename_unavailable", "--output . requires Content-Disposition filename or artifact filename metadata")
+	}
+	return filename, nil
+}
+
+func artifactContentDispositionFilename(headers http.Header) string {
+	raw := strings.TrimSpace(headers.Get("Content-Disposition"))
+	if raw == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(raw)
+	if err != nil {
+		return ""
+	}
+	return cleanArtifactOutputFilename(firstNonEmpty(params["filename"], params["filename*"]))
+}
+
+func (a *App) artifactFilenameFromMetadata(ctx context.Context, cfg config.Resolved, artifactID string) (string, error) {
+	client, err := httpclient.New(cfg)
+	if err != nil {
+		return "", errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{
+		Method:  http.MethodGet,
+		Path:    "/artifacts/" + url.PathEscape(strings.TrimSpace(artifactID)),
+		Headers: generatedHeaders(cfg),
+	})
+	if invokeErr != nil {
+		return "", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifact metadata request failed", invokeErr)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	parsed := parseResponseBody(resp.Body)
+	body, _ := parsed.(map[string]any)
+	artifact := extractNestedMap(body, "artifact")
+	if artifact == nil {
+		artifact = body
+	}
+	for _, key := range []string{"filename", "original_filename", "name"} {
+		if filename := cleanArtifactOutputFilename(anyString(artifact[key])); filename != "" {
+			return filename, nil
+		}
+	}
+	return "", nil
+}
+
+func cleanArtifactOutputFilename(filename string) string {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return ""
+	}
+	filename = filepath.Base(filename)
+	if filename == "." || filename == string(filepath.Separator) {
+		return ""
+	}
+	return filename
 }
 
 func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any) (*commandResult, error) {
@@ -248,7 +326,7 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 	refsJSON = strings.TrimSpace(refsJSON)
 	var refsProbe []any
 	if err := json.Unmarshal([]byte(refsJSON), &refsProbe); err != nil || len(refsProbe) == 0 {
-		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"thread:<id>\"])")
+		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"topic:launch\"])")
 	}
 	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
 	file, err := os.Open(cleanPath)

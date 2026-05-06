@@ -508,7 +508,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	fs.Var(&requestKeyFlag, "request-key", "Request key for idempotency")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&columnFlag, "column", "Initial board column key")
-	fs.Var(&topicFlag, "topic", "Related topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&topicFlag, "topic", "Related topic typed ref or handle")
 	fs.Var(&documentRefFlag, "document-ref", "Pinned document typed ref")
 	fs.Var(&riskFlag, "risk", "Risk level: low, medium, high, critical")
 	fs.Var(&dueAtFlag, "due-at", "Due timestamp")

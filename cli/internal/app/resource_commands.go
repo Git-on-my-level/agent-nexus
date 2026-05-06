@@ -997,38 +997,63 @@ func (a *App) runArtifactsAttachmentsCommand(ctx context.Context, args []string,
 	sub := strings.TrimSpace(strings.ToLower(args[0]))
 	switch sub {
 	case "create":
-		fs := newSilentFlagSet("artifacts attachments create")
-		var refsJSON trackedString
-		var filePath trackedString
-		var summary trackedString
-		var artifactJSON trackedString
-		var actorIDFlag trackedString
-		fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["topic:launch"]`)
-		fs.Var(&filePath, "file", "Path to file to upload")
-		fs.Var(&summary, "summary", "Optional attachment summary")
-		fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_flags", err.Error())
-		}
-		if len(fs.Args()) > 0 {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_args", "unexpected positional arguments")
-		}
-		if strings.TrimSpace(refsJSON.value) == "" {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--refs is required")
-		}
-		if strings.TrimSpace(filePath.value) == "" {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--file is required")
-		}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts attachments create", err
-		}
-		result, callErr := a.invokeArtifactAttachmentCreate(ctx, cfg, refsJSON.value, filePath.value, summary.value, artifactJSON.value, actorID)
+		result, callErr := a.runArtifactAttachmentCreateFlags(ctx, cfg, args[1:], "artifacts attachments create")
 		return result, "artifacts attachments create", callErr
 	default:
 		return nil, "artifacts attachments", errnorm.Usage("unknown_command", fmt.Sprintf("unknown artifacts attachments subcommand %q", args[0]))
 	}
+}
+
+func (a *App) runArtifactAttachmentCreateFlags(ctx context.Context, cfg config.Resolved, args []string, commandName string) (*commandResult, error) {
+	fs := newSilentFlagSet(commandName)
+	var refsJSON trackedString
+	var refs trackedStrings
+	var filePath trackedString
+	var summary trackedString
+	var artifactJSON trackedString
+	var actorIDFlag trackedString
+	fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["topic:launch"]`)
+	fs.Var(&refs, "ref", "Typed ref to attach to, repeatable")
+	fs.Var(&filePath, "file", "Path to file to upload")
+	fs.Var(&summary, "summary", "Optional attachment summary")
+	fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if strings.TrimSpace(filePath.value) == "" {
+		return nil, errnorm.Usage("invalid_request", "--file is required")
+	}
+	resolvedRefsJSON, err := artifactAttachmentRefsJSON(refsJSON.value, refs.values)
+	if err != nil {
+		return nil, err
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeArtifactAttachmentCreate(ctx, cfg, resolvedRefsJSON, filePath.value, summary.value, artifactJSON.value, actorID)
+}
+
+func artifactAttachmentRefsJSON(refsJSON string, refs []string) (string, error) {
+	refsJSON = strings.TrimSpace(refsJSON)
+	if refsJSON != "" && len(refs) > 0 {
+		return "", errnorm.Usage("invalid_flags", "use either --ref or --refs, not both")
+	}
+	if len(refs) > 0 {
+		encoded, err := json.Marshal(refs)
+		if err != nil {
+			return "", errnorm.Wrap(errnorm.KindLocal, "refs_encode_failed", "failed to encode refs", err)
+		}
+		return string(encoded), nil
+	}
+	if refsJSON == "" {
+		return "", errnorm.Usage("invalid_request", "--ref is required (or pass --refs JSON)")
+	}
+	return refsJSON, nil
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -1108,6 +1133,10 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		)
 		return result, "artifacts get", callErr
 	case "create":
+		if artifactCreateUsesFileFlags(args[1:]) {
+			result, callErr := a.runArtifactAttachmentCreateFlags(ctx, cfg, args[1:], "artifacts create")
+			return addResourceURLToResult(cfg, "artifacts.attachments.create", result), "artifacts create", callErr
+		}
 		body, err := a.parseJSONBodyInput(args[1:], "artifacts create")
 		if err != nil {
 			return nil, "artifacts create", err
@@ -1121,7 +1150,11 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id")
 		fs.StringVar(&outputPath, "o", "", "Write raw artifact bytes to file")
 		fs.StringVar(&outputPath, "output", "", "Write raw artifact bytes to file")
-		if err := fs.Parse(args[1:]); err != nil {
+		contentArgs, reorderErr := reorderArtifactContentFlags(args[1:])
+		if reorderErr != nil {
+			return nil, "artifacts content", reorderErr
+		}
+		if err := fs.Parse(contentArgs); err != nil {
 			return nil, "artifacts content", errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
@@ -1331,6 +1364,49 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func artifactCreateUsesFileFlags(args []string) bool {
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "--file" || strings.HasPrefix(arg, "--file=") || arg == "--ref" || strings.HasPrefix(arg, "--ref=") || arg == "--refs" || strings.HasPrefix(arg, "--refs=") {
+			return true
+		}
+	}
+	return false
+}
+
+func reorderArtifactContentFlags(args []string) ([]string, error) {
+	knownValueFlags := map[string]struct{}{
+		"-o":            {},
+		"--output":      {},
+		"--artifact-id": {},
+	}
+	flags := make([]string, 0, len(args))
+	positionals := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--artifact-id=") || strings.HasPrefix(arg, "-o=") {
+			flags = append(flags, arg)
+			continue
+		}
+		if _, ok := knownValueFlags[arg]; ok {
+			flags = append(flags, arg)
+			if i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("flag provided but not defined: %s", arg))
+		}
+		positionals = append(positionals, arg)
+	}
+	return append(flags, positionals...), nil
 }
 
 func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -3157,7 +3233,7 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 	fs.Var(&contentFileFlag, "content-file", "Load document content from a local file")
 	fs.Var(&titleFlag, "title", "Document title")
 	fs.Var(&summaryFlag, "summary", "Document summary")
-	fs.Var(&topicFlag, "topic", "Topic id or topic:<id> ref to anchor the document")
+	fs.Var(&topicFlag, "topic", "Topic typed ref or handle to anchor the document")
 	fs.Var(&subjectFlag, "subject-ref", "Explicit typed subject ref")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&refFlags, "ref", "Additional typed ref (repeatable)")
@@ -3242,7 +3318,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&titleFlag, "title", "Board title")
 	fs.Var(&summaryFlag, "summary", "Board summary")
-	fs.Var(&topicFlag, "topic", "Primary topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&topicFlag, "topic", "Primary topic typed ref or handle")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&documentRefFlags, "document-ref", "Linked document typed ref, repeatable")
 	fs.Var(&pinnedRefFlags, "ref", "Pinned/related typed ref, repeatable")

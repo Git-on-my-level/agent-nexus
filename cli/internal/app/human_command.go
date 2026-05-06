@@ -28,7 +28,7 @@ Flags:
   --proposal <text>             Optional alternative suggestion (repeatable, up to five). Same length limits as server.
   --from-file <path>            Markdown with YAML frontmatter; cannot be mixed with field-building flags or positional title.
   --subject-ref <ref>           Subject typed ref for the human attention item.
-  --thread-id <thread-id>       Backing thread id when subject_ref is not thread:<id>.
+  --thread-id <thread-id>       Backing thread id when subject_ref is not a thread ref.
   --ref <typed-ref>             Additional related typed ref (repeatable).
   --body <text>                 Optional detailed body.
   --body-file <path>            Read detailed body from a file.

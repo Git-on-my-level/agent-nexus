@@ -108,7 +108,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "topics reply",
 		Summary:     "Reply to an existing Topic message.",
-		JSONShape:   "Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.",
+		JSONShape:   "Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.",
 		Composition: "Fetches the Topic and validates the target message exists on its backing thread before posting the reply.",
 		Examples: []string{
 			"anx topics reply topic:launch --to <message-id> --body \"Confirmed\"",
@@ -234,7 +234,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "cards reply",
 		Summary:     "Reply to an existing Card message.",
-		JSONShape:   "Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.",
+		JSONShape:   "Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.",
 		Composition: "Fetches the Card and validates the target message exists on its backing thread before posting the reply.",
 		Examples: []string{
 			"anx cards reply card:implement-login --to <message-id> --body \"Confirmed\"",
@@ -291,7 +291,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "threads reply",
 		Summary:     "Escape hatch: reply to an existing message on a backing thread.",
-		JSONShape:   "Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.",
+		JSONShape:   "Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.",
 		Composition: "Validates the target message exists on the thread before posting the reply.",
 		Examples: []string{
 			"anx threads reply <thread-id> --to <message-id> --body \"Confirmed\"",
@@ -344,7 +344,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "cards resolve",
 		Summary:     "Resolve a card into the done column with evidence refs.",
 		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
-		Composition: "With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.",
+		Composition: "With `--body` or `--body-file`, posts a card message first and passes its `event:launch-update` as terminal resolution evidence.",
 		Examples: []string{
 			"anx cards resolve card:implement-login --body-file evidence.md",
 			"anx cards resolve card:implement-login --resolution-ref event:<event-id>",
@@ -423,6 +423,44 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "<event-type>", Description: "Optional event type to focus on; omit it to list known event types."},
+		},
+	},
+	{
+		Path:        "artifacts create",
+		Summary:     "Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.",
+		JSONShape:   "With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.",
+		Composition: "Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.",
+		Examples: []string{
+			`anx artifacts create --file ./photo.jpg --ref topic:launch`,
+			`anx artifacts create --file ./evidence.pdf --ref card:launch-evidence --summary "Evidence"`,
+			`cat artifact.json | anx artifacts create`,
+		},
+		Flags: []localHelperFlag{
+			{Name: "--file <path>", Description: "Upload a local file as kind=attachment via multipart form."},
+			{Name: "--ref <typed-ref>", Description: "Typed ref to attach to, repeatable."},
+			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
+			{Name: "--summary <text>", Description: "Optional attachment summary."},
+			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--from-file <path>", Description: "Advanced JSON artifact create body from file; cannot be combined with --file."},
+		},
+	},
+	{
+		Path:        "artifacts attachments create",
+		Summary:     "Upload a local file as an attachment artifact via multipart form.",
+		JSONShape:   "Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.",
+		Composition: "Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.",
+		Examples: []string{
+			`anx artifacts attachments create --file ./notes.md --ref thread:<thread-id>`,
+			`anx artifacts attachments create --file ./photo.jpg --refs '["topic:launch"]'`,
+		},
+		Flags: []localHelperFlag{
+			{Name: "--file <path>", Description: "Path to the file to upload."},
+			{Name: "--ref <typed-ref>", Description: "Typed ref to attach to, repeatable."},
+			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
+			{Name: "--summary <text>", Description: "Optional attachment summary."},
+			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 		},
 	},
 	{
@@ -585,7 +623,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs reply",
 		Summary:     "Reply to an existing Document message.",
-		JSONShape:   "Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.",
+		JSONShape:   "Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.",
 		Composition: "Fetches the Document and validates the target message exists on its backing thread before posting the reply.",
 		Examples: []string{
 			`anx docs reply doc:runbook --to <message-id> --body "Confirmed"`,
@@ -942,7 +980,17 @@ func localGroupHelpSupplement(topic string) string {
 	  Raw ` + "`events create`" + ` is a contract escape hatch. For ordinary discussion, use ` + "`anx topics message topic:<handle>`" + `, ` + "`anx docs message doc:<handle>`" + `, or ` + "`anx cards message card:<handle>`" + ` instead of hand-authoring a ` + "`message_posted`" + ` event.
   For details: ` + "`anx events explain <event-type>`")
 	case "artifacts":
-		return strings.TrimSpace(`Local inspection helper:
+		return strings.TrimSpace(`Common attachment flow:
+  artifacts create --file <path> --ref <typed-ref>
+                            Upload a file attachment with repeatable typed refs.
+  artifacts content <id> --output <path>
+                            Download raw artifact bytes to a file.
+  artifacts content <id> --output .
+                            Download using the server-provided filename.
+
+Lower-level helpers:
+  artifacts attachments create
+                            Explicit multipart attachment upload path.
   artifacts inspect        Fetch artifact metadata and content in one call.`)
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:

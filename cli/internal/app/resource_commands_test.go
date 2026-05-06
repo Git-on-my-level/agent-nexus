@@ -4591,6 +4591,198 @@ func TestArtifactContentJSONOutputFile(t *testing.T) {
 	}
 }
 
+func TestArtifactsCreateFileRefUsesAttachmentEndpoint(t *testing.T) {
+	t.Parallel()
+
+	uploaded := []byte("menu bytes")
+	filePath := filepath.Join(t.TempDir(), "menu.txt")
+	if err := os.WriteFile(filePath, uploaded, 0o600); err != nil {
+		t.Fatalf("write upload file: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts/attachments" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if got := r.FormValue("refs"); got != `["topic:topic_1","card:card_1"]` {
+			t.Fatalf("unexpected refs field: %q", got)
+		}
+		if got := r.FormValue("summary"); got != "Menu" {
+			t.Fatalf("unexpected summary field: %q", got)
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("form file: %v", err)
+		}
+		defer file.Close()
+		if header.Filename != "menu.txt" {
+			t.Fatalf("unexpected uploaded filename: %q", header.Filename)
+		}
+		got, err := io.ReadAll(file)
+		if err != nil {
+			t.Fatalf("read form file: %v", err)
+		}
+		if !bytes.Equal(got, uploaded) {
+			t.Fatalf("unexpected uploaded bytes: got=%q want=%q", got, uploaded)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_menu","kind":"attachment","filename":"menu.txt"}}`))
+	}))
+	defer server.Close()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create",
+		"--file", filePath,
+		"--ref", "topic:topic_1",
+		"--ref", "card:card_1",
+		"--summary", "Menu",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "artifacts create" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+}
+
+func TestArtifactsCreateFromFilePreservesAdvancedJSONPath(t *testing.T) {
+	t.Parallel()
+
+	bodyFile := filepath.Join(t.TempDir(), "artifact.json")
+	if err := os.WriteFile(bodyFile, []byte(`{"artifact":{"kind":"note","refs":["topic:topic_1"]},"content_type":"text","content":"hello"}`), 0o600); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts" {
+			http.NotFound(w, r)
+			return
+		}
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got["content"] != "hello" {
+			t.Fatalf("expected JSON artifact body, got %#v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_json","kind":"note"}}`))
+	}))
+	defer server.Close()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create", "--from-file", bodyFile,
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestArtifactsContentUnknownFlagFailsBeforeNetwork(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"artifacts", "content", "--bogus",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_flags" {
+		t.Fatalf("expected invalid_flags, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "bogus") {
+		t.Fatalf("expected unknown flag in error message, got %#v", payload)
+	}
+}
+
+func TestArtifactsContentOutputDotUsesContentDispositionFilename(t *testing.T) {
+	expected := []byte("download body")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts/artifact-named/content" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="report.txt"`)
+		_, _ = w.Write(expected)
+	}))
+	defer server.Close()
+
+	cwd := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	out := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"artifacts", "content", "artifact-named", "--output", ".",
+	})
+	if !strings.Contains(out, "wrote 13 bytes to report.txt") {
+		t.Fatalf("expected write summary, got %q", out)
+	}
+	got, err := os.ReadFile(filepath.Join(cwd, "report.txt"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected output bytes: got=%q want=%q", got, expected)
+	}
+}
+
+func TestArtifactsContentOutputDotFallsBackToMetadataFilename(t *testing.T) {
+	expected := []byte("metadata fallback")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact-meta/content":
+			_, _ = w.Write(expected)
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact-meta":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"artifact":{"id":"artifact-meta","filename":"fallback.bin"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cwd := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "content", "artifact-meta", "--output", ".",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["output_path"]); got != "fallback.bin" {
+		t.Fatalf("expected metadata fallback output path, got %#v", data)
+	}
+	got, err := os.ReadFile(filepath.Join(cwd, "fallback.bin"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected output bytes: got=%q want=%q", got, expected)
+	}
+}
+
 func TestArtifactsInspectCommand(t *testing.T) {
 	t.Parallel()
 

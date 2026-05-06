@@ -219,7 +219,7 @@ func (a *App) runReadCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 	}
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", "`anx read` requires an ANX URL or typed ref such as card:<id>, document:<id>, topic:<id>, board:<id>, artifact:<id>, or thread:<id>")
+		return nil, errnorm.Usage("invalid_request", "`anx read` requires an ANX URL or typed ref such as card:implement-login, document:runbook, topic:launch, board:launch, artifact:launch-notes, or thread:launch-discussion")
 	}
 	switch canonicalResourceKind(loc.Kind) {
 	case "card":

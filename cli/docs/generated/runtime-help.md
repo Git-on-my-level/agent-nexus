@@ -101,8 +101,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `inbox tail` (command): Stream inbox items (SSE)
 - `artifacts list` (command): List artifacts
 - `artifacts get` (command): Get artifact metadata
-- `artifacts create` (command): Create artifact
 - `artifacts content` (command): Download artifact bytes
+- `artifacts attachments` (group): Nested generated help topic.
 - `artifacts archive` (command): Archive artifact
 - `artifacts unarchive` (command): Unarchive artifact
 - `artifacts trash` (command): Move artifact to trash
@@ -139,6 +139,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
+- `artifacts create` (local-helper): Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+- `artifacts attachments create` (local-helper): Upload a local file as an attachment artifact via multipart form.
 - `artifacts inspect` (local-helper): Fetch artifact metadata and resolved content in one command for operator inspection.
 - `threads inspect` (local-helper): Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 - `threads workspace` (local-helper): Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
@@ -1001,17 +1003,17 @@ Usage:
   anx provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
 
 Typed ref roots:
-  event:<id>
-  thread:<id>
-  artifact:<id>
-  topic:<id>
+  event:launch-update
+  thread:launch-discussion
+  artifact:launch-notes
+  topic:launch
 
 Heuristics
 
-- Start from `event:<id>` when explaining one update or mutation.
-- Start from `thread:<id>` when explaining backing-thread evidence and history.
-- Start from `artifact:<id>` when tracing a file or attachment back to its source.
-- Start from `topic:<id>` when explaining operator-facing topic state and linked refs.
+- Start from `event:launch-update` when explaining one update or mutation.
+- Start from `thread:launch-discussion` when explaining backing-thread evidence and history.
+- Start from `artifact:launch-notes` when tracing a file or attachment back to its source.
+- Start from `topic:launch` when explaining operator-facing topic state and linked refs.
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:
@@ -1654,7 +1656,17 @@ Commands:
   artifacts trash          Move artifact to trash
   artifacts unarchive      Unarchive artifact
 
-Local inspection helper:
+Common attachment flow:
+  artifacts create --file <path> --ref <typed-ref>
+                            Upload a file attachment with repeatable typed refs.
+  artifacts content <id> --output <path>
+                            Download raw artifact bytes to a file.
+  artifacts content <id> --output .
+                            Download using the server-provided filename.
+
+Lower-level helpers:
+  artifacts attachments create
+                            Explicit multipart attachment upload path.
   artifacts inspect        Fetch artifact metadata and content in one call.
 
 Global flags:
@@ -3619,38 +3631,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `artifacts create`
-
-Create artifact
-
-```text
-Generated Help: artifacts create
-
-- Command ID: `artifacts.create`
-- CLI path: `artifacts create`
-- HTTP: `POST /artifacts`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
-- Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
-- Concepts: `artifacts`, `write`
-- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
-
-Inputs:
-  Required:
-  - body `artifact` (object)
-  - body `content_type` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `content` (any)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `artifacts content`
 
 Download artifact bytes
@@ -3677,6 +3657,24 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts attachments`
+
+Nested generated help topic.
+
+```text
+Generated Help: artifacts attachments
+
+Commands:
+  artifacts attachments create Upload a file attachment
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts attachments ... ; anx --json artifacts attachments ... ; anx artifacts attachments ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
 ```
 
 ## `artifacts archive`
@@ -4242,7 +4240,7 @@ Local Help: topics reply
 - Kind: `local helper`
 - Summary: Reply to an existing Topic message.
 - Composition: Fetches the Topic and validates the target message exists on its backing thread before posting the reply.
-- JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
   - `anx topics reply topic:launch --to <message-id> --body "Confirmed"`
   - `anx topics reply topic:launch --to <message-id> --body-file reply.md`
@@ -4440,7 +4438,7 @@ Local Help: cards reply
 - Kind: `local helper`
 - Summary: Reply to an existing Card message.
 - Composition: Fetches the Card and validates the target message exists on its backing thread before posting the reply.
-- JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
   - `anx cards reply card:implement-login --to <message-id> --body "Confirmed"`
   - `anx cards reply card:implement-login --to <message-id> --body-file reply.md`
@@ -4533,7 +4531,7 @@ Local Help: threads reply
 - Kind: `local helper`
 - Summary: Escape hatch: reply to an existing message on a backing thread.
 - Composition: Validates the target message exists on the thread before posting the reply.
-- JSON body: Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- JSON body: Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
   - `anx threads reply <thread-id> --to <message-id> --body "Confirmed"`
   - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
@@ -4620,7 +4618,7 @@ Local Help: cards resolve
 
 - Kind: `local helper`
 - Summary: Resolve a card into the done column with evidence refs.
-- Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence.
+- Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:launch-update` as terminal resolution evidence.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards resolve card:implement-login --body-file evidence.md`
@@ -4753,6 +4751,68 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx events explain ... ; anx --json events explain ... ; anx events explain ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts create`
+
+Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+
+```text
+Local Help: artifacts create
+
+- Kind: `local helper`
+- Summary: Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
+- Composition: Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.
+- JSON body: With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.
+- Examples:
+  - `anx artifacts create --file ./photo.jpg --ref topic:launch`
+  - `anx artifacts create --file ./evidence.pdf --ref card:launch-evidence --summary "Evidence"`
+  - `cat artifact.json | anx artifacts create`
+
+Flags:
+  --file <path>                Upload a local file as kind=attachment via multipart form.
+  --ref <typed-ref>            Typed ref to attach to, repeatable.
+  --refs <json>                Compatibility form: JSON array of typed refs.
+  --summary <text>             Optional attachment summary.
+  --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --from-file <path>           Advanced JSON artifact create body from file; cannot be combined with --file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts attachments create`
+
+Upload a local file as an attachment artifact via multipart form.
+
+```text
+Local Help: artifacts attachments create
+
+- Kind: `local helper`
+- Summary: Upload a local file as an attachment artifact via multipart form.
+- Composition: Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.
+- JSON body: Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.
+- Examples:
+  - `anx artifacts attachments create --file ./notes.md --ref thread:<thread-id>`
+  - `anx artifacts attachments create --file ./photo.jpg --refs '["topic:launch"]'`
+
+Flags:
+  --file <path>                Path to the file to upload.
+  --ref <typed-ref>            Typed ref to attach to, repeatable.
+  --refs <json>                Compatibility form: JSON array of typed refs.
+  --summary <text>             Optional attachment summary.
+  --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts attachments create ... ; anx --json artifacts attachments create ... ; anx artifacts attachments create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5043,7 +5103,7 @@ Local Help: docs reply
 - Kind: `local helper`
 - Summary: Reply to an existing Document message.
 - Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
-- JSON body: Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:<id>` ref.
+- JSON body: Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
   - `anx docs reply doc:runbook --to <message-id> --body "Confirmed"`
   - `anx docs reply doc:runbook --to <message-id> --body-file reply.md`
