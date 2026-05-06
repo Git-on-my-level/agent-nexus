@@ -47,6 +47,7 @@ type ArtifactListFilter struct {
 	Kind          string
 	BackingScope  string
 	ThreadID      string
+	ThreadIDs     []string
 	CreatedBefore string
 	CreatedAfter  string
 }
@@ -81,7 +82,9 @@ type EventListFilter struct {
 	BackingScope string
 	Preset       string
 	TopicID      string
+	TopicIDs     []string
 	ThreadID     string
+	ThreadIDs    []string
 	ActorID      string
 	ActorIDs     []string
 	ActorKind    string
@@ -2498,16 +2501,20 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		}
 		query += ` AND type NOT IN (` + strings.Join(placeholders, ",") + `)`
 	}
-	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
-		query += ` AND thread_id = ?`
-		args = append(args, threadID)
+	if threadIDs := eventFilterIDs(filter.ThreadID, filter.ThreadIDs); len(threadIDs) > 0 {
+		query += ` AND thread_id IN (` + placeholders(len(threadIDs)) + `)`
+		for _, threadID := range threadIDs {
+			args = append(args, threadID)
+		}
 	}
-	if topicID := strings.TrimSpace(filter.TopicID); topicID != "" {
+	if topicIDs := eventFilterIDs(filter.TopicID, filter.TopicIDs); len(topicIDs) > 0 {
 		query += ` AND EXISTS (
 			SELECT 1 FROM json_each(events.refs_json)
-			WHERE json_each.value = ?
+			WHERE json_each.value IN (` + placeholders(len(topicIDs)) + `)
 		)`
-		args = append(args, "topic:"+topicID)
+		for _, topicID := range topicIDs {
+			args = append(args, "topic:"+topicID)
+		}
 	}
 	if actorID := strings.TrimSpace(filter.ActorID); actorID != "" {
 		query += ` AND actor_id = ?`
@@ -3594,10 +3601,34 @@ func NormalizeArtifactIDFilter(ids []string, max int) []string {
 	return out
 }
 
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Repeat("?,", n-1) + "?"
+}
+
+func eventFilterIDs(primary string, alternatives []string) []string {
+	values := make([]string, 0, len(alternatives)+1)
+	if primary = strings.TrimSpace(primary); primary != "" {
+		values = append(values, primary)
+	}
+	values = append(values, alternatives...)
+	return dedupeStrings(values)
+}
+
+func artifactThreadFilterIDs(filter ArtifactListFilter) []string {
+	values := make([]string, 0, len(filter.ThreadIDs)+1)
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		values = append(values, threadID)
+	}
+	values = append(values, filter.ThreadIDs...)
+	return dedupeStrings(values)
+}
+
 func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	if ids := NormalizeArtifactIDFilter(filter.IDs, 48); len(ids) > 0 {
-		placeholders := strings.Repeat("?,", len(ids)-1) + "?"
-		query := `SELECT id, metadata_json FROM artifacts WHERE id IN (` + placeholders + `)`
+		query := `SELECT id, metadata_json FROM artifacts WHERE id IN (` + placeholders(len(ids)) + `)`
 		query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 		query += ` ORDER BY created_at ASC, id ASC`
 		args := make([]any, len(ids))
@@ -3610,17 +3641,28 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	qPattern := "%" + q + "%"
 	backingScope := normalizeBackingScope(filter.BackingScope)
 
-	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
-		primaryClauses := []string{"thread_id = ?"}
+	if threadIDs := artifactThreadFilterIDs(filter); len(threadIDs) > 0 {
+		primaryClauses := []string{"thread_id IN (" + placeholders(len(threadIDs)) + ")"}
 		secondaryClauses := []string{
-			"COALESCE(artifacts.thread_id, '') <> ?",
+			"COALESCE(artifacts.thread_id, '') NOT IN (" + placeholders(len(threadIDs)) + ")",
 			"ref_edges.source_type = ?",
 			"ref_edges.target_type = ?",
-			"ref_edges.target_id = ?",
+			"ref_edges.target_id IN (" + placeholders(len(threadIDs)) + ")",
 			"ref_edges.edge_type = ?",
 		}
-		primaryArgs := []any{threadID}
-		secondaryArgs := []any{threadID, "artifact", "thread", threadID, refEdgeTypeRef}
+		primaryArgs := make([]any, 0, len(threadIDs))
+		for _, threadID := range threadIDs {
+			primaryArgs = append(primaryArgs, threadID)
+		}
+		secondaryArgs := make([]any, 0, len(threadIDs)*2+3)
+		for _, threadID := range threadIDs {
+			secondaryArgs = append(secondaryArgs, threadID)
+		}
+		secondaryArgs = append(secondaryArgs, "artifact", "thread")
+		for _, threadID := range threadIDs {
+			secondaryArgs = append(secondaryArgs, threadID)
+		}
+		secondaryArgs = append(secondaryArgs, refEdgeTypeRef)
 		lifecyclePrimary := LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 		lifecycleSecondary := LifecycleStatesOrGroup("artifacts.archived_at", "artifacts.trashed_at", filter.States)
 		primaryClauses = append(primaryClauses, lifecyclePrimary)

@@ -760,6 +760,15 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	query := r.URL.Query()
 	threadID := strings.TrimSpace(query.Get("thread_id"))
+	var threadIDs []string
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+		threadIDs = resolvedRefStorageCandidates(resolved)
+	}
 
 	var artifactIDs []string
 	if idsCSV := strings.TrimSpace(query.Get("ids")); idsCSV != "" {
@@ -770,7 +779,15 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				raw = append(raw, id)
 			}
 		}
-		artifactIDs = primitives.NormalizeArtifactIDFilter(raw, 48)
+		artifactIDs = make([]string, 0, len(raw))
+		for _, rawID := range primitives.NormalizeArtifactIDFilter(raw, 48) {
+			resolved, ok := resolveListFilterResourceRef(w, r, opts, "artifact", rawID, "ids")
+			if !ok {
+				return
+			}
+			artifactIDs = append(artifactIDs, resolved.ID)
+		}
+		artifactIDs = primitives.NormalizeArtifactIDFilter(artifactIDs, 48)
 	}
 
 	states, parseErr := ParseListLifecycleStates(query)
@@ -804,6 +821,7 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		Kind:          kind,
 		BackingScope:  backingScope,
 		ThreadID:      threadID,
+		ThreadIDs:     threadIDs,
 		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
 		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
 	}

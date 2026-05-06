@@ -39,6 +39,13 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	threadID := strings.TrimSpace(query.Get("thread_id"))
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+	}
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
 		States:   states,
 		ThreadID: threadID,
