@@ -5357,3 +5357,189 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 		}
 	})
 }
+
+func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
+
+	threadCtxJSON := `{
+		"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+		"recent_events":[
+			{"id":"event_ctx_1","ref":"event:event_ctx_1","handle":"event_ctx_1","type":"message_posted","summary":"normalize frame shape","thread_id":"thread_123","created_at":"2026-03-07T00:00:00Z"},
+			{"id":"event_ctx_2","ref":"event:event_ctx_2","handle":"event_ctx_2","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123","created_at":"2026-03-07T00:01:00Z"}
+		],
+		"key_artifacts":[
+			{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","handle":"artifact_ctx_1","kind":"attachment"}
+		],
+		"open_cards":[
+			{"id":"card_ctx_1","ref":"card:card-ctx-1","handle":"card-ctx-1","status":"open"}
+		],
+		"documents":[
+			{
+				"id":"doc_ctx_1","ref":"document:runbook","handle":"runbook","state":"active","title":"Runbook","updated_at":"2026-03-07T00:02:00Z",
+				"head_revision":{"artifact_id":"artifact_doc_ctx_1","content_type":"text","created_at":"2026-03-07T00:02:00Z","revision_id":"rev_ctx_1","revision_number":3}
+			}
+		]
+	}`
+
+	threadWorkspaceJSON := `{
+		"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+		"collaboration":{"key_artifacts":[{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","kind":"attachment"}],"open_cards":[{"id":"card_ctx_1","ref":"card:card-ctx-1","status":"open"}],"artifact_count":1,"open_card_count":1},
+		"context":{
+			"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+			"recent_events":[
+				{"id":"event_ctx_1","ref":"event:event_ctx_1","type":"message_posted","summary":"normalize frame shape","thread_id":"thread_123"},
+				{"id":"event_ctx_2","ref":"event:event_ctx_2","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123"}
+			],
+			"key_artifacts":[{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","kind":"attachment"}],
+			"open_cards":[{"id":"card_ctx_1","ref":"card:card-ctx-1","status":"open"}],
+			"documents":[{"id":"doc_ctx_1","ref":"document:runbook","state":"active","title":"Runbook","updated_at":"2026-03-07T00:02:00Z","head_revision":{"artifact_id":"artifact_doc_ctx_1","content_type":"text","created_at":"2026-03-07T00:02:00Z","revision_id":"rev_ctx_1","revision_number":3}}]
+		},
+		"inbox":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}],"count":1,"thread_id":"thread_123"},
+		"pending_attention":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}],"count":1,"thread_id":"thread_123"},
+		"related_threads":{"items":[],"count":0},
+		"follow_up":{
+			"context_refresh_command":"anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+			"events_get_template":"anx events get --event-id <event-id> --json",
+			"events_get_examples":["anx events get --event-id event_ctx_1 --json","anx events get --event-id event_ctx_2 --json"]
+		},
+		"total_review_items":1
+	}`
+
+	timelineJSON := `{"thread_id":"thread_123","events":[
+		{"id":"event_100","ref":"event:event_100","handle":"event_100","type":"message_posted","summary":"ship machine-facing fixes","thread_id":"thread_123","created_at":"2026-03-07T00:00:00Z"},
+		{"id":"event_101","ref":"event:event_101","handle":"event_101","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123","created_at":"2026-03-07T00:01:00Z"}
+	]}`
+
+	boardsListJSON := `{"boards":[{"board":{"id":"board_1234567890abcdef","ref":"board:machine-board","handle":"machine-board","state":"active","title":"Machine Board"},"summary":{"card_count":1,"cards_by_column":{"backlog":0,"blocked":0,"done":0,"in_progress":1,"ready":0,"review":0},"document_count":1,"has_document_refs":true,"latest_activity_at":"2026-03-07T00:03:00Z","unresolved_card_count":2}}]}`
+
+	boardWorkspaceJSON := `{
+		"board":{"id":"board_1234567890abcdef","ref":"board:machine-board","handle":"machine-board","state":"active","title":"Machine Board","updated_at":"2026-03-07T00:03:00Z"},
+		"board_summary":{"card_count":1,"cards_by_column":{"backlog":0,"blocked":0,"done":0,"in_progress":1,"ready":0,"review":0},"document_count":1,"has_document_refs":true,"latest_activity_at":"2026-03-07T00:03:00Z","unresolved_card_count":1},
+		"cards":{"count":1,"items":[{"card":{"board_id":"board_1234567890abcdef","ref":"card:card-ctx-1","handle":"card-ctx-1","column_key":"in_progress","created_at":"2026-03-07T00:00:00Z","created_by":"actor_1","pinned_document_id":null,"rank":"m","thread_id":"thread_123","updated_at":"2026-03-07T00:03:00Z","updated_by":"actor_1"},"pinned_document":null,"summary":{"decision_count":0,"decision_request_count":1,"document_count":1,"inbox_count":1,"latest_activity_at":"2026-03-07T00:03:00Z","recommendation_count":1,"related_topic_count":1,"stale":false},"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"}}]},
+		"documents":{"count":1,"items":[{"id":"doc_ctx_1","ref":"document:runbook","handle":"runbook","state":"active","title":"Runbook"}]},
+		"generated_at":"2026-03-07T00:03:00Z",
+		"inbox":{"count":1,"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed"}]},
+		"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","inbox":"derived","topics":"derived","warnings":"derived"},
+		"warnings":{"count":0,"items":[]},
+		"topics":{"count":0,"items":[]}
+	}`
+
+	eventGetJSON := `{"event":{"id":"event_456","ref":"event:event_456","handle":"event_456","type":"message_posted","summary":"canonical event payload","thread_id":"thread_123"}}`
+
+	inboxListJSON := `{"items":[
+		{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"},
+		{"id":"inbox:action_needed:thread_other:none:evt_x","thread_id":"thread_other","type":"action_needed","summary":"unrelated"}
+	]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
+			_, _ = w.Write([]byte(threadCtxJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
+			_, _ = w.Write([]byte(threadWorkspaceJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/timeline":
+			_, _ = w.Write([]byte(timelineJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":
+			_, _ = w.Write([]byte(eventGetJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(boardsListJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/board_1234567890abcdef/workspace":
+			_, _ = w.Write([]byte(boardWorkspaceJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(inboxListJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/events":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"ref\":\"event:event_stream_1\",\"handle\":\"event_stream_1\",\"type\":\"message_posted\"}}\n\n")
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/inbox":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\",\"ref\":\"inbox:inbox-1\",\"handle\":\"inbox-1\"}}\n\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	t.Run("events_list", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "list",
+			"--thread-id", "thread_123",
+			"--type", "message_posted",
+		})
+		assertGolden(t, "events_list_machine.golden.json", raw)
+	})
+
+	t.Run("events_get", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "get",
+			"--event-id", "event_456",
+		})
+		assertGolden(t, "events_get_machine.golden.json", raw)
+	})
+
+	t.Run("events_stream", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "stream",
+			"--max-events", "1",
+		})
+		assertGolden(t, "events_stream_machine.golden.json", raw)
+	})
+
+	t.Run("threads_context", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "context",
+			"--thread-id", "thread_123",
+		})
+		assertGolden(t, "threads_context_machine.golden.json", raw)
+	})
+
+	t.Run("threads_inspect", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "inspect",
+			"--thread-id", "thread_123",
+		})
+		assertGoldenStabilizedInboxAliases(t, "threads_inspect_machine.golden.json", raw)
+	})
+
+	t.Run("threads_workspace", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "workspace",
+			"--thread-id", "thread_123",
+		})
+		assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", raw)
+	})
+
+	t.Run("boards_list", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"boards", "list",
+		})
+		assertGolden(t, "boards_list_machine.golden.json", raw)
+	})
+
+	t.Run("boards_workspace", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"boards", "workspace",
+			"--board-id", "board_1234567890abcdef",
+		})
+		assertGolden(t, "boards_workspace_machine.golden.json", raw)
+	})
+
+	t.Run("inbox_stream", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"inbox", "stream",
+			"--max-events", "1",
+		})
+		assertGolden(t, "inbox_stream_machine.golden.json", raw)
+	})
+}

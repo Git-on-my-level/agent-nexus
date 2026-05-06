@@ -7,14 +7,18 @@
       "artifact_count": 1,
       "key_artifacts": [
         {
+          "handle": "artifact_ctx_1",
           "id": "artifact_ctx_1",
-          "kind": "attachment"
+          "kind": "attachment",
+          "ref": "artifact:artifact_ctx_1"
         }
       ],
       "open_card_count": 1,
       "open_cards": [
         {
+          "handle": "card-ctx-1",
           "id": "card_ctx_1",
+          "ref": "card:card-ctx-1",
           "status": "open"
         }
       ]
@@ -24,20 +28,25 @@
         "artifact_count": 1,
         "key_artifacts": [
           {
+            "handle": "artifact_ctx_1",
             "id": "artifact_ctx_1",
-            "kind": "attachment"
+            "kind": "attachment",
+            "ref": "artifact:artifact_ctx_1"
           }
         ],
         "open_card_count": 1,
         "open_cards": [
           {
+            "handle": "card-ctx-1",
             "id": "card_ctx_1",
+            "ref": "card:card-ctx-1",
             "status": "open"
           }
         ]
       },
       "documents": [
         {
+          "handle": "runbook",
           "head_revision": {
             "artifact_id": "artifact_doc_ctx_1",
             "content_type": "text",
@@ -46,6 +55,7 @@
             "revision_number": 3
           },
           "id": "doc_ctx_1",
+          "ref": "document:runbook",
           "state": "active",
           "title": "Runbook",
           "updated_at": "2026-03-07T00:02:00Z"
@@ -54,26 +64,36 @@
       "full_id": false,
       "key_artifacts": [
         {
+          "handle": "artifact_ctx_1",
           "id": "artifact_ctx_1",
-          "kind": "attachment"
+          "kind": "attachment",
+          "ref": "artifact:artifact_ctx_1"
         }
       ],
       "open_cards": [
         {
+          "handle": "card-ctx-1",
           "id": "card_ctx_1",
+          "ref": "card:card-ctx-1",
           "status": "open"
         }
       ],
       "recent_events": [
         {
+          "created_at": "2026-03-07T00:00:00Z",
+          "handle": "event_ctx_1",
           "id": "event_ctx_1",
+          "ref": "event:event_ctx_1",
           "summary": "normalize frame shape",
           "summary_preview": "normalize frame shape",
           "thread_id": "thread_123",
           "type": "message_posted"
         },
         {
+          "created_at": "2026-03-07T00:01:00Z",
+          "handle": "event_ctx_2",
           "id": "event_ctx_2",
+          "ref": "event:event_ctx_2",
           "summary": "confirm canonical command labels",
           "summary_preview": "confirm canonical command labels",
           "thread_id": "thread_123",
@@ -81,7 +101,9 @@
         }
       ],
       "thread": {
+        "handle": "machine-facing-consistency",
         "id": "thread_123",
+        "ref": "thread:machine-facing-consistency",
         "title": "Machine-facing consistency"
       },
       "thread_id": "thread_123"
@@ -93,7 +115,7 @@
       "full_id": false,
       "items": [
         {
-          "alias": "ibx_PLACEHOLDER",
+          "alias": "ibx_STABLE",
           "id": "inbox:action_needed:thread_123:none:event_ctx_2",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
@@ -104,7 +126,9 @@
     },
     "inbox_source": "inbox.list",
     "thread": {
+      "handle": "machine-facing-consistency",
       "id": "thread_123",
+      "ref": "thread:machine-facing-consistency",
       "title": "Machine-facing consistency"
     },
     "thread_id": "thread_123"

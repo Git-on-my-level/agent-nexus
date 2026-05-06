@@ -7,7 +7,9 @@
     "events": [
       {
         "created_at": "2026-03-07T00:00:00Z",
+        "handle": "event_100",
         "id": "event_100",
+        "ref": "event:event_100",
         "summary": "ship machine-facing fixes",
         "summary_preview": "ship machine-facing fixes",
         "thread_id": "thread_123",

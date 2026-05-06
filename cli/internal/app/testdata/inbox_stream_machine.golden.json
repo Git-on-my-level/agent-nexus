@@ -5,11 +5,15 @@
   "data": {
     "id": "ibx_1",
     "item": {
+      "handle": "inbox-1",
       "id": "inbox:1",
+      "ref": "inbox:inbox-1",
       "thread_id": "thread_123"
     },
     "payload": {
+      "handle": "inbox-1",
       "id": "inbox:1",
+      "ref": "inbox:inbox-1",
       "thread_id": "thread_123"
     },
     "payload_key": "item",
