@@ -171,6 +171,53 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 	})
 }
 
+func TestPublicRefsInValueOnlyRewritesRefFields(t *testing.T) {
+	t.Parallel()
+
+	value := map[string]any{
+		"text": "note: follow up",
+		"url":  "https://example.test/path",
+		"payload": map[string]any{
+			"subject_ref": " topic:topic-1 ",
+			"notes": []any{
+				map[string]any{"target_ref": " document:doc-1 "},
+				"event: ordinary prose",
+			},
+			"related_refs": []any{" thread:thread-1 ", "topic:topic-2"},
+		},
+		"provenance": map[string]any{
+			"sources": []any{"event: event-1", "https://example.test/source"},
+		},
+	}
+
+	got := publicRefsInValue(context.Background(), nil, value).(map[string]any)
+	if got["text"] != "note: follow up" {
+		t.Fatalf("non-ref text field was rewritten: %#v", got["text"])
+	}
+	if got["url"] != "https://example.test/path" {
+		t.Fatalf("non-ref url field was rewritten: %#v", got["url"])
+	}
+
+	payload := got["payload"].(map[string]any)
+	if got := payload["subject_ref"]; got != "topic:topic-1" {
+		t.Fatalf("subject_ref should be normalized: %#v", got)
+	}
+	notes := payload["notes"].([]any)
+	if got := notes[0].(map[string]any)["target_ref"]; got != "document:doc-1" {
+		t.Fatalf("nested target_ref should be normalized: %#v", got)
+	}
+	if got := notes[1]; got != "event: ordinary prose" {
+		t.Fatalf("non-ref array string was rewritten: %#v", got)
+	}
+	if refs := payload["related_refs"]; !reflect.DeepEqual(refs, []any{"thread:thread-1", "topic:topic-2"}) {
+		t.Fatalf("related_refs should be normalized: %#v", refs)
+	}
+	provenance := got["provenance"].(map[string]any)
+	if sources := provenance["sources"]; !reflect.DeepEqual(sources, []any{"event: event-1", "https://example.test/source"}) {
+		t.Fatalf("provenance.sources should not be treated as refs: %#v", sources)
+	}
+}
+
 func TestRefEdgesBackArtifactAndEventReverseLookups(t *testing.T) {
 	t.Parallel()
 
@@ -472,8 +519,8 @@ func TestInfrastructureRefsUsePublicRefsWithInternalJoinMetadata(t *testing.T) {
 		t.Fatalf("event payload subject_ref should be public: got %q want %q", got, topicRef)
 	}
 	provenance := event["provenance"].(map[string]any)
-	if sources := stringListFromAny(provenance["sources"]); !reflect.DeepEqual(sources, []string{topicRef}) {
-		t.Fatalf("event provenance sources should be public: got %#v want %#v", sources, []string{topicRef})
+	if sources := stringListFromAny(provenance["sources"]); !reflect.DeepEqual(sources, []string{"topic:" + topicID}) {
+		t.Fatalf("event provenance sources should preserve exact user strings: got %#v want %#v", sources, []string{"topic:" + topicID})
 	}
 
 	var metadataJSON string

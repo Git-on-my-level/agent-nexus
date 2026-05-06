@@ -132,6 +132,32 @@ func publicTypedRefsAny(ctx context.Context, q queryRower, refs []any) []any {
 }
 
 func publicRefsInValue(ctx context.Context, q queryRower, value any) any {
+	return publicRefsInField(ctx, q, "", value)
+}
+
+func publicRefsInField(ctx context.Context, q queryRower, key string, value any) any {
+	if isPublicRefFieldKey(key) {
+		return publicRefsInRefValue(ctx, q, value)
+	}
+	switch v := value.(type) {
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = publicRefsInValue(ctx, q, item)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = publicRefsInField(ctx, q, key, item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func publicRefsInRefValue(ctx context.Context, q queryRower, value any) any {
 	switch v := value.(type) {
 	case string:
 		prefix, refValue, ok := normalizeTypedRef(v)
@@ -142,20 +168,21 @@ func publicRefsInValue(ctx context.Context, q queryRower, value any) any {
 	case []string:
 		return publicTypedRefs(ctx, q, v)
 	case []any:
-		out := make([]any, len(v))
-		for i, item := range v {
-			out[i] = publicRefsInValue(ctx, q, item)
-		}
-		return out
+		return publicTypedRefsAny(ctx, q, v)
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for key, item := range v {
-			out[key] = publicRefsInValue(ctx, q, item)
+			out[key] = publicRefsInField(ctx, q, key, item)
 		}
 		return out
 	default:
 		return value
 	}
+}
+
+func isPublicRefFieldKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == "ref" || key == "refs" || strings.HasSuffix(key, "_ref") || strings.HasSuffix(key, "_refs")
 }
 
 func normalizeTypedRef(raw string) (string, string, bool) {

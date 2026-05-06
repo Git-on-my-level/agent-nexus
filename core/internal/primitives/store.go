@@ -281,7 +281,7 @@ func decodeEventBodyFromRow(
 			if k == "payload" {
 				continue
 			}
-			out[k] = publicRefsInValue(ctx, q, v)
+			out[k] = publicRefsInField(ctx, q, k, v)
 		}
 		return out, nil
 	}
@@ -2392,7 +2392,7 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		case "id", "type", "ts", "actor_id", "thread_id", "thread_ref", "refs", "payload":
 			continue
 		default:
-			prepared.Body[k] = publicRefsInValue(ctx, exec, v)
+			prepared.Body[k] = publicRefsInField(ctx, exec, k, v)
 		}
 	}
 	if _, err := exec.ExecContext(

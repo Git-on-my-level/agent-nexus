@@ -343,8 +343,12 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 					continue
 				}
 				seenArtifactIDs[artifactID] = struct{}{}
+				artifactRef := strings.TrimSpace(anyString(artifact["ref"]))
+				if artifactRef == "" {
+					artifactRef = "artifact:" + artifactID
+				}
 				item := map[string]any{
-					"ref":      "artifact:" + artifactID,
+					"ref":      artifactRef,
 					"artifact": artifact,
 				}
 				if includeArtifactContent {
@@ -381,8 +385,12 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 			return nil, err
 		}
 
+		artifactRef := strings.TrimSpace(anyString(artifact["ref"]))
+		if artifactRef == "" {
+			artifactRef = ref
+		}
 		item := map[string]any{
-			"ref":      ref,
+			"ref":      artifactRef,
 			"artifact": artifact,
 		}
 
