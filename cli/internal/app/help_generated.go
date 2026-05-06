@@ -102,7 +102,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
-			{Name: "--full-id", Description: "Render full event ids in default text output."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
 	},
 	{
@@ -228,7 +228,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
-			{Name: "--full-id", Description: "Render full event ids in default text output."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
 	},
 	{
@@ -392,7 +392,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
 			{Name: "--max <n>", Description: "Alias for --max-events."},
-			{Name: "--full-id", Description: "Render full event ids in default text output (non-JSON)."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output (non-JSON)."},
 			{Name: "--include-archived", Description: "Include archived events in results."},
 			{Name: "--archived-only", Description: "Show only archived events."},
 			{Name: "--include-trashed", Description: "Include trashed events in results."},
@@ -452,7 +452,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
 	{
@@ -469,7 +469,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--state <state>", Description: "Discover one thread by lifecycle state (active, archived, trashed)."},
 			{Name: "--max-events <n>", Description: "Maximum recent context events to include."},
 			{Name: "--include-artifact-content", Description: "Include artifact content previews from the underlying read-only thread views."},
-			{Name: "--full-id", Description: "Render full event and inbox ids in default text output (non-JSON)."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event and inbox ids in default text output (non-JSON)."},
 		},
 	},
 	{
@@ -496,7 +496,7 @@ var localHelperTopics = []localHelperTopic{
 		},
 		Flags: []localHelperFlag{
 			{Name: "<board-ref-or-handle>", Description: "Board typed ref or handle to list cards for."},
-			{Name: "--full-id", Description: "Render full card ids in default text output."},
+			{Name: "--full-id", Description: "(debug/admin) Render full card ids in default text output."},
 		},
 	},
 	{
@@ -556,7 +556,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
 			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
-			{Name: "--full-id", Description: "Render full event ids in default text output."},
+			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 			{Name: "--include-archived", Description: "Include archived message events."},
 			{Name: "--archived-only", Description: "Show only archived message events."},
 			{Name: "--include-trashed", Description: "Include trashed message events."},
@@ -932,13 +932,13 @@ func localGroupHelpSupplement(topic string) string {
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer domain commands like ` + "`anx cards message <card-id>`" + ` for normal authoring and ` + "`anx topics workspace --topic-id <topic-id>`" + ` for primary coordination reads. Use ` + "`anx threads workspace --full-id`" + ` when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
+  Tip: prefer domain commands like ` + "`anx cards message <card-id>`" + ` for normal authoring and ` + "`anx topics workspace --topic-id <topic-id>`" + ` for primary coordination reads. Use ` + "`anx threads workspace --full-id`" + ` (debug/admin) when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
-  Tip: use ` + "`--mine`" + ` or ` + "`--actor-id <id>`" + ` to audit one actor; add ` + "`--full-id`" + ` for copy/paste IDs.
+  Tip: use ` + "`--mine`" + ` or ` + "`--actor-id <id>`" + ` to audit one actor; add ` + "`--full-id`" + ` (debug/admin) for copy/paste IDs.
   Raw ` + "`events create`" + ` is a contract escape hatch. For ordinary discussion, use ` + "`anx topics message <topic-id>`" + `, ` + "`anx docs message <document-id>`" + `, or ` + "`anx cards message <card-id>`" + ` instead of hand-authoring a ` + "`message_posted`" + ` event.
   For details: ` + "`anx events explain <event-type>`")
 	case "artifacts":

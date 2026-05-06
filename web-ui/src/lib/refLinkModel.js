@@ -49,6 +49,11 @@ function shouldHumanizeByDefault(prefix) {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Compact a typed-ref value for humanized display. Public refs now use handles
+ * (not UUIDs), so this UUID-truncation path is a fallback for legacy or
+ * internal-only data that still carries a UUID value after the colon.
+ */
 function compactValue(value) {
   if (UUID_RE.test(value)) return value.slice(0, 10);
   return value;

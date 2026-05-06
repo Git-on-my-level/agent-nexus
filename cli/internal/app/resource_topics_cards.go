@@ -44,7 +44,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		fs.Var(&queryFlag, "q", "Search topics by id or title substring")
 		fs.Var(&limitFlag, "limit", "Page size (1–1000)")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
-		fs.Var(&fullIDFlag, "full-id", "Render full topic ids in default text output (non-JSON)")
+		fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full topic ids in default text output (non-JSON)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived topics")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived topics")
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed topics")
@@ -1142,7 +1142,7 @@ func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved
 		if card == nil {
 			return nil
 		}
-		if rawBoardID := strings.TrimSpace(anyString(body["board_id"])); rawBoardID != "" && shouldResolveDisplayedShortID(rawBoardID) {
+		if rawBoardID := strings.TrimSpace(anyString(body["board_id"])); rawBoardID != "" {
 			resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
 			if err != nil {
 				return err
@@ -1354,7 +1354,7 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		})
 	case "agent.notifications.read", "agent.notifications.dismiss":
 		raw := strings.TrimSpace(anyString(body["wakeup_id"]))
-		if raw == "" || !shouldResolveDisplayedShortID(raw) || !strings.HasPrefix(raw, "artifact_") {
+		if raw == "" || !strings.HasPrefix(raw, "artifact_") {
 			return nil
 		}
 		resolved, err := a.resolveResourceIDFromList(ctx, cfg, raw, artifactIDLookupSpec)

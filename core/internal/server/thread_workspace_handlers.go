@@ -400,9 +400,6 @@ func workspaceNormalizeEvents(events []map[string]any) []map[string]any {
 		if copy == nil {
 			continue
 		}
-		if id := strings.TrimSpace(anyString(copy["id"])); id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
-			copy["short_id"] = workspaceShortID(id)
-		}
 		if preview := workspaceEventSummaryPreview(copy); preview != "" && strings.TrimSpace(anyString(copy["summary_preview"])) == "" {
 			copy["summary_preview"] = preview
 		}
@@ -672,14 +669,6 @@ func workspaceTruncatePreview(raw string) string {
 		return normalized
 	}
 	return strings.TrimSpace(string(runes[:maxRunes])) + "..."
-}
-
-func workspaceShortID(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) <= 10 {
-		return id
-	}
-	return id[:10]
 }
 
 func workspaceIntValue(raw any) int {

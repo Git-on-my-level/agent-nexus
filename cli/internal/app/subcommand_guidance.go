@@ -140,7 +140,7 @@ var provenanceSubcommandSpec = subcommandSpec{
 var threadsSubcommandSpec = subcommandSpec{
 	command:  "threads",
 	valid:    []string{"list", "get", "message", "reply", "timeline", "context", "inspect", "workspace", "review"},
-	examples: []string{"anx topics workspace --topic-id <topic-id>", "anx cards message <card-id> --body-file update.md", "anx threads message <thread-id> --body-file note.md", "anx threads list --state active", "anx threads workspace --state active --full-id"},
+	examples: []string{"anx topics workspace --topic-id <topic-id>", "anx cards message <card-id> --body-file update.md", "anx threads message <thread-id> --body-file note.md", "anx threads list --state active", "anx threads workspace --state active"},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -188,7 +188,7 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 var eventsSubcommandSpec = subcommandSpec{
 	command:  "events",
 	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
-	examples: []string{"anx events list --thread-id <thread-id> --type message_posted --mine --full-id", "anx events tail --max-events 20"},
+	examples: []string{"anx events list --thread-id <thread-id> --type message_posted --mine", "anx events tail --max-events 20"},
 	aliases: map[string]string{
 		"watch": "stream",
 		"ls":    "list",

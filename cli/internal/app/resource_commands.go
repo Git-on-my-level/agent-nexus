@@ -30,7 +30,6 @@ import (
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 
-const shortIDLength = 10
 const inboxAliasPrefix = "ibx_"
 const inboxAliasDigestLength = 12
 
@@ -786,7 +785,7 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadContextSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -826,7 +825,7 @@ func parseThreadWorkspaceArgs(args []string) (threadWorkspaceSelection, error) {
 	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadWorkspaceSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -2507,7 +2506,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&backingScopeFlag, "backing-scope", "Filter backing events: all, standalone, or backing_only")
 	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full IDs in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full IDs in default text output (non-JSON)")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	fs.Var(&maxEventsFlag, "max", "Alias for --max-events")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -2856,7 +2855,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 	var fullIDFlag trackedBool
 	fs.Var(&threadIDFlags, "thread-id", "Filter by thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by inbox item type/category/kind (repeatable)")
-	fs.Var(&fullIDFlag, "full-id", "Render full inbox ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full inbox ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3986,9 +3985,8 @@ func looksLikeThreadCardIdentifier(raw string) bool {
 }
 
 type boardCardIdentifierMatch struct {
-	CardID      string
-	CardShortID string
-	ThreadID    string
+	CardID   string
+	ThreadID string
 }
 
 func listBoardCardIdentifierMatches(result *commandResult) []boardCardIdentifierMatch {
@@ -4020,9 +4018,8 @@ func listBoardCardIdentifierMatches(result *commandResult) []boardCardIdentifier
 		}
 		seen[cardID] = struct{}{}
 		out = append(out, boardCardIdentifierMatch{
-			CardID:      cardID,
-			CardShortID: strings.TrimSpace(anyString(item["short_id"])),
-			ThreadID:    strings.TrimSpace(anyString(item["thread_id"])),
+			CardID:   cardID,
+			ThreadID: strings.TrimSpace(anyString(item["thread_id"])),
 		})
 	}
 	return out
@@ -4033,7 +4030,7 @@ func parseBoardCardsListInput(args []string) (string, bool, error) {
 	var boardIDFlag trackedString
 	var fullIDFlag trackedBool
 	fs.Var(&boardIDFlag, "board-id", "Board id")
-	fs.Var(&fullIDFlag, "full-id", "Render full card ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full card ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return "", false, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -4275,7 +4272,6 @@ func (a *App) resolveInboxItemFromList(ctx context.Context, cfg config.Resolved,
 
 type inboxListMatch struct {
 	ID       string
-	ShortID  string
 	Alias    string
 	ThreadID string
 	Item     map[string]any
@@ -4298,9 +4294,6 @@ func resolveInboxItemFromListResult(result *commandResult, rawID string) (inboxL
 		if item.Alias != "" && item.Alias == rawLower {
 			return item, nil
 		}
-		if item.ShortID != "" && item.ShortID == rawID {
-			return item, nil
-		}
 	}
 
 	prefixMatches := make([]inboxListMatch, 0, len(items))
@@ -4309,9 +4302,6 @@ func resolveInboxItemFromListResult(result *commandResult, rawID string) (inboxL
 		match := strings.HasPrefix(item.ID, rawID)
 		if !match && item.Alias != "" {
 			match = strings.HasPrefix(item.Alias, rawLower)
-		}
-		if !match && item.ShortID != "" {
-			match = strings.HasPrefix(item.ShortID, rawID)
 		}
 		if !match {
 			continue
@@ -4365,7 +4355,6 @@ func listInboxMatches(result *commandResult) []inboxListMatch {
 		seen[id] = struct{}{}
 		out = append(out, inboxListMatch{
 			ID:       id,
-			ShortID:  strings.TrimSpace(anyString(item["short_id"])),
 			Alias:    strings.ToLower(strings.TrimSpace(anyString(item["alias"]))),
 			ThreadID: strings.TrimSpace(anyString(item["thread_id"])),
 			Item:     item,
@@ -4686,7 +4675,7 @@ func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches [
 		if idx >= 3 {
 			break
 		}
-		samples = append(samples, fmt.Sprintf("%s (short_id=%s)", match, shortID(match)))
+		samples = append(samples, match)
 	}
 	message := fmt.Sprintf(
 		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Run `anx %s` to inspect candidates. Matches: %s",
@@ -4702,7 +4691,7 @@ func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches [
 
 func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
 	message := fmt.Sprintf(
-		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `anx %s` and retry with a unique short_id or canonical id.",
+		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `anx %s` and retry with a unique ref/handle or canonical id.",
 		spec.idLabel,
 		rawID,
 		spec.resource,
@@ -4740,36 +4729,6 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 	default:
 		return body, false
 	}
-}
-
-func addShortIDToObjectIfPresent(obj map[string]any) bool {
-	if obj == nil {
-		return false
-	}
-	id := strings.TrimSpace(anyString(obj["id"]))
-	if id == "" {
-		return false
-	}
-	expectedShortID := shortID(id)
-	if strings.TrimSpace(anyString(obj["short_id"])) == expectedShortID {
-		return false
-	}
-	obj["short_id"] = expectedShortID
-	return true
-}
-
-func addShortIDsToObjectSlice(slice []any) bool {
-	changed := false
-	for _, raw := range slice {
-		item, _ := raw.(map[string]any)
-		if item == nil {
-			continue
-		}
-		if addShortIDToObjectIfPresent(item) {
-			changed = true
-		}
-	}
-	return changed
 }
 
 // enrichThreadWorkspaceBodyWithShortIDs mirrors list-response public identity enrichment for GET /threads/{id}/workspace.
@@ -5021,14 +4980,6 @@ func addInboxAliasToItemField(body map[string]any, field string) bool {
 
 func applyInboxIdentifiers(item map[string]any, alias string) bool {
 	changed := false
-	id := strings.TrimSpace(anyString(item["id"]))
-	if id != "" {
-		expectedShortID := shortID(id)
-		if currentShortID := strings.TrimSpace(anyString(item["short_id"])); currentShortID != expectedShortID {
-			item["short_id"] = expectedShortID
-			changed = true
-		}
-	}
 	if alias != "" {
 		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != alias {
 			item["alias"] = alias
@@ -5037,17 +4988,7 @@ func applyInboxIdentifiers(item map[string]any, alias string) bool {
 	}
 	threadID := strings.TrimSpace(anyString(item["thread_id"]))
 	if threadID != "" {
-		threadShortID := shortID(threadID)
-		if current := strings.TrimSpace(anyString(item["thread_short_id"])); current != threadShortID {
-			item["thread_short_id"] = threadShortID
-			changed = true
-		}
-	}
-	sourceEventID := strings.TrimSpace(anyString(item["source_event_id"]))
-	if sourceEventID != "" {
-		sourceShortID := shortID(sourceEventID)
-		if current := strings.TrimSpace(anyString(item["source_event_short_id"])); current != sourceShortID {
-			item["source_event_short_id"] = sourceShortID
+		if addPublicIdentityToObjectIfPresent(item, "inbox") {
 			changed = true
 		}
 	}
@@ -5073,14 +5014,6 @@ func inboxAliasByID(ids []string) map[string]string {
 func inboxAliasDigest(id string) string {
 	sum := sha1.Sum([]byte(strings.TrimSpace(id)))
 	return fmt.Sprintf("%x", sum)
-}
-
-func shortID(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) <= shortIDLength {
-		return id
-	}
-	return id[:shortIDLength]
 }
 
 func minInt(a int, b int) int {
@@ -5597,10 +5530,7 @@ func enrichEventsForList(events []any) []any {
 			continue
 		}
 		copy := cloneMap(event)
-		id := strings.TrimSpace(anyString(copy["id"]))
-		if id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
-			copy["short_id"] = shortID(id)
-		}
+		addPublicIdentityToObjectIfPresent(copy, "event")
 		if preview := eventSummaryPreview(copy); preview != "" {
 			copy["summary_preview"] = preview
 		}

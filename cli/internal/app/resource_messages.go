@@ -327,7 +327,7 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	fs.Var(&cardIDFlag, "card-id", "Card id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -391,7 +391,6 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	data := asMap(result.Data)
 	body := asMap(data["body"])
 	body["card_id"] = target.SubjectID
-	body["card_short_id"] = shortID(target.SubjectID)
 	body["card_title"] = target.Title
 	body["thread_id"] = target.ThreadID
 	data["body"] = body
@@ -411,7 +410,7 @@ func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg co
 	fs.Var(&topicIDFlag, "topic-id", "Topic id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -457,7 +456,7 @@ func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg conf
 	fs.Var(&documentIDFlag, "document-id", "Document id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full event ids in default text output")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
 	fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived events")
@@ -528,7 +527,6 @@ func (a *App) runTargetMessagesCommand(ctx context.Context, cfg config.Resolved,
 	body["returned_events"] = len(asSlice(body["events"]))
 	body["subject_kind"] = target.SubjectKind
 	body["subject_id"] = target.SubjectID
-	body["subject_short_id"] = shortID(target.SubjectID)
 	body["subject_title"] = target.Title
 	body["thread_id"] = target.ThreadID
 	data["body"] = body
@@ -756,7 +754,7 @@ func (a *App) resolveMessageEventOnThread(ctx context.Context, cfg config.Resolv
 		if id == rawEventID {
 			return id, nil
 		}
-		if shouldResolveDisplayedShortID(rawEventID) && strings.HasPrefix(id, rawEventID) {
+		if strings.HasPrefix(id, rawEventID) {
 			matches = append(matches, id)
 		}
 	}
@@ -840,7 +838,6 @@ func (a *App) decorateMessageWriteResult(result *commandResult, callErr error, c
 	target, targetErr := cardMessageTarget(card, strings.TrimSpace(anyString(card["id"])))
 	if targetErr == nil {
 		body["card_id"] = target.SubjectID
-		body["card_short_id"] = shortID(target.SubjectID)
 		body["card_title"] = target.Title
 		body["thread_id"] = target.ThreadID
 		body["refs"] = stringList(event["refs"])
@@ -861,7 +858,6 @@ func decorateThreadMessageWriteResult(result *commandResult, callErr error, cfg 
 	if target.SubjectKind != "" && target.SubjectKind != "thread" {
 		body["subject_kind"] = target.SubjectKind
 		body["subject_id"] = target.SubjectID
-		body["subject_short_id"] = shortID(target.SubjectID)
 		body["subject_title"] = target.Title
 	}
 	body["thread_id"] = target.ThreadID
@@ -879,7 +875,7 @@ func messageWriteText(body any, subjectLabel string) string {
 	switch subjectLabel {
 	case "Card":
 		title := strings.TrimSpace(anyString(root["card_title"]))
-		cardID := firstNonEmpty(strings.TrimSpace(anyString(root["card_short_id"])), strings.TrimSpace(anyString(root["card_id"])))
+		cardID := strings.TrimSpace(anyString(root["card_id"]))
 		if title != "" && cardID != "" {
 			lines = append(lines, "Card: "+title+" ("+cardID+")")
 		} else if cardID != "" {
@@ -887,7 +883,7 @@ func messageWriteText(body any, subjectLabel string) string {
 		}
 	case "Topic", "Document":
 		title := strings.TrimSpace(anyString(root["subject_title"]))
-		id := firstNonEmpty(strings.TrimSpace(anyString(root["subject_short_id"])), strings.TrimSpace(anyString(root["subject_id"])))
+		id := strings.TrimSpace(anyString(root["subject_id"]))
 		if title != "" && id != "" {
 			lines = append(lines, subjectLabel+": "+title+" ("+id+")")
 		} else if id != "" {
@@ -921,7 +917,7 @@ func formatSubjectMessages(body any, label string) string {
 	root := asMap(body)
 	lines := []string{label + " messages"}
 	title := strings.TrimSpace(anyString(root["subject_title"]))
-	id := firstNonEmpty(strings.TrimSpace(anyString(root["subject_short_id"])), strings.TrimSpace(anyString(root["subject_id"])))
+	id := strings.TrimSpace(anyString(root["subject_id"]))
 	if title != "" && id != "" {
 		lines = append(lines, label+": "+title+" ("+id+")")
 	} else if id != "" {
@@ -938,7 +934,7 @@ func formatCardsMessages(body any) string {
 	root := asMap(body)
 	lines := []string{"Card messages"}
 	title := strings.TrimSpace(anyString(root["card_title"]))
-	cardID := firstNonEmpty(strings.TrimSpace(anyString(root["card_short_id"])), strings.TrimSpace(anyString(root["card_id"])))
+	cardID := strings.TrimSpace(anyString(root["card_id"]))
 	if title != "" && cardID != "" {
 		lines = append(lines, "Card: "+title+" ("+cardID+")")
 	} else if cardID != "" {

@@ -182,10 +182,6 @@ func (a *App) normalizeTypedRefValue(ctx context.Context, cfg config.Resolved, v
 	return normalized, nil
 }
 
-func shouldResolveDisplayedShortID(raw string) bool {
-	return len(strings.TrimSpace(raw)) == shortIDLength
-}
-
 func ensureEmptyListDefaults(body map[string]any, nestKey string, fields []string) {
 	if body == nil {
 		return

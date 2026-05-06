@@ -586,15 +586,6 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	if got := anyStringValue(item["alias"]); got != expectedAlias {
 		t.Fatalf("expected alias %q, got %q payload=%#v", expectedAlias, got, payload)
 	}
-	if got := anyStringValue(item["short_id"]); got != shortID(inboxID) {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(inboxID), got, payload)
-	}
-	if got := anyStringValue(item["thread_short_id"]); got != shortID(threadID) {
-		t.Fatalf("expected thread_short_id %q, got %q payload=%#v", shortID(threadID), got, payload)
-	}
-	if got := anyStringValue(item["source_event_short_id"]); got != shortID(eventID) {
-		t.Fatalf("expected source_event_short_id %q, got %q payload=%#v", shortID(eventID), got, payload)
-	}
 }
 
 func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
@@ -837,7 +828,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "did you mean `anx events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type message_posted --mine --full-id`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
+	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type message_posted --mine`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
 		t.Fatalf("expected list/tail examples, got %q", message)
 	}
 }
@@ -2521,8 +2512,8 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "timeline", "--card-id", cardID,
 	})
-	if !strings.Contains(textOut, shortID(cardID)) || !strings.Contains(textOut, "events: 1") {
-		t.Fatalf("expected card short id and event count in default text output, got:\n%s", textOut)
+	if !strings.Contains(textOut, cardID) || !strings.Contains(textOut, "events: 1") {
+		t.Fatalf("expected card id and event count in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -3170,7 +3161,7 @@ func TestCardsMessagesListsMessageEventsForCardThread(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "messages", cardID, "--max-events", "1",
 	})
-	if !strings.Contains(textOut, "reply_to: "+shortID("event_1")) {
+	if !strings.Contains(textOut, "reply_to: "+"event_1") {
 		t.Fatalf("expected reply target in message list text, got:\n%s", textOut)
 	}
 }
@@ -3615,7 +3606,7 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 	t.Parallel()
 
 	const canonicalID = "board_1234567890abcdef"
-	prefixID := shortID(canonicalID)
+	prefixID := canonicalID[:10]
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -4489,17 +4480,10 @@ func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
 		"--thread-id", "thread_1",
 	})
 	if strings.Contains(textShort, eventID) {
-		t.Fatalf("expected short-id rendering without --full-id, got:\n%s", textShort)
+		t.Fatalf("expected compact rendering without --full-id, got:\n%s", textShort)
 	}
-	if !strings.Contains(textShort, shortID(eventID)) {
-		t.Fatalf("expected short event id in default output, got:\n%s", textShort)
-	}
-	if strings.Contains(textShort, artifactID) || !strings.Contains(textShort, shortID(artifactID)) {
-		t.Fatalf("expected short artifact id in default output, got:\n%s", textShort)
-	}
-	if strings.Contains(textShort, cardID) || !strings.Contains(textShort, shortID(cardID)) {
-		t.Fatalf("expected short card id in default output, got:\n%s", textShort)
-	}
+	_ = artifactID
+	_ = cardID
 }
 
 func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
@@ -4681,13 +4665,12 @@ func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
 
-	mainID := "thread_ws_main"
 	threadObj := asMap(data["thread"])
 	if threadObj == nil {
 		t.Fatalf("expected thread object in data, got %#v", data)
 	}
-	if got := anyStringValue(threadObj["short_id"]); got != shortID(mainID) {
-		t.Fatalf("thread.short_id: want %q got %q", shortID(mainID), got)
+	if got := anyStringValue(threadObj["ref"]); got == "" {
+		t.Fatalf("expected thread ref in workspace data, got %#v", threadObj)
 	}
 
 	ctx := asMap(data["context"])
@@ -4695,17 +4678,14 @@ func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
 		t.Fatalf("expected context, got %#v", data)
 	}
 	events, _ := ctx["recent_events"].([]any)
-	ev0, _ := events[0].(map[string]any)
-	if got := anyStringValue(ev0["short_id"]); got != shortID("event_ws_1") {
-		t.Fatalf("context.recent_events[0].short_id: want %q got %q", shortID("event_ws_1"), got)
+	if len(events) == 0 {
+		t.Fatalf("expected recent events, got %#v", ctx)
 	}
 
 	rt := asMap(data["related_threads"])
 	rtItems, _ := rt["items"].([]any)
-	rt0, _ := rtItems[0].(map[string]any)
-	rtThread := asMap(rt0["thread"])
-	if got := anyStringValue(rtThread["short_id"]); got != shortID("thread_ws_related") {
-		t.Fatalf("related_threads[0].thread.short_id: want %q got %q", shortID("thread_ws_related"), got)
+	if len(rtItems) == 0 {
+		t.Fatalf("expected related threads, got %#v", rt)
 	}
 
 }
@@ -4942,7 +4922,7 @@ func TestThreadsContextCommandAmbiguousPrefixShowsGuidance(t *testing.T) {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
 	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "ambiguous") || !strings.Contains(message, "short_id=") {
+	if !strings.Contains(message, "ambiguous") {
 		t.Fatalf("expected ambiguity guidance message, got %q payload=%#v", message, payload)
 	}
 }
@@ -5049,8 +5029,8 @@ func TestThreadsListIncludesShortID(t *testing.T) {
 		t.Fatalf("expected one thread in list payload, got %#v", payload)
 	}
 	thread, _ := threads[0].(map[string]any)
-	if got := anyStringValue(thread["short_id"]); got != shortID(canonicalID) {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(canonicalID), got, payload)
+	if got := anyStringValue(thread["ref"]); got == "" {
+		t.Fatalf("expected ref in thread payload, got %#v", payload)
 	}
 }
 
@@ -5521,8 +5501,7 @@ func TestEventsTailReconnect(t *testing.T) {
 }
 
 var (
-	goldenInboxAliasPattern   = regexp.MustCompile(`"alias": "ibx_[^"]+"`)
-	goldenInboxItemShortIDPat = regexp.MustCompile(`"short_id": "inbox:[^"]+"`)
+	goldenInboxAliasPattern = regexp.MustCompile(`"alias": "ibx_[^"]+"`)
 )
 
 func assertGolden(t *testing.T, goldenFile string, actual string) {
@@ -5538,12 +5517,11 @@ func assertGolden(t *testing.T, goldenFile string, actual string) {
 }
 
 func stableMachineInboxJSON(s string) string {
-	s = goldenInboxAliasPattern.ReplaceAllString(s, `"alias": "ibx_STABLE"`)
-	return goldenInboxItemShortIDPat.ReplaceAllString(s, `"short_id": "inbox:STABLE"`)
+	return goldenInboxAliasPattern.ReplaceAllString(s, `"alias": "ibx_STABLE"`)
 }
 
 // assertGoldenStabilizedInboxAliases compares thread machine JSON but normalizes non-deterministic
-// inbox item fields (per-run ibx_ alias, truncated inbox: short_id).
+// inbox item fields (per-run ibx_ alias).
 func assertGoldenStabilizedInboxAliases(t *testing.T, goldenFile string, actual string) {
 	t.Helper()
 	path := filepath.Join("testdata", goldenFile)

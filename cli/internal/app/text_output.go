@@ -789,7 +789,7 @@ func formatRevisionRecord(revision map[string]any) string {
 	return strings.Join(lines, "\n")
 }
 
-const textListScanTailRunes = shortIDLength
+const textListScanTailRunes = 10
 
 func listKindIDPrefixes(kind string) []string {
 	switch strings.TrimSpace(kind) {
@@ -1276,7 +1276,7 @@ func displayIDWithMode(item map[string]any, fullID bool) string {
 func renderEventListItemWithMode(item map[string]any, fullID bool) string {
 	summary := firstNonEmpty(anyString(item["summary_preview"]), anyString(item["summary"]), anyString(item["created_at"]))
 	if replyTo := eventReplyTarget(item); replyTo != "" {
-		summary = strings.TrimSpace(summary + " (reply_to: " + shortID(replyTo) + ")")
+		summary = strings.TrimSpace(summary + " (reply_to: " + replyTo + ")")
 	}
 	prefix := ""
 	if anyString(item["trashed_at"]) != "" {
@@ -1302,15 +1302,8 @@ func displayEventID(item map[string]any, fullID bool) string {
 		}
 	}
 	id := strings.TrimSpace(anyString(item["id"]))
-	short := strings.TrimSpace(anyString(item["short_id"]))
-	if short == "" && id != "" {
-		short = shortID(id)
-	}
 	if fullID && id != "" {
 		return id
-	}
-	if short != "" {
-		return short
 	}
 	return displayID(item)
 }
@@ -1331,11 +1324,7 @@ func displayCompactIDWithMode(item map[string]any, fullID bool) string {
 	if fullID && id != "" {
 		return id
 	}
-	short := strings.TrimSpace(anyString(item["short_id"]))
-	if short == "" && id != "" {
-		short = shortID(id)
-	}
-	return firstNonEmpty(short, id)
+	return firstNonEmpty(id, "(unknown)")
 }
 
 func displayPublicIdentity(item map[string]any, kind string) string {

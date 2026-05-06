@@ -86,6 +86,8 @@
     };
   });
 
+  // Compact a ref value for mobile display; handles are short enough to show
+  // as-is, but legacy UUID values still get truncated to 10 chars.
   function compactId(value) {
     const text = String(value ?? "").trim();
     if (text.length <= 12) return text;

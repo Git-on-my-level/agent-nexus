@@ -1572,7 +1572,7 @@ Read-only backing-thread diagnostics and direct thread messages:
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-  Tip: prefer domain commands like `anx cards message <card-id>` for normal authoring and `anx topics workspace --topic-id <topic-id>` for primary coordination reads. Use `anx threads workspace --full-id` when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+  Tip: prefer domain commands like `anx cards message <card-id>` for normal authoring and `anx topics workspace --topic-id <topic-id>` for primary coordination reads. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1603,7 +1603,7 @@ Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
   events explain           Explain known event-type conventions and local validation constraints.
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
-  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` for copy/paste IDs.
+  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` (debug/admin) for copy/paste IDs.
   Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message <topic-id>`, `anx docs message <document-id>`, or `anx cards message <card-id>` instead of hand-authoring a `message_posted` event.
   For details: `anx events explain <event-type>`
 
@@ -4223,7 +4223,7 @@ Flags:
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
-  --full-id                    Render full event ids in default text output.
+  --full-id                    (debug/admin) Render full event ids in default text output.
 
 
 Global flags:
@@ -4421,7 +4421,7 @@ Flags:
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
-  --full-id                    Render full event ids in default text output.
+  --full-id                    (debug/admin) Render full event ids in default text output.
 
 
 Global flags:
@@ -4693,7 +4693,7 @@ Flags:
   --mine                       Resolve to the active profile actor_id.
   --max-events <n>             Keep the most recent matching events.
   --max <n>                    Alias for --max-events.
-  --full-id                    Render full event ids in default text output (non-JSON).
+  --full-id                    (debug/admin) Render full event ids in default text output (non-JSON).
   --include-archived           Include archived events in results.
   --archived-only              Show only archived events.
   --include-trashed            Include trashed events in results.
@@ -4801,7 +4801,7 @@ Flags:
   --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --full-id                    Render full event and inbox ids in default text output (non-JSON).
+  --full-id                    (debug/admin) Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
@@ -4830,7 +4830,7 @@ Flags:
   --state <state>              Discover one thread by lifecycle state (active, archived, trashed).
   --max-events <n>             Maximum recent context events to include.
   --include-artifact-content   Include artifact content previews from the underlying read-only thread views.
-  --full-id                    Render full event and inbox ids in default text output (non-JSON).
+  --full-id                    (debug/admin) Render full event and inbox ids in default text output (non-JSON).
 
 
 Global flags:
@@ -4881,7 +4881,7 @@ Local Help: boards cards list
 
 Flags:
   <board-ref-or-handle>        Board typed ref or handle to list cards for.
-  --full-id                    Render full card ids in default text output.
+  --full-id                    (debug/admin) Render full card ids in default text output.
 
 
 Global flags:
@@ -4989,7 +4989,7 @@ Flags:
   --max-events <n>             Return at most N most-recent matching messages.
   --mine                       Filter to messages authored by the active profile actor_id.
   --actor-id <actor-id>        Filter to one actor id.
-  --full-id                    Render full event ids in default text output.
+  --full-id                    (debug/admin) Render full event ids in default text output.
   --include-archived           Include archived message events.
   --archived-only              Show only archived message events.
   --include-trashed            Include trashed message events.

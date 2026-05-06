@@ -8,15 +8,13 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "attachment",
-          "short_id": "artifact_c"
+          "kind": "attachment"
         }
       ],
       "open_card_count": 1,
       "open_cards": [
         {
           "id": "card_ctx_1",
-          "short_id": "card_ctx_1",
           "status": "open"
         }
       ]
@@ -32,7 +30,6 @@
             "revision_number": 3
           },
           "id": "doc_ctx_1",
-          "short_id": "doc_ctx_1",
           "state": "active",
           "title": "Runbook",
           "updated_at": "2026-03-07T00:02:00Z"
@@ -41,28 +38,24 @@
       "key_artifacts": [
         {
           "id": "artifact_ctx_1",
-          "kind": "attachment",
-          "short_id": "artifact_c"
+          "kind": "attachment"
         }
       ],
       "open_cards": [
         {
           "id": "card_ctx_1",
-          "short_id": "card_ctx_1",
           "status": "open"
         }
       ],
       "recent_events": [
         {
           "id": "event_ctx_1",
-          "short_id": "event_ctx_",
           "summary": "normalize frame shape",
           "thread_id": "thread_123",
           "type": "message_posted"
         },
         {
           "id": "event_ctx_2",
-          "short_id": "event_ctx_",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
           "type": "human_attention_requested"
@@ -86,10 +79,8 @@
         {
           "alias": "ibx_PLACEHOLDER",
           "id": "inbox:action_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:acti",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "thread_short_id": "thread_123",
           "type": "action_needed"
         }
       ],
@@ -102,10 +93,8 @@
         {
           "alias": "ibx_PLACEHOLDER",
           "id": "inbox:action_needed:thread_123:none:event_ctx_2",
-          "short_id": "inbox:acti",
           "summary": "confirm canonical command labels",
           "thread_id": "thread_123",
-          "thread_short_id": "thread_123",
           "type": "action_needed"
         }
       ],
@@ -117,7 +106,6 @@
     },
     "thread": {
       "id": "thread_123",
-      "short_id": "thread_123",
       "title": "Machine-facing consistency"
     },
     "thread_id": "thread_123",
