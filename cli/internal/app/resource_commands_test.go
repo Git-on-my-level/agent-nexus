@@ -376,7 +376,7 @@ func TestCardsListJSONAndTextUsePublicIdentity(t *testing.T) {
 	home := t.TempDir()
 	text := runCLIForTest(t, home, nil, nil, []string{"--base-url", server.URL, "cards", "list"})
 	if !strings.Contains(text, "card:cli-json-body-input") || strings.Contains(text, "card_intern") {
-		t.Fatalf("expected text output to lead with public ref and hide short ids, got:\n%s", text)
+		t.Fatalf("expected text output to lead with public ref and hide internal ids, got:\n%s", text)
 	}
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "list"}))
 	data := asMap(payload["data"])
@@ -556,7 +556,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	}
 }
 
-func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
+func TestInboxListIncludesAliasesAndLinkedPublicIdentity(t *testing.T) {
 	t.Parallel()
 
 	const inboxID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
@@ -3601,7 +3601,7 @@ func TestBoardCommands(t *testing.T) {
 	}
 }
 
-func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.T) {
+func TestBoardsListLegacyShortBoardIDResolutionDisabled(t *testing.T) {
 	t.Skip("legacy short-id list enrichment and local resolution were replaced by ref-native identity")
 	t.Parallel()
 
@@ -3654,7 +3654,7 @@ func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.
 	}
 }
 
-func TestBoardCardsListAddsCardShortIDAndGetResolvesShortCardID(t *testing.T) {
+func TestBoardCardsListLegacyShortCardIDResolutionDisabled(t *testing.T) {
 	t.Skip("legacy short-id list enrichment and local resolution were replaced by ref-native identity")
 	t.Parallel()
 
@@ -4624,7 +4624,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	}
 }
 
-func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
+func TestThreadsWorkspaceJSONLegacyShortIDEnrichmentDisabled(t *testing.T) {
 	t.Skip("legacy short_id JSON enrichment was replaced by ref and handle enrichment")
 	t.Parallel()
 
@@ -5000,7 +5000,7 @@ func TestThreadsContextCommandEndpointNotFoundDoesNotAttemptIDResolution(t *test
 	}
 }
 
-func TestThreadsListIncludesShortID(t *testing.T) {
+func TestThreadsListLegacyShortIDEnrichmentDisabled(t *testing.T) {
 	t.Skip("legacy short_id JSON enrichment was replaced by ref and handle enrichment")
 	t.Parallel()
 

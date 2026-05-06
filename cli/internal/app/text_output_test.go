@@ -211,7 +211,7 @@ func TestFormatBoardsList_TextScanStripsBoardPrefix(t *testing.T) {
 		},
 	}
 	got := formatBoardsList(body)
-	// Tail after "board-" is summer-menu-plan; first shortIDLength (10) runes: summer-men
+	// Legacy scan output used a compact id tail after the redundant board prefix.
 	if !strings.Contains(got, "summer-men") || strings.Contains(got, "board-su") {
 		t.Fatalf("expected scan-style id tail (10 runes) without redundant board- prefix, got:\n%s", got)
 	}
@@ -256,7 +256,7 @@ func TestFormatNamedList_ThreadsScanStripsThreadPrefix(t *testing.T) {
 		},
 	}
 	got := formatNamedList(body, "threads", "Threads", "thread", renderThreadListItem)
-	// Tail after "thread-" is kids-lemonade-main; first shortIDLength (10) runes: kids-lemon
+	// Legacy scan output used a compact id tail after the redundant thread prefix.
 	if !strings.Contains(got, "kids-lemon") || strings.Contains(got, "thread-k") {
 		t.Fatalf("expected scan-style id (10 runes) after thread- prefix, got:\n%s", got)
 	}

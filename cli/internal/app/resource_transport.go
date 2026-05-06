@@ -164,7 +164,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 
 	headersSorted := normalizedHeaders(resp.Header)
 	parsedBody := parseResponseBody(responseBody)
-	parsedBody, enriched := enrichListBodyWithShortIDs(commandID, parsedBody)
+	parsedBody, enriched := enrichListBodyWithPublicIdentity(commandID, parsedBody)
 	if enriched {
 		if encoded, marshalErr := json.Marshal(parsedBody); marshalErr == nil {
 			responseBody = encoded

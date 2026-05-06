@@ -4700,7 +4700,7 @@ func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
 	return errnorm.Usage("invalid_request", message)
 }
 
-func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
+func enrichListBodyWithPublicIdentity(commandID string, body any) (any, bool) {
 	typedBody, _ := body.(map[string]any)
 	if typedBody == nil {
 		return body, false
@@ -4725,14 +4725,14 @@ func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
 	case "inbox.get":
 		return body, addInboxAliasToItemField(typedBody, "item")
 	case "threads.workspace":
-		return body, enrichThreadWorkspaceBodyWithShortIDs(typedBody)
+		return body, enrichThreadWorkspaceBodyWithPublicIdentity(typedBody)
 	default:
 		return body, false
 	}
 }
 
-// enrichThreadWorkspaceBodyWithShortIDs mirrors list-response public identity enrichment for GET /threads/{id}/workspace.
-func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
+// enrichThreadWorkspaceBodyWithPublicIdentity mirrors list-response public identity enrichment for GET /threads/{id}/workspace.
+func enrichThreadWorkspaceBodyWithPublicIdentity(body map[string]any) bool {
 	if body == nil {
 		return false
 	}
