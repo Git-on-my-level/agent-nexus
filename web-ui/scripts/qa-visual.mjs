@@ -983,6 +983,8 @@ async function installQaRoutes(page, scene) {
       pathname.startsWith("/assets/") ||
       pathname === "/favicon.svg" ||
       pathname === "/apple-touch-icon.png" ||
+      pathname === "/icon-192.png" ||
+      pathname === "/icon-512.png" ||
       pathname === "/manifest.json" ||
       pathname === "/robots.txt"
     ) {
