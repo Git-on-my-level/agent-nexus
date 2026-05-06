@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -252,7 +251,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 	if !ok {
 		return
 	}
-	cardRef, cardHandle := resolvedCardPublicIdentity(r.Context(), opts, cardID)
+	cardRef, cardHandle := resolvedPublicIdentity(r.Context(), opts, "card", cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -262,7 +261,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revisions")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revisions": revisions})
+	writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revisions": publicCardRevisionsView(revisions)})
 }
 
 func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID, revisionID string) {
@@ -275,7 +274,7 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
-	cardRef, cardHandle := resolvedCardPublicIdentity(r.Context(), opts, cardID)
+	cardRef, cardHandle := resolvedPublicIdentity(r.Context(), opts, "card", cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -291,21 +290,27 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 	for _, revision := range revisions {
 		if strings.TrimSpace(anyString(revision["revision_id"])) == revisionID || strings.TrimSpace(anyString(revision["id"])) == revisionID {
-			writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revision": revision})
+			writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revision": publicCardRevisionView(revision)})
 			return
 		}
 	}
 	writeError(w, http.StatusNotFound, "not_found", "card revision not found")
 }
 
-func resolvedCardPublicIdentity(ctx context.Context, opts handlerOptions, cardID string) (string, string) {
-	cardID = strings.TrimSpace(cardID)
-	if opts.primitiveStore != nil {
-		if resolved, err := opts.primitiveStore.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: "card", Ref: cardID}); err == nil {
-			return resolved.CanonicalRef, resolved.Handle
-		}
+func publicCardRevisionsView(revisions []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(revisions))
+	for _, revision := range revisions {
+		out = append(out, publicCardRevisionView(revision))
 	}
-	return "card:" + cardID, cardID
+	return out
+}
+
+func publicCardRevisionView(revision map[string]any) map[string]any {
+	out := copyStringAnyMap(revision)
+	for _, key := range []string{"id", "card_id", "board_id", "thread_id"} {
+		delete(out, key)
+	}
+	return out
 }
 
 func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

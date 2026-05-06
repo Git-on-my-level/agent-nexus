@@ -562,6 +562,7 @@ func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts hand
 	if !ok {
 		return
 	}
+	documentRef, documentHandle := resolvedPublicIdentity(r.Context(), opts, "document", documentID)
 
 	history, err := opts.primitiveStore.ListDocumentHistory(r.Context(), documentID)
 	if err != nil {
@@ -574,8 +575,10 @@ func handleListDocumentHistory(w http.ResponseWriter, r *http.Request, opts hand
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"document_id": documentID,
-		"revisions":   history,
+		"document_ref":    documentRef,
+		"document_handle": documentHandle,
+		"document_id":     documentID,
+		"revisions":       publicDocumentRevisionsView(history),
 	})
 }
 
@@ -594,6 +597,7 @@ func handleGetDocumentRevision(w http.ResponseWriter, r *http.Request, opts hand
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve document")
 		return
 	}
+	documentRef, documentHandle := resolvedPublicIdentity(r.Context(), opts, "document", documentID)
 	revisionID = strings.TrimSpace(revisionID)
 	if revisionID == "" || strings.Contains(revisionID, "/") {
 		writeError(w, http.StatusBadRequest, "invalid_request", "revision_id is required")
@@ -614,8 +618,27 @@ func handleGetDocumentRevision(w http.ResponseWriter, r *http.Request, opts hand
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"revision": revision,
+		"document_ref":    documentRef,
+		"document_handle": documentHandle,
+		"document_id":     documentID,
+		"revision":        publicDocumentRevisionView(revision),
 	})
+}
+
+func publicDocumentRevisionsView(revisions []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(revisions))
+	for _, revision := range revisions {
+		out = append(out, publicDocumentRevisionView(revision))
+	}
+	return out
+}
+
+func publicDocumentRevisionView(revision map[string]any) map[string]any {
+	out := copyStringAnyMap(revision)
+	for _, key := range []string{"document_id", "artifact_id", "prev_revision_id", "thread_id"} {
+		delete(out, key)
+	}
+	return out
 }
 
 func validateDocumentID(value string) error {

@@ -41,6 +41,24 @@ func resolveResourceIDForInternalUse(ctx context.Context, opts handlerOptions, t
 	return resolved.ID, true
 }
 
+func resolvedPublicIdentity(ctx context.Context, opts handlerOptions, typ, id string) (string, string) {
+	id = strings.TrimSpace(id)
+	if opts.primitiveStore != nil {
+		if resolved, err := opts.primitiveStore.ResolveResourceRef(ctx, primitives.ResourceRefInput{Type: typ, Ref: id}); err == nil {
+			return resolved.CanonicalRef, resolved.Handle
+		}
+	}
+	return typ + ":" + id, id
+}
+
+func copyStringAnyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
 func resolveListFilterResourceRef(w http.ResponseWriter, r *http.Request, opts handlerOptions, typ, raw, label string) (primitives.ResolvedResourceRef, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

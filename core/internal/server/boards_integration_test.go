@@ -413,6 +413,59 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 	if got := asString(revisionPayload.Revision["summary"]); got != "Canonical revised summary" {
 		t.Fatalf("expected nested revision summary in revision, got %#v", revisionPayload.Revision)
 	}
+	revisionID := asString(revisionPayload.Revision["revision_id"])
+	if revisionID == "" {
+		t.Fatalf("expected revision_id in card revision create response, got %#v", revisionPayload.Revision)
+	}
+
+	listRevisionResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/revisions")
+	if err != nil {
+		t.Fatalf("GET /cards/{card_id}/revisions: %v", err)
+	}
+	defer listRevisionResp.Body.Close()
+	if listRevisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card revisions status: got %d", listRevisionResp.StatusCode)
+	}
+	var listRevisionPayload map[string]any
+	if err := json.NewDecoder(listRevisionResp.Body).Decode(&listRevisionPayload); err != nil {
+		t.Fatalf("decode card revisions response: %v", err)
+	}
+	if got := asString(listRevisionPayload["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected card revisions envelope card_ref, got %#v", listRevisionPayload)
+	}
+	if got := asString(listRevisionPayload["card_handle"]); got == "" {
+		t.Fatalf("expected card revisions envelope card_handle, got %#v", listRevisionPayload)
+	}
+	cardRevisions, _ := listRevisionPayload["revisions"].([]any)
+	if len(cardRevisions) != 2 {
+		t.Fatalf("expected two card revisions, got %d payload=%#v", len(cardRevisions), listRevisionPayload)
+	}
+	firstCardRevision, _ := cardRevisions[0].(map[string]any)
+	assertMapOmitsKeys(t, firstCardRevision, "id", "card_id", "board_id", "thread_id")
+
+	getRevisionResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/revisions/" + revisionID)
+	if err != nil {
+		t.Fatalf("GET /cards/{card_id}/revisions/{revision_id}: %v", err)
+	}
+	defer getRevisionResp.Body.Close()
+	if getRevisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card revision status: got %d", getRevisionResp.StatusCode)
+	}
+	var getRevisionPayload map[string]any
+	if err := json.NewDecoder(getRevisionResp.Body).Decode(&getRevisionPayload); err != nil {
+		t.Fatalf("decode card revision response: %v", err)
+	}
+	if got := asString(getRevisionPayload["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected card revision envelope card_ref, got %#v", getRevisionPayload)
+	}
+	if got := asString(getRevisionPayload["card_handle"]); got == "" {
+		t.Fatalf("expected card revision envelope card_handle, got %#v", getRevisionPayload)
+	}
+	loadedCardRevision, _ := getRevisionPayload["revision"].(map[string]any)
+	if got := asString(loadedCardRevision["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected loaded card revision card_ref, got %#v", loadedCardRevision)
+	}
+	assertMapOmitsKeys(t, loadedCardRevision, "id", "card_id", "board_id", "thread_id")
 
 	cardUpdatedAt := asString(revisionPayload.Card["updated_at"])
 	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{

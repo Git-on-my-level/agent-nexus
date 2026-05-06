@@ -1545,18 +1545,26 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if loadedOpenAPIRevResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected GET OpenAPI revision status: %d", loadedOpenAPIRevResp.StatusCode)
 	}
-	var loadedOpenAPIRev map[string]map[string]any
+	var loadedOpenAPIRev map[string]any
 	if err := json.NewDecoder(loadedOpenAPIRevResp.Body).Decode(&loadedOpenAPIRev); err != nil {
 		t.Fatalf("decode loaded OpenAPI revision: %v", err)
 	}
-	loadedProv, _ := loadedOpenAPIRev["revision"]["provenance"].(map[string]any)
+	loadedOpenAPIRevision, _ := loadedOpenAPIRev["revision"].(map[string]any)
+	loadedProv, _ := loadedOpenAPIRevision["provenance"].(map[string]any)
 	if loadedProv == nil {
-		t.Fatalf("expected persisted revision provenance on GET, got %#v", loadedOpenAPIRev["revision"])
+		t.Fatalf("expected persisted revision provenance on GET, got %#v", loadedOpenAPIRevision)
 	}
 	loadedSources, _ := loadedProv["sources"].([]any)
 	if len(loadedSources) != 1 || loadedSources[0] != "operator" {
 		t.Fatalf("expected loaded provenance sources [operator], got %#v", loadedProv["sources"])
 	}
+	if got := asString(loadedOpenAPIRev["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected revision envelope document_ref, got %#v", loadedOpenAPIRev)
+	}
+	if got := asString(loadedOpenAPIRev["document_handle"]); got == "" {
+		t.Fatalf("expected revision envelope document_handle, got %#v", loadedOpenAPIRev)
+	}
+	assertMapOmitsKeys(t, loadedOpenAPIRevision, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 
 	historyResp, err := http.Get(h.baseURL + "/docs/doc-1/history")
 	if err != nil {
@@ -1585,6 +1593,32 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if got := asString(secondHistory["prev_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected history revision prev_revision_ref, got %#v", secondHistory)
 	}
+	assertMapOmitsKeys(t, firstHistory, "document_id", "artifact_id", "prev_revision_id", "thread_id")
+
+	revisionsResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions")
+	if err != nil {
+		t.Fatalf("GET /docs/{document_id}/revisions: %v", err)
+	}
+	defer revisionsResp.Body.Close()
+	if revisionsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected revisions status: got %d", revisionsResp.StatusCode)
+	}
+	var revisionsPayload map[string]any
+	if err := json.NewDecoder(revisionsResp.Body).Decode(&revisionsPayload); err != nil {
+		t.Fatalf("decode revisions response: %v", err)
+	}
+	if got := asString(revisionsPayload["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected revisions envelope document_ref, got %#v", revisionsPayload)
+	}
+	if got := asString(revisionsPayload["document_handle"]); got == "" {
+		t.Fatalf("expected revisions envelope document_handle, got %#v", revisionsPayload)
+	}
+	openAPIRevisions, _ := revisionsPayload["revisions"].([]any)
+	if len(openAPIRevisions) != 4 {
+		t.Fatalf("expected four revisions from /revisions, got %d payload=%#v", len(openAPIRevisions), revisionsPayload)
+	}
+	firstOpenAPIRevision, _ := openAPIRevisions[0].(map[string]any)
+	assertMapOmitsKeys(t, firstOpenAPIRevision, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 
 	revisionResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions/" + headRevisionID)
 	if err != nil {
@@ -1594,23 +1628,31 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if revisionResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected revision status: got %d", revisionResp.StatusCode)
 	}
-	var revisionPayload map[string]map[string]any
+	var revisionPayload map[string]any
 	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
 		t.Fatalf("decode revision response: %v", err)
 	}
-	if revisionPayload["revision"]["content"] != "initial text" {
-		t.Fatalf("unexpected revision content: %#v", revisionPayload["revision"]["content"])
+	revisionMap, _ := revisionPayload["revision"].(map[string]any)
+	if got := asString(revisionPayload["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected fetched revision envelope document_ref, got %#v", revisionPayload)
 	}
-	if got := asString(revisionPayload["revision"]["document_ref"]); got != asString(created["document"]["ref"]) {
-		t.Fatalf("expected fetched revision document_ref, got %#v", revisionPayload["revision"])
+	if got := asString(revisionPayload["document_handle"]); got == "" {
+		t.Fatalf("expected fetched revision envelope document_handle, got %#v", revisionPayload)
 	}
-	if got := asString(revisionPayload["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
-		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionPayload["revision"])
+	if revisionMap["content"] != "initial text" {
+		t.Fatalf("unexpected revision content: %#v", revisionMap["content"])
 	}
-	loadedRevisionHash, _ := revisionPayload["revision"]["revision_hash"].(string)
+	if got := asString(revisionMap["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected fetched revision document_ref, got %#v", revisionMap)
+	}
+	if got := asString(revisionMap["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
+		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionMap)
+	}
+	loadedRevisionHash, _ := revisionMap["revision_hash"].(string)
 	if loadedRevisionHash != createRevisionHash {
 		t.Fatalf("revision_hash mismatch on GET revision: got %q want %q", loadedRevisionHash, createRevisionHash)
 	}
+	assertMapOmitsKeys(t, revisionMap, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 }
 
 func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
@@ -1947,13 +1989,14 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 	if revisionResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected legacy revision status: %d", revisionResp.StatusCode)
 	}
-	var revisionPayload map[string]map[string]any
+	var revisionPayload map[string]any
 	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
 		t.Fatalf("decode legacy revision payload: %v", err)
 	}
-	revisionArtifact, ok := revisionPayload["revision"]["artifact"].(map[string]any)
+	revision, _ := revisionPayload["revision"].(map[string]any)
+	revisionArtifact, ok := revision["artifact"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected legacy revision artifact metadata map, got %#v", revisionPayload["revision"]["artifact"])
+		t.Fatalf("expected legacy revision artifact metadata map, got %#v", revision["artifact"])
 	}
 	if _, ok := revisionArtifact["content_path"]; ok {
 		t.Fatalf("expected legacy revision response to omit content_path: %#v", revisionArtifact)
@@ -2028,20 +2071,21 @@ func TestDocumentRevisionMerkleChainIntegrity(t *testing.T) {
 			t.Fatalf("GET revision %d: %v", i, err)
 		}
 		defer revResp.Body.Close()
-		var revPayload map[string]map[string]any
+		var revPayload map[string]any
 		if err := json.NewDecoder(revResp.Body).Decode(&revPayload); err != nil {
 			t.Fatalf("decode revision %d: %v", i, err)
 		}
+		revision, _ := revPayload["revision"].(map[string]any)
 
-		revisionHash, _ := revPayload["revision"]["revision_hash"].(string)
+		revisionHash, _ := revision["revision_hash"].(string)
 		if revisionHash == "" {
 			t.Fatalf("revision %d missing revision_hash", i)
 		}
 
 		contentHash := sha256Hex([]byte(contents[i]))
 		revNum := i + 1
-		createdAt, _ := revPayload["revision"]["created_at"].(string)
-		createdBy, _ := revPayload["revision"]["created_by"].(string)
+		createdAt, _ := revision["created_at"].(string)
+		createdBy, _ := revision["created_by"].(string)
 		expectedHash := testComputeRevisionHash(contentHash, prevHash, "merkle-doc", revNum, createdAt, createdBy)
 
 		if revisionHash != expectedHash {
@@ -2335,6 +2379,18 @@ func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+func assertMapOmitsKeys(t *testing.T, m map[string]any, keys ...string) {
+	t.Helper()
+	if m == nil {
+		t.Fatalf("expected map, got nil")
+	}
+	for _, key := range keys {
+		if _, exists := m[key]; exists {
+			t.Fatalf("expected map to omit %q, got %#v", key, m)
+		}
 	}
 }
 
