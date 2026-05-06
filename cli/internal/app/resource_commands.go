@@ -3979,52 +3979,6 @@ func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, 
 	return rawCardID, nil
 }
 
-func looksLikeThreadCardIdentifier(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	return strings.HasPrefix(raw, "thread_") || strings.HasPrefix(raw, "thread-") || strings.HasPrefix(raw, "thread:")
-}
-
-type boardCardIdentifierMatch struct {
-	CardID   string
-	ThreadID string
-}
-
-func listBoardCardIdentifierMatches(result *commandResult) []boardCardIdentifierMatch {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body["cards"].([]any)
-	if len(rawItems) == 0 {
-		return nil
-	}
-	out := make([]boardCardIdentifierMatch, 0, len(rawItems))
-	seen := make(map[string]struct{}, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		cardID := strings.TrimSpace(anyString(item["id"]))
-		if cardID == "" {
-			continue
-		}
-		if _, exists := seen[cardID]; exists {
-			continue
-		}
-		seen[cardID] = struct{}{}
-		out = append(out, boardCardIdentifierMatch{
-			CardID:   cardID,
-			ThreadID: strings.TrimSpace(anyString(item["thread_id"])),
-		})
-	}
-	return out
-}
-
 func parseBoardCardsListInput(args []string) (string, bool, error) {
 	fs := newSilentFlagSet("boards cards list")
 	var boardIDFlag trackedString
@@ -4870,10 +4824,6 @@ func addPublicIdentityToObjectIfPresent(obj map[string]any, kind string) bool {
 	changed := false
 	refKey := canonicalResourceKind(kind) + "_ref"
 	handleKey := canonicalResourceKind(kind) + "_handle"
-	if canonicalResourceKind(kind) == "document" {
-		refKey = "document_ref"
-		handleKey = "document_handle"
-	}
 	if strings.TrimSpace(anyString(obj["ref"])) == "" {
 		if ref := firstNonEmpty(strings.TrimSpace(anyString(obj[refKey])), publicRefFromID(kind, anyString(obj["id"]))); ref != "" {
 			obj["ref"] = ref
@@ -4983,12 +4933,6 @@ func applyInboxIdentifiers(item map[string]any, alias string) bool {
 	if alias != "" {
 		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != alias {
 			item["alias"] = alias
-			changed = true
-		}
-	}
-	threadID := strings.TrimSpace(anyString(item["thread_id"]))
-	if threadID != "" {
-		if addPublicIdentityToObjectIfPresent(item, "inbox") {
 			changed = true
 		}
 	}

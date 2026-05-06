@@ -81,9 +81,9 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatCardRecord(extractNestedMap(body, "card"))
 	case "cards.purge":
 		root := asMap(body)
-		id, _ := root["card_id"].(string)
-		if purged, _ := root["purged"].(bool); purged && id != "" {
-			return "Card " + id + " permanently deleted"
+		label := firstNonEmpty(anyString(root["card_ref"]), anyString(root["card_handle"]), anyString(root["card_id"]))
+		if purged, _ := root["purged"].(bool); purged && label != "" {
+			return "Card " + label + " permanently deleted"
 		}
 		return formatPrettyBody(body)
 	case "threads.context":
@@ -100,9 +100,9 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatArtifactRecord(extractNestedMap(body, "artifact"))
 	case "artifacts.purge":
 		root := asMap(body)
-		id, _ := root["artifact_id"].(string)
-		if id != "" {
-			return "Artifact " + id + " permanently deleted"
+		label := firstNonEmpty(anyString(root["artifact_ref"]), anyString(root["artifact_handle"]), anyString(root["artifact_id"]))
+		if purged, _ := root["purged"].(bool); purged && label != "" {
+			return "Artifact " + label + " permanently deleted"
 		}
 		return formatPrettyBody(body)
 	case "artifacts.inspect":
@@ -117,9 +117,9 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatProposalApply(body)
 	case "docs.purge":
 		root := asMap(body)
-		id, _ := root["document_id"].(string)
-		if id != "" {
-			return "Document " + id + " permanently deleted"
+		label := firstNonEmpty(anyString(root["document_ref"]), anyString(root["document_handle"]), anyString(root["document_id"]))
+		if purged, _ := root["purged"].(bool); purged && label != "" {
+			return "Document " + label + " permanently deleted"
 		}
 		return formatPrettyBody(body)
 	case "docs.content":
@@ -142,9 +142,9 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatBoardRecord(extractNestedMap(body, "board"))
 	case "boards.purge":
 		root := asMap(body)
-		id, _ := root["board_id"].(string)
-		if id != "" {
-			return "Board " + id + " permanently deleted"
+		label := firstNonEmpty(anyString(root["board_ref"]), anyString(root["board_handle"]), anyString(root["board_id"]))
+		if purged, _ := root["purged"].(bool); purged && label != "" {
+			return "Board " + label + " permanently deleted"
 		}
 		return formatPrettyBody(body)
 	case "boards.workspace":
