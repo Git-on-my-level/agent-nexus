@@ -19,7 +19,7 @@ func TestFormatBoardCardRemoveResult_WithCardThreadBacked(t *testing.T) {
 	if !strings.Contains(got, "Card removed:") {
 		t.Fatalf("expected headline, got %q", got)
 	}
-	if !strings.Contains(got, "- thread: thread_abc123") {
+	if !strings.Contains(got, "- card: standalone card") || !strings.Contains(got, "thread: thread_abc123") {
 		t.Fatalf("expected thread line, got %q", got)
 	}
 	if !strings.Contains(got, "column: ready") {
@@ -46,7 +46,7 @@ func TestFormatBoardCardCreateResult_IsConciseAndShowsCardRef(t *testing.T) {
 	if strings.Contains(got, `"card"`) || strings.Contains(got, "thread_1234567890abcdef") || strings.Contains(got, "card_12345") {
 		t.Fatalf("expected concise text create output, got:\n%s", got)
 	}
-	if !strings.Contains(got, "Card created:") || !strings.Contains(got, "- card: card:fix-cli-card-discovery — Fix CLI card discovery") || !strings.Contains(got, "thread: thread:cli-card-discovery") {
+	if !strings.Contains(got, "Card created:") || !strings.Contains(got, "- card:fix-cli-card-discovery — Fix CLI card discovery") || !strings.Contains(got, "thread:cli-card-discovery") {
 		t.Fatalf("expected card ref create output, got:\n%s", got)
 	}
 }
@@ -150,7 +150,7 @@ func TestFormatBoardCardRemoveResult_WithCardStandalone(t *testing.T) {
 	if strings.Contains(got, "card_xyz789") {
 		t.Fatalf("expected public card ref instead of internal id, got %q", got)
 	}
-	if !strings.Contains(got, "- card: card:standalone-task — Standalone task") {
+	if !strings.Contains(got, "- card:standalone-task — Standalone task") {
 		t.Fatalf("expected card line with ref and title, got %q", got)
 	}
 }

@@ -298,13 +298,29 @@ func (a *App) resolveLocatorForURL(ctx context.Context, cfg config.Resolved, loc
 				return loc, err
 			}
 			card := extractNestedMap(commandResultBody(result), "card")
-			if id := strings.TrimSpace(anyString(card["id"])); id != "" {
+			if id := publicLocatorID(card, "card"); id != "" {
 				loc.ID = id
 			}
-			loc.BoardID = refID(anyString(card["board_ref"]))
+			loc.BoardID = firstNonEmpty(refID(anyString(card["board_ref"])), strings.TrimSpace(anyString(card["board_handle"])))
+			if publicBoardID, err := a.resolvePublicBoardLocatorID(ctx, cfg, loc.BoardID); err == nil && publicBoardID != "" {
+				loc.BoardID = publicBoardID
+			}
 		}
 	}
 	return loc, nil
+}
+
+func (a *App) resolvePublicBoardLocatorID(ctx context.Context, cfg config.Resolved, boardID string) (string, error) {
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		return "", nil
+	}
+	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards get", "boards.get", "board_id", boardID, boardIDLookupSpec, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	board := extractNestedMap(commandResultBody(result), "board")
+	return publicLocatorID(board, "board"), nil
 }
 
 func addResourceURLToResult(cfg config.Resolved, commandID string, result *commandResult) *commandResult {
@@ -339,32 +355,57 @@ func locatorFromCommandBody(commandID string, body map[string]any) (resourceLoca
 	switch strings.TrimSpace(commandID) {
 	case "boards.create":
 		board := extractNestedMap(body, "board")
-		id := strings.TrimSpace(anyString(board["id"]))
+		id := publicLocatorID(board, "board")
 		return resourceLocator{Kind: "board", ID: id}, id != ""
 	case "topics.create":
 		topic := extractNestedMap(body, "topic")
-		id := strings.TrimSpace(anyString(topic["id"]))
+		id := publicLocatorID(topic, "topic")
 		return resourceLocator{Kind: "topic", ID: id}, id != ""
 	case "docs.create":
 		document := extractNestedMap(body, "document")
-		id := strings.TrimSpace(anyString(document["id"]))
+		id := publicLocatorID(document, "document")
 		return resourceLocator{Kind: "document", ID: id}, id != ""
 	case "artifacts.create":
 		artifact := extractNestedMap(body, "artifact")
-		id := strings.TrimSpace(anyString(artifact["id"]))
+		id := publicLocatorID(artifact, "artifact")
 		return resourceLocator{Kind: "artifact", ID: id}, id != ""
 	case "cards.create", "boards.cards.create":
 		card := extractNestedMap(body, "card")
-		id := strings.TrimSpace(anyString(card["id"]))
-		boardID := refID(anyString(card["board_ref"]))
+		id := publicLocatorID(card, "card")
+		boardID := firstNonEmpty(refID(anyString(card["board_ref"])), strings.TrimSpace(anyString(card["board_handle"])))
 		if boardID == "" {
 			board := extractNestedMap(body, "board")
-			boardID = strings.TrimSpace(anyString(board["id"]))
+			boardID = publicLocatorID(board, "board")
 		}
 		return resourceLocator{Kind: "card", ID: id, BoardID: boardID}, id != "" && boardID != ""
 	default:
 		return resourceLocator{}, false
 	}
+}
+
+func publicLocatorID(obj map[string]any, kind string) string {
+	if obj == nil {
+		return ""
+	}
+	kind = canonicalResourceKind(kind)
+	if kind == "" {
+		return strings.TrimSpace(anyString(obj["id"]))
+	}
+	if ref := refID(anyString(obj["ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(obj["handle"])); handle != "" {
+		return handle
+	}
+	refKey := kind + "_ref"
+	if ref := refID(anyString(obj[refKey])); ref != "" {
+		return ref
+	}
+	handleKey := kind + "_handle"
+	if handle := strings.TrimSpace(anyString(obj[handleKey])); handle != "" {
+		return handle
+	}
+	return strings.TrimSpace(anyString(obj["id"]))
 }
 
 func resourceURL(cfg config.Resolved, loc resourceLocator) (string, error) {
