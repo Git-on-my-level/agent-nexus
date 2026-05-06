@@ -1354,14 +1354,9 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		})
 	case "agent.notifications.read", "agent.notifications.dismiss":
 		raw := strings.TrimSpace(anyString(body["wakeup_id"]))
-		if raw == "" || !strings.HasPrefix(raw, "artifact_") {
-			return nil
+		if raw != "" {
+			body["wakeup_id"] = raw
 		}
-		resolved, err := a.resolveResourceIDFromList(ctx, cfg, raw, artifactIDLookupSpec)
-		if err != nil {
-			return err
-		}
-		body["wakeup_id"] = resolved
 		return nil
 	default:
 		return nil

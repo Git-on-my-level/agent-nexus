@@ -98,11 +98,7 @@ func (a *App) parseTopicReplyInput(ctx context.Context, args []string, cfg confi
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -166,11 +162,7 @@ func (a *App) parseDocReplyInput(ctx context.Context, args []string, cfg config.
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -234,15 +226,7 @@ func (a *App) parseCardReplyInput(ctx context.Context, args []string, cfg config
 	if err != nil {
 		return nil, nil, false, err
 	}
-	target, err := cardMessageTarget(card, strings.TrimSpace(anyString(card["id"])))
-	if err != nil {
-		return nil, nil, false, err
-	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, card, dryRun, nil
 }
 
@@ -308,11 +292,7 @@ func (a *App) parseThreadReplyInput(ctx context.Context, args []string, cfg conf
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedReplyTo, err := a.resolveMessageEventOnThread(ctx, cfg, target.ThreadID, replyTo)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
-	applyReplyToMessageBody(body, resolvedReplyTo)
+	applyReplyToMessageBody(body, replyTo)
 	return body, target, dryRun, nil
 }
 
@@ -734,40 +714,6 @@ func applyReplyToMessageBody(body map[string]any, replyToEventID string) {
 	event["refs"] = uniqueStrings(refs)
 }
 
-func (a *App) resolveMessageEventOnThread(ctx context.Context, cfg config.Resolved, threadID string, rawEventID string) (string, error) {
-	result, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "threads timeline", "threads.timeline", "thread_id", threadID, threadIDLookupSpec, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	body := extractNestedMap(asMap(result.Data), "body")
-	events := asSlice(body["events"])
-	matches := make([]string, 0, 2)
-	for _, raw := range events {
-		event := asMap(raw)
-		if event == nil || strings.TrimSpace(anyString(event["type"])) != "message_posted" {
-			continue
-		}
-		id := strings.TrimSpace(anyString(event["id"]))
-		if id == "" {
-			continue
-		}
-		if id == rawEventID {
-			return id, nil
-		}
-		if strings.HasPrefix(id, rawEventID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sortStrings(matches)
-		return "", ambiguousResourceIDError(rawEventID, eventIDLookupSpec, matches)
-	}
-	return "", errnorm.Usage("not_found", fmt.Sprintf("message %q was not found on thread %s", rawEventID, threadID))
-}
-
 func (a *App) readMessageText(body string, bodyFile string, commandName string) (string, error) {
 	body = strings.TrimSpace(body)
 	bodyFile = strings.TrimSpace(bodyFile)
@@ -945,17 +891,4 @@ func formatCardsMessages(body any) string {
 	lines = appendScalar(lines, "returned_events", root, "returned_events")
 	lines = appendEventListSection(lines, "messages", asSlice(root["events"]), asBool(root["full_id"]))
 	return strings.Join(lines, "\n")
-}
-
-func sortStrings(values []string) {
-	if len(values) < 2 {
-		return
-	}
-	for i := 0; i < len(values)-1; i++ {
-		for j := i + 1; j < len(values); j++ {
-			if values[j] < values[i] {
-				values[i], values[j] = values[j], values[i]
-			}
-		}
-	}
 }

@@ -4328,7 +4328,7 @@ func ambiguousInboxItemIDError(rawID string, matches []inboxListMatch) error {
 	return errnorm.Usage(
 		"invalid_request",
 		fmt.Sprintf(
-			"inbox item id %q is ambiguous: %d inbox items match. Use a longer id/alias or the canonical id. Matches: %s",
+			"inbox item id %q is ambiguous: %d inbox items match. Run `anx inbox list` and retry with the exact displayed alias. Matches: %s",
 			rawID,
 			len(matches),
 			strings.Join(samples, ", "),
@@ -4340,7 +4340,7 @@ func missingInboxItemIDError(rawID string) error {
 	return errnorm.Usage(
 		"invalid_request",
 		fmt.Sprintf(
-			"inbox item id %q is missing: no canonical id, alias, or unique prefix match was found. Run `anx inbox list` and retry with alias or canonical id.",
+			"inbox item id %q is missing. Run `anx inbox list` and retry with the exact displayed alias.",
 			strings.TrimSpace(rawID),
 		),
 	)
@@ -4419,239 +4419,11 @@ func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {
 	)
 }
 
-func remoteNotFoundMessage(err error) string {
-	normalized := errnorm.Normalize(err)
-	if normalized == nil || normalized.Kind != errnorm.KindRemote || normalized.Code != "not_found" {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(normalized.Message))
-}
-
-func revisionIDsFromDocsHistoryResult(result *commandResult) []string {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body["revisions"].([]any)
-	out := make([]string, 0, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		if id := strings.TrimSpace(anyString(item["id"])); id != "" {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func (a *App) resolveRevisionIDPrefix(ctx context.Context, cfg config.Resolved, documentID, rawRevisionID string) (string, error) {
-	result, err := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.revisions.list", map[string]string{"document_id": documentID}, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	ids := revisionIDsFromDocsHistoryResult(result)
-	rawRevisionID = strings.TrimSpace(rawRevisionID)
-	for _, id := range ids {
-		if id == rawRevisionID {
-			return id, nil
-		}
-	}
-	matches := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, rawRevisionID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		samples := matches
-		if len(samples) > 3 {
-			samples = samples[:3]
-		}
-		return "", errnorm.Usage(
-			"invalid_request",
-			fmt.Sprintf(
-				"revision id %q is ambiguous: %d revisions share that prefix. Use a longer prefix or canonical id. Matches: %s",
-				rawRevisionID,
-				len(matches),
-				strings.Join(samples, ", "),
-			),
-		)
-	}
-	return "", errnorm.Usage(
-		"invalid_request",
-		fmt.Sprintf("revision id %q is missing: no matching revision on document %q", rawRevisionID, documentID),
-	)
-}
-
 func (a *App) invokeDocsRevisionGetWithIDResolution(ctx context.Context, cfg config.Resolved, documentID, revisionID string) (*commandResult, error) {
-	invoke := func(docID, revID string) (*commandResult, error) {
-		return a.invokeTypedJSON(ctx, cfg, "docs revision get", "docs.revisions.get", map[string]string{"document_id": docID, "revision_id": revID}, nil, nil)
-	}
-	resDoc := strings.TrimSpace(documentID)
-	resRev := strings.TrimSpace(revisionID)
-	result, err := invoke(resDoc, resRev)
-	if err == nil {
-		return result, nil
-	}
-	if remoteNotFoundMessage(err) == "document not found" {
-		resolvedDoc, resolveErr := a.resolveResourceIDFromList(ctx, cfg, resDoc, documentIDLookupSpec)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		resDoc = resolvedDoc
-		result, err = invoke(resDoc, resRev)
-		if err == nil {
-			return result, nil
-		}
-	}
-	if remoteNotFoundMessage(err) == "document revision not found" {
-		resolvedRev, resolveErr := a.resolveRevisionIDPrefix(ctx, cfg, resDoc, resRev)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		return invoke(resDoc, resolvedRev)
-	}
-	return nil, err
-}
-
-func (a *App) resolveResourceIDFromList(ctx context.Context, cfg config.Resolved, rawID string, spec resourceIDLookupSpec) (string, error) {
-	result, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, nil, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	ids := listResourceIDs(result, spec)
-	if len(ids) == 0 {
-		return "", missingResourceIDError(rawID, spec)
-	}
-
-	rawID = strings.TrimSpace(rawID)
-	for _, id := range ids {
-		if id == rawID {
-			return id, nil
-		}
-	}
-
-	matches := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, rawID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		return "", ambiguousResourceIDError(rawID, spec, matches)
-	}
-	return "", missingResourceIDError(rawID, spec)
-}
-
-func listResourceIDs(result *commandResult, spec resourceIDLookupSpec) []string {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body[spec.listField].([]any)
-	if len(rawItems) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(rawItems))
-	out := make([]string, 0, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		id := extractResourceListItemID(item, spec)
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
-}
-
-func extractResourceListItemID(item map[string]any, spec resourceIDLookupSpec) string {
-	path := spec.idFieldPath
-	if len(path) == 0 {
-		path = []string{"id"}
-	}
-	var current any = item
-	for _, segment := range path {
-		typed, _ := current.(map[string]any)
-		if typed == nil {
-			return ""
-		}
-		current = typed[segment]
-	}
-	return strings.TrimSpace(anyString(current))
-}
-
-func isResolvableResourceNotFoundError(err error, spec resourceIDLookupSpec) bool {
-	normalized := errnorm.Normalize(err)
-	if normalized == nil || normalized.Kind != errnorm.KindRemote || normalized.Code != "not_found" {
-		return false
-	}
-	message := strings.ToLower(strings.TrimSpace(normalized.Message))
-	if message == "" || message == "endpoint not found" {
-		return false
-	}
-	for _, hint := range spec.notFoundHints {
-		if message == strings.ToLower(strings.TrimSpace(hint)) {
-			return true
-		}
-	}
-	return false
-}
-
-func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches []string) error {
-	samples := make([]string, 0, minInt(3, len(matches)))
-	for idx, match := range matches {
-		if idx >= 3 {
-			break
-		}
-		samples = append(samples, match)
-	}
-	message := fmt.Sprintf(
-		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Run `anx %s` to inspect candidates. Matches: %s",
-		spec.idLabel,
-		rawID,
-		len(matches),
-		spec.resource,
-		spec.listCommand,
-		strings.Join(samples, ", "),
-	)
-	return errnorm.Usage("invalid_request", message)
-}
-
-func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
-	message := fmt.Sprintf(
-		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `anx %s` and retry with a unique ref/handle or canonical id.",
-		spec.idLabel,
-		rawID,
-		spec.resource,
-		spec.listCommand,
-	)
-	return errnorm.Usage("invalid_request", message)
+	return a.invokeTypedJSON(ctx, cfg, "docs revision get", "docs.revisions.get", map[string]string{
+		"document_id": strings.TrimSpace(documentID),
+		"revision_id": strings.TrimSpace(revisionID),
+	}, nil, nil)
 }
 
 func enrichListBodyWithPublicIdentity(commandID string, body any) (any, bool) {
