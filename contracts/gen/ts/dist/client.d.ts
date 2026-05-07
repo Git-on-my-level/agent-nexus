@@ -16,6 +16,17 @@ export interface CommandSpec {
     group?: string;
     path_params?: string[];
     input_mode?: string;
+    http_input_mode?: string;
+    cli_input?: {
+        mode?: string;
+        body_optional?: boolean;
+        flags?: Array<{
+            name: string;
+            body_path?: string;
+            required?: boolean;
+            description?: string;
+        }>;
+    };
     streaming?: unknown;
     output_envelope?: string;
     error_codes?: string[];

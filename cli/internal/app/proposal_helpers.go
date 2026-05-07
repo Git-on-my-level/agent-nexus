@@ -157,32 +157,7 @@ func resolveDraftIDFromInput(draftsDir string, raw string) (string, error) {
 		}
 	}
 
-	entries, err := os.ReadDir(draftsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", errnorm.Local("draft_not_found", fmt.Sprintf("draft %q was not found", raw))
-		}
-		return "", errnorm.Wrap(errnorm.KindLocal, "draft_read_failed", "failed to read drafts directory", err)
-	}
-	matches := make([]string, 0, 4)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		draftID := strings.TrimSuffix(entry.Name(), ".json")
-		if strings.HasPrefix(draftID, raw) {
-			matches = append(matches, draftID)
-		}
-	}
-	sort.Strings(matches)
-	switch len(matches) {
-	case 0:
-		return "", errnorm.Local("draft_not_found", fmt.Sprintf("draft %q was not found", raw))
-	case 1:
-		return matches[0], nil
-	default:
-		return "", errnorm.Usage("ambiguous_draft_id", fmt.Sprintf("draft id prefix %q matched multiple proposals: %s", raw, strings.Join(matches, ", ")))
-	}
+	return "", errnorm.Local("draft_not_found", fmt.Sprintf("draft %q was not found", raw))
 }
 
 func validateDraftPathParams(commandID string, pathParams map[string]string) error {

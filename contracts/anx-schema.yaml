@@ -100,30 +100,52 @@ enums:
     enum_policy: open
     description: Discrete evidence label. Never a numeric confidence score.
     examples:
-      - "event:<event_id>"
+      - "event:<event_handle>"
       - "inferred"
 
 ref_format:
   description: >
-    All strings in `refs`, `*_ref`, and `*_refs` fields MUST use typed prefixes
-    so consumers can parse the target deterministically.
+    Typed refs are the public identity model for durable Agent Nexus resources.
+    All strings in `ref`, `refs`, `*_ref`, and `*_refs` fields MUST use typed
+    prefixes so consumers can parse the target deterministically.
   prefixes:
-    "artifact:<id>": "References an artifact by ID"
-    "event:<id>": "References an event by ID"
-    "thread:<id>": "References a backing thread by ID"
-    "topic:<id>": "References a topic by ID"
-    "document:<id>": "References a document lineage by ID"
-    "document_revision:<id>": "References a document revision by ID"
-    "board:<id>": "References a board by ID"
-    "card:<id>": "References a card by ID"
-    "card_revision:<id>": "References a card content revision by ID"
-    "inbox:<id>": "References a derived inbox item by ID"
+    "artifact:<handle>": "References an artifact by public handle"
+    "event:<handle>": "References an event by public handle"
+    "thread:<handle>": "References a backing thread by public handle"
+    "topic:<handle>": "References a topic by public handle"
+    "document:<handle>": "References a document lineage by public handle"
+    "document_revision:<handle>": "References a document revision by public handle"
+    "board:<handle>": "References a board by public handle"
+    "card:<handle>": "References a card by public handle"
+    "card_revision:<handle>": "References a card content revision by public handle"
+    "inbox:<handle>": "References a derived inbox item by public handle"
     "url:<url>": "References an external URL"
   rules:
     - "All refs MUST start with a typed prefix followed by a colon and value."
     - "Consumers MUST parse the prefix; they MUST NOT infer ref kind from raw ids."
+    - "Public APIs SHOULD accept typed refs and resource handles before falling back to internal UUID lookup."
     - "Reverse lookups MUST be derived from typed refs and ref_edge records."
     - "Unknown prefixes MUST be preserved and round-tripped."
+
+identity_concepts:
+  ResourceRef:
+    type: typed_ref
+    description: >
+      Public typed reference in the form `<kind>:<handle>`. This is the
+      canonical cross-resource identity value for API payloads, refs, links,
+      and operator-visible routing.
+  ResourceHandle:
+    type: string
+    description: >
+      Public, kind-scoped resource handle. A handle is stable enough for URLs,
+      command arguments, and human-readable references, but clients should carry
+      the full typed `ref` whenever the resource kind is not otherwise known.
+  InternalResourceUUID:
+    type: string
+    description: >
+      Internal storage UUID or storage id. UUIDs are explicit debug/admin
+      identifiers and MUST NOT be described as the primary public identity for
+      workspace resources.
 
 provenance:
   description: >
@@ -167,14 +189,14 @@ primitives:
       preset_id: home_feed
       group_ownership: >
         Home resolves events to typed groups. Resolution order:
-        1. Direct `topic:<id>` ref → topic group.
-        2. `thread:<id>` or event.thread_id through topic or board backing thread → owning group.
-        3. `board:<id>` ref → board group.
+        1. Direct `topic:<handle>` ref → topic group.
+        2. `thread:<handle>` or event.thread_ref through topic or board backing thread → owning group.
+        3. `board:<handle>` ref → board group.
         Events that cannot be assigned to any group are excluded from Home and
         remain visible on Events.
       reader_scope: >
         Read cursors are keyed by authenticated principal plus group_ref (a typed
-        ref string such as "topic:<id>" or "board:<id>"). Development legacy
+        ref string such as "topic:<handle>" or "board:<handle>"). Development legacy
         actor mode may pass a reader id explicitly for local operation.
       cursor: "Per-group `(last_read_event_ts, last_read_event_id)` keyed by group_ref; id breaks equal-timestamp ties."
       eligible_types:
@@ -236,7 +258,9 @@ primitives:
           family: doc
           required_payload_fields: [document_id, title]
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       ts: { type: datetime, required: true }
       type: { type: string, required: true, ref: enums.event_type }
       actor_id: { type: string, required: true }
@@ -252,7 +276,9 @@ primitives:
       low-level inspection, and timeline reconstruction. They are not the
       primary planning surface.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       topic_ref: { type: typed_ref, required: false }
       title: { type: string, required: false }
       state:
@@ -282,7 +308,9 @@ primitives:
       mime_type, original_filename, size_bytes, preview_status, and scan_status,
       while `content_type` holds the concrete MIME type served from GET .../content.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       created_at: { type: datetime, required: true }
       created_by: { type: string, required: true }
       kind: { type: string, required: true, ref: enums.artifact_kind }
@@ -312,7 +340,9 @@ resources:
       First-class durable work subject. Topics are the canonical place to track
       lifecycle state, intent, and linked evidence for organizational work.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       state:
         type: string
         required: true
@@ -354,7 +384,9 @@ resources:
       document lifecycle field and uses the values `active`, `archived`, or
       `trashed`.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       title: { type: string, required: true }
       summary:
         type: string
@@ -404,7 +436,9 @@ resources:
       `prev_revision_ref`, `artifact_ref`) even when runtime/storage layers also
       expose convenience fields such as revision numbers.
     fields:
-      revision_id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      revision_id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       document_ref: { type: typed_ref, required: true }
       prev_revision_ref: { type: typed_ref, required: false }
       artifact_ref: { type: typed_ref, required: true }
@@ -419,7 +453,9 @@ resources:
       column policy, and operator-facing grouping, while linked resources are
       represented through typed refs.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       title: { type: string, required: true }
       summary:
         type: string
@@ -455,7 +491,9 @@ resources:
       On create, the server allocates a backing thread id; clients MUST NOT send
       thread_id on board-card writes.
     fields:
-      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       board_ref: { type: typed_ref, required: true }
       topic_ref: { type: typed_ref, required: false }
       thread_id: { type: string, required: true, description: "Backing thread id for the card; server-assigned when persisted." }
@@ -485,7 +523,9 @@ resources:
       state changes stay on the mutable card row; only title, summary, and
       definition_of_done are versioned here.
     fields:
-      revision_id: { type: string, required: true }
+      ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
+      handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
+      revision_id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
       card_ref: { type: typed_ref, required: true }
       prev_revision_ref: { type: typed_ref, required: false }
       artifact_ref: { type: typed_ref, required: true }
@@ -507,59 +547,59 @@ reference_conventions:
     _rule: "Thread-scoped events SHOULD set thread_ref on the event payload."
 
     topic_created:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["topic:<topic_handle>"]
 
     topic_updated:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["topic:<topic_handle>"]
 
     topic_archived:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["topic:<topic_handle>"]
 
     topic_restored:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["topic:<topic_handle>"]
 
     topic_trashed:
-      refs_must_include: ["topic:<topic_id>"]
+      refs_must_include: ["topic:<topic_handle>"]
 
     message_posted:
       thread_id: "required as thread_ref when the message belongs to a backing thread"
 
     document_created:
-      refs_must_include: ["document:<document_id>", "document_revision:<revision_id>", "artifact:<artifact_id>"]
+      refs_must_include: ["document:<document_handle>", "document_revision:<revision_handle>", "artifact:<artifact_handle>"]
 
     document_revised:
-      refs_must_include: ["document:<document_id>", "document_revision:<revision_id>", "artifact:<artifact_id>"]
+      refs_must_include: ["document:<document_handle>", "document_revision:<revision_handle>", "artifact:<artifact_handle>"]
 
     document_trashed:
-      refs_must_include: ["document:<document_id>"]
+      refs_must_include: ["document:<document_handle>"]
 
     document_restored:
-      refs_must_include: ["document:<document_id>"]
+      refs_must_include: ["document:<document_handle>"]
 
     board_created:
-      refs_must_include: ["board:<board_id>"]
+      refs_must_include: ["board:<board_handle>"]
 
     board_updated:
-      refs_must_include: ["board:<board_id>"]
+      refs_must_include: ["board:<board_handle>"]
 
     card_created:
-      refs_must_include: ["card:<card_id>", "board:<board_id>", "card_revision:<revision_id>", "artifact:<artifact_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>", "card_revision:<revision_handle>", "artifact:<artifact_handle>"]
 
     card_updated:
-      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
 
     card_moved:
-      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
       payload_must_include: ["column_key"]
 
     card_archived:
-      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
 
     card_trashed:
-      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
 
     card_resolved:
-      refs_must_include: ["card:<card_id>", "board:<board_id>"]
+      refs_must_include: ["card:<card_handle>", "board:<board_handle>"]
       payload_must_include: ["resolution"]
 
     exception_raised:

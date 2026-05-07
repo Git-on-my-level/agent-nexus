@@ -1848,8 +1848,9 @@ function listSeedDocumentsForThread(threadId) {
 }
 
 /**
- * Mock topic typed refs use a short id (strip leading `thread-`) so `topic:` refs do not
- * look like thread ids. Canonical topic rows still use `thread-*` ids for URL/API parity.
+ * Mock topic typed refs derive a handle from the thread id (strip leading `thread-`)
+ * so `topic:` refs use readable handles like `topic:kids-lemonade-main` rather than
+ * thread-internal ids. Canonical topic rows still use `thread-*` ids for URL/API parity.
  */
 export function mockTopicRefSuffixFromThreadId(threadId) {
   const tid = String(threadId ?? "").trim();

@@ -6,11 +6,11 @@
     helperText = "",
     placeholder = "Search",
     emptyText = "No matches found.",
-    advancedLabel = "Use a manual ID instead",
-    manualLabel = "Manual ID",
-    manualPlaceholder = "Enter an ID",
-    addManualLabel = "Add ID",
-    /** When false, hides raw ID entry (search only). */
+    advancedLabel = "Use a manual ref instead",
+    manualLabel = "Manual ref",
+    manualPlaceholder = "Enter a ref or handle",
+    addManualLabel = "Add ref",
+    /** When false, hides raw ref entry (search only). */
     showManualEntry = true,
     /** Max rows when the search box is empty (multi only). */
     idleSuggestionLimit = 3,
@@ -41,7 +41,7 @@
   let selectedItems = $derived(
     (values ?? []).map((id) => {
       const matched = items.find((item) => item.id === id);
-      return matched ?? { id, title: id, subtitle: "Manual ID" };
+      return matched ?? { id, title: id, subtitle: "Manual ref" };
     }),
   );
   let availableItems = $derived(
@@ -203,6 +203,21 @@
   function removeValue(id) {
     values = (values ?? []).filter((item) => item !== id);
   }
+
+  function itemPublicLabel(item) {
+    return String(
+      item?.title ||
+        item?.display_name ||
+        item?.ref ||
+        item?.handle ||
+        item?.id ||
+        "",
+    ).trim();
+  }
+
+  function itemPublicSubtext(item) {
+    return String(item?.ref || item?.handle || item?.subtitle || "").trim();
+  }
 </script>
 
 <div class="space-y-2">
@@ -222,9 +237,9 @@
           <span
             class="inline-flex items-center gap-2 rounded-md border border-line bg-panel px-2.5 py-1 text-micro text-fg"
           >
-            <span>{item.title || item.id}</span>
+            <span>{itemPublicLabel(item)}</span>
             <button
-              aria-label={`Remove ${item.title || item.id}`}
+              aria-label={`Remove ${itemPublicLabel(item)}`}
               class="text-fg-muted transition-colors hover:text-fg"
               onclick={() => removeValue(item.id)}
               type="button"
@@ -266,13 +281,10 @@
           >
             <div class="min-w-0">
               <p class="truncate text-micro font-medium text-fg">
-                {item.title || item.id}
+                {itemPublicLabel(item)}
               </p>
               <p class="mt-0.5 truncate text-micro text-fg-muted">
-                {item.id}
-                {#if item.subtitle}
-                  · {item.subtitle}
-                {/if}
+                {itemPublicSubtext(item)}
               </p>
             </div>
             <span
@@ -345,16 +357,13 @@
       <div class="ui-panel px-3 py-2">
         {#if selectedItem}
           <p class="text-micro font-medium text-fg">
-            {selectedItem.title || selectedItem.id}
+            {itemPublicLabel(selectedItem)}
           </p>
           <p class="mt-0.5 text-micro text-fg-muted">
-            {selectedItem.id}
-            {#if selectedItem.subtitle}
-              · {selectedItem.subtitle}
-            {/if}
+            {itemPublicSubtext(selectedItem)}
           </p>
         {:else}
-          <p class="text-micro font-medium text-fg">Manual ID selected</p>
+          <p class="text-micro font-medium text-fg">Manual ref selected</p>
           <p class="mt-0.5 font-mono text-micro text-fg-muted">
             {value}
           </p>
@@ -400,13 +409,10 @@
           >
             <div class="min-w-0">
               <p class="truncate text-micro font-medium text-fg">
-                {item.title || item.id}
+                {itemPublicLabel(item)}
               </p>
               <p class="mt-0.5 truncate text-micro text-fg-muted">
-                {item.id}
-                {#if item.subtitle}
-                  · {item.subtitle}
-                {/if}
+                {itemPublicSubtext(item)}
               </p>
             </div>
             {#if value === item.id}

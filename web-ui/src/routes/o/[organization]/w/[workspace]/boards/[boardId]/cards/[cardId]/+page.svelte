@@ -12,6 +12,7 @@
   } from "$lib/boardUtils";
   import CardDetailModalInner from "$lib/components/CardDetailModalInner.svelte";
   import { coreClient } from "$lib/coreClient";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { readEnumSearchParam } from "$lib/urlState";
 
@@ -55,10 +56,18 @@
   let selectedCard = $derived.by(() => {
     const items = workspace?.cards?.items ?? [];
     return (
-      items.find((item) => boardCardStableId(item?.membership) === cardId) ??
-      null
+      items.find((item) => {
+        const membership = item?.membership;
+        return (
+          boardCardStableId(membership) === cardId ||
+          resourceRouteSegment(membership, "card") === cardId
+        );
+      }) ?? null
     );
   });
+  let boardRouteSegment = $derived(
+    resourceRouteSegment(workspace?.board, "board") || boardId,
+  );
 
   let mobileCardDetailColumnPeers = $derived.by(() => {
     const ws = workspace;
@@ -81,7 +90,9 @@
   );
 
   async function closeCardPage() {
-    await goto(workspaceHref(`/boards/${encodeURIComponent(boardId)}`));
+    await goto(
+      workspaceHref(`/boards/${encodeURIComponent(boardRouteSegment)}`),
+    );
   }
 
   function cardRouteKey(targetBoardId = boardId, targetCardId = cardId) {
@@ -340,7 +351,7 @@
     <p class="text-meta font-medium text-fg">Card not found.</p>
     <a
       class="mt-3 inline-flex rounded-md border border-line px-3 py-1.5 text-meta text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg"
-      href={workspaceHref(`/boards/${encodeURIComponent(boardId)}`)}
+      href={workspaceHref(`/boards/${encodeURIComponent(boardRouteSegment)}`)}
     >
       Back to board
     </a>

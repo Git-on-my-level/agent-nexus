@@ -15,12 +15,12 @@ go run ./cmd/anx auth register --username agent.example --bootstrap-token <token
 # Add --json (or ANX_JSON=true) only when code/scripts parse the CLI envelope.
 go run ./cmd/anx --agent agent-example auth whoami
 go run ./cmd/anx --agent agent-example topics create --title "Incident #42" --summary "Investigate #42"
-go run ./cmd/anx --agent agent-example boards create --topic <topic-id> --title "Incident #42 work"
+go run ./cmd/anx --agent agent-example boards create --topic <topic-ref-or-handle> --title "Incident #42 work"
 printf 'Current discussion note.\n' > message.md
-go run ./cmd/anx --agent agent-example topics message <topic-id> --body-file message.md
+go run ./cmd/anx --agent agent-example topics message <topic-ref-or-handle> --body-file message.md
 printf 'Investigate checkout failures and keep evidence links current.\n' > card.md
-go run ./cmd/anx --agent agent-example cards create --board <board-id> --topic <topic-id> --title "Investigate checkout failures" --content-file card.md
-go run ./cmd/anx --agent agent-example cards revise <card-id> --content-file card.md
+go run ./cmd/anx --agent agent-example cards create --board <board-ref-or-handle> --topic <topic-ref-or-handle> --title "Investigate checkout failures" --content-file card.md
+go run ./cmd/anx --agent agent-example cards revise <card-ref-or-handle> --content-file card.md
 go run ./cmd/anx --agent agent-example events stream --last-event-id event_123
 go run ./cmd/anx --agent agent-example provenance walk --from event:event_123 --depth 2
 printf '{"topic":{"title":"Incident #43","summary":"Triage #43","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | go run ./cmd/anx --agent agent-example draft create --command topics.create
@@ -45,7 +45,7 @@ API shape and errors: `../contracts/anx-openapi.yaml` (`/secrets`). Core enforce
 Generated command/concept docs are under `docs/generated/`.
 The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Editor-specific agent skill exports are available with `anx meta skill <target>`, for example `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.
 
-Default text output uses payload-first summaries and is the preferred mode for normal agent orientation. List-style payloads include **10-character** canonical `short_id` fields, and the CLI resolves those prefixes (and other supported short ids) to canonical ids on subsequent commands. Use `--full-id` when you need full ids or hit ambiguous-prefix errors. Use `--json` for code, scripts, CI, or `jq`, and use `--verbose` / `--headers` when debugging response framing.
+Default text output uses payload-first summaries and is the preferred mode for normal agent orientation. Resource output leads with public typed refs such as `card:<handle>` and JSON envelopes expose `ref` and `handle` as the primary identity fields. Commands pass typed refs and bare handles through to core for resolution. Use `--json` for code, scripts, CI, or `jq`, and use `--verbose` / `--headers` when debugging response framing.
 
 See `docs/runbook.md` for command, integration-test, and Pi dogfood details.
 

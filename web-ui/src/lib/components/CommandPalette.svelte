@@ -10,6 +10,10 @@
   } from "$lib/searchHelpers";
   import { kindLabel } from "$lib/artifactKinds";
   import { shortMimeBadge } from "$lib/attachmentDisplay.js";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let {
@@ -120,10 +124,10 @@
   function navigate(entry) {
     if (!organizationSlug || !workspaceSlug || entry.type === "header") return;
     const paths = {
-      topic: `/topics/${entry.item.id}`,
-      doc: `/docs/${entry.item.id}`,
-      board: `/boards/${entry.item.id}`,
-      artifact: `/artifacts/${entry.item.id}`,
+      topic: `/topics/${encodeURIComponent(resourceRouteSegment(entry.item, "topic"))}`,
+      doc: `/docs/${encodeURIComponent(resourceRouteSegment(entry.item, "document"))}`,
+      board: `/boards/${encodeURIComponent(resourceRouteSegment(entry.item, "board"))}`,
+      artifact: `/artifacts/${encodeURIComponent(resourceRouteSegment(entry.item, "artifact"))}`,
     };
     const target = paths[entry.type];
     if (target) {
@@ -176,7 +180,11 @@
       if (summary) return summary;
       return `${kindLabel(entry.item.kind)} artifact`;
     }
-    return entry.item.title || entry.item.display_name || entry.item.id;
+    return (
+      entry.item.title ||
+      entry.item.display_name ||
+      resourceDisplayLabel(entry.item)
+    );
   }
 
   function resultSubtitle(entry) {
@@ -184,18 +192,18 @@
       const parts = [];
       const life = String(entry.item.state ?? "").trim();
       if (life) parts.push(life);
-      return parts.join(" · ") || entry.item.id;
+      return parts.join(" · ") || entry.item.ref || entry.item.handle || "";
     }
     if (entry.type === "doc") {
       const sub = documentSearchPickerSubtitle(entry.item);
       if (sub) return sub;
       return entry.item.head_version
         ? `v${entry.item.head_version}`
-        : entry.item.id;
+        : entry.item.ref || entry.item.handle || "";
     }
     if (entry.type === "board") {
       const sub = boardSearchPickerSubtitle(entry.item);
-      return sub || entry.item.id;
+      return sub || entry.item.ref || entry.item.handle || "";
     }
     if (entry.type === "artifact") {
       const item = entry.item ?? {};

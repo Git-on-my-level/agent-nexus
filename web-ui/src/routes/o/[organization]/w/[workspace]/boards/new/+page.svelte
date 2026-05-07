@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let creating = $state(false);
@@ -37,7 +38,7 @@
         workspacePath(
           organizationSlug,
           workspaceSlug,
-          `/boards/${created.board.id}`,
+          `/boards/${encodeURIComponent(resourceRouteSegment(created.board, "board"))}`,
         ),
       );
     } catch (e) {

@@ -39,14 +39,14 @@ func handleCreateCardGlobal(w http.ResponseWriter, r *http.Request, opts handler
 	if !decodeJSONBody(w, r, &raw) {
 		return
 	}
-	boardID, ok := resolveBoardIDForGlobalCardCreate(w, raw, opts.contract)
+	boardID, ok := resolveBoardIDForGlobalCardCreate(w, r, raw, opts)
 	if !ok {
 		return
 	}
 	addBoardCardFromRaw(w, r, opts, boardID, raw, "cards.create")
 }
 
-func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, raw map[string]any, contract *schema.Contract) (string, bool) {
+func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, r *http.Request, raw map[string]any, opts handlerOptions) (string, bool) {
 	if raw == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "body is required")
 		return "", false
@@ -67,40 +67,27 @@ func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, raw map[string]any
 		}
 	}
 	if boardID != "" && refStr != "" {
-		prefix, suffix, err := schema.SplitTypedRef(refStr)
-		if err == nil && prefix == "board" && strings.TrimSpace(suffix) != "" && strings.TrimSpace(suffix) != boardID {
+		resolvedID, idOK := resolveResourceIDForInternalUse(r.Context(), opts, "board", boardID)
+		resolvedRef, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "board", Ref: refStr})
+		if idOK && err == nil && strings.TrimSpace(resolvedRef.ID) != "" && strings.TrimSpace(resolvedRef.ID) != resolvedID {
 			writeError(w, http.StatusBadRequest, "invalid_request", "board_id and board_ref disagree")
 			return "", false
 		}
 	}
 	if boardID != "" {
-		return boardID, true
+		return resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
 	}
 	if refStr == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "board_id or board_ref is required for POST /cards")
 		return "", false
 	}
-	prefix, id, err := schema.SplitTypedRef(refStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must be a typed ref (board:<id>)")
-		return "", false
-	}
-	if strings.TrimSpace(prefix) != "board" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must use board: prefix")
-		return "", false
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "board_ref must be board:<id>")
-		return "", false
-	}
-	if contract != nil {
-		if err := schema.ValidateTypedRefs(contract, []string{refStr}); err != nil {
+	if opts.contract != nil {
+		if err := schema.ValidateTypedRefs(opts.contract, []string{refStr}); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return "", false
 		}
 	}
-	return id, true
+	return resolveHTTPResourceID(w, r, opts, "board", refStr, "board")
 }
 
 func handleGetCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
@@ -136,6 +123,11 @@ func cardTimelineEventMatches(event map[string]any, cardID string) bool {
 func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
 		return
 	}
 
@@ -254,6 +246,12 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
+		return
+	}
+	cardRef, cardHandle := resolvedPublicIdentity(r.Context(), opts, "card", cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -263,7 +261,7 @@ func handleListCardRevisions(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load card revisions")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revisions": revisions})
+	writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revisions": publicCardRevisionsView(revisions)})
 }
 
 func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID, revisionID string) {
@@ -271,6 +269,12 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
+		return
+	}
+	cardRef, cardHandle := resolvedPublicIdentity(r.Context(), opts, "card", cardID)
 	revisions, err := opts.primitiveStore.ListBoardCardHistory(r.Context(), cardID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -281,18 +285,42 @@ func handleGetCardRevision(w http.ResponseWriter, r *http.Request, opts handlerO
 		return
 	}
 	revisionID = strings.TrimSpace(revisionID)
+	if resolved, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "card_revision", Ref: revisionID}); err == nil {
+		revisionID = resolved.ID
+	}
 	for _, revision := range revisions {
 		if strings.TrimSpace(anyString(revision["revision_id"])) == revisionID || strings.TrimSpace(anyString(revision["id"])) == revisionID {
-			writeJSON(w, http.StatusOK, map[string]any{"card_id": cardID, "revision": revision})
+			writeJSON(w, http.StatusOK, map[string]any{"card_ref": cardRef, "card_handle": cardHandle, "card_id": cardID, "revision": publicCardRevisionView(revision)})
 			return
 		}
 	}
 	writeError(w, http.StatusNotFound, "not_found", "card revision not found")
 }
 
+func publicCardRevisionsView(revisions []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(revisions))
+	for _, revision := range revisions {
+		out = append(out, publicCardRevisionView(revision))
+	}
+	return out
+}
+
+func publicCardRevisionView(revision map[string]any) map[string]any {
+	out := copyStringAnyMap(revision)
+	for _, key := range []string{"id", "card_id", "board_id", "thread_id"} {
+		delete(out, key)
+	}
+	return out
+}
+
 func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
 		return
 	}
 	var req struct {
@@ -362,6 +390,11 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
 		return
 	}
 
@@ -474,6 +507,11 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
+		return
+	}
 	var req struct {
 		ActorID          string  `json:"actor_id"`
 		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
@@ -515,6 +553,11 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	cardID, ok = resolveHTTPResourceID(w, r, opts, "card", cardID, "card")
+	if !ok {
 		return
 	}
 	principal, ok := resolveOptionalPrincipal(w, r, opts)

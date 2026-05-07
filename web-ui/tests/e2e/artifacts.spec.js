@@ -110,7 +110,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
 
   await page.getByRole("button", { name: "Filter" }).click();
   await page.getByLabel("Kind").selectOption("doc");
-  await page.getByLabel("Topic ID").fill("thread-onboarding");
+  await page.getByLabel("Topic ref").fill("thread-onboarding");
   await page.getByRole("button", { name: "Apply" }).click();
 
   await expect(page).toHaveURL(
@@ -126,7 +126,7 @@ test("artifact filters are URL-backed and survive refresh", async ({
     /\/o\/local\/w\/local\/artifacts\?kind=doc&thread_id=thread-onboarding$/,
   );
   await expect(page.getByLabel("Kind")).toHaveValue("doc");
-  await expect(page.getByLabel("Topic ID")).toHaveValue("thread-onboarding");
+  await expect(page.getByLabel("Topic ref")).toHaveValue("thread-onboarding");
   await expect(page.getByText("Collected onboarding evidence")).toBeVisible();
   await expect(page.getByText("Prepare onboarding plan")).toBeVisible();
   await expect(page.getByText("Incident recovery evidence")).toHaveCount(0);

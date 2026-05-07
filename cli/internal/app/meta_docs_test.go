@@ -88,6 +88,59 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	}
 }
 
+func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
+	t.Parallel()
+
+	profiles := runHelpCommand(t, "meta", "doc", "profiles")
+	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Active profile resolution") {
+		t.Fatalf("expected profiles docs output=%s", profiles)
+	}
+	if !strings.Contains(profiles, "command flags > environment variables") {
+		t.Fatalf("expected precedence guidance output=%s", profiles)
+	}
+
+	env := runHelpCommand(t, "meta", "doc", "environment")
+	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_PROFILE_PATH") || !strings.Contains(env, "ANX_JSON") {
+		t.Fatalf("expected env docs via alias output=%s", env)
+	}
+
+	config := runHelpCommand(t, "meta", "doc", "configuration")
+	if !strings.Contains(config, "## `config`") || !strings.Contains(config, "Config surface for the active CLI profile") {
+		t.Fatalf("expected config docs via alias output=%s", config)
+	}
+}
+
+func TestRunMetaDocsListAndSearch(t *testing.T) {
+	t.Parallel()
+
+	listOutput := runHelpCommand(t, "meta", "docs", "--list")
+	if !strings.Contains(listOutput, "# ANX Runtime Help Topics") || !strings.Contains(listOutput, "`profiles`") {
+		t.Fatalf("expected topic list output=%s", listOutput)
+	}
+
+	searchOutput := runHelpCommand(t, "meta", "docs", "--search", "profile")
+	if !strings.Contains(searchOutput, "`profiles`") || !strings.Contains(searchOutput, "`config show`") {
+		t.Fatalf("expected profile search output=%s", searchOutput)
+	}
+	if strings.Contains(searchOutput, "## `threads`") {
+		t.Fatalf("expected search index, not full docs output=%s", searchOutput)
+	}
+}
+
+func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"--json", "meta", "docs", "--list", "--write-dir", t.TempDir()},
+		{"--json", "meta", "docs", "--search", "profile", "--write-dir", t.TempDir()},
+	} {
+		stdout := runCLIForTestJSONError(t, t.TempDir(), map[string]string{}, args)
+		if !strings.Contains(stdout, "use --write-dir only with full") {
+			t.Fatalf("expected write-dir conflict error for %v, got %s", args, stdout)
+		}
+	}
+}
+
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	t.Parallel()
 

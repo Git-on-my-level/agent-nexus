@@ -29,6 +29,8 @@ function deriveBoardPanelsFromTopicWorkspace(workspace, topicId) {
     .filter((b) => boardOwnsTopicId(b, topicIdStr))
     .map((b) => ({
       id: b.id,
+      ref: b.ref,
+      handle: b.handle,
       title: b.title,
       state: b.state,
       card_count: cards.filter((c) => String(c?.board_id) === String(b.id))

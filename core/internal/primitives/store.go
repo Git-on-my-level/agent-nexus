@@ -47,6 +47,7 @@ type ArtifactListFilter struct {
 	Kind          string
 	BackingScope  string
 	ThreadID      string
+	ThreadIDs     []string
 	CreatedBefore string
 	CreatedAfter  string
 }
@@ -81,7 +82,9 @@ type EventListFilter struct {
 	BackingScope string
 	Preset       string
 	TopicID      string
+	TopicIDs     []string
 	ThreadID     string
+	ThreadIDs    []string
 	ActorID      string
 	ActorIDs     []string
 	ActorKind    string
@@ -171,6 +174,7 @@ type Store struct {
 
 type eventExec interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type queryRower interface {
@@ -227,7 +231,8 @@ func overlayEventLifecycleFromSQLColumns(body map[string]any, archivedAt, archiv
 }
 
 func decodeEventBodyFromRow(
-	eventID, typeValue, ts, actorID string,
+	ctx context.Context, q queryRower,
+	eventID, eventHandle, typeValue, ts, actorID string,
 	threadID sql.NullString,
 	refsJSON, payloadJSON string,
 ) (map[string]any, error) {
@@ -235,6 +240,7 @@ func decodeEventBodyFromRow(
 	if err := json.Unmarshal([]byte(refsJSON), &refsList); err != nil {
 		return nil, fmt.Errorf("decode event refs: %w", err)
 	}
+	refsList = publicTypedRefs(ctx, q, refsList)
 	// Use []any for refs so API consumers that walk raw maps (e.g. thread ref discovery) match
 	// json.Unmarshal into map[string]any, which decodes JSON arrays as []any.
 	refs := make([]any, len(refsList))
@@ -250,8 +256,14 @@ func decodeEventBodyFromRow(
 		wrapper = map[string]any{}
 	}
 
+	handle := strings.TrimSpace(eventHandle)
+	if handle == "" {
+		handle = eventID
+	}
 	out := map[string]any{
 		"id":       eventID,
+		"ref":      "event:" + handle,
+		"handle":   handle,
 		"type":     typeValue,
 		"ts":       ts,
 		"actor_id": actorID,
@@ -259,15 +271,17 @@ func decodeEventBodyFromRow(
 	}
 	if threadID.Valid {
 		out["thread_id"] = threadID.String
+		out["thread_ref"] = makePublicTypedRef(ctx, q, "thread", threadID.String)
 	}
 
 	if inner, ok := wrapper["payload"].(map[string]any); ok {
 		out["payload"] = inner
+		out["payload"] = publicRefsInValue(ctx, q, out["payload"])
 		for k, v := range wrapper {
 			if k == "payload" {
 				continue
 			}
-			out[k] = v
+			out[k] = publicRefsInField(ctx, q, k, v)
 		}
 		return out, nil
 	}
@@ -287,7 +301,7 @@ func decodeEventBodyFromRow(
 	if len(flat) == 0 {
 		out["payload"] = map[string]any{}
 	} else {
-		out["payload"] = flat
+		out["payload"] = publicRefsInValue(ctx, q, flat)
 	}
 	return out, nil
 }
@@ -299,6 +313,7 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 
 	var (
 		eventID     string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorID     string
@@ -313,11 +328,11 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 	)
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		id,
-	).Scan(&eventID, &typeValue, &ts, &actorID, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -326,7 +341,7 @@ func (s *Store) GetEvent(ctx context.Context, id string) (map[string]any, error)
 		return nil, fmt.Errorf("query event: %w", err)
 	}
 
-	body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -405,12 +420,21 @@ func (s *Store) CreateArtifact(ctx context.Context, actorID string, artifact map
 	if err != nil {
 		return nil, fmt.Errorf("begin artifact transaction: %w", err)
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(metadata["title"]), anyStringValue(metadata["summary"]), kind), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("allocate artifact handle: %w", err)
+	}
+	metadata["handle"] = artifactHandle
+	metadata["ref"] = "artifact:" + artifactHandle
+	metadata["refs"] = publicTypedRefs(ctx, tx, refs)
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
+		artifactHandle,
 		kind,
 		nullableString(artifactThreadID),
 		metadata["created_at"],
@@ -537,12 +561,21 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin transaction: %w", err)
 	}
+	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", firstNonEmpty(anyStringValue(metadata["title"]), anyStringValue(metadata["summary"]), kind), "artifact-"+artifactID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, nil, fmt.Errorf("allocate artifact handle: %w", err)
+	}
+	metadata["handle"] = artifactHandle
+	metadata["ref"] = "artifact:" + artifactHandle
+	metadata["refs"] = publicTypedRefs(ctx, tx, artifactRefs)
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO artifacts(id, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		metadata["id"],
+		artifactHandle,
 		kind,
 		nullableString(artifactThreadID),
 		metadata["created_at"],
@@ -603,8 +636,8 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	var metadataJSON string
-	err := s.db.QueryRowContext(ctx, `SELECT metadata_json FROM artifacts WHERE id = ?`, id).Scan(&metadataJSON)
+	var metadataJSON, handle string
+	err := s.db.QueryRowContext(ctx, `SELECT metadata_json, COALESCE(handle, '') FROM artifacts WHERE id = ?`, id).Scan(&metadataJSON, &handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -616,10 +649,11 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (map[string]any, err
 	if err != nil {
 		return nil, err
 	}
+	publicizeArtifactMetadata(ctx, s.db, metadata, id, handle)
 	if owner, err := s.loadArtifactOwner(ctx, s.db, id); err != nil {
 		return nil, err
 	} else if owner.Kind != "" {
-		owner.apply(metadata)
+		owner.applyPublic(ctx, s.db, metadata)
 	}
 	return metadata, nil
 }
@@ -637,6 +671,15 @@ func (o artifactOwner) apply(metadata map[string]any) {
 	metadata["system_owned"] = true
 	metadata["owner_ref"] = strings.TrimSpace(o.Kind) + ":" + strings.TrimSpace(o.ResourceID)
 	metadata["owner_revision_ref"] = strings.TrimSpace(o.Kind) + "_revision:" + strings.TrimSpace(o.RevisionID)
+}
+
+func (o artifactOwner) applyPublic(ctx context.Context, q queryRower, metadata map[string]any) {
+	o.apply(metadata)
+	if metadata == nil || strings.TrimSpace(o.Kind) == "" {
+		return
+	}
+	metadata["owner_ref"] = makePublicTypedRef(ctx, q, strings.TrimSpace(o.Kind), strings.TrimSpace(o.ResourceID))
+	metadata["owner_revision_ref"] = makePublicTypedRef(ctx, q, strings.TrimSpace(o.Kind)+"_revision", strings.TrimSpace(o.RevisionID))
 }
 
 func (s *Store) loadArtifactOwner(ctx context.Context, q queryRower, artifactID string) (artifactOwner, error) {
@@ -727,10 +770,11 @@ func (s *Store) ListArtifacts(ctx context.Context, filter ArtifactListFilter) ([
 		if err != nil {
 			return nil, err
 		}
+		publicizeArtifactMetadata(ctx, s.db, metadata, artifactID, "")
 		if owner, err := s.loadArtifactOwner(ctx, s.db, artifactID); err != nil {
 			return nil, err
 		} else if owner.Kind != "" {
-			owner.apply(metadata)
+			owner.applyPublic(ctx, s.db, metadata)
 		}
 
 		artifacts = append(artifacts, metadata)
@@ -1203,6 +1247,7 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1216,11 +1261,11 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1233,7 +1278,7 @@ func (s *Store) ArchiveEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, ErrAlreadyTrashed
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1284,6 +1329,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1297,11 +1343,11 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1314,7 +1360,7 @@ func (s *Store) UnarchiveEvent(ctx context.Context, actorID, eventID string) (ma
 		return nil, ErrNotArchived
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1360,6 +1406,7 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1373,11 +1420,11 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -1386,7 +1433,7 @@ func (s *Store) TrashEvent(ctx context.Context, actorID, eventID, reason string)
 		return nil, fmt.Errorf("query event for trash: %w", err)
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1443,6 +1490,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 
 	var (
 		eventIDScan string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorIDScan string
@@ -1456,11 +1504,11 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 		trashReason sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events WHERE id = ?`,
 		eventID,
-	).Scan(&eventIDScan, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
+	).Scan(&eventIDScan, &eventHandle, &typeValue, &ts, &actorIDScan, &threadID, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason)
 	_ = trashedBy
 	_ = trashReason
@@ -1475,7 +1523,7 @@ func (s *Store) RestoreEvent(ctx context.Context, actorID, eventID string) (map[
 		return nil, ErrNotTrashed
 	}
 
-	body, err := decodeEventBodyFromRow(eventIDScan, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventIDScan, eventHandle, typeValue, ts, actorIDScan, threadID, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -1761,12 +1809,18 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 	if err != nil {
 		return ThreadMutationResult{}, fmt.Errorf("begin thread create transaction: %w", err)
 	}
+	handle, err := uniqueHandleTx(ctx, tx, "thread", anyStringValue(body["title"]), "thread-"+threadID)
+	if err != nil {
+		_ = tx.Rollback()
+		return ThreadMutationResult{}, fmt.Errorf("allocate thread handle: %w", err)
+	}
 
 	_, err = tx.ExecContext(
 		ctx,
-		`INSERT INTO threads(id, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
-		 VALUES (?, 'thread', ?, ?, ?, ?, ?)`,
+		`INSERT INTO threads(id, handle, kind, thread_id, updated_at, updated_by, body_json, provenance_json)
+		 VALUES (?, ?, 'thread', ?, ?, ?, ?, ?)`,
 		threadID,
+		handle,
 		threadID,
 		updatedAt,
 		actorID,
@@ -1792,6 +1846,8 @@ func (s *Store) CreateThread(ctx context.Context, actorID string, thread map[str
 
 	out := cloneMap(body)
 	out["id"] = threadID
+	out["ref"] = "thread:" + handle
+	out["handle"] = handle
 	// Thread domain `type` is provided by caller (thread_type enum).
 	out["thread_id"] = threadID
 	out["updated_at"] = updatedAt
@@ -1811,7 +1867,7 @@ func (s *Store) GetThread(ctx context.Context, id string) (map[string]any, error
 	if row.Kind != "thread" {
 		return nil, ErrNotFound
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) PatchThread(ctx context.Context, actorID string, id string, patch map[string]any, ifUpdatedAt *string) (ThreadMutationResult, error) {
@@ -1842,7 +1898,7 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 		if err != nil {
 			return nil, "", err
 		}
-		threadMap, err := row.ToThreadMap()
+		threadMap, err := row.ToThreadMapPublic(ctx, s.db)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1889,7 +1945,7 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 		return nil, ErrAlreadyTrashed
 	}
 	if row.ArchivedAt.Valid && strings.TrimSpace(row.ArchivedAt.String) != "" {
-		return row.ToThreadMap()
+		return row.ToThreadMapPublic(ctx, s.db)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
@@ -1902,7 +1958,7 @@ func (s *Store) ArchiveThread(ctx context.Context, actorID, threadID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
@@ -1937,7 +1993,7 @@ func (s *Store) UnarchiveThread(ctx context.Context, actorID, threadID string) (
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason string) (map[string]any, error) {
@@ -1960,7 +2016,7 @@ func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason strin
 		return nil, ErrNotFound
 	}
 	if row.TrashedAt.Valid && strings.TrimSpace(row.TrashedAt.String) != "" {
-		return row.ToThreadMap()
+		return row.ToThreadMapPublic(ctx, s.db)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.db.ExecContext(ctx,
@@ -1973,7 +2029,7 @@ func (s *Store) TrashThread(ctx context.Context, actorID, threadID, reason strin
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (map[string]any, error) {
@@ -2008,7 +2064,7 @@ func (s *Store) RestoreThread(ctx context.Context, actorID, threadID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	return row.ToThreadMap()
+	return row.ToThreadMapPublic(ctx, s.db)
 }
 
 func (s *Store) PurgeThread(ctx context.Context, threadID string) error {
@@ -2072,7 +2128,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
@@ -2088,6 +2144,7 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2100,12 +2157,12 @@ func (s *Store) ListEventsByThread(ctx context.Context, threadID string) ([]map[
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan thread event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -2205,7 +2262,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		`SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		 FROM events
 		 WHERE thread_id = ?
@@ -2223,6 +2280,7 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2235,12 +2293,12 @@ func (s *Store) ListRecentEventsByThread(ctx context.Context, threadID string, l
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan recent thread event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -2313,11 +2371,36 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 }
 
 func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedEvent) error {
+	eventID := anyStringValue(prepared.Body["id"])
+	handle, err := uniqueHandleTx(ctx, exec, "event", prepared.Type, "event-"+eventID)
+	if err != nil {
+		return fmt.Errorf("allocate event handle: %w", err)
+	}
+	prepared.Body["handle"] = handle
+	prepared.Body["ref"] = "event:" + handle
+	if prepared.ThreadID != "" {
+		prepared.Body["thread_ref"] = makePublicTypedRef(ctx, exec, "thread", prepared.ThreadID)
+	}
+	if refs, err := normalizeStringSlice(prepared.Body["refs"]); err == nil {
+		prepared.Body["refs"] = publicTypedRefs(ctx, exec, refs)
+	}
+	if payload, ok := prepared.Body["payload"]; ok {
+		prepared.Body["payload"] = publicRefsInValue(ctx, exec, payload)
+	}
+	for k, v := range prepared.Body {
+		switch k {
+		case "id", "type", "ts", "actor_id", "thread_id", "thread_ref", "refs", "payload":
+			continue
+		default:
+			prepared.Body[k] = publicRefsInField(ctx, exec, k, v)
+		}
+	}
 	if _, err := exec.ExecContext(
 		ctx,
-		`INSERT INTO events(id, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		prepared.Body["id"],
+		`INSERT INTO events(id, handle, type, ts, actor_id, thread_id, refs_json, payload_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		eventID,
+		handle,
 		prepared.Type,
 		prepared.Body["ts"],
 		prepared.Body["actor_id"],
@@ -2330,7 +2413,7 @@ func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedE
 		}
 		return fmt.Errorf("insert event: %w", err)
 	}
-	if err := replaceRefEdges(ctx, exec, "event", anyStringValue(prepared.Body["id"]), prepared.RefTargets); err != nil {
+	if err := replaceRefEdges(ctx, exec, "event", eventID, prepared.RefTargets); err != nil {
 		return err
 	}
 
@@ -2372,7 +2455,7 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		return EventPage{}, fmt.Errorf("primitives store database is not initialized")
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE COALESCE(trashed_at, '') = ''`
@@ -2418,16 +2501,20 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 		}
 		query += ` AND type NOT IN (` + strings.Join(placeholders, ",") + `)`
 	}
-	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
-		query += ` AND thread_id = ?`
-		args = append(args, threadID)
+	if threadIDs := eventFilterIDs(filter.ThreadID, filter.ThreadIDs); len(threadIDs) > 0 {
+		query += ` AND thread_id IN (` + placeholders(len(threadIDs)) + `)`
+		for _, threadID := range threadIDs {
+			args = append(args, threadID)
+		}
 	}
-	if topicID := strings.TrimSpace(filter.TopicID); topicID != "" {
+	if topicIDs := eventFilterIDs(filter.TopicID, filter.TopicIDs); len(topicIDs) > 0 {
 		query += ` AND EXISTS (
 			SELECT 1 FROM json_each(events.refs_json)
-			WHERE json_each.value = ?
+			WHERE json_each.value IN (` + placeholders(len(topicIDs)) + `)
 		)`
-		args = append(args, "topic:"+topicID)
+		for _, topicID := range topicIDs {
+			args = append(args, "topic:"+topicID)
+		}
 	}
 	if actorID := strings.TrimSpace(filter.ActorID); actorID != "" {
 		query += ` AND actor_id = ?`
@@ -2501,6 +2588,7 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -2513,12 +2601,12 @@ func (s *Store) ListEventsPage(ctx context.Context, filter EventListFilter) (Eve
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return EventPage{}, fmt.Errorf("scan event: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return EventPage{}, err
 		}
@@ -2645,12 +2733,22 @@ func (s *Store) MarkHomeReadAt(ctx context.Context, readerID string, groupRefs [
 		return fmt.Errorf("reader_id is required")
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	lookup, _ := s.homeGroupLookup(ctx)
 	for _, groupRef := range dedupeStrings(groupRefs) {
 		groupRef = strings.TrimSpace(groupRef)
 		if groupRef == "" {
 			continue
 		}
+		inputGroupRef := groupRef
+		if lookup != nil {
+			if canonical := lookup.aliasToGroupRef[groupRef]; canonical != "" {
+				groupRef = canonical
+			}
+		}
 		cursor := expected[groupRef]
+		if strings.TrimSpace(cursor.TS) == "" && inputGroupRef != groupRef {
+			cursor = expected[inputGroupRef]
+		}
 		if strings.TrimSpace(cursor.TS) == "" || strings.TrimSpace(cursor.ID) == "" {
 			event, err := s.newestHomeEventForGroup(ctx, groupRef)
 			if err != nil {
@@ -2708,7 +2806,7 @@ func (s *Store) newestHomeEventForGroup(ctx context.Context, groupRef string) (m
 
 func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[string]any, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+		SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 			archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE COALESCE(trashed_at, '') = ''
@@ -2725,6 +2823,7 @@ func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[stri
 	}
 	var (
 		eventID     string
+		eventHandle string
 		typeValue   string
 		ts          string
 		actorID     string
@@ -2737,11 +2836,11 @@ func (s *Store) newestHomeEventForRef(ctx context.Context, ref string) (map[stri
 		trashedBy   sql.NullString
 		trashReason sql.NullString
 	)
-	if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+	if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 		&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 		return nil, fmt.Errorf("scan newest home event for ref %s: %w", ref, err)
 	}
-	body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+	body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -2795,12 +2894,14 @@ type homeGroupMeta struct {
 
 type homeGroupLookup struct {
 	groupByRef       map[string]*homeGroupMeta
+	aliasToGroupRef  map[string]string
 	threadToGroupRef map[string]string
 }
 
 func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 	lookup := &homeGroupLookup{
 		groupByRef:       map[string]*homeGroupMeta{},
+		aliasToGroupRef:  map[string]string{},
 		threadToGroupRef: map[string]string{},
 	}
 
@@ -2814,16 +2915,16 @@ func (s *Store) homeGroupLookup(ctx context.Context) (*homeGroupLookup, error) {
 }
 
 func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, summary, thread_id, updated_at, extensions_json, archived_at, trashed_at FROM topics WHERE COALESCE(trashed_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home topics: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, updatedAt, extensionsJSON string
+		var id, handle, updatedAt, extensionsJSON string
 		var title, summary, threadID sql.NullString
 		var discardArchivedAt, discardTrashedAt sql.NullString
-		if err := rows.Scan(&id, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &discardArchivedAt, &discardTrashedAt); err != nil {
+		if err := rows.Scan(&id, &handle, &title, &summary, &threadID, &updatedAt, &extensionsJSON, &discardArchivedAt, &discardTrashedAt); err != nil {
 			return fmt.Errorf("scan home topic: %w", err)
 		}
 		var extensions map[string]any
@@ -2832,7 +2933,8 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 			extensions = map[string]any{}
 		}
 		priority := firstNonEmptyString(anyStringValue(extensions["priority"]), anyStringValue(extensions["filter_priority"]))
-		groupRef := "topic:" + id
+		publicHandle := firstNonEmptyString(strings.TrimSpace(handle), id)
+		groupRef := "topic:" + publicHandle
 		meta := &homeGroupMeta{
 			groupRef:    groupRef,
 			groupType:   "topic",
@@ -2840,6 +2942,7 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 			priority:    priority,
 		}
 		lookup.groupByRef[groupRef] = meta
+		lookup.aliasToGroupRef["topic:"+id] = groupRef
 		if threadID.Valid && strings.TrimSpace(threadID.String) != "" {
 			lookup.threadToGroupRef[threadID.String] = groupRef
 		}
@@ -2851,17 +2954,18 @@ func (s *Store) loadTopicGroups(ctx context.Context, lookup *homeGroupLookup) er
 }
 
 func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, COALESCE(handle, ''), title, thread_id FROM boards WHERE COALESCE(trashed_at, '') = ''`)
 	if err != nil {
 		return fmt.Errorf("query home boards: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, title, threadID string
-		if err := rows.Scan(&id, &title, &threadID); err != nil {
+		var id, handle, title, threadID string
+		if err := rows.Scan(&id, &handle, &title, &threadID); err != nil {
 			return fmt.Errorf("scan home board: %w", err)
 		}
-		groupRef := "board:" + id
+		publicHandle := firstNonEmptyString(strings.TrimSpace(handle), id)
+		groupRef := "board:" + publicHandle
 		meta := &homeGroupMeta{
 			groupRef:    groupRef,
 			groupType:   "board",
@@ -2869,6 +2973,7 @@ func (s *Store) loadBoardGroups(ctx context.Context, lookup *homeGroupLookup) er
 			priority:    "",
 		}
 		lookup.groupByRef[groupRef] = meta
+		lookup.aliasToGroupRef["board:"+id] = groupRef
 		threadID = strings.TrimSpace(threadID)
 		if threadID != "" {
 			if _, exists := lookup.threadToGroupRef[threadID]; !exists {
@@ -2898,6 +3003,9 @@ func homeBoardGroupRefFromRefs(refs []string, lookup *homeGroupLookup) string {
 			if _, ok := lookup.groupByRef[boardRef]; ok {
 				return boardRef
 			}
+			if canonical := lookup.aliasToGroupRef[boardRef]; canonical != "" {
+				return canonical
+			}
 		}
 	}
 	return ""
@@ -2915,6 +3023,9 @@ func homeGroupForEvent(event map[string]any, lookup *homeGroupLookup) string {
 			topicRef := "topic:" + strings.TrimSpace(strings.TrimPrefix(ref, "topic:"))
 			if _, ok := lookup.groupByRef[topicRef]; ok {
 				return topicRef
+			}
+			if canonical := lookup.aliasToGroupRef[topicRef]; canonical != "" {
+				return canonical
 			}
 		}
 	}
@@ -3052,7 +3163,7 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 		limit = 100
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE type = ? AND COALESCE(trashed_at, '') = ''`
@@ -3093,6 +3204,7 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -3105,12 +3217,12 @@ func (s *Store) ListHumanAttentionRespondedPage(ctx context.Context, params Huma
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan human_attention_responded row: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -3132,7 +3244,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 		limit = 100
 	}
 
-	query := `SELECT id, type, ts, actor_id, thread_id, refs_json, payload_json,
+	query := `SELECT id, COALESCE(handle, ''), type, ts, actor_id, thread_id, refs_json, payload_json,
 		archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM events
 		WHERE 1=1`
@@ -3176,6 +3288,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 	for rows.Next() {
 		var (
 			eventID     string
+			eventHandle string
 			typeValue   string
 			ts          string
 			actorID     string
@@ -3188,12 +3301,12 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 			trashedBy   sql.NullString
 			trashReason sql.NullString
 		)
-		if err := rows.Scan(&eventID, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
+		if err := rows.Scan(&eventID, &eventHandle, &typeValue, &ts, &actorID, &thread, &refsJSON, &payloadJSON,
 			&archivedAt, &archivedBy, &trashedAt, &trashedBy, &trashReason); err != nil {
 			return nil, fmt.Errorf("scan event after cursor: %w", err)
 		}
 
-		body, err := decodeEventBodyFromRow(eventID, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
+		body, err := decodeEventBodyFromRow(ctx, s.db, eventID, eventHandle, typeValue, ts, actorID, thread, refsJSON, payloadJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -3208,6 +3321,7 @@ func (s *Store) ListEventsAfter(ctx context.Context, filter EventListFilter, cur
 
 type threadRow struct {
 	ID             string
+	Handle         sql.NullString
 	Kind           string
 	ThreadID       sql.NullString
 	UpdatedAt      string
@@ -3233,9 +3347,9 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 	row := threadRow{}
 	err := db.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT id, kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM %s WHERE id = ?`, tableName),
+		fmt.Sprintf(`SELECT id, COALESCE(handle, ''), kind, thread_id, updated_at, updated_by, body_json, provenance_json, archived_at, archived_by, trashed_at, trashed_by, trash_reason FROM %s WHERE id = ?`, tableName),
 		id,
-	).Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
+	).Scan(&row.ID, &row.Handle, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		return threadRow{}, ErrNotFound
 	}
@@ -3247,7 +3361,7 @@ func getThreadRowFromQueryRower(ctx context.Context, db queryRower, id string, t
 
 func scanThreadRow(scanner interface{ Scan(dest ...any) error }) (threadRow, error) {
 	row := threadRow{}
-	if err := scanner.Scan(&row.ID, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason); err != nil {
+	if err := scanner.Scan(&row.ID, &row.Handle, &row.Kind, &row.ThreadID, &row.UpdatedAt, &row.UpdatedBy, &row.BodyJSON, &row.ProvenanceJSON, &row.ArchivedAt, &row.ArchivedBy, &row.TrashedAt, &row.TrashedBy, &row.TrashReason); err != nil {
 		return threadRow{}, fmt.Errorf("scan threads row: %w", err)
 	}
 	return row, nil
@@ -3275,6 +3389,12 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 	}
 
 	body["id"] = r.ID
+	handle := strings.TrimSpace(r.Handle.String)
+	if handle == "" {
+		handle = r.ID
+	}
+	body["ref"] = "thread:" + handle
+	body["handle"] = handle
 	if _, hasType := body["type"]; !hasType {
 		body["type"] = r.Kind
 	}
@@ -3305,6 +3425,14 @@ func (r threadRow) ToThreadMap() (map[string]any, error) {
 	body["state"] = canonicalLifecycleState(r.ArchivedAt, r.TrashedAt)
 
 	return body, nil
+}
+
+func (r threadRow) ToThreadMapPublic(ctx context.Context, q queryRower) (map[string]any, error) {
+	body, err := r.ToThreadMap()
+	if err != nil {
+		return nil, err
+	}
+	return publicRefsInValue(ctx, q, body).(map[string]any), nil
 }
 
 // StripThreadPlanningFieldsForAPI removes planning-only fields that belong on topics from a thread
@@ -3418,7 +3546,7 @@ func uniqueNormalizedStrings(values []string) []string {
 }
 
 func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
-	query := `SELECT threads.id, threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
+	query := `SELECT threads.id, COALESCE(threads.handle, ''), threads.kind, threads.thread_id, threads.updated_at, threads.updated_by, threads.body_json, threads.provenance_json, threads.archived_at, threads.archived_by, threads.trashed_at, threads.trashed_by, threads.trash_reason
 		 FROM threads`
 	args := make([]any, 0, 9)
 	hasWhere := false
@@ -3433,8 +3561,8 @@ func buildListThreadsQuery(filter ThreadListFilter) (string, []any) {
 	appendClause(LifecycleStatesOrGroup("threads.archived_at", "threads.trashed_at", filter.States))
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		searchPattern := "%" + strings.ToLower(q) + "%"
-		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(threads.thread_id) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.subject_ref'), json_extract(body_json, '$.topic_ref'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.title'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.current_summary'), '')) LIKE ?)`)
-		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+		appendClause(`(LOWER(threads.id) LIKE ? OR LOWER(threads.thread_id) LIKE ? OR LOWER(COALESCE(threads.handle, '')) LIKE ? OR LOWER('thread:' || COALESCE(threads.handle, '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.subject_ref'), json_extract(body_json, '$.topic_ref'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.title'), '')) LIKE ? OR LOWER(COALESCE(json_extract(body_json, '$.current_summary'), '')) LIKE ?)`)
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
 	query += ` ORDER BY threads.updated_at DESC, threads.id ASC`
 	if filter.Limit != nil && *filter.Limit > 0 {
@@ -3473,10 +3601,34 @@ func NormalizeArtifactIDFilter(ids []string, max int) []string {
 	return out
 }
 
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.Repeat("?,", n-1) + "?"
+}
+
+func eventFilterIDs(primary string, alternatives []string) []string {
+	values := make([]string, 0, len(alternatives)+1)
+	if primary = strings.TrimSpace(primary); primary != "" {
+		values = append(values, primary)
+	}
+	values = append(values, alternatives...)
+	return dedupeStrings(values)
+}
+
+func artifactThreadFilterIDs(filter ArtifactListFilter) []string {
+	values := make([]string, 0, len(filter.ThreadIDs)+1)
+	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
+		values = append(values, threadID)
+	}
+	values = append(values, filter.ThreadIDs...)
+	return dedupeStrings(values)
+}
+
 func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	if ids := NormalizeArtifactIDFilter(filter.IDs, 48); len(ids) > 0 {
-		placeholders := strings.Repeat("?,", len(ids)-1) + "?"
-		query := `SELECT id, metadata_json FROM artifacts WHERE id IN (` + placeholders + `)`
+		query := `SELECT id, metadata_json FROM artifacts WHERE id IN (` + placeholders(len(ids)) + `)`
 		query += ` AND ` + LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 		query += ` ORDER BY created_at ASC, id ASC`
 		args := make([]any, len(ids))
@@ -3489,17 +3641,28 @@ func buildListArtifactsQuery(filter ArtifactListFilter) (string, []any) {
 	qPattern := "%" + q + "%"
 	backingScope := normalizeBackingScope(filter.BackingScope)
 
-	if threadID := strings.TrimSpace(filter.ThreadID); threadID != "" {
-		primaryClauses := []string{"thread_id = ?"}
+	if threadIDs := artifactThreadFilterIDs(filter); len(threadIDs) > 0 {
+		primaryClauses := []string{"thread_id IN (" + placeholders(len(threadIDs)) + ")"}
 		secondaryClauses := []string{
-			"COALESCE(artifacts.thread_id, '') <> ?",
+			"COALESCE(artifacts.thread_id, '') NOT IN (" + placeholders(len(threadIDs)) + ")",
 			"ref_edges.source_type = ?",
 			"ref_edges.target_type = ?",
-			"ref_edges.target_id = ?",
+			"ref_edges.target_id IN (" + placeholders(len(threadIDs)) + ")",
 			"ref_edges.edge_type = ?",
 		}
-		primaryArgs := []any{threadID}
-		secondaryArgs := []any{threadID, "artifact", "thread", threadID, refEdgeTypeRef}
+		primaryArgs := make([]any, 0, len(threadIDs))
+		for _, threadID := range threadIDs {
+			primaryArgs = append(primaryArgs, threadID)
+		}
+		secondaryArgs := make([]any, 0, len(threadIDs)*2+3)
+		for _, threadID := range threadIDs {
+			secondaryArgs = append(secondaryArgs, threadID)
+		}
+		secondaryArgs = append(secondaryArgs, "artifact", "thread")
+		for _, threadID := range threadIDs {
+			secondaryArgs = append(secondaryArgs, threadID)
+		}
+		secondaryArgs = append(secondaryArgs, refEdgeTypeRef)
 		lifecyclePrimary := LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
 		lifecycleSecondary := LifecycleStatesOrGroup("artifacts.archived_at", "artifacts.trashed_at", filter.States)
 		primaryClauses = append(primaryClauses, lifecyclePrimary)
@@ -3658,6 +3821,22 @@ func scrubArtifactMetadataMap(metadata map[string]any) map[string]any {
 	}
 	delete(metadata, "content_path")
 	return metadata
+}
+
+func publicizeArtifactMetadata(ctx context.Context, q queryRower, metadata map[string]any, artifactID, handle string) {
+	if metadata == nil {
+		return
+	}
+	artifactID = firstNonEmpty(strings.TrimSpace(artifactID), anyStringValue(metadata["id"]))
+	handle = firstNonEmpty(strings.TrimSpace(handle), anyStringValue(metadata["handle"]), artifactID)
+	if handle == "" {
+		return
+	}
+	metadata["handle"] = handle
+	metadata["ref"] = "artifact:" + handle
+	if refs, err := normalizeStringSlice(metadata["refs"]); err == nil {
+		metadata["refs"] = publicTypedRefs(ctx, q, refs)
+	}
 }
 
 func decodeArtifactMetadataJSON(metadataJSON string) (map[string]any, error) {

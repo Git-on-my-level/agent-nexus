@@ -332,7 +332,7 @@ func (s *Service) routeMention(ctx context.Context, handle string, event map[str
 		topicID := strings.TrimSpace(strings.TrimPrefix(sr, "topic:"))
 		if topicID != "" {
 			topicWorkspaceURL = fmt.Sprintf("%s/topics/%s/workspace", baseURL, topicID)
-			cliTopicWorkspace = fmt.Sprintf("anx topics workspace --topic-id %s --json", topicID)
+			cliTopicWorkspace = fmt.Sprintf("anx topics workspace %s --json", sr)
 		}
 	}
 	wakeupID := WakeupArtifactID(s.cfg.WorkspaceID, threadID, eventID, registration.ActorID)
