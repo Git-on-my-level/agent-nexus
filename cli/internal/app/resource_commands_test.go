@@ -2762,6 +2762,139 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 	}
 }
 
+func TestCardsResolveReasonPostsEvidenceBeforeMove(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_resolve_reason_123456"
+		boardID      = "board_resolve_reason_123456"
+		threadID     = "thread_resolve_reason_123456"
+		eventID      = "event_resolve_reason_123456"
+		cardUpdated  = "2026-04-21T01:00:00Z"
+		boardUpdated = "2026-04-21T01:05:00Z"
+		profileActor = "actor_resolve_reason"
+	)
+
+	var postedEvidence, moved bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","board_ref":"board:` + boardID + `","title":"Resolve reason","thread_id":"` + threadID + `","updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + boardUpdated + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			if moved {
+				t.Fatalf("expected evidence event before card move")
+			}
+			var posted map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Fatalf("decode evidence body: %v", err)
+			}
+			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Works as expected.")
+			postedEvidence = true
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
+			if !postedEvidence {
+				t.Fatalf("expected card resolve to post evidence before move")
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode move body: %v", err)
+			}
+			if got := anyStringValue(payload["column_key"]); got != "done" {
+				t.Fatalf("expected done column, got %#v", payload)
+			}
+			if got := anyStringValue(payload["resolution"]); got != "done" {
+				t.Fatalf("expected done resolution, got %#v", payload)
+			}
+			refs := asSlice(payload["resolution_refs"])
+			if len(refs) != 1 || anyStringValue(refs[0]) != "event:"+eventID {
+				t.Fatalf("expected posted evidence ref, got %#v", payload)
+			}
+			moved = true
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"2026-04-21T01:10:00Z"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","column_key":"done","resolution":"done","resolution_refs":["event:` + eventID + `"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-resolve-reason", `{"agent":"agent-resolve-reason","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-resolve-reason",
+		"cards", "resolve", cardID, "--reason", "Works as expected.",
+	}))
+	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+		t.Fatalf("expected final cards.move command_id, got %#v", payload)
+	}
+	if !postedEvidence || !moved {
+		t.Fatalf("expected evidence post and move")
+	}
+}
+
+func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_move_file_column_123456"
+		boardID      = "board_move_file_column_123456"
+		boardUpdated = "2026-04-21T02:05:00Z"
+		profileActor = "actor_move_file_column"
+	)
+
+	var moved bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","board_id":"` + boardID + `","board_ref":"board:` + boardID + `","title":"Move","updated_at":"2026-04-21T02:00:00Z"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+boardID:
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + boardUpdated + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+cardID+"/move":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode move body: %v", err)
+			}
+			if got := anyStringValue(payload["column_key"]); got != "done" {
+				t.Fatalf("expected column override, got %#v", payload)
+			}
+			if got := anyStringValue(payload["if_board_updated_at"]); got != boardUpdated {
+				t.Fatalf("expected discovered board token %q, got %#v", boardUpdated, payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			}
+			moved = true
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","column_key":"done"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-move-file-column", `{"agent":"agent-move-file-column","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	bodyFile := filepath.Join(home, "move.json")
+	if err := os.WriteFile(bodyFile, []byte(`{"column_key":"review"}`), 0o600); err != nil {
+		t.Fatalf("write move body: %v", err)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-move-file-column",
+		"cards", "move", cardID, "--from-file", bodyFile, "--column", "done",
+	}))
+	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+		t.Fatalf("expected cards.move command_id, got %#v", payload)
+	}
+	if !moved {
+		t.Fatalf("expected move request")
+	}
+}
+
 func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 	t.Parallel()
 

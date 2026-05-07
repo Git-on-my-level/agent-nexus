@@ -44,7 +44,7 @@ func agentDomainSurfaces() []domainSurface {
 				{Path: "cards revise", Target: "<card-id>", Examples: []string{"anx cards revise <card-id> --content-file card.md"}, ForbidHelp: []string{"anx cards revise --card <card-id>", "--card <card-id>"}},
 				{Path: "cards move", Target: "<card-id>", Examples: []string{"anx cards move <card-id> --column review"}, ForbidHelp: []string{"anx cards move --card <card-id>", "--card <card-id>"}},
 				{Path: "cards assign", Target: "<card-id>", Examples: []string{"anx cards assign <card-id> --assignee-ref actor:<actor-id>"}, ForbidHelp: []string{"anx cards assign --card <card-id>", "--card <card-id>"}},
-				{Path: "cards resolve", Target: "<card-id>", Examples: []string{"anx cards resolve <card-id> --body-file evidence.md"}, ForbidHelp: []string{"anx cards resolve --card <card-id>", "--card <card-id>"}},
+				{Path: "cards resolve", Target: "<card-id>", Examples: []string{"anx cards resolve <card-id> --reason \"Works as expected\""}, ForbidHelp: []string{"anx cards resolve --card <card-id>", "--card <card-id>"}},
 				{Path: "cards reopen", Target: "<card-id>", Examples: []string{"anx cards reopen <card-id>"}, ForbidHelp: []string{"anx cards reopen --card <card-id>", "--card <card-id>"}},
 			},
 		},
