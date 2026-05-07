@@ -134,7 +134,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `threads reply` (local-helper): Escape hatch: reply to an existing message on a backing thread.
 - `cards move` (local-helper): Move a card to another board column using Card workflow language.
 - `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
-- `cards resolve` (local-helper): Resolve a card into the done column with evidence refs.
+- `cards resolve` (local-helper): Resolve a card into the done column with optional free-text evidence.
 - `cards reopen` (local-helper): Move a resolved card back into active workflow.
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
@@ -4844,21 +4844,25 @@ Global flags:
 
 ## `cards resolve`
 
-Resolve a card into the done column with evidence refs.
+Resolve a card into the done column with optional free-text evidence.
 
 ```text
 Local Help: cards resolve
 
 - Kind: `local helper`
-- Summary: Resolve a card into the done column with evidence refs.
-- Composition: With `--body` or `--body-file`, posts a card message first and passes its `event:launch-update` as terminal resolution evidence.
+- Summary: Resolve a card into the done column with optional free-text evidence.
+- Composition: With `--reason`, `--body`, or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence. With no evidence flags, posts a default resolution note.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards resolve card:implement-login --body-file evidence.md`
+  - `anx cards resolve card:implement-login --reason "Works as expected"`
+  - `anx cards resolve card:implement-login`
+  - `anx cards resolve card:implement-login --column done --reason "Implemented and tested"`
   - `anx cards resolve card:implement-login --resolution-ref event:<event-id>`
 
 Flags:
   <ref>                        Card ref, handle, or id to resolve.
+  --column <key>               Target board column, default done.
+  --reason <text>              Post inline resolution evidence to the card thread before resolving.
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
   --body <text>                Post inline evidence to the card thread before resolving.
   --body-file <path>           Load evidence text from a file before resolving.
@@ -4866,6 +4870,7 @@ Flags:
   --resolution <value>         Resolution value, default done.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --from-file <path>           Advanced JSON move request body from file.
 
 
 Global flags:

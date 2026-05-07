@@ -397,15 +397,19 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "cards resolve",
-		Summary:     "Resolve a card into the done column with evidence refs.",
+		Summary:     "Resolve a card into the done column with optional free-text evidence.",
 		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
-		Composition: "With `--body` or `--body-file`, posts a card message first and passes its `event:launch-update` as terminal resolution evidence.",
+		Composition: "With `--reason`, `--body`, or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence. With no evidence flags, posts a default resolution note.",
 		Examples: []string{
-			"anx cards resolve card:implement-login --body-file evidence.md",
+			"anx cards resolve card:implement-login --reason \"Works as expected\"",
+			"anx cards resolve card:implement-login",
+			"anx cards resolve card:implement-login --column done --reason \"Implemented and tested\"",
 			"anx cards resolve card:implement-login --resolution-ref event:<event-id>",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id to resolve."},
+			{Name: "--column <key>", Description: "Target board column, default done."},
+			{Name: "--reason <text>", Description: "Post inline resolution evidence to the card thread before resolving."},
 			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
 			{Name: "--body <text>", Description: "Post inline evidence to the card thread before resolving."},
 			{Name: "--body-file <path>", Description: "Load evidence text from a file before resolving."},
@@ -413,6 +417,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--resolution <value>", Description: "Resolution value, default done."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
 		},
 	},
 	{
