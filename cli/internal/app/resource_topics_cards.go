@@ -656,10 +656,9 @@ func (a *App) parseTopicPatchInput(ctx context.Context, args []string, cfg confi
 		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 
+	// Only patch-field flags select JSON vs flag mode; metadata flags stay compatible with stdin/--from-file.
 	fieldFlagsSet := strings.TrimSpace(titleFlag.value) != "" ||
-		strings.TrimSpace(summaryFlag.value) != "" ||
-		strings.TrimSpace(ifUpdatedAtFlag.value) != "" ||
-		strings.TrimSpace(actorIDFlag.value) != ""
+		strings.TrimSpace(summaryFlag.value) != ""
 	if strings.TrimSpace(fromFileFlag.value) != "" || !fieldFlagsSet {
 		if fieldFlagsSet {
 			return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
@@ -728,11 +727,12 @@ func (a *App) parseCardPatchInput(ctx context.Context, args []string, cfg config
 	if err != nil {
 		return "", nil, err
 	}
+	if strings.TrimSpace(columnKeyFlag.value) != "" {
+		return "", nil, errnorm.Usage("invalid_request", "`--column-key` is not writable with `anx cards patch`; use `anx cards move <card-id> --column <column-key>`")
+	}
+	// Only patch-field flags select JSON vs flag mode; metadata flags stay compatible with stdin/--from-file.
 	fieldFlagsSet := strings.TrimSpace(titleFlag.value) != "" ||
-		strings.TrimSpace(summaryFlag.value) != "" ||
-		strings.TrimSpace(columnKeyFlag.value) != "" ||
-		strings.TrimSpace(ifUpdatedAtFlag.value) != "" ||
-		strings.TrimSpace(actorIDFlag.value) != ""
+		strings.TrimSpace(summaryFlag.value) != ""
 	if strings.TrimSpace(fromFileFlag.value) != "" || !fieldFlagsSet {
 		if fieldFlagsSet {
 			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
@@ -753,9 +753,6 @@ func (a *App) parseCardPatchInput(ctx context.Context, args []string, cfg config
 			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		return cardID, bodyMap, nil
-	}
-	if strings.TrimSpace(columnKeyFlag.value) != "" {
-		return "", nil, errnorm.Usage("invalid_request", "`--column-key` is not writable with `anx cards patch`; use `anx cards move <card-id> --column <column-key>`")
 	}
 	patch := map[string]any{}
 	if title := strings.TrimSpace(titleFlag.value); title != "" {
