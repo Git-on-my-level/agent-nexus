@@ -41,12 +41,10 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth bootstrap status` (command): Bootstrap registration availability
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
-- `topics patch` (command): Patch topic
 - `topics timeline` (command): Get topic timeline
 - `topics workspace` (command): Get topic workspace (primary operator coordination read)
 - `topics archive` (command): Archive topic
 - `topics unarchive` (command): Unarchive topic
-- `topics trash` (command): Move topic to trash
 - `topics restore` (command): Restore topic from trash
 - `boards list` (command): List boards
 - `boards get` (command): Get board
@@ -73,7 +71,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards list` (command): List cards
 - `cards get` (command): Get card
 - `cards history` (command): List card revisions
-- `cards patch` (command): Patch card
 - `cards archive` (command): Archive card
 - `cards trash` (command): Move card to trash
 - `cards purge` (command): Permanently delete archived or trashed card
@@ -117,12 +114,15 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
+- `topics patch` (local-helper): Patch a topic from scalar flags, or from advanced JSON.
+- `topics trash` (local-helper): Trash a topic with a simple reason flag, or from advanced JSON.
 - `topics message` (local-helper): Post a message to a Topic conversation without hand-authoring event JSON.
 - `topics messages` (local-helper): List messages from a Topic conversation.
 - `topics reply` (local-helper): Reply to an existing Topic message.
 - `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
 - `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
+- `cards patch` (local-helper): Patch card metadata from scalar flags, or from advanced JSON.
 - `cards message` (local-helper): Post a message to a Card conversation without hand-authoring event JSON.
 - `cards messages` (local-helper): List message_posted events from a Card conversation.
 - `cards reply` (local-helper): Reply to an existing Card message.
@@ -1741,45 +1741,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `topics patch`
-
-Patch topic
-
-```text
-Generated Help: topics patch
-
-- Command ID: `topics.patch`
-- CLI path: `topics patch`
-- HTTP: `PATCH /topics/{topic_id}`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Update topic state with provenance and optimistic concurrency.
-- Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `topics`, `write`, `concurrency`
-- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics restore`, `topics timeline`, `topics trash`, `topics unarchive`, `topics workspace`
-
-Inputs:
-  Required:
-  - path `topic_id`
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  Optional:
-  - body `patch.board_refs` (list<any>)
-  - body `patch.document_refs` (list<any>)
-  - body `patch.owner_refs` (list<any>)
-  - body `patch.provenance.by_field` (object)
-  - body `patch.provenance.notes` (string)
-  - body `patch.provenance.sources` (list<string>)
-  - body `patch.related_refs` (list<any>)
-  - body `patch.summary` (string)
-  - body `patch.title` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx topics patch ... ; anx --json topics patch ... ; anx topics patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `topics timeline`
 
 Get topic timeline
@@ -1893,37 +1854,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics unarchive ... ; anx --json topics unarchive ... ; anx topics unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `topics trash`
-
-Move topic to trash
-
-```text
-Generated Help: topics trash
-
-- Command ID: `topics.trash`
-- CLI path: `topics trash`
-- HTTP: `POST /topics/{topic_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move topic to trash with an explicit operator reason.
-- Output: Returns `{ topic }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `topics`, `write`
-- Adjacent commands: `topics archive`, `topics create`, `topics get`, `topics list`, `topics patch`, `topics restore`, `topics timeline`, `topics unarchive`, `topics workspace`
-
-Inputs:
-  Required:
-  - path `topic_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx topics trash ... ; anx --json topics trash ... ; anx topics trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2701,49 +2631,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards history ... ; anx --json cards history ... ; anx cards history ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `cards patch`
-
-Patch card
-
-```text
-Generated Help: cards patch
-
-- Command ID: `cards.patch`
-- CLI path: `cards patch`
-- HTTP: `PATCH /cards/{card_id}`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Update card fields, including resolution and resolution refs.
-- Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
-
-Inputs:
-  Required:
-  - path `card_id`
-  - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
-  Optional:
-  - body `actor_id` (string)
-  - body `patch.assignee_refs` (list<any>)
-  - body `patch.document_ref` (string)
-  - body `patch.due_at` (datetime)
-  - body `patch.provenance.by_field` (object)
-  - body `patch.provenance.notes` (string)
-  - body `patch.provenance.sources` (list<string>)
-  - body `patch.related_refs` (list<any>)
-  - body `patch.resolution` (string)
-  - body `patch.resolution_refs` (list<any>)
-  - body `patch.risk` (string)
-  - body `patch.topic_ref` (string)
-  Enum values: patch.resolution: done; patch.risk: critical, high, low, medium
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4036,6 +3923,65 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `topics patch`
+
+Patch a topic from scalar flags, or from advanced JSON.
+
+```text
+Local Help: topics patch
+
+- Kind: `local helper`
+- Summary: Patch a topic from scalar flags, or from advanced JSON.
+- Composition: Fetches the Topic to discover `updated_at` when `--if-updated-at` is omitted.
+- JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
+- Examples:
+  - `anx topics patch <topic-id> --title "Launch plan"`
+  - `anx topics patch <topic-id> --summary "Updated coordination notes" --if-updated-at <updated_at>`
+  - `cat topic-patch.json | anx topics patch <topic-id>`
+
+Flags:
+  <topic-id>                   Topic id or unique prefix to patch.
+  --title <text>               Topic title.
+  --summary <text>             Topic summary.
+  --if-updated-at <timestamp>  Optimistic concurrency token; discovered from topics get when omitted.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --from-file <path>           Advanced JSON request body from file.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics patch ... ; anx --json topics patch ... ; anx topics patch ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `topics trash`
+
+Trash a topic with a simple reason flag, or from advanced JSON.
+
+```text
+Local Help: topics trash
+
+- Kind: `local helper`
+- Summary: Trash a topic with a simple reason flag, or from advanced JSON.
+- Composition: Builds the `topics.trash` request without requiring heredoc JSON for routine lifecycle changes.
+- JSON body: Either `--reason` building `{ reason }`, or advanced JSON body from stdin/--from-file.
+- Examples:
+  - `anx topics trash <topic-id> --reason "test artifact"`
+  - `cat trash.json | anx topics trash <topic-id>`
+
+Flags:
+  <topic-id>                   Topic id or unique prefix to trash.
+  --reason <text>              Reason for trashing the topic.
+  --from-file <path>           Advanced JSON request body from file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx topics trash ... ; anx --json topics trash ... ; anx topics trash ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `topics message`
 
 Post a message to a Topic conversation without hand-authoring event JSON.
@@ -4231,6 +4177,38 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards patch`
+
+Patch card metadata from scalar flags, or from advanced JSON.
+
+```text
+Local Help: cards patch
+
+- Kind: `local helper`
+- Summary: Patch card metadata from scalar flags, or from advanced JSON.
+- Composition: Fetches the Card to discover `updated_at` when `--if-updated-at` is omitted. Use `cards move` for board placement changes.
+- JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
+- Examples:
+  - `anx cards patch <card-id> --title "Implement login"`
+  - `anx cards patch <card-id> --summary "Updated scope" --if-updated-at <updated_at>`
+  - `cat card-patch.json | anx cards patch <card-id>`
+
+Flags:
+  <card-id>                    Card id or unique prefix to patch.
+  --title <text>               Card title.
+  --summary <text>             Card summary/body.
+  --column-key <key>           Accepted for guidance only; use `anx cards move --column <key>` for placement.
+  --if-updated-at <timestamp>  Optimistic concurrency token; discovered from cards get when omitted.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --from-file <path>           Advanced JSON request body from file.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
