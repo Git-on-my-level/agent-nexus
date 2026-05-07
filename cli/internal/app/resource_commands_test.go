@@ -5440,6 +5440,68 @@ func TestCLISurfaceBodyFileAndStdinAliases(t *testing.T) {
 	}
 }
 
+func TestDocsCreateAndReviseBodyFileStdinNotConsumedAsJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("docs_create_dry_run", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		stdin := strings.NewReader("# Title\n\nProse from stdin\n")
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json", "docs", "create", "--dry-run",
+			"--topic", "topic:launch",
+			"--title", "Runbook",
+			"--body-file=-",
+		})
+		payload := assertEnvelopeOK(t, raw)
+		data := asMap(payload["data"])
+		body := asMap(data["body"])
+		if got := anyStringValue(body["content"]); got != "# Title\n\nProse from stdin" {
+			t.Fatalf("expected markdown from stdin as content, got %q", got)
+		}
+	})
+
+	t.Run("docs_revise_apply", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial","content_type":"text"}}`))
+				return
+			}
+			if r.Method != http.MethodPost || r.URL.Path != "/docs/doc_1/revisions" {
+				http.NotFound(w, r)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["content"])); got != "revised from stdin" {
+				t.Fatalf("expected stdin content, got %q full=%s", got, string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		writeAgentProfile(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+		stdin := strings.NewReader("revised from stdin")
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json",
+			"--base-url", server.URL,
+			"--agent", "agent-docs",
+			"docs", "revise", "--apply",
+			"--document-id", "doc_1",
+			"--body-file=-",
+		})
+		assertEnvelopeOK(t, raw)
+	})
+}
+
 func TestCardsMoveMergesFromFileAndFlags(t *testing.T) {
 	t.Parallel()
 

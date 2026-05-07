@@ -3237,7 +3237,15 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 		return nil, false, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs create`")
 	}
 
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	fromFile := strings.TrimSpace(fromFileFlag.value)
+	contentFile := strings.TrimSpace(contentFileFlag.value)
+	var payload []byte
+	var err error
+	if skipJSONStdinForContentFile(fromFile, contentFile) {
+		payload = nil
+	} else {
+		payload, err = a.readBodyInput(fromFile)
+	}
 	if err != nil {
 		return nil, false, err
 	}
@@ -3250,7 +3258,7 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 	} else {
 		body = docsCreateBodyFromFlags(titleFlag.value, summaryFlag.value, topicFlag.value, subjectFlag.value, refFlags.values)
 	}
-	body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), "docs create")
+	body, err = a.applyContentFileOverride(body, contentFile, "docs create")
 	if err != nil {
 		return nil, false, err
 	}
@@ -3420,14 +3428,25 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 	if len(fs.Args()) > 0 {
 		return nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	fromFile := strings.TrimSpace(fromFileFlag.value)
+	contentFile := strings.TrimSpace(contentFileFlag.value)
+	if !options.allowContentFile {
+		contentFile = ""
+	}
+	var payload []byte
+	var err error
+	if skipJSONStdinForContentFile(fromFile, contentFile) {
+		payload = nil
+	} else {
+		payload, err = a.readBodyInput(fromFile)
+	}
 	if err != nil {
 		return nil, false, err
 	}
 	if len(payload) == 0 {
-		if options.allowContentOnly && strings.TrimSpace(contentFileFlag.value) != "" {
+		if options.allowContentOnly && contentFile != "" {
 			body := map[string]any{"content_type": "text"}
-			rawBody, err := a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+			rawBody, err := a.applyContentFileOverride(body, contentFile, commandName)
 			if err != nil {
 				return nil, false, err
 			}
@@ -3440,7 +3459,7 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 		return nil, false, err
 	}
 	if options.allowContentFile {
-		body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+		body, err = a.applyContentFileOverride(body, contentFile, commandName)
 		if err != nil {
 			return nil, false, err
 		}
@@ -3481,14 +3500,25 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	if len(positionals) > 0 {
 		return "", nil, false, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
+	fromFile := strings.TrimSpace(fromFileFlag.value)
+	contentFile := strings.TrimSpace(contentFileFlag.value)
+	if !options.allowContentFile {
+		contentFile = ""
+	}
+	var payload []byte
+	var err error
+	if skipJSONStdinForContentFile(fromFile, contentFile) {
+		payload = nil
+	} else {
+		payload, err = a.readBodyInput(fromFile)
+	}
 	if err != nil {
 		return "", nil, false, err
 	}
 	if len(payload) == 0 {
-		if options.allowContentOnly && strings.TrimSpace(contentFileFlag.value) != "" {
+		if options.allowContentOnly && contentFile != "" {
 			body := map[string]any{"content_type": "text"}
-			rawBody, err := a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+			rawBody, err := a.applyContentFileOverride(body, contentFile, commandName)
 			if err != nil {
 				return "", nil, false, err
 			}
@@ -3501,7 +3531,7 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 		return "", nil, false, err
 	}
 	if options.allowContentFile {
-		body, err = a.applyContentFileOverride(body, strings.TrimSpace(contentFileFlag.value), commandName)
+		body, err = a.applyContentFileOverride(body, contentFile, commandName)
 		if err != nil {
 			return "", nil, false, err
 		}
@@ -5535,6 +5565,14 @@ func (a *App) applyContentFileOverride(body any, contentFile string, commandName
 	}
 	payload["content"] = string(content)
 	return payload, nil
+}
+
+// skipJSONStdinForContentFile is true when the user supplied document content via
+// --body-file/--content-file (including `-` for stdin) without --from-file/--json-file.
+// In that case stdin must not be consumed as the JSON mutation body; it is reserved for
+// the raw document stream read by applyContentFileOverride/readRawFile.
+func skipJSONStdinForContentFile(fromFile, contentFile string) bool {
+	return strings.TrimSpace(fromFile) == "" && strings.TrimSpace(contentFile) != ""
 }
 
 func (a *App) readRawFile(path string) ([]byte, error) {
