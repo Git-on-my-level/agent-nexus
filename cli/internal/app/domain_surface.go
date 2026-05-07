@@ -44,7 +44,7 @@ func agentDomainSurfaces() []domainSurface {
 				{Path: "cards revise", Target: "<ref>", Examples: []string{"anx cards revise card:implement-login --content-file card.md"}, ForbidHelp: []string{"anx cards revise --card <card-id>", "--card <card-id>"}},
 				{Path: "cards move", Target: "<ref>", Examples: []string{"anx cards move card:implement-login --column review"}, ForbidHelp: []string{"anx cards move --card <card-id>", "--card <card-id>"}},
 				{Path: "cards assign", Target: "<ref>", Examples: []string{"anx cards assign card:implement-login --assignee-ref actor:agent-alpha"}, ForbidHelp: []string{"anx cards assign --card <card-id>", "--card <card-id>"}},
-				{Path: "cards resolve", Target: "<ref>", Examples: []string{"anx cards resolve card:implement-login --body-file evidence.md"}, ForbidHelp: []string{"anx cards resolve --card <card-id>", "--card <card-id>"}},
+				{Path: "cards resolve", Target: "<ref>", Examples: []string{"anx cards resolve card:implement-login --reason \"Works as expected\""}, ForbidHelp: []string{"anx cards resolve --card <card-id>", "--card <card-id>"}},
 				{Path: "cards reopen", Target: "<ref>", Examples: []string{"anx cards reopen card:implement-login"}, ForbidHelp: []string{"anx cards reopen --card <card-id>", "--card <card-id>"}},
 			},
 		},

@@ -427,6 +427,32 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"execute": boolFlag,
 		},
 		"topics list": merge(listFlags, lifecycle),
+		"topics patch": {
+			"topic-id":      valueFlag,
+			"from-file":     valueFlag,
+			"title":         valueFlag,
+			"summary":       valueFlag,
+			"if-updated-at": valueFlag,
+			"actor-id":      valueFlag,
+			"dry-run":       boolFlag,
+		},
+		"topics archive": {
+			"topic-id":  valueFlag,
+			"from-file": valueFlag,
+		},
+		"topics unarchive": {
+			"topic-id":  valueFlag,
+			"from-file": valueFlag,
+		},
+		"topics trash": {
+			"topic-id":  valueFlag,
+			"from-file": valueFlag,
+			"reason":    valueFlag,
+		},
+		"topics restore": {
+			"topic-id":  valueFlag,
+			"from-file": valueFlag,
+		},
 		"docs list": merge(map[string]preflightFlagSpec{
 			"thread-id": valueFlag,
 			"q":         valueFlag,
@@ -528,7 +554,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"topic-id": valueFlag,
 		}, lifecycle),
 		"topics reply":  {"topic": valueFlag, "topic-id": valueFlag},
-		"topics trash":  {"topic-id": valueFlag, "from-file": valueFlag, "reason": valueFlag},
 		"docs content":  {"document-id": valueFlag},
 		"docs message":  {"document": valueFlag, "document-id": valueFlag},
 		"docs messages": {"document": valueFlag, "document-id": valueFlag},
@@ -566,6 +591,16 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"ref":                 valueFlag,
 			"done":                valueFlag,
 			"dry-run":             boolFlag,
+		},
+		"cards patch": {
+			"card":          valueFlag,
+			"card-id":       valueFlag,
+			"from-file":     valueFlag,
+			"title":         valueFlag,
+			"summary":       valueFlag,
+			"column-key":    valueFlag,
+			"if-updated-at": valueFlag,
+			"actor-id":      valueFlag,
 		},
 		"cards revise": {"card": valueFlag, "card-id": valueFlag, "body-file": valueFlag, "content-file": valueFlag, "from-file": valueFlag},
 		"cards move": {

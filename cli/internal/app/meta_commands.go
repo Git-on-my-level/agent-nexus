@@ -187,7 +187,7 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 		return nil, errnorm.Internal("registry_invalid", "generated command metadata is missing required why field")
 	}
 
-	text := formatGeneratedCommandHelp(runtimePathFromRegistryPath(cmd.CLIPath), cmd)
+	text := formatGeneratedCommandHelp(runtimePathFromRegistryPath(cmd.CLIPath), cmd, true)
 	return &commandResult{Text: text, Data: map[string]any{"command": cmd, "source": "embedded-generated-registry"}}, nil
 }
 
