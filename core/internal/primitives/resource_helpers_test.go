@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"reflect"
 	"sort"
 	"strings"
@@ -170,6 +171,53 @@ func TestSharedResourceWritesIndexRefEdges(t *testing.T) {
 	})
 }
 
+func TestPublicRefsInValueOnlyRewritesRefFields(t *testing.T) {
+	t.Parallel()
+
+	value := map[string]any{
+		"text": "note: follow up",
+		"url":  "https://example.test/path",
+		"payload": map[string]any{
+			"subject_ref": " topic:topic-1 ",
+			"notes": []any{
+				map[string]any{"target_ref": " document:doc-1 "},
+				"event: ordinary prose",
+			},
+			"related_refs": []any{" thread:thread-1 ", "topic:topic-2"},
+		},
+		"provenance": map[string]any{
+			"sources": []any{"event: event-1", "https://example.test/source"},
+		},
+	}
+
+	got := publicRefsInValue(context.Background(), nil, value).(map[string]any)
+	if got["text"] != "note: follow up" {
+		t.Fatalf("non-ref text field was rewritten: %#v", got["text"])
+	}
+	if got["url"] != "https://example.test/path" {
+		t.Fatalf("non-ref url field was rewritten: %#v", got["url"])
+	}
+
+	payload := got["payload"].(map[string]any)
+	if got := payload["subject_ref"]; got != "topic:topic-1" {
+		t.Fatalf("subject_ref should be normalized: %#v", got)
+	}
+	notes := payload["notes"].([]any)
+	if got := notes[0].(map[string]any)["target_ref"]; got != "document:doc-1" {
+		t.Fatalf("nested target_ref should be normalized: %#v", got)
+	}
+	if got := notes[1]; got != "event: ordinary prose" {
+		t.Fatalf("non-ref array string was rewritten: %#v", got)
+	}
+	if refs := payload["related_refs"]; !reflect.DeepEqual(refs, []any{"thread:thread-1", "topic:topic-2"}) {
+		t.Fatalf("related_refs should be normalized: %#v", refs)
+	}
+	provenance := got["provenance"].(map[string]any)
+	if sources := provenance["sources"]; !reflect.DeepEqual(sources, []any{"event: event-1", "https://example.test/source"}) {
+		t.Fatalf("provenance.sources should not be treated as refs: %#v", sources)
+	}
+}
+
 func TestRefEdgesBackArtifactAndEventReverseLookups(t *testing.T) {
 	t.Parallel()
 
@@ -323,7 +371,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	cardID := cardResult.Card["id"].(string)
 
 	t.Run("forward lookup by source_ref", func(t *testing.T) {
-		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "")
+		edges, err := store.ListRefEdgesBySource(ctx, anyStringValue(board["ref"]), "")
 		if err != nil {
 			t.Fatalf("ListRefEdgesBySource: %v", err)
 		}
@@ -331,7 +379,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 			t.Fatal("expected ref edges for board")
 		}
 		for _, e := range edges {
-			if e.SourceRef != "board:"+boardID {
+			if e.SourceRef != anyStringValue(board["ref"]) {
 				t.Fatalf("expected source_ref board:%s, got %s", boardID, e.SourceRef)
 			}
 			if !strings.HasPrefix(e.TargetRef, "card:") && e.Relation != "ref" {
@@ -347,7 +395,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	})
 
 	t.Run("reverse lookup by target_ref", func(t *testing.T) {
-		edges, err := store.ListRefEdgesByTarget(ctx, "card:"+cardID, "")
+		edges, err := store.ListRefEdgesByTarget(ctx, anyStringValue(cardResult.Card["ref"]), "")
 		if err != nil {
 			t.Fatalf("ListRefEdgesByTarget: %v", err)
 		}
@@ -355,14 +403,14 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 			t.Fatal("expected ref edges pointing at card")
 		}
 		for _, e := range edges {
-			if e.TargetRef != "card:"+cardID {
+			if e.TargetRef != anyStringValue(cardResult.Card["ref"]) {
 				t.Fatalf("expected target_ref card:%s, got %s", cardID, e.TargetRef)
 			}
 		}
 	})
 
 	t.Run("relation filter", func(t *testing.T) {
-		edges, err := store.ListRefEdgesBySource(ctx, "board:"+boardID, "board_card")
+		edges, err := store.ListRefEdgesBySource(ctx, anyStringValue(board["ref"]), "board_card")
 		if err != nil {
 			t.Fatalf("ListRefEdgesBySource with relation filter: %v", err)
 		}
@@ -372,7 +420,7 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 		if edges[0].Relation != "board_card" {
 			t.Fatalf("expected relation board_card, got %s", edges[0].Relation)
 		}
-		if edges[0].TargetRef != "card:"+cardID {
+		if edges[0].TargetRef != anyStringValue(cardResult.Card["ref"]) {
 			t.Fatalf("expected target_ref card:%s, got %s", cardID, edges[0].TargetRef)
 		}
 	})
@@ -405,7 +453,127 @@ func TestRefEdgesStoreTypedRefRoundTrip(t *testing.T) {
 	})
 }
 
+func TestInfrastructureRefsUsePublicRefsWithInternalJoinMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	topicResult, err := store.CreateTopic(ctx, "actor-1", map[string]any{
+		"id":            "topic-internal-public-ref",
+		"title":         "Public Topic Ref",
+		"summary":       "summary",
+		"owner_refs":    []string{},
+		"document_refs": []string{},
+		"board_refs":    []string{},
+		"related_refs":  []string{},
+		"provenance":    map[string]any{"sources": []string{"inferred"}},
+	})
+	if err != nil {
+		t.Fatalf("create topic: %v", err)
+	}
+	topicID := topicResult.Topic["id"].(string)
+	topicRef := topicResult.Topic["ref"].(string)
+	if topicRef == "topic:"+topicID || !strings.HasPrefix(topicRef, "topic:") {
+		t.Fatalf("expected topic public ref, got topicRef=%q topicID=%q", topicRef, topicID)
+	}
+
+	threadID := topicResult.Topic["thread_id"].(string)
+	thread, err := store.GetThread(ctx, threadID)
+	if err != nil {
+		t.Fatalf("get topic backing thread: %v", err)
+	}
+	if got := anyStringValue(thread["subject_ref"]); got != topicRef {
+		t.Fatalf("thread subject_ref should be public: got %q want %q", got, topicRef)
+	}
+	if got := anyStringValue(thread["ref"]); got == "" || got == "thread:"+threadID {
+		t.Fatalf("thread ref should be public handle-backed ref, got %q for id %q", got, threadID)
+	}
+
+	event, err := store.AppendEvent(ctx, "actor-1", map[string]any{
+		"id":        "event-public-ref-normalize",
+		"type":      "message_posted",
+		"thread_id": threadID,
+		"refs":      []string{"thread:" + threadID, "topic:" + topicID},
+		"payload": map[string]any{
+			"subject_ref": "topic:" + topicID,
+			"related_refs": []any{
+				"topic:" + topicID,
+			},
+		},
+		"provenance": map[string]any{"sources": []string{"topic:" + topicID}},
+	})
+	if err != nil {
+		t.Fatalf("append event: %v", err)
+	}
+	if refs := stringListFromAny(event["refs"]); !containsStringForResourceTest(refs, topicRef) || containsStringForResourceTest(refs, "topic:"+topicID) {
+		t.Fatalf("event refs should expose public topic ref: got %#v", refs)
+	}
+	payload := event["payload"].(map[string]any)
+	if got := anyStringValue(payload["subject_ref"]); got != topicRef {
+		t.Fatalf("event payload subject_ref should be public: got %q want %q", got, topicRef)
+	}
+	provenance := event["provenance"].(map[string]any)
+	if sources := stringListFromAny(provenance["sources"]); !reflect.DeepEqual(sources, []string{"topic:" + topicID}) {
+		t.Fatalf("event provenance sources should preserve exact user strings: got %#v want %#v", sources, []string{"topic:" + topicID})
+	}
+
+	var metadataJSON string
+	if err := workspace.DB().QueryRowContext(ctx, `
+		SELECT metadata_json
+		  FROM ref_edges
+		 WHERE source_type = 'event'
+		   AND source_id = ?
+		   AND target_type = 'topic'
+		   AND target_id = ?
+		   AND edge_type = 'ref'`,
+		event["id"], topicID,
+	).Scan(&metadataJSON); err != nil {
+		t.Fatalf("query event topic ref edge: %v", err)
+	}
+	metadata := map[string]any{}
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		t.Fatalf("decode ref edge metadata: %v", err)
+	}
+	if got := anyStringValue(metadata["target_ref"]); got != topicRef {
+		t.Fatalf("ref edge target_ref metadata should be public: got %q want %q", got, topicRef)
+	}
+	if got := anyStringValue(metadata["resolved_target_id"]); got != topicID {
+		t.Fatalf("ref edge resolved_target_id should preserve internal join id: got %q want %q", got, topicID)
+	}
+}
+
 func stringPointer(value string) *string {
 	value = strings.TrimSpace(value)
 	return &value
+}
+
+func stringListFromAny(raw any) []string {
+	var out []string
+	switch values := raw.(type) {
+	case []string:
+		out = append(out, values...)
+	case []any:
+		for _, value := range values {
+			if text, ok := value.(string); ok {
+				out = append(out, text)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func containsStringForResourceTest(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

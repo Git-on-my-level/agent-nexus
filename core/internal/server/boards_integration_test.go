@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -412,6 +413,59 @@ func TestBoardCardWriteEdgeRejectsMixedAliases(t *testing.T) {
 	if got := asString(revisionPayload.Revision["summary"]); got != "Canonical revised summary" {
 		t.Fatalf("expected nested revision summary in revision, got %#v", revisionPayload.Revision)
 	}
+	revisionID := asString(revisionPayload.Revision["revision_id"])
+	if revisionID == "" {
+		t.Fatalf("expected revision_id in card revision create response, got %#v", revisionPayload.Revision)
+	}
+
+	listRevisionResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/revisions")
+	if err != nil {
+		t.Fatalf("GET /cards/{card_id}/revisions: %v", err)
+	}
+	defer listRevisionResp.Body.Close()
+	if listRevisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card revisions status: got %d", listRevisionResp.StatusCode)
+	}
+	var listRevisionPayload map[string]any
+	if err := json.NewDecoder(listRevisionResp.Body).Decode(&listRevisionPayload); err != nil {
+		t.Fatalf("decode card revisions response: %v", err)
+	}
+	if got := asString(listRevisionPayload["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected card revisions envelope card_ref, got %#v", listRevisionPayload)
+	}
+	if got := asString(listRevisionPayload["card_handle"]); got == "" {
+		t.Fatalf("expected card revisions envelope card_handle, got %#v", listRevisionPayload)
+	}
+	cardRevisions, _ := listRevisionPayload["revisions"].([]any)
+	if len(cardRevisions) != 2 {
+		t.Fatalf("expected two card revisions, got %d payload=%#v", len(cardRevisions), listRevisionPayload)
+	}
+	firstCardRevision, _ := cardRevisions[0].(map[string]any)
+	assertMapOmitsKeys(t, firstCardRevision, "id", "card_id", "board_id", "thread_id")
+
+	getRevisionResp, err := http.Get(h.baseURL + "/cards/" + cardID + "/revisions/" + revisionID)
+	if err != nil {
+		t.Fatalf("GET /cards/{card_id}/revisions/{revision_id}: %v", err)
+	}
+	defer getRevisionResp.Body.Close()
+	if getRevisionResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected card revision status: got %d", getRevisionResp.StatusCode)
+	}
+	var getRevisionPayload map[string]any
+	if err := json.NewDecoder(getRevisionResp.Body).Decode(&getRevisionPayload); err != nil {
+		t.Fatalf("decode card revision response: %v", err)
+	}
+	if got := asString(getRevisionPayload["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected card revision envelope card_ref, got %#v", getRevisionPayload)
+	}
+	if got := asString(getRevisionPayload["card_handle"]); got == "" {
+		t.Fatalf("expected card revision envelope card_handle, got %#v", getRevisionPayload)
+	}
+	loadedCardRevision, _ := getRevisionPayload["revision"].(map[string]any)
+	if got := asString(loadedCardRevision["card_ref"]); got != asString(addCardPayload.Card["ref"]) {
+		t.Fatalf("expected loaded card revision card_ref, got %#v", loadedCardRevision)
+	}
+	assertMapOmitsKeys(t, loadedCardRevision, "id", "card_id", "board_id", "thread_id")
 
 	cardUpdatedAt := asString(revisionPayload.Card["updated_at"])
 	patchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
@@ -651,11 +705,11 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected refs on board lifecycle event %q, got %#v", eventType, event["refs"])
 		}
-		if !containsAny(refs, "board:"+boardID) {
+		if !containsAnyWithPrefix(refs, "board:") {
 			t.Fatalf("expected board ref on %q, got %#v", eventType, refs)
 		}
 	}
-	if !containsAny(boardEventsByType["board_created"]["refs"].([]any), "thread:"+primaryThreadID) || !containsAny(boardEventsByType["board_created"]["refs"].([]any), "document:"+primaryDocumentID) {
+	if !containsAnyWithPrefix(boardEventsByType["board_created"]["refs"].([]any), "thread:") || !containsAnyWithPrefix(boardEventsByType["board_created"]["refs"].([]any), "document:") {
 		t.Fatalf("expected primary thread/document refs on board_created, got %#v", boardEventsByType["board_created"]["refs"])
 	}
 	cardBackingThreadID := asString(addCardPayload.Card["thread_id"])
@@ -685,7 +739,7 @@ func TestBoardLifecycleEventsAndConflictValidation(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if containsAny(refs, "document:"+pinnedDocumentID) {
+		if containsAnyWithPrefix(refs, "document:") {
 			pinnedDocCardUpdated = event
 			break
 		}
@@ -1611,13 +1665,13 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if cardMovedEvent == nil {
 		t.Fatalf("expected card_moved event in card timeline, got %#v", cardTimelinePayload.Events)
 	}
-	if !containsAny(cardMovedEvent["refs"].([]any), "board:"+boardID) || !containsAny(cardMovedEvent["refs"].([]any), "card:"+cardID) {
+	if !containsAnyWithPrefix(cardMovedEvent["refs"].([]any), "board:") || !containsAnyWithPrefix(cardMovedEvent["refs"].([]any), "card:") {
 		t.Fatalf("expected board and card refs on card_moved, got %#v", cardMovedEvent["refs"])
 	}
 	if cardUpdatedEvent == nil {
 		t.Fatalf("expected card_updated event in card timeline, got %#v", cardTimelinePayload.Events)
 	}
-	if !containsAny(cardUpdatedEvent["refs"].([]any), "board:"+boardID) || !containsAny(cardUpdatedEvent["refs"].([]any), "card:"+cardID) {
+	if !containsAnyWithPrefix(cardUpdatedEvent["refs"].([]any), "board:") || !containsAnyWithPrefix(cardUpdatedEvent["refs"].([]any), "card:") {
 		t.Fatalf("expected board and card refs on card_updated, got %#v", cardUpdatedEvent["refs"])
 	}
 }
@@ -1793,11 +1847,15 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 	if boardID == "" {
 		t.Fatal("expected board id")
 	}
+	boardRef := asString(boardEnvelope.Board["ref"])
+	if boardRef == "" {
+		t.Fatal("expected board ref")
+	}
 	boardUpdatedAt := asString(boardEnvelope.Board["updated_at"])
 
 	globalCardResp := postJSONExpectStatus(t, h.baseURL+"/cards", `{
 		"actor_id":"actor-1",
-		"board_id":"`+boardID+`",
+		"board_id":"`+boardRef+`",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
 		"title":"Created via POST /cards",
 		"column_key":"backlog",
@@ -1815,8 +1873,12 @@ func TestPostCardsGlobalAndRefEdgesForwardLookup(t *testing.T) {
 	if cardID == "" {
 		t.Fatal("expected card id from global create")
 	}
+	cardRef := asString(cardOut.Card["ref"])
+	if cardRef == "" {
+		t.Fatal("expected card ref from global create")
+	}
 
-	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=card:" + cardID)
+	refResp, err := http.Get(h.baseURL + "/ref-edges?source_ref=" + url.QueryEscape(cardRef))
 	if err != nil {
 		t.Fatalf("GET ref-edges: %v", err)
 	}

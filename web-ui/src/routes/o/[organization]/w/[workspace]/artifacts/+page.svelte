@@ -33,6 +33,7 @@
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { emptyConfirmModal } from "$lib/confirmModal.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
 
   let artifacts = $state([]);
   let loading = $state(false);
@@ -265,7 +266,9 @@
 
   /** @param {number} i */
   function artifactHrefAtVisibleIndex(i) {
-    return workspaceHref(`/artifacts/${artifactIdAtVisibleIndex(i)}`);
+    return workspaceHref(
+      `/artifacts/${encodeURIComponent(resourceRouteSegment(artifacts[i], "artifact"))}`,
+    );
   }
 
   async function bulkArchiveArtifacts(ids) {
@@ -463,7 +466,7 @@
             </select>
           </label>
           <label class="text-micro font-medium text-fg-muted">
-            Topic ID
+            Topic ref
             <input
               bind:value={filters.thread_id}
               class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
@@ -723,7 +726,9 @@
             {:else}
               <a
                 class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft"
-                href={workspaceHref(`/artifacts/${artifact.id}`)}
+                href={workspaceHref(
+                  `/artifacts/${encodeURIComponent(resourceRouteSegment(artifact, "artifact"))}`,
+                )}
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <p class="truncate text-meta font-medium text-fg">

@@ -260,12 +260,43 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 
 	fs := newSilentFlagSet("meta docs")
 	var writeDir trackedString
+	var listFlag trackedBool
+	var searchFlag trackedString
 	fs.Var(&writeDir, "write-dir", "Write bundled runtime help docs to the target directory")
+	fs.Var(&listFlag, "list", "List bundled runtime help topics")
+	fs.Var(&searchFlag, "search", "Search bundled runtime help topics")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(fs.Args()) > 0 {
 		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx meta docs`")
+	}
+	if listFlag.value && strings.TrimSpace(searchFlag.value) != "" {
+		return nil, errnorm.Usage("invalid_flags", "use either --list or --search, not both")
+	}
+	if strings.TrimSpace(writeDir.value) != "" && (listFlag.value || strings.TrimSpace(searchFlag.value) != "") {
+		return nil, errnorm.Usage("invalid_flags", "use --write-dir only with full `anx meta docs` output, not --list or --search")
+	}
+	if listFlag.value {
+		topics := runtimeHelpDocTopics()
+		return &commandResult{Text: RuntimeHelpDocsIndexMarkdown(topics), Data: map[string]any{
+			"topics": topics,
+			"source": "runtime-help-catalog",
+			"count":  len(topics),
+		}}, nil
+	}
+	if strings.TrimSpace(searchFlag.value) != "" {
+		matches := SearchRuntimeHelpDocTopics(searchFlag.value)
+		text := RuntimeHelpDocsIndexMarkdown(matches)
+		if len(matches) == 0 {
+			text = "No runtime help topics matched: " + strings.TrimSpace(searchFlag.value)
+		}
+		return &commandResult{Text: text, Data: map[string]any{
+			"query":   strings.TrimSpace(searchFlag.value),
+			"topics":  matches,
+			"source":  "runtime-help-catalog",
+			"matches": len(matches),
+		}}, nil
 	}
 
 	markdown, err := RuntimeHelpDocsMarkdown()
@@ -397,14 +428,20 @@ func metaDocsUsageText() string {
 
 Usage:
   anx meta docs [--write-dir <dir>]
+  anx meta docs --list
+  anx meta docs --search <query>
 
 Print the bundled Markdown reference built from the same runtime help catalog used by ` + "`anx help`" + `.
 
 Options:
   --write-dir <dir>   Write ` + "`runtime-help.md`" + ` into the target directory.
+  --list              List available topic names with summaries.
+  --search <query>    Search topic names, summaries, and bundled help text.
 
 Examples:
   anx meta docs
+  anx meta docs --list
+  anx meta docs --search profile
   anx meta docs --write-dir ./docs/generated`)
 }
 
@@ -419,6 +456,8 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   anx meta doc agent-guide
+  anx meta doc profiles
+  anx meta doc env
   anx meta doc "docs trash"`)
 }
 

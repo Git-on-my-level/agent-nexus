@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -42,6 +43,148 @@ func makeTypedRef(prefix, id string) string {
 	return prefix + ":" + id
 }
 
+func makePublicTypedRef(ctx context.Context, q queryRower, prefix, id string) string {
+	prefix = strings.TrimSpace(prefix)
+	id = strings.TrimSpace(id)
+	if prefix == "" || id == "" {
+		return ""
+	}
+	if q == nil {
+		return makeTypedRef(prefix, id)
+	}
+	resolved, err := resolvePublicResourceRef(ctx, q, prefix, id)
+	if err != nil {
+		return makeTypedRef(prefix, id)
+	}
+	return resolved.CanonicalRef
+}
+
+func resolvePublicResourceRef(ctx context.Context, q queryRower, typ, id string) (ResolvedResourceRef, error) {
+	typ = strings.TrimSpace(typ)
+	id = strings.TrimSpace(id)
+	if typ == "" || id == "" {
+		return ResolvedResourceRef{}, ErrInvalidResourceRef
+	}
+	if typ == "document_revision" || typ == "card_revision" {
+		return resolveRevisionResourceRef(ctx, q, typ, id)
+	}
+	table := resourceTables[typ]
+	if table == "" {
+		return ResolvedResourceRef{Type: typ, ID: id, CanonicalRef: makeTypedRef(typ, id)}, nil
+	}
+	var handle sql.NullString
+	err := q.QueryRowContext(ctx, `SELECT handle FROM `+table+` WHERE id = ?`, id).Scan(&handle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedResourceRef{Type: typ, ID: id, CanonicalRef: makeTypedRef(typ, id)}, nil
+	}
+	if err != nil {
+		return ResolvedResourceRef{}, err
+	}
+	h := strings.TrimSpace(handle.String)
+	if h == "" {
+		h = id
+	}
+	return ResolvedResourceRef{Type: typ, ID: id, Handle: h, CanonicalRef: makeTypedRef(typ, h)}, nil
+}
+
+func publicTypedRefs(ctx context.Context, q queryRower, refs []string) []string {
+	if len(refs) == 0 {
+		return refs
+	}
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		prefix, value, ok := normalizeTypedRef(ref)
+		if !ok {
+			out = append(out, ref)
+			continue
+		}
+		out = append(out, makePublicTypedRef(ctx, q, prefix, value))
+	}
+	return uniqueSortedStrings(out)
+}
+
+func publicTypedRefsAny(ctx context.Context, q queryRower, refs []any) []any {
+	if len(refs) == 0 {
+		return refs
+	}
+	out := make([]any, 0, len(refs))
+	stringsOnly := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		text, ok := ref.(string)
+		if !ok {
+			out = append(out, ref)
+			continue
+		}
+		stringsOnly = append(stringsOnly, text)
+	}
+	if len(stringsOnly) == len(refs) {
+		public := publicTypedRefs(ctx, q, stringsOnly)
+		out = make([]any, len(public))
+		for i, ref := range public {
+			out[i] = ref
+		}
+		return out
+	}
+	for _, ref := range stringsOnly {
+		out = append(out, publicTypedRefs(ctx, q, []string{ref})[0])
+	}
+	return out
+}
+
+func publicRefsInValue(ctx context.Context, q queryRower, value any) any {
+	return publicRefsInField(ctx, q, "", value)
+}
+
+func publicRefsInField(ctx context.Context, q queryRower, key string, value any) any {
+	if isPublicRefFieldKey(key) {
+		return publicRefsInRefValue(ctx, q, value)
+	}
+	switch v := value.(type) {
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = publicRefsInValue(ctx, q, item)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = publicRefsInField(ctx, q, key, item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func publicRefsInRefValue(ctx context.Context, q queryRower, value any) any {
+	switch v := value.(type) {
+	case string:
+		prefix, refValue, ok := normalizeTypedRef(v)
+		if !ok {
+			return v
+		}
+		return makePublicTypedRef(ctx, q, prefix, refValue)
+	case []string:
+		return publicTypedRefs(ctx, q, v)
+	case []any:
+		return publicTypedRefsAny(ctx, q, v)
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = publicRefsInField(ctx, q, key, item)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func isPublicRefFieldKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == "ref" || key == "refs" || strings.HasSuffix(key, "_ref") || strings.HasSuffix(key, "_refs")
+}
+
 func normalizeTypedRef(raw string) (string, string, bool) {
 	prefix, value, ok := splitTypedRef(strings.TrimSpace(raw))
 	if !ok {
@@ -74,6 +217,82 @@ func typedRefEdgeTargets(edgeType string, refs []string) []refEdgeTarget {
 		})
 	}
 	return targets
+}
+
+func resolvedTypedRefEdgeTargets(ctx context.Context, q queryRower, edgeType string, refs []string) []refEdgeTarget {
+	if len(refs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(refs))
+	targets := make([]refEdgeTarget, 0, len(refs))
+	for _, raw := range refs {
+		targetType, targetValue, ok := normalizeTypedRef(raw)
+		if !ok {
+			continue
+		}
+		targetID := targetValue
+		publicRef := strings.TrimSpace(raw)
+		if resourceTables[targetType] != "" || targetType == "document_revision" || targetType == "card_revision" {
+			if resolved, err := resolveResourceByTypedValue(ctx, q, targetType, targetValue); err == nil {
+				targetID = resolved.ID
+				publicRef = resolved.CanonicalRef
+			}
+		}
+		key := edgeType + "\x00" + targetType + "\x00" + targetID
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		meta := map[string]any{
+			"target_ref":         publicRef,
+			"resolved_target_id": targetID,
+		}
+		metaJSON, _ := json.Marshal(meta)
+		targets = append(targets, refEdgeTarget{
+			TargetType:   targetType,
+			TargetID:     targetID,
+			EdgeType:     edgeType,
+			MetadataJSON: string(metaJSON),
+		})
+	}
+	return targets
+}
+
+func resolveResourceByTypedValue(ctx context.Context, q queryRower, typ, value string) (ResolvedResourceRef, error) {
+	if typ == "document_revision" || typ == "card_revision" {
+		return resolveRevisionResourceRef(ctx, q, typ, value)
+	}
+	table := resourceTables[typ]
+	if table == "" {
+		return ResolvedResourceRef{Type: typ, ID: strings.TrimSpace(value), CanonicalRef: makeTypedRef(typ, strings.TrimSpace(value))}, nil
+	}
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return ResolvedResourceRef{}, ErrInvalidResourceRef
+	}
+	var id string
+	var handle sql.NullString
+	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE handle = ?`, normalized).Scan(&id, &handle)
+	if err == nil {
+		h := strings.TrimSpace(handle.String)
+		return ResolvedResourceRef{Type: typ, ID: id, Handle: h, CanonicalRef: makeTypedRef(typ, h)}, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return ResolvedResourceRef{}, err
+	}
+	err = q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE id = ?`, normalized).Scan(&id, &handle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ResolvedResourceRef{}, ErrNotFound
+	}
+	if err != nil {
+		return ResolvedResourceRef{}, err
+	}
+	h := strings.TrimSpace(handle.String)
+	canonical := makeTypedRef(typ, id)
+	if h != "" {
+		canonical = makeTypedRef(typ, h)
+	}
+	return ResolvedResourceRef{Type: typ, ID: id, Handle: h, CanonicalRef: canonical}, nil
 }
 
 func uniqueSortedStrings(values []string) []string {
@@ -159,6 +378,11 @@ func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, s
 		if targetType == "" || targetID == "" || edgeType == "" {
 			continue
 		}
+		publicTargetRef := makeTypedRef(targetType, targetID)
+		if resolved, err := resolveResourceByTypedValue(ctx, exec, targetType, targetID); err == nil {
+			targetID = resolved.ID
+			publicTargetRef = resolved.CanonicalRef
+		}
 		key := edgeType + "\x00" + targetType + "\x00" + targetID
 		if _, exists := seen[key]; exists {
 			continue
@@ -169,6 +393,10 @@ func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, s
 		if meta == "" {
 			meta = "{}"
 		}
+		meta = mergeRefEdgeMetadata(meta, map[string]any{
+			"target_ref":         publicTargetRef,
+			"resolved_target_id": targetID,
+		})
 		if _, err := exec.ExecContext(
 			ctx,
 			`INSERT INTO ref_edges(id, source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json)
@@ -189,6 +417,26 @@ func replaceRefEdgesSelective(ctx context.Context, exec eventExec, sourceType, s
 		}
 	}
 	return nil
+}
+
+func mergeRefEdgeMetadata(raw string, additions map[string]any) string {
+	meta := map[string]any{}
+	if strings.TrimSpace(raw) != "" {
+		_ = json.Unmarshal([]byte(raw), &meta)
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	for key, value := range additions {
+		if _, exists := meta[key]; !exists {
+			meta[key] = value
+		}
+	}
+	encoded, err := json.Marshal(meta)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
 }
 
 func lifecycleFieldsFromSQLColumns(archivedAt, archivedBy, trashedAt, trashedBy, trashReason sql.NullString) lifecycleFields {

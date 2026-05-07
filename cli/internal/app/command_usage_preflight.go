@@ -528,6 +528,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"topic-id": valueFlag,
 		}, lifecycle),
 		"topics reply":   {"topic": valueFlag, "topic-id": valueFlag},
+		"topics trash":   {"topic-id": valueFlag, "from-file": valueFlag, "reason": valueFlag},
 		"docs content":   {"document-id": valueFlag},
 		"docs message":   {"document": valueFlag, "document-id": valueFlag},
 		"docs messages":  {"document": valueFlag, "document-id": valueFlag},

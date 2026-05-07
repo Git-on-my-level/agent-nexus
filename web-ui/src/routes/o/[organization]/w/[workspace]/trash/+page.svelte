@@ -35,6 +35,10 @@
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   const TRASH_TAB_IDS = ["artifacts", "documents", "topics", "boards", "cards"];
 
@@ -68,7 +72,9 @@
     const rawBoard = String(card?.board_ref ?? "").trim();
     const { prefix, id: boardId } = splitTypedRef(rawBoard);
     if (prefix === "board" && boardId) {
-      return workspaceHref(`/boards/${boardId}?card=${encodeURIComponent(id)}`);
+      return workspaceHref(
+        `/boards/${encodeURIComponent(boardId)}?card=${encodeURIComponent(resourceRouteSegment(card, "card"))}`,
+      );
     }
     return workspaceHref("/trash");
   }
@@ -84,13 +90,21 @@
     if (!id) return workspaceHref("/trash");
     switch (activeTab) {
       case "artifacts":
-        return workspaceHref(`/artifacts/${id}`);
+        return workspaceHref(
+          `/artifacts/${encodeURIComponent(resourceRouteSegment(activeItems[idx], "artifact"))}`,
+        );
       case "documents":
-        return workspaceHref(`/docs/${id}`);
+        return workspaceHref(
+          `/docs/${encodeURIComponent(resourceRouteSegment(activeItems[idx], "document"))}`,
+        );
       case "topics":
-        return workspaceHref(`/topics/${encodeURIComponent(id)}`);
+        return workspaceHref(
+          `/topics/${encodeURIComponent(resourceRouteSegment(activeItems[idx], "topic"))}`,
+        );
       case "boards":
-        return workspaceHref(`/boards/${id}`);
+        return workspaceHref(
+          `/boards/${encodeURIComponent(resourceRouteSegment(activeItems[idx], "board"))}`,
+        );
       case "cards":
         return cardTrashNavigateHref(activeItems[idx]);
       default:
@@ -785,7 +799,9 @@
       {:else}
         <a
           class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
-          href={workspaceHref(`/artifacts/${artifact.id}`)}
+          href={workspaceHref(
+            `/artifacts/${encodeURIComponent(resourceRouteSegment(artifact, "artifact"))}`,
+          )}
         >
           <div class="flex flex-wrap items-center gap-2">
             <span
@@ -898,7 +914,9 @@
       {:else}
         <a
           class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
-          href={workspaceHref(`/docs/${doc.id}`)}
+          href={workspaceHref(
+            `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+          )}
         >
           <div class="flex flex-wrap items-center gap-2">
             {#if docState}
@@ -948,7 +966,7 @@
       {#if trashSel.selectMode}
         <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
-            aria-label={`${selected ? "Deselect" : "Select"} ${String(thread?.title ?? "").trim() || thread.id}`}
+            aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(thread)}`}
             aria-pressed={selected}
             class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
               ? 'border-l-[3px] border-l-accent bg-accent-soft'
@@ -974,7 +992,7 @@
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-meta font-medium text-fg">
-                  {String(thread?.title ?? "").trim() || thread.id}
+                  {resourceDisplayLabel(thread)}
                 </span>
                 {#if thread.state}
                   <span
@@ -1018,11 +1036,13 @@
       {:else}
         <a
           class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
-          href={workspaceHref(`/topics/${encodeURIComponent(thread.id)}`)}
+          href={workspaceHref(
+            `/topics/${encodeURIComponent(resourceRouteSegment(thread, "topic"))}`,
+          )}
         >
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-meta font-medium text-fg">
-              {String(thread?.title ?? "").trim() || thread.id}
+              {resourceDisplayLabel(thread)}
             </span>
             {#if thread.state}
               <span
@@ -1075,7 +1095,7 @@
       {#if trashSel.selectMode}
         <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
-            aria-label={`${selected ? "Deselect" : "Select"} ${String(board?.title ?? "").trim() || board.id}`}
+            aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(board)}`}
             aria-pressed={selected}
             class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
               ? 'border-l-[3px] border-l-accent bg-accent-soft'
@@ -1101,7 +1121,7 @@
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-meta font-medium text-fg">
-                  {String(board?.title ?? "").trim() || board.id}
+                  {resourceDisplayLabel(board)}
                 </span>
                 {#if board.state}
                   <span
@@ -1136,11 +1156,13 @@
       {:else}
         <a
           class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
-          href={workspaceHref(`/boards/${board.id}`)}
+          href={workspaceHref(
+            `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
+          )}
         >
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-meta font-medium text-fg">
-              {String(board?.title ?? "").trim() || board.id}
+              {resourceDisplayLabel(board)}
             </span>
             {#if board.state}
               <span
@@ -1185,7 +1207,7 @@
       {#if trashSel.selectMode}
         <div class="transition-colors hover:bg-line-subtle {borderTop}">
           <div
-            aria-label={`${selected ? "Deselect" : "Select"} ${String(card?.title ?? "").trim() || card.id}`}
+            aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(card)}`}
             aria-pressed={selected}
             class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {selected
               ? 'border-l-[3px] border-l-accent bg-accent-soft'
@@ -1211,7 +1233,7 @@
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-meta font-medium text-fg">
-                  {String(card?.title ?? "").trim() || card.id}
+                  {resourceDisplayLabel(card)}
                 </span>
                 {#if card.risk}
                   <span
@@ -1301,7 +1323,7 @@
           >
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-meta font-medium text-fg">
-                {String(card?.title ?? "").trim() || card.id}
+                {resourceDisplayLabel(card)}
               </span>
               {#if card.risk}
                 <span

@@ -94,32 +94,32 @@ func enrichConflict(msg string) (string, map[string]any) {
 	switch msg {
 	case "board has been updated; refresh and retry",
 		"board membership already exists or board has changed; refresh and retry":
-		return "Your if_board_updated_at token is stale (the board changed since you last read it). Fetch a fresh board: run `anx boards get --board-id <board_id> --json`, then set `if_board_updated_at` from the board's `updated_at` in that response and retry.",
+		return "Your if_board_updated_at token is stale (the board changed since you last read it). Fetch a fresh board: run `anx boards get <board-ref-or-handle> --json`, then set `if_board_updated_at` from the board's `updated_at` in that response and retry.",
 			map[string]any{
 				"kind":        "stale_concurrency_token",
 				"field":       "if_board_updated_at",
-				"refresh_cli": "anx boards get --board-id <board_id> --json",
+				"refresh_cli": "anx boards get <board-ref-or-handle> --json",
 			}
 	case "card has been updated; refresh and retry":
-		return "Your if_updated_at token is stale for this card. Fetch the latest card: `anx boards cards get --card-id <card_id> --json` or `anx cards get --card-id <card_id> --json`, then set `if_updated_at` from the card's `updated_at` and retry.",
+		return "Your if_updated_at token is stale for this card. Fetch the latest card: `anx cards get <card-ref-or-handle> --json`, then set `if_updated_at` from the card's `updated_at` and retry.",
 			map[string]any{
 				"kind":        "stale_concurrency_token",
 				"field":       "if_updated_at",
-				"refresh_cli": "anx boards cards get --card-id <card_id> --json",
+				"refresh_cli": "anx cards get <card-ref-or-handle> --json",
 			}
 	case "topic has been updated; refresh and retry":
-		return "Your if_updated_at token is stale for this topic. Run `anx topics get --topic-id <topic_id> --json`, copy `updated_at` into `if_updated_at`, and retry.",
+		return "Your if_updated_at token is stale for this topic. Run `anx topics get <topic-ref-or-handle> --json`, copy `updated_at` into `if_updated_at`, and retry.",
 			map[string]any{
 				"kind":        "stale_concurrency_token",
 				"field":       "if_updated_at",
-				"refresh_cli": "anx topics get --topic-id <topic_id> --json",
+				"refresh_cli": "anx topics get <topic-ref-or-handle> --json",
 			}
 	case "document has been updated; refresh and retry":
-		return "Your if_document_updated_at token is stale. Run `anx docs get --document-id <document_id> --json`, copy the document's `updated_at` into `if_document_updated_at` for the revision request, and retry.",
+		return "Your if_document_updated_at token is stale. Run `anx docs get <doc-ref-or-handle> --json`, copy the document's `updated_at` into `if_document_updated_at` for the revision request, and retry.",
 			map[string]any{
 				"kind":        "stale_concurrency_token",
 				"field":       "if_document_updated_at",
-				"refresh_cli": "anx docs get --document-id <document_id> --json",
+				"refresh_cli": "anx docs get <doc-ref-or-handle> --json",
 			}
 	case "board already exists":
 		return "A board with this title (or identity) already exists in the workspace. Run `anx boards list --json` to find it, or change the create payload to use a distinct title before retrying.",
@@ -136,13 +136,13 @@ func enrichConflict(msg string) (string, map[string]any) {
 func enrichInvalidRequest(msg string) (string, map[string]any) {
 	switch msg {
 	case "if_updated_at is required":
-		return "The request body must include `if_updated_at` (RFC3339). For the current value, run `anx boards cards get --card-id <card_id> --json` or `anx cards get --card-id <card_id> --json` and copy the card `updated_at` field.",
+		return "The request body must include `if_updated_at` (RFC3339). For the current value, run `anx cards get <card-ref-or-handle> --json` and copy the card `updated_at` field.",
 			map[string]any{
 				"kind":  "missing_required_field",
 				"field": "if_updated_at",
 			}
 	case "if_board_updated_at is required":
-		return "The request body must include `if_board_updated_at` (RFC3339). Run `anx boards get --board-id <board_id> --json` and copy `board.updated_at` from the response.",
+		return "The request body must include `if_board_updated_at` (RFC3339). Run `anx boards get <board-ref-or-handle> --json` and copy `board.updated_at` from the response.",
 			map[string]any{
 				"kind":  "missing_required_field",
 				"field": "if_board_updated_at",
@@ -252,8 +252,8 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "Core could not read the HTTP request body. Retry with a non-empty body on stdin, or reduce size / check the client transport.",
 			map[string]any{"kind": "missing_request_body"}
 	case "if_base_revision is required":
-		return "Document revision requests require `if_base_revision` from the document metadata. Run `anx docs get --document-id <id> --json` and copy the correct base revision id.",
-			map[string]any{"kind": "missing_required_field", "field": "if_base_revision", "help_cli": "anx docs get --document-id <document_id> --json"}
+		return "Document revision requests require `if_base_revision` from the document metadata. Run `anx docs get <doc-ref-or-handle> --json` and copy the correct base revision ref.",
+			map[string]any{"kind": "missing_required_field", "field": "if_base_revision", "help_cli": "anx docs get <doc-ref-or-handle> --json"}
 	case "specify exactly one of: source_ref or target_ref":
 		return "This ref-edges request must include exactly one of `source_ref` or `target_ref` in the JSON body (not both, not neither). See `anx help` for ref-edges topics.",
 			map[string]any{"kind": "invalid_request_shape", "field": "source_ref|target_ref", "help_cli": "anx help"}
@@ -288,14 +288,14 @@ func enrichInvalidRequestRFCTimestamp(msg string) (string, map[string]any) {
 	rec := map[string]any{"kind": "invalid_timestamp_format", "field": field}
 	switch field {
 	case "if_board_updated_at":
-		rec["refresh_cli"] = "anx boards get --board-id <board_id> --json"
-		hint += " For boards, use `board.updated_at` from `anx boards get --board-id <board_id> --json`."
+		rec["refresh_cli"] = "anx boards get <board-ref-or-handle> --json"
+		hint += " For boards, use `board.updated_at` from `anx boards get <board-ref-or-handle> --json`."
 	case "if_updated_at":
-		rec["refresh_cli"] = "anx cards get --card-id <card_id> --json"
-		hint += " For cards, use `updated_at` from `anx cards get --card-id <card_id> --json` (or `anx boards cards get`); for topics use `anx topics get --topic-id <topic_id> --json`."
+		rec["refresh_cli"] = "anx cards get <card-ref-or-handle> --json"
+		hint += " For cards, use `updated_at` from `anx cards get <card-ref-or-handle> --json`; for topics use `anx topics get <topic-ref-or-handle> --json`."
 	case "if_document_updated_at":
-		rec["refresh_cli"] = "anx docs get --document-id <document_id> --json"
-		hint += " For documents, use `updated_at` from `anx docs get --document-id <document_id> --json`."
+		rec["refresh_cli"] = "anx docs get <doc-ref-or-handle> --json"
+		hint += " For documents, use `updated_at` from `anx docs get <doc-ref-or-handle> --json`."
 	}
 	return hint, rec
 }

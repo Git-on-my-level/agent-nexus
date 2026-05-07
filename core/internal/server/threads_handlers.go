@@ -28,7 +28,11 @@ func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		return
 	}
 
-	thread, err := opts.primitiveStore.GetThread(r.Context(), threadID)
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "thread", threadID, "thread")
+	if !ok {
+		return
+	}
+	thread, err := opts.primitiveStore.GetThread(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
@@ -163,7 +167,7 @@ func expandThreadTimeline(ctx context.Context, opts handlerOptions, threadID str
 func hydrateTimelineExpansion(ctx context.Context, opts handlerOptions, events []map[string]any) (threadTimelineExpansion, error) {
 	var out threadTimelineExpansion
 
-	artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(events)
+	artifactIDs, documentIDs, documentRevisionIDs := collectTimelineReferencedObjectIDs(ctx, opts, events)
 
 	artifacts := make(map[string]map[string]any, len(artifactIDs))
 	for _, artifactID := range artifactIDs {
@@ -231,7 +235,11 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return
 	}
 
-	exp, err := expandThreadTimeline(r.Context(), opts, threadID)
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "thread", threadID, "thread")
+	if !ok {
+		return
+	}
+	exp, err := expandThreadTimeline(r.Context(), opts, resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
@@ -260,8 +268,12 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	if !ok {
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "thread", threadID, "thread")
+	if !ok {
+		return
+	}
 
-	body, err := buildThreadContextPayload(r.Context(), opts, threadID, options)
+	body, err := buildThreadContextPayload(r.Context(), opts, resolvedID, options)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
@@ -311,6 +323,9 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 					continue
 				}
 				artifactID := strings.TrimSpace(strings.TrimPrefix(edge.SourceRef, "artifact:"))
+				if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "artifact", edge.SourceRef); ok {
+					artifactID = resolved
+				}
 				if artifactID == "" {
 					continue
 				}
@@ -328,8 +343,12 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 					continue
 				}
 				seenArtifactIDs[artifactID] = struct{}{}
+				artifactRef := strings.TrimSpace(anyString(artifact["ref"]))
+				if artifactRef == "" {
+					artifactRef = "artifact:" + artifactID
+				}
 				item := map[string]any{
-					"ref":      "artifact:" + artifactID,
+					"ref":      artifactRef,
 					"artifact": artifact,
 				}
 				if includeArtifactContent {
@@ -355,6 +374,9 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 			continue
 		}
 
+		if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "artifact", ref); ok {
+			artifactID = resolved
+		}
 		artifact, err := opts.primitiveStore.GetArtifact(ctx, artifactID)
 		if err != nil {
 			if errors.Is(err, primitives.ErrNotFound) {
@@ -363,8 +385,12 @@ func buildThreadContextArtifacts(ctx context.Context, opts handlerOptions, threa
 			return nil, err
 		}
 
+		artifactRef := strings.TrimSpace(anyString(artifact["ref"]))
+		if artifactRef == "" {
+			artifactRef = ref
+		}
 		item := map[string]any{
-			"ref":      ref,
+			"ref":      artifactRef,
 			"artifact": artifact,
 		}
 
@@ -413,7 +439,7 @@ func artifactContentPreview(content []byte) string {
 	return string(runes[:threadContextContentPreviewChars])
 }
 
-func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []string, []string) {
+func collectTimelineReferencedObjectIDs(ctx context.Context, opts handlerOptions, events []map[string]any) ([]string, []string, []string) {
 	artifactSet := make(map[string]struct{})
 	documentSet := make(map[string]struct{})
 	documentRevisionSet := make(map[string]struct{})
@@ -430,10 +456,19 @@ func collectTimelineReferencedObjectIDs(events []map[string]any) ([]string, []st
 			}
 			switch prefix {
 			case "artifact":
+				if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "artifact", ref); ok {
+					id = resolved
+				}
 				artifactSet[id] = struct{}{}
 			case "document":
+				if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "document", ref); ok {
+					id = resolved
+				}
 				documentSet[id] = struct{}{}
 			case "document_revision":
+				if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "document_revision", ref); ok {
+					id = resolved
+				}
 				documentRevisionSet[id] = struct{}{}
 			}
 		}

@@ -74,6 +74,7 @@ type PrimitiveStore interface {
 	MarkDerivedTopicProjectionDirty(ctx context.Context, threadID string, dirtyAt string) error
 	ClearDerivedTopicProjectionDirty(ctx context.Context, threadID string) error
 	ListDerivedTopicProjectionDirtyEntries(ctx context.Context, limit int) ([]primitives.DerivedTopicProjectionDirtyEntry, error)
+	ResolveResourceRef(ctx context.Context, input primitives.ResourceRefInput) (primitives.ResolvedResourceRef, error)
 	GetDerivedTopicProjectionQueueStats(ctx context.Context) (primitives.DerivedTopicProjectionQueueStats, error)
 	ListDocuments(ctx context.Context, filter primitives.DocumentListFilter) ([]map[string]any, string, error)
 	MarkTopicProjectionsDirty(ctx context.Context, threadIDs []string, queuedAt time.Time) error

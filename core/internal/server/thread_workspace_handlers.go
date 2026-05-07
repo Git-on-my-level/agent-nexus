@@ -76,8 +76,12 @@ func handleThreadWorkspace(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "thread", threadID, "thread")
+	if !ok {
+		return
+	}
 
-	body, err := buildThreadWorkspacePayload(r.Context(), opts, threadID, options)
+	body, err := buildThreadWorkspacePayload(r.Context(), opts, resolvedID, options)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "thread not found")
@@ -236,7 +240,7 @@ func buildThreadWorkspaceCollaborationSummary(contextBody map[string]any) map[st
 }
 
 func buildThreadWorkspaceRelatedThreadReview(ctx context.Context, opts handlerOptions, rootThreadID string, rootContextBody map[string]any, options threadWorkspaceOptions) (map[string]any, error) {
-	relatedThreadIDs := relatedThreadRefIDs(rootThreadID, rootContextBody)
+	relatedThreadIDs := relatedThreadRefIDs(ctx, opts, rootThreadID, rootContextBody)
 	items := make([]map[string]any, 0, len(relatedThreadIDs))
 	warnings := make([]map[string]any, 0)
 
@@ -324,7 +328,7 @@ func buildThreadWorkspaceFollowUpHints(thread map[string]any, threadID string, s
 	}
 	tid := strings.TrimSpace(threadID)
 	if topicID := topicIDFromThreadWorkspaceRefs(thread); topicID != "" {
-		hints["workspace_refresh_command"] = "anx topics workspace --topic-id " + topicID + " --include-artifact-content --full-id --json"
+		hints["workspace_refresh_command"] = "anx topics workspace topic:" + topicID + " --include-artifact-content --full-id --json"
 	} else if tid != "" {
 		hints["workspace_refresh_command"] = "anx threads workspace --thread-id " + tid + " --include-artifact-content --full-id --json"
 	}
@@ -396,9 +400,6 @@ func workspaceNormalizeEvents(events []map[string]any) []map[string]any {
 		if copy == nil {
 			continue
 		}
-		if id := strings.TrimSpace(anyString(copy["id"])); id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
-			copy["short_id"] = workspaceShortID(id)
-		}
 		if preview := workspaceEventSummaryPreview(copy); preview != "" && strings.TrimSpace(anyString(copy["summary_preview"])) == "" {
 			copy["summary_preview"] = preview
 		}
@@ -431,27 +432,27 @@ func workspaceNormalizeEvents(events []map[string]any) []map[string]any {
 	return out
 }
 
-func relatedThreadRefIDs(rootThreadID string, value any) []string {
+func relatedThreadRefIDs(ctx context.Context, opts handlerOptions, rootThreadID string, value any) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0)
-	collectThreadRefIDs(value, rootThreadID, seen, &out)
+	collectThreadRefIDs(ctx, opts, value, rootThreadID, seen, &out)
 	sort.Strings(out)
 	return out
 }
 
-func collectThreadRefIDs(value any, rootThreadID string, seen map[string]struct{}, out *[]string) {
+func collectThreadRefIDs(ctx context.Context, opts handlerOptions, value any, rootThreadID string, seen map[string]struct{}, out *[]string) {
 	switch typed := value.(type) {
 	case []map[string]any:
 		for _, item := range typed {
-			collectThreadRefIDs(item, rootThreadID, seen, out)
+			collectThreadRefIDs(ctx, opts, item, rootThreadID, seen, out)
 		}
 	case []any:
 		for _, item := range typed {
-			collectThreadRefIDs(item, rootThreadID, seen, out)
+			collectThreadRefIDs(ctx, opts, item, rootThreadID, seen, out)
 		}
 	case map[string]any:
 		for _, nested := range typed {
-			collectThreadRefIDs(nested, rootThreadID, seen, out)
+			collectThreadRefIDs(ctx, opts, nested, rootThreadID, seen, out)
 		}
 	case string:
 		ref := strings.TrimSpace(typed)
@@ -459,6 +460,9 @@ func collectThreadRefIDs(value any, rootThreadID string, seen map[string]struct{
 			return
 		}
 		threadID := strings.TrimSpace(strings.TrimPrefix(ref, "thread:"))
+		if resolved, ok := resolveResourceIDForInternalUse(ctx, opts, "thread", ref); ok {
+			threadID = resolved
+		}
 		if threadID == "" || threadID == strings.TrimSpace(rootThreadID) {
 			return
 		}
@@ -665,14 +669,6 @@ func workspaceTruncatePreview(raw string) string {
 		return normalized
 	}
 	return strings.TrimSpace(string(runes[:maxRunes])) + "..."
-}
-
-func workspaceShortID(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) <= 10 {
-		return id
-	}
-	return id[:10]
 }
 
 func workspaceIntValue(raw any) int {

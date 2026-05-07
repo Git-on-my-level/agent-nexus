@@ -574,7 +574,7 @@ func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
 	if !strings.Contains(output, "Local Help: docs create") {
 		t.Fatalf("expected local docs create help, got output=%s", output)
 	}
-	if !strings.Contains(output, "--topic <topic-id>") || !strings.Contains(output, "--content-file <path>") {
+	if !strings.Contains(output, "--topic <topic-ref-or-handle>") || !strings.Contains(output, "--content-file <path>") {
 		t.Fatalf("expected file-first docs create flags output=%s", output)
 	}
 	if strings.Contains(output, "document.body_markdown") {
@@ -900,6 +900,34 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	}
 }
 
+func TestGeneratedCommandHelpIncludesCLIInputAffordance(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"help", "topics", "trash"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "- Input mode: `flags`") {
+		t.Fatalf("expected effective CLI input mode output=%s", output)
+	}
+	if !strings.Contains(output, "`--reason` required -> body `reason`") {
+		t.Fatalf("expected generated reason flag affordance output=%s", output)
+	}
+}
+
 func TestRuntimeSupportedCommandIDsMatchGeneratedHelpSpecSurface(t *testing.T) {
 	t.Parallel()
 
@@ -986,10 +1014,10 @@ func TestRunGeneratedHelpResolvesDerivedDocsAndArtifactCommands(t *testing.T) {
 	if !strings.Contains(docsRevise, "--apply") || !strings.Contains(docsRevise, "--proposal-id") {
 		t.Fatalf("expected docs revise apply/proposal flags output=%s", docsRevise)
 	}
-	if !strings.Contains(docsRevise, "anx docs revise <document-id> --apply --content-file notes.md") {
+	if !strings.Contains(docsRevise, "anx docs revise doc:runbook --apply --content-file notes.md") {
 		t.Fatalf("expected docs revise apply example to keep positional target before flags output=%s", docsRevise)
 	}
-	if strings.Contains(docsRevise, "anx docs revise --apply <document-id> --content-file notes.md") {
+	if strings.Contains(docsRevise, "anx docs revise --apply doc:runbook --content-file notes.md") {
 		t.Fatalf("unexpected docs revise example with flags before positional target output=%s", docsRevise)
 	}
 

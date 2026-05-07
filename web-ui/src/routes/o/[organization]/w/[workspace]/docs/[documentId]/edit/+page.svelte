@@ -1,6 +1,7 @@
 <script>
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let document = $state(/** @type {Record<string, any> | null} */ (null));
@@ -14,12 +15,15 @@
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let documentId = $derived(String($page.params.documentId ?? "").trim());
+  let documentRouteSegment = $derived(
+    resourceRouteSegment(document, "document") || documentId,
+  );
 
   function documentDetailHref() {
     return workspacePath(
       organizationSlug,
       workspaceSlug,
-      `/docs/${documentId}`,
+      `/docs/${encodeURIComponent(documentRouteSegment)}`,
     );
   }
 

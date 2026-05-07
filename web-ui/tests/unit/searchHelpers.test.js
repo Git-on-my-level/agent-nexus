@@ -54,16 +54,19 @@ describe("searchHelpers", () => {
   });
 
   describe("topicSearchResultToPickerOption", () => {
-    it("uses backing thread id as picker value", () => {
+    it("prefers backing thread public ref as picker value", () => {
       const opt = topicSearchResultToPickerOption({
         id: "topic-1",
         thread_id: "thr-9",
+        thread_ref: "thread:coordination",
+        ref: "topic:coordination",
         title: "Coordination",
         type: "incident",
         state: "active",
       });
-      expect(opt.id).toBe("thr-9");
+      expect(opt.id).toBe("thread:coordination");
       expect(opt.title).toBe("Coordination");
+      expect(opt.subtitle).toBe("active · topic:coordination");
       expect(opt.keywords).toEqual([]);
     });
   });
@@ -72,16 +75,15 @@ describe("searchHelpers", () => {
     it("uses topic typed ref as picker value", () => {
       const opt = topicSearchResultToBoardRefOption({
         id: "5e63c3fc-271b-4785-8036-cf06e1ee03b0",
+        ref: "topic:alpha",
         thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
         title: "Alpha",
         type: "initiative",
         state: "active",
       });
-      expect(opt.id).toBe("topic:5e63c3fc-271b-4785-8036-cf06e1ee03b0");
+      expect(opt.id).toBe("topic:alpha");
       expect(opt.title).toBe("Alpha");
-      expect(opt.subtitle).toContain(
-        "Timeline d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
-      );
+      expect(opt.subtitle).toBe("active · topic:alpha");
     });
 
     it("preserves already-typed ref ids", () => {
@@ -131,14 +133,15 @@ describe("searchHelpers", () => {
   });
 
   describe("documentSearchPickerSubtitle", () => {
-    it("joins state, summary, and timeline", () => {
+    it("joins state, summary, and public ref", () => {
       expect(
         documentSearchPickerSubtitle({
           state: "active",
           summary: "Hello",
-          thread_id: "t-1",
+          ref: "document:hello",
+          thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
         }),
-      ).toBe("active · Hello · Timeline t-1");
+      ).toBe("active · Hello · document:hello");
     });
 
     it("omits empty parts", () => {
@@ -149,14 +152,15 @@ describe("searchHelpers", () => {
   });
 
   describe("boardSearchPickerSubtitle", () => {
-    it("joins state, summary, and timeline", () => {
+    it("joins state, summary, and public ref", () => {
       expect(
         boardSearchPickerSubtitle({
           state: "active",
           summary: "Q2 tracking",
-          thread_id: "thread-abc",
+          ref: "board:q2-tracking",
+          thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
         }),
-      ).toBe("active · Q2 tracking · Timeline thread-abc");
+      ).toBe("active · Q2 tracking · board:q2-tracking");
     });
 
     it("omits empty parts", () => {

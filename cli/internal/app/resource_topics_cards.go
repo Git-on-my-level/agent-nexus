@@ -16,13 +16,13 @@ var topicsSubcommandSpec = subcommandSpec{
 		"list", "get", "create", "patch", "message", "messages", "reply", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message <topic-id> --body-file message.md", "anx topics messages <topic-id>", "anx topics reply <topic-id> --to <message-id> --body-file reply.md", "anx topics workspace <topic-id>", "anx topics archive <topic-id>"},
+	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message topic:launch --body-file message.md", "anx topics messages topic:launch", "anx topics reply topic:launch --to <message-id> --body-file reply.md", "anx topics workspace topic:launch", "anx topics archive topic:launch"},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board <board-id> --title \"Implement login\" --body-file card.md", "anx cards message <card-id> --body-file update.md", "anx cards messages <card-id>", "anx cards reply <card-id> --to <message-id> --body-file reply.md", "anx cards revise <card-id> --body-file card.md", "anx cards history <card-id>", "anx cards assign <card-id> --assignee-ref actor:<actor-id>", "anx cards resolve <card-id> --body-file evidence.md", "anx cards move <card-id> --column review", "anx cards get <card-id>"},
+	examples: []string{"anx cards list", "anx cards create --board board:launch --title \"Implement login\" --body-file card.md", "anx cards message card:implement-login --body-file update.md", "anx cards messages card:implement-login", "anx cards reply card:implement-login --to <message-id> --body-file reply.md", "anx cards revise card:implement-login --body-file card.md", "anx cards history card:implement-login", "anx cards assign card:implement-login --assignee-ref actor:agent-alpha", "anx cards resolve card:implement-login --body-file evidence.md", "anx cards move card:implement-login --column review", "anx cards get card:implement-login"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -44,7 +44,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		fs.Var(&queryFlag, "q", "Search topics by id or title substring")
 		fs.Var(&limitFlag, "limit", "Page size (1–1000)")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
-		fs.Var(&fullIDFlag, "full-id", "Render full topic ids in default text output (non-JSON)")
+		fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full topic ids in default text output (non-JSON)")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived topics")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived topics")
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed topics")
@@ -184,7 +184,7 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
 		return result, "topics unarchive", callErr
 	case "trash":
-		id, body, err := a.parseTopicIDAndBodyInput(args[1:], "topics trash")
+		id, body, err := a.parseTopicTrashInput(args[1:], "topics trash")
 		if err != nil {
 			return nil, "topics trash", err
 		}
@@ -511,7 +511,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	fs.Var(&requestKeyFlag, "request-key", "Request key for idempotency")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
 	fs.Var(&columnFlag, "column", "Initial board column key")
-	fs.Var(&topicFlag, "topic", "Related topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&topicFlag, "topic", "Related topic typed ref or handle")
 	fs.Var(&documentRefFlag, "document-ref", "Pinned document typed ref")
 	fs.Var(&riskFlag, "risk", "Risk level: low, medium, high, critical")
 	fs.Var(&dueAtFlag, "due-at", "Due timestamp")
@@ -1068,7 +1068,7 @@ func (a *App) ensureCardRevisionBase(ctx context.Context, cfg config.Resolved, c
 		body["if_base_revision"] = baseRevision
 	}
 	if strings.TrimSpace(anyString(body["if_base_revision"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get "+cardID+"` and retry with --if-base-revision <revision_id>")
+		return errnorm.Usage("invalid_request", "`if_base_revision` is required; run `anx cards get "+cardID+"` and retry with --if-base-revision <revision-ref-or-handle>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }
@@ -1101,7 +1101,7 @@ func (a *App) ensureCardMoveConcurrency(ctx context.Context, cfg config.Resolved
 		body["if_board_updated_at"] = updatedAt
 	}
 	if strings.TrimSpace(anyString(body["if_board_updated_at"])) == "" {
-		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required; run `anx boards get --board-id "+boardID+"` and retry with --if-board-updated-at <updated_at>")
+		return errnorm.Usage("invalid_request", "`if_board_updated_at` is required; run `anx boards get "+boardID+"` and retry with --if-board-updated-at <updated_at>")
 	}
 	return finalizeOptionalMutationBodyActorID(body, cfg)
 }
@@ -1170,7 +1170,7 @@ func (a *App) normalizeCardMutationBody(ctx context.Context, cfg config.Resolved
 		if card == nil {
 			return nil
 		}
-		if rawBoardID := strings.TrimSpace(anyString(body["board_id"])); rawBoardID != "" && shouldResolveDisplayedShortID(rawBoardID) {
+		if rawBoardID := strings.TrimSpace(anyString(body["board_id"])); rawBoardID != "" {
 			resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, rawBoardID)
 			if err != nil {
 				return err
@@ -1382,14 +1382,9 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 		})
 	case "agent.notifications.read", "agent.notifications.dismiss":
 		raw := strings.TrimSpace(anyString(body["wakeup_id"]))
-		if raw == "" || !shouldResolveDisplayedShortID(raw) || !strings.HasPrefix(raw, "artifact_") {
-			return nil
+		if raw != "" {
+			body["wakeup_id"] = raw
 		}
-		resolved, err := a.resolveResourceIDFromList(ctx, cfg, raw, artifactIDLookupSpec)
-		if err != nil {
-			return err
-		}
-		body["wakeup_id"] = resolved
 		return nil
 	default:
 		return nil
@@ -1446,6 +1441,52 @@ func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string)
 	return id, bodyMap, nil
 }
 
+func (a *App) parseTopicTrashInput(args []string, commandName string) (string, map[string]any, error) {
+	leadingTopicID, args := popLeadingPositional(args)
+	fs := newSilentFlagSet(commandName)
+	var topicIDFlag, fromFile, reasonFlag trackedString
+	fs.Var(&topicIDFlag, "topic-id", "Topic id")
+	fs.Var(&fromFile, "from-file", "Load advanced JSON body from file path")
+	fs.Var(&reasonFlag, "reason", "Operator-visible trash reason")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	id := firstNonEmpty(strings.TrimSpace(topicIDFlag.value), leadingTopicID)
+	if id == "" && len(positionals) > 0 {
+		id = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if err := validateID(id, "topic id"); err != nil {
+		return "", nil, err
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if strings.TrimSpace(fromFile.value) != "" && strings.TrimSpace(reasonFlag.value) != "" {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
+	}
+	if reason := strings.TrimSpace(reasonFlag.value); reason != "" {
+		return id, map[string]any{"reason": reason}, nil
+	}
+	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
+	if err != nil {
+		return "", nil, err
+	}
+	if len(payload) == 0 {
+		return "", nil, errnorm.Usage("invalid_request", "`anx topics trash` requires --reason or JSON body input")
+	}
+	decoded, err := decodeJSONPayload(payload)
+	if err != nil {
+		return "", nil, err
+	}
+	bodyMap, ok := decoded.(map[string]any)
+	if !ok {
+		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+	}
+	return id, bodyMap, nil
+}
+
 func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) (string, map[string]any, error) {
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, fromFile trackedString
@@ -1487,7 +1528,7 @@ func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) 
 var refEdgesSubcommandSpec = subcommandSpec{
 	command:  "ref-edges",
 	valid:    []string{"list"},
-	examples: []string{`anx ref-edges list --target-ref card:<card-id>`},
+	examples: []string{`anx ref-edges list --target-ref card:implement-login`},
 }
 
 func (a *App) runRefEdgesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {

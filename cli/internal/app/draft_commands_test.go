@@ -3,11 +3,13 @@ package app
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/profile"
 )
 
@@ -41,6 +43,37 @@ func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
 		if !strings.Contains(joinedText, expected) {
 			t.Fatalf("expected error %q in payload=%#v", expected, payload)
 		}
+	}
+}
+
+func TestResolveDraftIDFromInputRequiresExactID(t *testing.T) {
+	t.Parallel()
+
+	draftsDir := t.TempDir()
+	const draftID = "draft_exact_123456"
+	draftPath, err := draftPathForID(draftsDir, draftID)
+	if err != nil {
+		t.Fatalf("draft path: %v", err)
+	}
+	if err := saveDraftFile(draftPath, persistedDraft{DraftID: draftID, CommandID: "events.create"}); err != nil {
+		t.Fatalf("save draft: %v", err)
+	}
+
+	resolved, err := resolveDraftIDFromInput(draftsDir, draftID)
+	if err != nil {
+		t.Fatalf("expected exact draft id to resolve: %v", err)
+	}
+	if resolved != draftID {
+		t.Fatalf("expected draft id %q, got %q", draftID, resolved)
+	}
+
+	_, err = resolveDraftIDFromInput(draftsDir, "draft_exact")
+	if err == nil {
+		t.Fatal("expected draft id prefix to be rejected")
+	}
+	var normalized *errnorm.Error
+	if !errors.As(err, &normalized) || normalized.Code != "draft_not_found" {
+		t.Fatalf("expected draft_not_found for prefix input, got %v", err)
 	}
 }
 

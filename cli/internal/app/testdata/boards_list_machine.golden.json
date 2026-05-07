@@ -6,8 +6,9 @@
     "boards": [
       {
         "board": {
+          "handle": "machine-board",
           "id": "board_1234567890abcdef",
-          "short_id": "board_1234",
+          "ref": "board:machine-board",
           "state": "active",
           "title": "Machine Board"
         },

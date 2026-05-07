@@ -56,6 +56,13 @@
     diffCardRevisionAgainstParent,
     humanizeRevisionFieldKey,
   } from "$lib/textDiff.js";
+  import {
+    isInternalUuid,
+    resourceDisplayLabel,
+    resourceRef,
+    resourceRouteSegment,
+    typedResourceRef,
+  } from "$lib/resourceIdentity.js";
 
   let {
     cardItem,
@@ -125,6 +132,22 @@
     cardDiscussionDockHostEnabled(presentation, linkedThreadId),
   );
   let cardKey = $derived(boardCardStableId(membership));
+  let cardPublicRef = $derived(typedResourceRef("card", membership));
+  let boardPublicRef = $derived(
+    typedResourceRef("board", board) ||
+      (String(boardId ?? "").trim() && !isInternalUuid(boardId)
+        ? `board:${String(boardId).trim()}`
+        : ""),
+  );
+  let cardShareRef = $derived(
+    cardPublicRef ||
+      (cardKey && !isInternalUuid(cardKey) ? `card:${cardKey}` : ""),
+  );
+  let linkedThreadPublicRef = $derived(
+    linkedThreadId && !isInternalUuid(linkedThreadId)
+      ? `thread:${linkedThreadId}`
+      : "",
+  );
 
   $effect(() => {
     if (!cardKey) {
@@ -369,8 +392,8 @@
   async function searchDocumentOptions(query) {
     const documents = await searchDocumentRecords(query);
     return documents.map((document) => ({
-      id: document.id,
-      title: document.title || document.id,
+      id: resourceRouteSegment(document, "document"),
+      title: resourceDisplayLabel(document),
       subtitle: documentSearchPickerSubtitle(document),
       keywords: [],
     }));
@@ -594,7 +617,12 @@
   async function persistDocumentBlur() {
     if (!membership) return;
     const docDraft = editDocumentId.trim();
-    const nextDoc = docDraft ? `document:${docDraft}` : null;
+    const nextDoc = docDraft
+      ? resourceRef(
+          { ref: docDraft.startsWith("document:") ? docDraft : "" },
+          "document",
+        ) || `document:${docDraft}`
+      : null;
     const prevDocRaw = String(membership.document_ref ?? "").trim();
     const prevDoc = prevDocRaw || null;
     if (nextDoc === prevDoc) return;
@@ -860,24 +888,24 @@
     const cid = boardCardStableId(m);
     if (cid) {
       rows.push({
-        label: "Card ID",
-        value: cid,
-        copyLabel: "Copy card ID",
+        label: "Card ref",
+        value: cardShareRef,
+        copyLabel: "Copy card ref",
       });
     }
     const bid = String(boardId ?? "").trim();
     if (bid) {
       rows.push({
-        label: "Board ID",
-        value: bid,
-        copyLabel: "Copy board ID",
+        label: "Board ref",
+        value: boardPublicRef,
+        copyLabel: "Copy board ref",
       });
     }
     if (linkedThreadId) {
       rows.push({
-        label: "Thread ID",
-        value: linkedThreadId,
-        copyLabel: "Copy thread ID",
+        label: "Thread ref",
+        value: linkedThreadPublicRef,
+        copyLabel: "Copy thread ref",
       });
     }
     return rows;
@@ -1090,12 +1118,18 @@
             class="flex min-w-0 items-baseline gap-1.5 text-micro text-fg-muted"
           >
             <span>Board</span>
-            <span class="truncate text-fg">{board?.title ?? boardId}</span>
+            <span class="truncate text-fg"
+              >{resourceDisplayLabel(board, boardId)}</span
+            >
           </div>
         </div>
         <div class="relative flex shrink-0 items-center gap-1">
           {#if cardKey}
-            <ResourceShareMenu resourceId={cardKey} rawRecord={cardItem} />
+            <ResourceShareMenu
+              resourceId={cardShareRef}
+              resourceLabel="card ref"
+              rawRecord={cardItem}
+            />
           {/if}
           <div class="relative" bind:this={cardActionsMenuEl}>
             <button
@@ -1479,13 +1513,13 @@
               >
                 <SearchableEntityPicker
                   bind:value={editThreadId}
-                  advancedLabel="Use a manual thread ID"
+                  advancedLabel="Use a manual thread ref"
                   disabledIds={[backingThreadId].filter(Boolean)}
                   helperText="Changing this updates the card threading context."
                   label="Topic or thread"
-                  manualLabel="Thread ID"
+                  manualLabel="Thread ref"
                   manualPlaceholder="thread-onboarding"
-                  placeholder="Search topics by title or ID"
+                  placeholder="Search topics by title or ref"
                   searchFn={searchThreadOptions}
                 />
                 {#if fieldErrors.thread}

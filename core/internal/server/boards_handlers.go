@@ -194,6 +194,11 @@ func handleGetBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 
 	board, err := opts.primitiveStore.GetBoard(r.Context(), boardID)
 	if err != nil {
@@ -220,6 +225,11 @@ func handleUpdateBoard(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	if opts.contract == nil {
 		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
 		return
 	}
 
@@ -321,6 +331,11 @@ func handleArchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 	var req struct {
 		ActorID string `json:"actor_id"`
 	}
@@ -347,6 +362,11 @@ func handleUnarchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOp
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 	var req struct {
 		ActorID string `json:"actor_id"`
 	}
@@ -371,6 +391,11 @@ func handleUnarchiveBoard(w http.ResponseWriter, r *http.Request, opts handlerOp
 func handleTrashBoard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
 		return
 	}
 	var req struct {
@@ -400,6 +425,11 @@ func handleRestoreBoard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 	var req struct {
 		ActorID string `json:"actor_id"`
 	}
@@ -426,6 +456,11 @@ func handlePurgeBoard(w http.ResponseWriter, r *http.Request, opts handlerOption
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
 	if !ok {
 		return
@@ -449,6 +484,11 @@ func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 
 	body, err := buildBoardWorkspacePayload(r.Context(), opts, boardID)
 	if err != nil {
@@ -466,6 +506,11 @@ func handleGetBoardWorkspace(w http.ResponseWriter, r *http.Request, opts handle
 func handleListBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
 		return
 	}
 
@@ -490,6 +535,17 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	if strings.TrimSpace(boardID) != "" {
+		boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+		if !ok {
+			return
+		}
+	}
+	identifier, ok = resolveHTTPResourceID(w, r, opts, "card", identifier, "card")
+	if !ok {
+		return
+	}
 	card, err := opts.primitiveStore.GetBoardCard(r.Context(), boardID, identifier)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -505,6 +561,11 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
 		return
 	}
 
@@ -645,6 +706,11 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
 	var raw map[string]any
 	if !decodeJSONBody(w, r, &raw) {
 		return
@@ -783,6 +849,15 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
+	cardKey, ok = resolveHTTPResourceID(w, r, opts, "card", cardKey, "card")
+	if !ok {
+		return
+	}
 
 	var req struct {
 		ActorID          string         `json:"actor_id"`
@@ -883,6 +958,17 @@ func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpt
 func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey, notFoundMessage string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	if strings.TrimSpace(boardID) != "" {
+		boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+		if !ok {
+			return
+		}
+	}
+	cardKey, ok = resolveHTTPResourceID(w, r, opts, "card", cardKey, "card")
+	if !ok {
 		return
 	}
 
@@ -1008,6 +1094,15 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+	if !ok {
+		return
+	}
+	identifier, ok = resolveHTTPResourceID(w, r, opts, "card", identifier, "card")
+	if !ok {
+		return
+	}
 
 	var req struct {
 		ActorID          string  `json:"actor_id"`
@@ -1061,6 +1156,17 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	var ok bool
+	if strings.TrimSpace(boardID) != "" {
+		boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+		if !ok {
+			return
+		}
+	}
+	identifier, ok = resolveHTTPResourceID(w, r, opts, "card", identifier, "card")
+	if !ok {
+		return
+	}
 	var req struct {
 		ActorID          string  `json:"actor_id"`
 		IfBoardUpdatedAt *string `json:"if_board_updated_at"`
@@ -1104,6 +1210,17 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	if strings.TrimSpace(boardID) != "" {
+		boardID, ok = resolveHTTPResourceID(w, r, opts, "board", boardID, "board")
+		if !ok {
+			return
+		}
+	}
+	identifier, ok = resolveHTTPResourceID(w, r, opts, "card", identifier, "card")
+	if !ok {
 		return
 	}
 	var req struct {

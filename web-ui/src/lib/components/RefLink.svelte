@@ -5,6 +5,7 @@
   import RefChip from "$lib/components/RefChip.svelte";
   import { isTrashedAttachmentMeta } from "$lib/attachmentDisplay.js";
   import { coreClient } from "$lib/coreClient";
+  import { isInternalUuid } from "$lib/resourceIdentity.js";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
 
@@ -86,8 +87,11 @@
     };
   });
 
+  // Compact a ref value for mobile display; handles are short enough to show
+  // as-is, but legacy UUID values still get truncated to 10 chars.
   function compactId(value) {
     const text = String(value ?? "").trim();
+    if (!text || isInternalUuid(text)) return "";
     if (text.length <= 12) return text;
     return text.slice(0, 10);
   }
@@ -121,7 +125,7 @@
 
   let mobileLabel = $derived(compactLabel(resolved));
   let mobileRaw = $derived(
-    resolved.prefix && resolved.value
+    resolved.prefix && resolved.value && compactId(resolved.value)
       ? `${resolved.prefix}:${compactId(resolved.value)}`
       : resolved.raw,
   );

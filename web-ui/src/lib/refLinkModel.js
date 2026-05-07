@@ -1,4 +1,5 @@
 import { shortMimeBadge } from "./attachmentDisplay.js";
+import { resourceRouteSegment } from "./resourceIdentity.js";
 import { parseRef, renderRef } from "./typedRefs.js";
 import { workspacePath } from "./workspacePaths.js";
 
@@ -48,6 +49,11 @@ function shouldHumanizeByDefault(prefix) {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Compact a typed-ref value for humanized display. Public refs now use handles
+ * (not UUIDs), so this UUID-truncation path is a fallback for legacy or
+ * internal-only data that still carries a UUID value after the colon.
+ */
 function compactValue(value) {
   if (UUID_RE.test(value)) return value.slice(0, 10);
   return value;
@@ -485,21 +491,25 @@ export function buildPrimitiveRefRoutes({
   const eventRows = coerceTimelineResourceList(events);
 
   const cardById = new Map(
-    cardRows
-      .map((card) => [asText(card?.id), card])
-      .filter(([id]) => Boolean(id)),
+    cardRows.flatMap((card) =>
+      [asText(card?.id), resourceRouteSegment(card, "card")]
+        .filter(Boolean)
+        .map((id) => [id, card]),
+    ),
   );
   const documentById = new Map(
-    documentRows
-      .map((document) => [asText(document?.id), document])
-      .filter(([id]) => Boolean(id)),
+    documentRows.flatMap((document) =>
+      [asText(document?.id), resourceRouteSegment(document, "document")]
+        .filter(Boolean)
+        .map((id) => [id, document]),
+    ),
   );
 
   const artifactRoutesById = {};
   const eventRoutesById = {};
 
   for (const document of documentById.values()) {
-    const documentId = asText(document?.id);
+    const documentId = resourceRouteSegment(document, "document");
     const artifactId = asText(
       document?.artifact_id ||
         document?.artifactId ||
@@ -516,7 +526,8 @@ export function buildPrimitiveRefRoutes({
   }
 
   for (const artifact of artifactRows) {
-    const id = asText(artifact?.id);
+    const storageId = asText(artifact?.id);
+    const id = resourceRouteSegment(artifact, "artifact") || storageId;
     if (!id) continue;
     const kind = asText(artifact?.kind).toLowerCase();
     const owner = splitTypedRef(artifact?.owner_ref);
@@ -532,9 +543,13 @@ export function buildPrimitiveRefRoutes({
       artifactRoutesById[id] = {
         kind: "document",
         targetPrefix: "document",
-        targetValue: directDocumentId,
+        targetValue:
+          resourceRouteSegment(document, "document") || directDocumentId,
         label: asText(document?.title),
       };
+      if (storageId && storageId !== id) {
+        artifactRoutesById[storageId] = artifactRoutesById[id];
+      }
       continue;
     }
 
@@ -544,12 +559,15 @@ export function buildPrimitiveRefRoutes({
       artifactRoutesById[id] = {
         kind: "card",
         targetPrefix: "card",
-        targetValue: directCardId,
+        targetValue: resourceRouteSegment(card, "card") || directCardId,
         boardId:
           asText(artifact?.board_id || artifact?.boardId) ||
           (board.prefix === "board" ? board.value : ""),
         label: asText(card?.title),
       };
+      if (storageId && storageId !== id) {
+        artifactRoutesById[storageId] = artifactRoutesById[id];
+      }
       continue;
     }
 
@@ -575,6 +593,9 @@ export function buildPrimitiveRefRoutes({
         size_bytes: Number.isFinite(sizeNum) ? sizeNum : undefined,
         trashed_at: artifact?.trashed_at ?? artifact?.trashedAt ?? null,
       };
+    }
+    if (storageId && storageId !== id && artifactRoutesById[id]) {
+      artifactRoutesById[storageId] = artifactRoutesById[id];
     }
   }
 

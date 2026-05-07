@@ -96,7 +96,9 @@ const QA_SCENES = [
     path: "/hosted/dashboard",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Northwind Autonomy workspaces");
+      await page.waitForSelector('h1:has-text("Northwind Autonomy")');
+      await page.waitForSelector('h2:has-text("Workspaces")');
+      await page.waitForSelector("text=Orbit Release");
     },
   },
   {
@@ -132,8 +134,10 @@ const QA_SCENES = [
     path: "/hosted/organizations/org_qa_primary/usage",
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
-      /** `Usage` h1 is SSR; panels render after usage-summary fetch completes. */
-      await page.waitForSelector("text=Workspace breakdown");
+      /** Legacy usage URL redirects to the billing page that now owns usage details. */
+      await page.waitForURL(/\/hosted\/organizations\/org_qa_primary\/billing$/);
+      await page.waitForSelector('h1:has-text("Billing & Usage")');
+      await page.waitForSelector('h2:has-text("Workspace usage")');
     },
   },
   {
@@ -979,6 +983,8 @@ async function installQaRoutes(page, scene) {
       pathname.startsWith("/assets/") ||
       pathname === "/favicon.svg" ||
       pathname === "/apple-touch-icon.png" ||
+      pathname === "/icon-192.png" ||
+      pathname === "/icon-512.png" ||
       pathname === "/manifest.json" ||
       pathname === "/robots.txt"
     ) {

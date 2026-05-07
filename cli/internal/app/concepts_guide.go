@@ -119,7 +119,7 @@ func conceptsGuideData() map[string]any {
 		"primitives":        primitives,
 		"selection_rules":   conceptsSelectionRules(),
 		"inbox_categories":  inboxCategoryReferenceMap(),
-		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide"},
+		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc profiles", "anx meta doc env"},
 	}
 }
 
@@ -175,6 +175,10 @@ func conceptsGuideText() string {
 		b.WriteString(entry.Description)
 		b.WriteString("\n")
 	}
+	b.WriteString("\nConfiguration and profiles:\n")
+	b.WriteString("- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.\n")
+	b.WriteString("- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.\n")
+	b.WriteString("- Read next: anx meta doc profiles ; anx meta doc env ; anx config show\n")
 	b.WriteString("\nFor the fuller operating model, read `anx meta doc agent-guide`.\n")
 	return strings.TrimSpace(b.String())
 }

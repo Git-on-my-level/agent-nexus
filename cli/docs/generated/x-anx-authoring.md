@@ -7,7 +7,7 @@ Required now for every command operation:
 - `x-anx-command-id`: stable id (for example `threads.list`)
 - `x-anx-cli-path`: CLI path (for example `threads list`)
 - `x-anx-why`: non-empty purpose/decision boundary
-- `x-anx-input-mode`: one of `none|query|json-body|raw-stream|file-and-body|multipart-form`
+- `x-anx-input-mode`: HTTP/input-shape mode, one of `none|query|json-body|flags|flags-or-json|raw-stream|file-and-body|multipart-form`
 - `x-anx-streaming`: streaming metadata object
 - `x-anx-output-envelope`: output notes for CLI consumers
 - `x-anx-error-codes`: stable semantic error code list
@@ -25,6 +25,7 @@ Generator enforcement:
 Recommended/backlog:
 
 - include at least one `x-anx-examples` command per operation
+- use `x-anx-cli-input` when the agent-facing CLI affordance differs from the HTTP body shape; supported fields are `mode`, `body_optional`, and `flags` entries with `name`, `body_path`, `required`, and `description`
 - keep `x-anx-command-id` immutable once published
 - keep concept labels lower-case and dash-separated
 - use `contracts/gen/docs/x-anx-validation.md` to audit baseline debt and missing examples

@@ -66,7 +66,7 @@ func TestEmbeddedEventRefRules(t *testing.T) {
 	if !ok {
 		t.Fatal("expected topic_created rule to be loaded")
 	}
-	if len(topicCreated.RefsMustInclude) != 1 || topicCreated.RefsMustInclude[0] != "topic:<topic_id>" {
+	if len(topicCreated.RefsMustInclude) != 1 || topicCreated.RefsMustInclude[0] != "topic:<topic_handle>" {
 		t.Fatalf("unexpected refs for topic_created: %#v", topicCreated)
 	}
 

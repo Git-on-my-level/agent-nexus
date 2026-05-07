@@ -101,6 +101,50 @@ func TestValidateXAnxAuthoringFailsInvalidEnum(t *testing.T) {
 	}
 }
 
+func TestCollectCommandsUsesCLIInputAffordance(t *testing.T) {
+	doc := openAPIDocument{
+		Paths: map[string]pathItem{
+			"/widgets/{widget_id}/trash": {
+				Post: &operation{
+					OperationID: "trashWidget",
+					CommandID:   "widgets.trash",
+					CLIPath:     "widgets trash",
+					Why:         "Trash a widget.",
+					InputMode:   "json-body",
+					CLIInput: &cliInput{
+						Mode: "flags",
+						Flags: []cliInputFlag{
+							{Name: "reason", BodyPath: "reason", Required: true, Description: "Trash reason."},
+						},
+					},
+					Streaming:  map[string]any{"mode": "none"},
+					Output:     "Returns widget.",
+					ErrorCodes: []string{"auth_required"},
+					Concepts:   []string{"widgets"},
+					Stability:  "beta",
+					Surface:    "canonical",
+					AgentNotes: "Safe to retry after reading current state.",
+				},
+			},
+		},
+	}
+
+	commands := collectCommands(doc, anxSchemaDocument{})
+	if len(commands) != 1 {
+		t.Fatalf("commands = %d, want 1", len(commands))
+	}
+	cmd := commands[0]
+	if cmd.InputMode != "flags" {
+		t.Fatalf("effective input mode = %q, want flags", cmd.InputMode)
+	}
+	if cmd.HTTPInputMode != "json-body" {
+		t.Fatalf("http input mode = %q, want json-body", cmd.HTTPInputMode)
+	}
+	if cmd.CLIInput == nil || len(cmd.CLIInput.Flags) != 1 || cmd.CLIInput.Flags[0].BodyPath != "reason" {
+		t.Fatalf("missing CLI input affordance: %#v", cmd.CLIInput)
+	}
+}
+
 func TestValidateXAnxAuthoringFailsScalarStreamingMetadata(t *testing.T) {
 	doc := openAPIDocument{
 		Paths: map[string]pathItem{

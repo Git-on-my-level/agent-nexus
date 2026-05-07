@@ -166,8 +166,12 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "event", eventID, "event")
+	if !ok {
+		return
+	}
 
-	event, err := opts.primitiveStore.GetEvent(r.Context(), eventID)
+	event, err := opts.primitiveStore.GetEvent(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "event not found")
@@ -517,8 +521,12 @@ func handleGetArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
 	}
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "artifact", artifactID, "artifact")
+	if !ok {
+		return
+	}
 
-	artifact, err := opts.primitiveStore.GetArtifact(r.Context(), artifactID)
+	artifact, err := opts.primitiveStore.GetArtifact(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact not found")
@@ -657,7 +665,11 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 
-	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), artifactID)
+	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "artifact", artifactID, "artifact")
+	if !ok {
+		return
+	}
+	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "artifact content not found")
@@ -748,6 +760,15 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 
 	query := r.URL.Query()
 	threadID := strings.TrimSpace(query.Get("thread_id"))
+	var threadIDs []string
+	if threadID != "" {
+		resolved, ok := resolveListFilterResourceRef(w, r, opts, "thread", threadID, "thread_id")
+		if !ok {
+			return
+		}
+		threadID = resolved.ID
+		threadIDs = resolvedRefStorageCandidates(resolved)
+	}
 
 	var artifactIDs []string
 	if idsCSV := strings.TrimSpace(query.Get("ids")); idsCSV != "" {
@@ -758,7 +779,15 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				raw = append(raw, id)
 			}
 		}
-		artifactIDs = primitives.NormalizeArtifactIDFilter(raw, 48)
+		artifactIDs = make([]string, 0, len(raw))
+		for _, rawID := range primitives.NormalizeArtifactIDFilter(raw, 48) {
+			resolved, ok := resolveListFilterResourceRef(w, r, opts, "artifact", rawID, "ids")
+			if !ok {
+				return
+			}
+			artifactIDs = append(artifactIDs, resolved.ID)
+		}
+		artifactIDs = primitives.NormalizeArtifactIDFilter(artifactIDs, 48)
 	}
 
 	states, parseErr := ParseListLifecycleStates(query)
@@ -792,6 +821,7 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		Kind:          kind,
 		BackingScope:  backingScope,
 		ThreadID:      threadID,
+		ThreadIDs:     threadIDs,
 		CreatedBefore: strings.TrimSpace(query.Get("created_before")),
 		CreatedAfter:  strings.TrimSpace(query.Get("created_after")),
 	}

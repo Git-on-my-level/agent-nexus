@@ -21,6 +21,10 @@
   import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   const DOC_STATE_LABELS = {
     active: "Active",
@@ -127,7 +131,8 @@
 
   /** @param {number} i */
   function docHrefAtVisibleIndex(i) {
-    return workspaceHref(`/docs/${docIdAtVisibleIndex(i)}`);
+    const segment = resourceRouteSegment(documents[i], "document");
+    return workspaceHref(`/docs/${encodeURIComponent(segment)}`);
   }
 
   async function loadDocuments(isRetry = false) {
@@ -219,7 +224,7 @@
         content_type: "text",
       });
 
-      const newDocId = result.document?.id;
+      const newDocId = resourceRouteSegment(result.document, "document");
       createOpen = false;
       resetDraft();
 
@@ -674,7 +679,7 @@
     {@const selected = docSel.selectedIds.has(doc.id)}
     {#if docSel.selectMode}
       <div
-        aria-label={`${selected ? "Deselect" : "Select"} ${doc.title || doc.id}`}
+        aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(doc)}`}
         aria-pressed={selected}
         class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft {showBorderTop
           ? 'border-t border-line'
@@ -703,7 +708,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-start justify-between gap-3">
               <WorkspaceResourceListRow
-                title={doc.title || doc.id}
+                title={resourceDisplayLabel(doc)}
                 description={doc.summary ?? ""}
               >
                 {#snippet badges()}
@@ -740,12 +745,14 @@
       >
         <a
           class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle sm:px-4"
-          href={workspaceHref(`/docs/${doc.id}`)}
+          href={workspaceHref(
+            `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+          )}
         >
           <div class="min-w-0 flex-1">
             <div class="flex min-w-0 items-start justify-between gap-3">
               <WorkspaceResourceListRow
-                title={doc.title || doc.id}
+                title={resourceDisplayLabel(doc)}
                 description={doc.summary ?? ""}
                 titleClass="group-hover/row:text-accent-text transition-colors"
               >

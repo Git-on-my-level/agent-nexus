@@ -30,7 +30,6 @@ import (
 
 var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 
-const shortIDLength = 10
 const inboxAliasPrefix = "ibx_"
 const inboxAliasDigestLength = 12
 
@@ -183,9 +182,9 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Summary:          "Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.",
 		Constraints: []string{
 			"thread_id is required when posting directly to a backing thread timeline.",
-			"Use domain commands such as `anx cards message <card-id>`, `anx topics message <topic-id>`, or `anx docs message <document-id>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
+			"Use domain commands such as `anx cards message card:<handle>`, `anx topics message topic:<handle>`, or `anx docs message doc:<handle>` for ordinary discussion; they fill actor_id, thread_id, and refs.",
 			"Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.",
-			`event.refs may include "event:<parent_event_id>" for replies and "artifact:<artifact_id>" mentions.`,
+			`event.refs may include "event:<parent-event-handle>" for replies and "artifact:<artifact-handle>" mentions.`,
 		},
 	},
 	{
@@ -194,7 +193,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		PreferredCommand: "anx human ask|review|escalate",
 		Summary:          "Use the human command group to ask for operator attention, review, or escalation.",
 		Constraints: []string{
-			`event.refs must include "thread:<thread_id>" and a typed subject ref such as "topic:<topic_id>", "card:<card_id>", or "document:<document_id>".`,
+			`event.refs must include "thread:<thread-handle>" and a typed subject ref such as "topic:<topic-handle>", "card:<card-handle>", or "document:<document-handle>".`,
 			`event.payload must include "kind", "title", "body", "subject_ref", and ordered "response_proposals".`,
 		},
 	},
@@ -204,7 +203,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		PreferredCommand: "anx inbox respond",
 		Summary:          "Records a human response and is the only source for Completed Inbox history.",
 		Constraints: []string{
-			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.refs must include "inbox:<inbox-item-handle>".`,
 			`event.payload must include "inbox_item_id", "kind", "request_event_ref", and "response_text".`,
 		},
 	},
@@ -212,70 +211,70 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Type:  "topic_created",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
+			`event.refs must include "topic:<topic-handle>".`,
 		},
 	},
 	{
 		Type:  "topic_updated",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "topic:<topic_id>".`,
+			`event.refs must include "topic:<topic-handle>".`,
 		},
 	},
 	{
 		Type:  "document_created",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>", "document_revision:<revision_id>", and "artifact:<artifact_id>".`,
+			`event.refs must include "document:<document-handle>", "document_revision:<revision-handle>", and "artifact:<artifact-handle>".`,
 		},
 	},
 	{
 		Type:  "document_revised",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>", "document_revision:<revision_id>", and "artifact:<artifact_id>".`,
+			`event.refs must include "document:<document-handle>", "document_revision:<revision-handle>", and "artifact:<artifact-handle>".`,
 		},
 	},
 	{
 		Type:  "document_trashed",
 		Group: "Topics And Documents",
 		Constraints: []string{
-			`event.refs must include "document:<document_id>".`,
+			`event.refs must include "document:<document-handle>".`,
 		},
 	},
 	{
 		Type:  "board_created",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "board:<board_id>".`,
+			`event.refs must include "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "board_updated",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "board:<board_id>".`,
+			`event.refs must include "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_created",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_updated",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 		},
 	},
 	{
 		Type:  "card_moved",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 			`event.payload must include "column_key".`,
 		},
 	},
@@ -283,7 +282,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Type:  "card_resolved",
 		Group: "Boards And Cards",
 		Constraints: []string{
-			`event.refs must include "card:<card_id>" and "board:<board_id>".`,
+			`event.refs must include "card:<card-handle>" and "board:<board-handle>".`,
 			`event.payload must include "resolution".`,
 		},
 	},
@@ -300,7 +299,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Group:            "Human Coordination",
 		PreferredCommand: "anx human ask|review|escalate",
 		Constraints: []string{
-			`event.refs must include "thread:<thread_id>".`,
+			`event.refs must include "thread:<thread-handle>".`,
 			`event.payload must include "kind", "title", "subject_ref", "requester_actor_id", and ordered "response_proposals" (1–6 strings, first is recommended).`,
 		},
 	},
@@ -309,7 +308,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 		Group:            "Human Coordination",
 		PreferredCommand: "anx inbox respond",
 		Constraints: []string{
-			`event.refs must include "inbox:<inbox_item_id>".`,
+			`event.refs must include "inbox:<inbox-item-handle>".`,
 			`event.payload must include "inbox_item_id", "kind", "response_text", and "responding_actor_id".`,
 		},
 	},
@@ -786,7 +785,7 @@ func parseThreadContextSelectionArgs(args []string, commandName string) (threadC
 	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadContextSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -826,7 +825,7 @@ func parseThreadWorkspaceArgs(args []string) (threadWorkspaceSelection, error) {
 	fs.Var(&stateFlag, "state", "Discover threads by lifecycle state (active, archived, trashed)")
 	fs.Var(&maxEventsFlag, "max-events", "Maximum recent events to include")
 	fs.Var(&includeArtifactContentFlag, "include-artifact-content", "Include key artifact content previews")
-	fs.Var(&fullIDFlag, "full-id", "Render full ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return threadWorkspaceSelection{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -905,7 +904,7 @@ func mixedThreadSelectionMessage(commandName string) string {
 	discoveryExample := "anx threads inspect --state active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace --topic-id <topic-id>` for primary coordination when you have a topic id. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace topic:<handle>` for primary coordination when you have a topic. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
 		return base + " For one thread, use `anx threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads inspect":
@@ -998,38 +997,63 @@ func (a *App) runArtifactsAttachmentsCommand(ctx context.Context, args []string,
 	sub := strings.TrimSpace(strings.ToLower(args[0]))
 	switch sub {
 	case "create":
-		fs := newSilentFlagSet("artifacts attachments create")
-		var refsJSON trackedString
-		var filePath trackedString
-		var summary trackedString
-		var artifactJSON trackedString
-		var actorIDFlag trackedString
-		fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["thread:<uuid>"]`)
-		fs.Var(&filePath, "file", "Path to file to upload")
-		fs.Var(&summary, "summary", "Optional attachment summary")
-		fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_flags", err.Error())
-		}
-		if len(fs.Args()) > 0 {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_args", "unexpected positional arguments")
-		}
-		if strings.TrimSpace(refsJSON.value) == "" {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--refs is required")
-		}
-		if strings.TrimSpace(filePath.value) == "" {
-			return nil, "artifacts attachments create", errnorm.Usage("invalid_request", "--file is required")
-		}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts attachments create", err
-		}
-		result, callErr := a.invokeArtifactAttachmentCreate(ctx, cfg, refsJSON.value, filePath.value, summary.value, artifactJSON.value, actorID)
+		result, callErr := a.runArtifactAttachmentCreateFlags(ctx, cfg, args[1:], "artifacts attachments create")
 		return result, "artifacts attachments create", callErr
 	default:
 		return nil, "artifacts attachments", errnorm.Usage("unknown_command", fmt.Sprintf("unknown artifacts attachments subcommand %q", args[0]))
 	}
+}
+
+func (a *App) runArtifactAttachmentCreateFlags(ctx context.Context, cfg config.Resolved, args []string, commandName string) (*commandResult, error) {
+	fs := newSilentFlagSet(commandName)
+	var refsJSON trackedString
+	var refs trackedStrings
+	var filePath trackedString
+	var summary trackedString
+	var artifactJSON trackedString
+	var actorIDFlag trackedString
+	fs.Var(&refsJSON, "refs", `JSON array of typed refs, e.g. ["topic:launch"]`)
+	fs.Var(&refs, "ref", "Typed ref to attach to, repeatable")
+	fs.Var(&filePath, "file", "Path to file to upload")
+	fs.Var(&summary, "summary", "Optional attachment summary")
+	fs.Var(&artifactJSON, "artifact", "Optional JSON object merged into artifact metadata")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	if strings.TrimSpace(filePath.value) == "" {
+		return nil, errnorm.Usage("invalid_request", "--file is required")
+	}
+	resolvedRefsJSON, err := artifactAttachmentRefsJSON(refsJSON.value, refs.values)
+	if err != nil {
+		return nil, err
+	}
+	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return a.invokeArtifactAttachmentCreate(ctx, cfg, resolvedRefsJSON, filePath.value, summary.value, artifactJSON.value, actorID)
+}
+
+func artifactAttachmentRefsJSON(refsJSON string, refs []string) (string, error) {
+	refsJSON = strings.TrimSpace(refsJSON)
+	if refsJSON != "" && len(refs) > 0 {
+		return "", errnorm.Usage("invalid_flags", "use either --ref or --refs, not both")
+	}
+	if len(refs) > 0 {
+		encoded, err := json.Marshal(refs)
+		if err != nil {
+			return "", errnorm.Wrap(errnorm.KindLocal, "refs_encode_failed", "failed to encode refs", err)
+		}
+		return string(encoded), nil
+	}
+	if refsJSON == "" {
+		return "", errnorm.Usage("invalid_request", "--ref is required (or pass --refs JSON)")
+	}
+	return refsJSON, nil
 }
 
 func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -1095,6 +1119,10 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
 		return result, "artifacts inspect", callErr
 	case "create":
+		if artifactCreateUsesFileFlags(args[1:]) {
+			result, callErr := a.runArtifactAttachmentCreateFlags(ctx, cfg, args[1:], "artifacts create")
+			return addResourceURLToResult(cfg, "artifacts.attachments.create", result), "artifacts create", callErr
+		}
 		body, err := a.parseJSONBodyInput(args[1:], "artifacts create")
 		if err != nil {
 			return nil, "artifacts create", err
@@ -1112,7 +1140,11 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id")
 		fs.StringVar(&outputPath, "o", "", "Write raw artifact bytes to file")
 		fs.StringVar(&outputPath, "output", "", "Write raw artifact bytes to file")
-		if err := fs.Parse(args[1:]); err != nil {
+		contentArgs, reorderErr := reorderArtifactContentFlags(args[1:])
+		if reorderErr != nil {
+			return nil, commandName, reorderErr
+		}
+		if err := fs.Parse(contentArgs); err != nil {
 			return nil, commandName, errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
@@ -1322,6 +1354,49 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
+}
+
+func artifactCreateUsesFileFlags(args []string) bool {
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "--file" || strings.HasPrefix(arg, "--file=") || arg == "--ref" || strings.HasPrefix(arg, "--ref=") || arg == "--refs" || strings.HasPrefix(arg, "--refs=") {
+			return true
+		}
+	}
+	return false
+}
+
+func reorderArtifactContentFlags(args []string) ([]string, error) {
+	knownValueFlags := map[string]struct{}{
+		"-o":            {},
+		"--output":      {},
+		"--artifact-id": {},
+	}
+	flags := make([]string, 0, len(args))
+	positionals := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if strings.HasPrefix(arg, "--output=") || strings.HasPrefix(arg, "--artifact-id=") || strings.HasPrefix(arg, "-o=") {
+			flags = append(flags, arg)
+			continue
+		}
+		if _, ok := knownValueFlags[arg]; ok {
+			flags = append(flags, arg)
+			if i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return nil, errnorm.Usage("invalid_flags", fmt.Sprintf("flag provided but not defined: %s", arg))
+		}
+		positionals = append(positionals, arg)
+	}
+	return append(flags, positionals...), nil
 }
 
 func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -2497,7 +2572,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&backingScopeFlag, "backing-scope", "Filter backing events: all, standalone, or backing_only")
 	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
 	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
-	fs.Var(&fullIDFlag, "full-id", "Render full IDs in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full IDs in default text output (non-JSON)")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	fs.Var(&maxEventsFlag, "max", "Alias for --max-events")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -2846,7 +2921,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 	var fullIDFlag trackedBool
 	fs.Var(&threadIDFlags, "thread-id", "Filter by thread id (repeatable)")
 	fs.Var(&typeFlags, "type", "Filter by inbox item type/category/kind (repeatable)")
-	fs.Var(&fullIDFlag, "full-id", "Render full inbox ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full inbox ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3150,7 +3225,7 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 	fs.Var(&contentFileFlag, "content-file", "Load document content from a local file")
 	fs.Var(&titleFlag, "title", "Document title")
 	fs.Var(&summaryFlag, "summary", "Document summary")
-	fs.Var(&topicFlag, "topic", "Topic id or topic:<id> ref to anchor the document")
+	fs.Var(&topicFlag, "topic", "Topic typed ref or handle to anchor the document")
 	fs.Var(&subjectFlag, "subject-ref", "Explicit typed subject ref")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&refFlags, "ref", "Additional typed ref (repeatable)")
@@ -3236,7 +3311,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&titleFlag, "title", "Board title")
 	fs.Var(&summaryFlag, "summary", "Board summary")
-	fs.Var(&topicFlag, "topic", "Primary topic id; plain ids are normalized to topic:<id>")
+	fs.Var(&topicFlag, "topic", "Primary topic typed ref or handle")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&documentRefFlags, "document-ref", "Linked document typed ref, repeatable")
 	fs.Var(&pinnedRefFlags, "ref", "Pinned/related typed ref, repeatable")
@@ -3988,133 +4063,26 @@ func buildBoardCardCommandPathParams(cardID string) (map[string]string, error) {
 }
 
 func (a *App) normalizeBoardMutationCardAnchorField(ctx context.Context, cfg config.Resolved, boardID string, body map[string]any, field string) error {
+	_ = ctx
+	_ = cfg
+	_ = boardID
 	rawID := strings.TrimSpace(anyString(body[field]))
 	if rawID == "" {
 		return nil
 	}
-	resolvedID, err := a.resolveMaybeBoardCardID(ctx, cfg, boardID, rawID)
-	if err != nil {
-		return err
-	}
-	body[field] = resolvedID
+	body[field] = rawID
 	return nil
 }
 
 func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, boardID, rawCardID string) (string, error) {
+	_ = ctx
+	_ = cfg
+	_ = boardID
 	rawCardID = strings.TrimSpace(rawCardID)
 	if rawCardID == "" {
 		return "", nil
 	}
-	if !shouldResolveDisplayedShortID(rawCardID) && !looksLikeThreadCardIdentifier(rawCardID) {
-		return rawCardID, nil
-	}
-	resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", err
-	}
-	result, err := a.invokeTypedJSON(ctx, cfg, "boards cards list", "boards.cards.list", map[string]string{"board_id": resolvedBoard}, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	matches := listBoardCardIdentifierMatches(result)
-	if len(matches) == 0 {
-		return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
-	}
-
-	for _, match := range matches {
-		if match.CardID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-	for _, match := range matches {
-		if match.CardShortID != "" && match.CardShortID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-	for _, match := range matches {
-		if match.ThreadID != "" && match.ThreadID == rawCardID {
-			return match.CardID, nil
-		}
-	}
-
-	cardMatches := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if strings.HasPrefix(match.CardID, rawCardID) || (match.CardShortID != "" && strings.HasPrefix(match.CardShortID, rawCardID)) {
-			cardMatches = append(cardMatches, match.CardID)
-		}
-	}
-	cardMatches = uniqueStringsInOrder(cardMatches)
-	if len(cardMatches) == 1 {
-		return cardMatches[0], nil
-	}
-	if len(cardMatches) > 1 {
-		sort.Strings(cardMatches)
-		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, cardMatches)
-	}
-
-	threadMatches := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if match.ThreadID != "" && strings.HasPrefix(match.ThreadID, rawCardID) {
-			threadMatches = append(threadMatches, match.CardID)
-		}
-	}
-	threadMatches = uniqueStringsInOrder(threadMatches)
-	if len(threadMatches) == 1 {
-		return threadMatches[0], nil
-	}
-	if len(threadMatches) > 1 {
-		sort.Strings(threadMatches)
-		return "", ambiguousResourceIDError(rawCardID, boardCardIDLookupSpec, threadMatches)
-	}
-	return "", missingResourceIDError(rawCardID, boardCardIDLookupSpec)
-}
-
-func looksLikeThreadCardIdentifier(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	return strings.HasPrefix(raw, "thread_") || strings.HasPrefix(raw, "thread-") || strings.HasPrefix(raw, "thread:")
-}
-
-type boardCardIdentifierMatch struct {
-	CardID      string
-	CardShortID string
-	ThreadID    string
-}
-
-func listBoardCardIdentifierMatches(result *commandResult) []boardCardIdentifierMatch {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body["cards"].([]any)
-	if len(rawItems) == 0 {
-		return nil
-	}
-	out := make([]boardCardIdentifierMatch, 0, len(rawItems))
-	seen := make(map[string]struct{}, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		cardID := strings.TrimSpace(anyString(item["id"]))
-		if cardID == "" {
-			continue
-		}
-		if _, exists := seen[cardID]; exists {
-			continue
-		}
-		seen[cardID] = struct{}{}
-		out = append(out, boardCardIdentifierMatch{
-			CardID:      cardID,
-			CardShortID: strings.TrimSpace(anyString(item["short_id"])),
-			ThreadID:    strings.TrimSpace(anyString(item["thread_id"])),
-		})
-	}
-	return out
+	return rawCardID, nil
 }
 
 func parseBoardCardsListInput(args []string) (string, bool, error) {
@@ -4122,7 +4090,7 @@ func parseBoardCardsListInput(args []string) (string, bool, error) {
 	var boardIDFlag trackedString
 	var fullIDFlag trackedBool
 	fs.Var(&boardIDFlag, "board-id", "Board id")
-	fs.Var(&fullIDFlag, "full-id", "Render full card ids in default text output (non-JSON)")
+	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full card ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return "", false, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -4169,24 +4137,15 @@ func hasAnyBoardMutationFieldFlags(values ...any) bool {
 }
 
 func (a *App) resolveMaybeBoardID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	if !shouldResolveDisplayedShortID(rawID) {
-		return rawID, nil
-	}
-	return a.resolveResourceIDFromList(ctx, cfg, rawID, boardIDLookupSpec)
+	_ = ctx
+	_ = cfg
+	return rawID, nil
 }
 
 func (a *App) resolveMaybeThreadID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	if !shouldResolveDisplayedShortID(rawID) {
-		return rawID, nil
-	}
-	resolved, err := a.resolveThreadIDFilters(ctx, cfg, []string{rawID})
-	if err != nil {
-		return "", err
-	}
-	if len(resolved) == 0 {
-		return rawID, nil
-	}
-	return resolved[0], nil
+	_ = ctx
+	_ = cfg
+	return rawID, nil
 }
 
 func parseIDArg(args []string, idFlag string, idLabel string) (string, error) {
@@ -4375,7 +4334,6 @@ func (a *App) resolveInboxItemFromList(ctx context.Context, cfg config.Resolved,
 
 type inboxListMatch struct {
 	ID       string
-	ShortID  string
 	Alias    string
 	ThreadID string
 	Item     map[string]any
@@ -4398,39 +4356,8 @@ func resolveInboxItemFromListResult(result *commandResult, rawID string) (inboxL
 		if item.Alias != "" && item.Alias == rawLower {
 			return item, nil
 		}
-		if item.ShortID != "" && item.ShortID == rawID {
-			return item, nil
-		}
 	}
 
-	prefixMatches := make([]inboxListMatch, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		match := strings.HasPrefix(item.ID, rawID)
-		if !match && item.Alias != "" {
-			match = strings.HasPrefix(item.Alias, rawLower)
-		}
-		if !match && item.ShortID != "" {
-			match = strings.HasPrefix(item.ShortID, rawID)
-		}
-		if !match {
-			continue
-		}
-		if _, exists := seen[item.ID]; exists {
-			continue
-		}
-		seen[item.ID] = struct{}{}
-		prefixMatches = append(prefixMatches, item)
-	}
-	if len(prefixMatches) == 1 {
-		return prefixMatches[0], nil
-	}
-	if len(prefixMatches) > 1 {
-		sort.Slice(prefixMatches, func(i int, j int) bool {
-			return prefixMatches[i].ID < prefixMatches[j].ID
-		})
-		return inboxListMatch{}, ambiguousInboxItemIDError(rawID, prefixMatches)
-	}
 	return inboxListMatch{}, missingInboxItemIDError(rawID)
 }
 
@@ -4465,7 +4392,6 @@ func listInboxMatches(result *commandResult) []inboxListMatch {
 		seen[id] = struct{}{}
 		out = append(out, inboxListMatch{
 			ID:       id,
-			ShortID:  strings.TrimSpace(anyString(item["short_id"])),
 			Alias:    strings.ToLower(strings.TrimSpace(anyString(item["alias"]))),
 			ThreadID: strings.TrimSpace(anyString(item["thread_id"])),
 			Item:     item,
@@ -4474,30 +4400,11 @@ func listInboxMatches(result *commandResult) []inboxListMatch {
 	return out
 }
 
-func ambiguousInboxItemIDError(rawID string, matches []inboxListMatch) error {
-	samples := make([]string, 0, minInt(3, len(matches)))
-	for idx, match := range matches {
-		if idx >= 3 {
-			break
-		}
-		samples = append(samples, fmt.Sprintf("%s (alias=%s)", match.ID, match.Alias))
-	}
-	return errnorm.Usage(
-		"invalid_request",
-		fmt.Sprintf(
-			"inbox item id %q is ambiguous: %d inbox items match. Use a longer id/alias or the canonical id. Matches: %s",
-			rawID,
-			len(matches),
-			strings.Join(samples, ", "),
-		),
-	)
-}
-
 func missingInboxItemIDError(rawID string) error {
 	return errnorm.Usage(
 		"invalid_request",
 		fmt.Sprintf(
-			"inbox item id %q is missing: no canonical id, alias, or unique prefix match was found. Run `anx inbox list` and retry with alias or canonical id.",
+			"inbox item id %q is missing. Run `anx inbox list` and retry with the exact displayed alias.",
 			strings.TrimSpace(rawID),
 		),
 	)
@@ -4576,316 +4483,58 @@ func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {
 	)
 }
 
-func remoteNotFoundMessage(err error) string {
-	normalized := errnorm.Normalize(err)
-	if normalized == nil || normalized.Kind != errnorm.KindRemote || normalized.Code != "not_found" {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(normalized.Message))
-}
-
-func revisionIDsFromDocsHistoryResult(result *commandResult) []string {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body["revisions"].([]any)
-	out := make([]string, 0, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		if id := strings.TrimSpace(anyString(item["id"])); id != "" {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func (a *App) resolveRevisionIDPrefix(ctx context.Context, cfg config.Resolved, documentID, rawRevisionID string) (string, error) {
-	result, err := a.invokeTypedJSON(ctx, cfg, "docs history", "docs.revisions.list", map[string]string{"document_id": documentID}, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	ids := revisionIDsFromDocsHistoryResult(result)
-	rawRevisionID = strings.TrimSpace(rawRevisionID)
-	for _, id := range ids {
-		if id == rawRevisionID {
-			return id, nil
-		}
-	}
-	matches := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, rawRevisionID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		samples := matches
-		if len(samples) > 3 {
-			samples = samples[:3]
-		}
-		return "", errnorm.Usage(
-			"invalid_request",
-			fmt.Sprintf(
-				"revision id %q is ambiguous: %d revisions share that prefix. Use a longer prefix or canonical id. Matches: %s",
-				rawRevisionID,
-				len(matches),
-				strings.Join(samples, ", "),
-			),
-		)
-	}
-	return "", errnorm.Usage(
-		"invalid_request",
-		fmt.Sprintf("revision id %q is missing: no matching revision on document %q", rawRevisionID, documentID),
-	)
-}
-
 func (a *App) invokeDocsRevisionGetWithIDResolution(ctx context.Context, cfg config.Resolved, documentID, revisionID string) (*commandResult, error) {
-	invoke := func(docID, revID string) (*commandResult, error) {
-		return a.invokeTypedJSON(ctx, cfg, "docs revision get", "docs.revisions.get", map[string]string{"document_id": docID, "revision_id": revID}, nil, nil)
-	}
-	resDoc := strings.TrimSpace(documentID)
-	resRev := strings.TrimSpace(revisionID)
-	result, err := invoke(resDoc, resRev)
-	if err == nil {
-		return result, nil
-	}
-	if remoteNotFoundMessage(err) == "document not found" {
-		resolvedDoc, resolveErr := a.resolveResourceIDFromList(ctx, cfg, resDoc, documentIDLookupSpec)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		resDoc = resolvedDoc
-		result, err = invoke(resDoc, resRev)
-		if err == nil {
-			return result, nil
-		}
-	}
-	if remoteNotFoundMessage(err) == "document revision not found" {
-		resolvedRev, resolveErr := a.resolveRevisionIDPrefix(ctx, cfg, resDoc, resRev)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		return invoke(resDoc, resolvedRev)
-	}
-	return nil, err
+	return a.invokeTypedJSON(ctx, cfg, "docs revision get", "docs.revisions.get", map[string]string{
+		"document_id": strings.TrimSpace(documentID),
+		"revision_id": strings.TrimSpace(revisionID),
+	}, nil, nil)
 }
 
-func (a *App) resolveResourceIDFromList(ctx context.Context, cfg config.Resolved, rawID string, spec resourceIDLookupSpec) (string, error) {
-	result, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, nil, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	ids := listResourceIDs(result, spec)
-	if len(ids) == 0 {
-		return "", missingResourceIDError(rawID, spec)
-	}
-
-	rawID = strings.TrimSpace(rawID)
-	for _, id := range ids {
-		if id == rawID {
-			return id, nil
-		}
-	}
-
-	matches := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, rawID) {
-			matches = append(matches, id)
-		}
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-	if len(matches) > 1 {
-		sort.Strings(matches)
-		return "", ambiguousResourceIDError(rawID, spec, matches)
-	}
-	return "", missingResourceIDError(rawID, spec)
-}
-
-func listResourceIDs(result *commandResult, spec resourceIDLookupSpec) []string {
-	if result == nil {
-		return nil
-	}
-	data, _ := result.Data.(map[string]any)
-	body, _ := data["body"].(map[string]any)
-	if body == nil {
-		return nil
-	}
-	rawItems, _ := body[spec.listField].([]any)
-	if len(rawItems) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(rawItems))
-	out := make([]string, 0, len(rawItems))
-	for _, rawItem := range rawItems {
-		item, _ := rawItem.(map[string]any)
-		if item == nil {
-			continue
-		}
-		id := extractResourceListItemID(item, spec)
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
-}
-
-func extractResourceListItemID(item map[string]any, spec resourceIDLookupSpec) string {
-	path := spec.idFieldPath
-	if len(path) == 0 {
-		path = []string{"id"}
-	}
-	var current any = item
-	for _, segment := range path {
-		typed, _ := current.(map[string]any)
-		if typed == nil {
-			return ""
-		}
-		current = typed[segment]
-	}
-	return strings.TrimSpace(anyString(current))
-}
-
-func isResolvableResourceNotFoundError(err error, spec resourceIDLookupSpec) bool {
-	normalized := errnorm.Normalize(err)
-	if normalized == nil || normalized.Kind != errnorm.KindRemote || normalized.Code != "not_found" {
-		return false
-	}
-	message := strings.ToLower(strings.TrimSpace(normalized.Message))
-	if message == "" || message == "endpoint not found" {
-		return false
-	}
-	for _, hint := range spec.notFoundHints {
-		if message == strings.ToLower(strings.TrimSpace(hint)) {
-			return true
-		}
-	}
-	return false
-}
-
-func ambiguousResourceIDError(rawID string, spec resourceIDLookupSpec, matches []string) error {
-	samples := make([]string, 0, minInt(3, len(matches)))
-	for idx, match := range matches {
-		if idx >= 3 {
-			break
-		}
-		samples = append(samples, fmt.Sprintf("%s (short_id=%s)", match, shortID(match)))
-	}
-	message := fmt.Sprintf(
-		"%s %q is ambiguous: %d %s ids share that prefix. Use a longer prefix or the canonical id. Run `anx %s` to inspect candidates. Matches: %s",
-		spec.idLabel,
-		rawID,
-		len(matches),
-		spec.resource,
-		spec.listCommand,
-		strings.Join(samples, ", "),
-	)
-	return errnorm.Usage("invalid_request", message)
-}
-
-func missingResourceIDError(rawID string, spec resourceIDLookupSpec) error {
-	message := fmt.Sprintf(
-		"%s %q is missing: no canonical %s id or unique prefix match was found. If this value was truncated, run `anx %s` and retry with a unique short_id or canonical id.",
-		spec.idLabel,
-		rawID,
-		spec.resource,
-		spec.listCommand,
-	)
-	return errnorm.Usage("invalid_request", message)
-}
-
-func enrichListBodyWithShortIDs(commandID string, body any) (any, bool) {
+func enrichListBodyWithPublicIdentity(commandID string, body any) (any, bool) {
 	typedBody, _ := body.(map[string]any)
 	if typedBody == nil {
 		return body, false
 	}
 	switch strings.TrimSpace(commandID) {
 	case "threads.list":
-		return body, addShortIDToListField(typedBody, "threads")
+		return body, addPublicIdentityToListField(typedBody, "threads", "thread")
 	case "topics.list":
-		return body, addShortIDToListField(typedBody, "topics")
+		return body, addPublicIdentityToListField(typedBody, "topics", "topic")
 	case "artifacts.list":
-		return body, addShortIDToListField(typedBody, "artifacts")
+		return body, addPublicIdentityToListField(typedBody, "artifacts", "artifact")
 	case "boards.list":
-		return body, addShortIDToNestedListField(typedBody, "boards", []string{"board"})
+		return body, addPublicIdentityToNestedListField(typedBody, "boards", []string{"board"}, "board")
 	case "boards.cards.list":
-		return body, addShortIDToListField(typedBody, "cards")
+		return body, addPublicIdentityToListField(typedBody, "cards", "card")
 	case "docs.list":
-		return body, addShortIDToListField(typedBody, "documents")
+		return body, addPublicIdentityToListField(typedBody, "documents", "document")
 	case "events.list":
-		return body, addShortIDToListField(typedBody, "events")
+		return body, addPublicIdentityToListField(typedBody, "events", "event")
 	case "inbox.list":
 		return body, addInboxAliasesToListField(typedBody, "items")
 	case "inbox.get":
 		return body, addInboxAliasToItemField(typedBody, "item")
 	case "threads.workspace":
-		return body, enrichThreadWorkspaceBodyWithShortIDs(typedBody)
+		return body, enrichThreadWorkspaceBodyWithPublicIdentity(typedBody)
 	default:
 		return body, false
 	}
 }
 
-func addShortIDToObjectIfPresent(obj map[string]any) bool {
-	if obj == nil {
-		return false
-	}
-	id := strings.TrimSpace(anyString(obj["id"]))
-	if id == "" {
-		return false
-	}
-	expectedShortID := shortID(id)
-	if strings.TrimSpace(anyString(obj["short_id"])) == expectedShortID {
-		return false
-	}
-	obj["short_id"] = expectedShortID
-	return true
-}
-
-func addShortIDsToObjectSlice(slice []any) bool {
-	changed := false
-	for _, raw := range slice {
-		item, _ := raw.(map[string]any)
-		if item == nil {
-			continue
-		}
-		if addShortIDToObjectIfPresent(item) {
-			changed = true
-		}
-	}
-	return changed
-}
-
-// enrichThreadWorkspaceBodyWithShortIDs mirrors list-response short_id enrichment for GET /threads/{id}/workspace.
-func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
+// enrichThreadWorkspaceBodyWithPublicIdentity mirrors list-response public identity enrichment for GET /threads/{id}/workspace.
+func enrichThreadWorkspaceBodyWithPublicIdentity(body map[string]any) bool {
 	if body == nil {
 		return false
 	}
 	changed := false
 	if thread := asMap(body["thread"]); thread != nil {
-		changed = addShortIDToObjectIfPresent(thread) || changed
+		changed = addPublicIdentityToObjectIfPresent(thread, "thread") || changed
 	}
 	contextSliceKeys := []string{"recent_events", "key_artifacts", "open_cards", "documents"}
 	if ctx := asMap(body["context"]); ctx != nil {
 		for _, key := range contextSliceKeys {
 			if items, ok := ctx[key].([]any); ok {
-				changed = addShortIDsToObjectSlice(items) || changed
+				changed = addPublicIdentityToObjectSlice(items, resourceKindForWorkspaceSlice(key)) || changed
 			}
 		}
 	}
@@ -4893,7 +4542,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	if collab := asMap(body["collaboration"]); collab != nil {
 		for _, key := range collabSliceKeys {
 			if items, ok := collab[key].([]any); ok {
-				changed = addShortIDsToObjectSlice(items) || changed
+				changed = addPublicIdentityToObjectSlice(items, resourceKindForWorkspaceSlice(key)) || changed
 			}
 		}
 	}
@@ -4911,12 +4560,12 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 					continue
 				}
 				if board := asMap(item["board"]); board != nil {
-					if addShortIDToObjectIfPresent(board) {
+					if addPublicIdentityToObjectIfPresent(board, "board") {
 						changed = true
 					}
 				}
 				if card := asMap(item["card"]); card != nil {
-					if addShortIDToObjectIfPresent(card) {
+					if addPublicIdentityToObjectIfPresent(card, "card") {
 						changed = true
 					}
 				}
@@ -4931,7 +4580,7 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 					continue
 				}
 				if t := asMap(item["thread"]); t != nil {
-					if addShortIDToObjectIfPresent(t) {
+					if addPublicIdentityToObjectIfPresent(t, "thread") {
 						changed = true
 					}
 				}
@@ -4941,7 +4590,22 @@ func enrichThreadWorkspaceBodyWithShortIDs(body map[string]any) bool {
 	return changed
 }
 
-func addShortIDToListField(body map[string]any, field string) bool {
+func resourceKindForWorkspaceSlice(key string) string {
+	switch key {
+	case "recent_events":
+		return "event"
+	case "key_artifacts":
+		return "artifact"
+	case "open_cards":
+		return "card"
+	case "documents":
+		return "document"
+	default:
+		return ""
+	}
+}
+
+func addPublicIdentityToListField(body map[string]any, field string, kind string) bool {
 	items, _ := body[field].([]any)
 	if len(items) == 0 {
 		return false
@@ -4952,14 +4616,14 @@ func addShortIDToListField(body map[string]any, field string) bool {
 		if item == nil {
 			continue
 		}
-		if addShortIDToObjectIfPresent(item) {
+		if addPublicIdentityToObjectIfPresent(item, kind) {
 			changed = true
 		}
 	}
 	return changed
 }
 
-func addShortIDToNestedListField(body map[string]any, field string, path []string) bool {
+func addPublicIdentityToNestedListField(body map[string]any, field string, path []string, kind string) bool {
 	items, _ := body[field].([]any)
 	if len(items) == 0 {
 		return false
@@ -4982,11 +4646,67 @@ func addShortIDToNestedListField(body map[string]any, field string, path []strin
 		if target == nil {
 			continue
 		}
-		if addShortIDToObjectIfPresent(target) {
+		if addPublicIdentityToObjectIfPresent(target, kind) {
 			changed = true
 		}
 	}
 	return changed
+}
+
+func addPublicIdentityToObjectIfPresent(obj map[string]any, kind string) bool {
+	if obj == nil {
+		return false
+	}
+	changed := false
+	refKey := canonicalResourceKind(kind) + "_ref"
+	handleKey := canonicalResourceKind(kind) + "_handle"
+	if strings.TrimSpace(anyString(obj["ref"])) == "" {
+		if ref := firstNonEmpty(strings.TrimSpace(anyString(obj[refKey])), publicRefFromID(kind, anyString(obj["id"]))); ref != "" {
+			obj["ref"] = ref
+			changed = true
+		}
+	}
+	if strings.TrimSpace(anyString(obj["handle"])) == "" {
+		if handle := firstNonEmpty(strings.TrimSpace(anyString(obj[handleKey])), publicHandleFromRef(anyString(obj["ref"]))); handle != "" {
+			obj["handle"] = handle
+			changed = true
+		}
+	}
+	return changed
+}
+
+func addPublicIdentityToObjectSlice(slice []any, kind string) bool {
+	changed := false
+	for _, raw := range slice {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		if addPublicIdentityToObjectIfPresent(item, kind) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func publicRefFromID(kind string, id string) string {
+	id = strings.TrimSpace(id)
+	kind = canonicalResourceKind(kind)
+	if id == "" || kind == "" {
+		return ""
+	}
+	if strings.Contains(id, ":") {
+		return id
+	}
+	return kind + ":" + id
+}
+
+func publicHandleFromRef(ref string) string {
+	_, value, _, err := parseTypedRef(ref)
+	if err != nil {
+		return ""
+	}
+	return value
 }
 
 func addInboxAliasesToListField(body map[string]any, field string) bool {
@@ -5046,33 +4766,9 @@ func addInboxAliasToItemField(body map[string]any, field string) bool {
 
 func applyInboxIdentifiers(item map[string]any, alias string) bool {
 	changed := false
-	id := strings.TrimSpace(anyString(item["id"]))
-	if id != "" {
-		expectedShortID := shortID(id)
-		if currentShortID := strings.TrimSpace(anyString(item["short_id"])); currentShortID != expectedShortID {
-			item["short_id"] = expectedShortID
-			changed = true
-		}
-	}
 	if alias != "" {
 		if currentAlias := strings.TrimSpace(anyString(item["alias"])); currentAlias != alias {
 			item["alias"] = alias
-			changed = true
-		}
-	}
-	threadID := strings.TrimSpace(anyString(item["thread_id"]))
-	if threadID != "" {
-		threadShortID := shortID(threadID)
-		if current := strings.TrimSpace(anyString(item["thread_short_id"])); current != threadShortID {
-			item["thread_short_id"] = threadShortID
-			changed = true
-		}
-	}
-	sourceEventID := strings.TrimSpace(anyString(item["source_event_id"]))
-	if sourceEventID != "" {
-		sourceShortID := shortID(sourceEventID)
-		if current := strings.TrimSpace(anyString(item["source_event_short_id"])); current != sourceShortID {
-			item["source_event_short_id"] = sourceShortID
 			changed = true
 		}
 	}
@@ -5098,14 +4794,6 @@ func inboxAliasByID(ids []string) map[string]string {
 func inboxAliasDigest(id string) string {
 	sum := sha1.Sum([]byte(strings.TrimSpace(id)))
 	return fmt.Sprintf("%x", sum)
-}
-
-func shortID(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) <= shortIDLength {
-		return id
-	}
-	return id[:shortIDLength]
 }
 
 func minInt(a int, b int) int {
@@ -5622,10 +5310,7 @@ func enrichEventsForList(events []any) []any {
 			continue
 		}
 		copy := cloneMap(event)
-		id := strings.TrimSpace(anyString(copy["id"]))
-		if id != "" && strings.TrimSpace(anyString(copy["short_id"])) == "" {
-			copy["short_id"] = shortID(id)
-		}
+		addPublicIdentityToObjectIfPresent(copy, "event")
 		if preview := eventSummaryPreview(copy); preview != "" {
 			copy["summary_preview"] = preview
 		}
