@@ -68,6 +68,41 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "topics patch",
+		Summary:     "Patch a topic from scalar flags, or from advanced JSON.",
+		JSONShape:   "Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.",
+		Composition: "Fetches the Topic to discover `updated_at` when `--if-updated-at` is omitted.",
+		Examples: []string{
+			"anx topics patch <topic-id> --title \"Launch plan\"",
+			"anx topics patch <topic-id> --summary \"Updated coordination notes\" --if-updated-at <updated_at>",
+			"cat topic-patch.json | anx topics patch <topic-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<topic-id>", Description: "Topic id or unique prefix to patch."},
+			{Name: "--title <text>", Description: "Topic title."},
+			{Name: "--summary <text>", Description: "Topic summary."},
+			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from topics get when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "topics trash",
+		Summary:     "Trash a topic with a simple reason flag, or from advanced JSON.",
+		JSONShape:   "Either `--reason` building `{ reason }`, or advanced JSON body from stdin/--from-file.",
+		Composition: "Builds the `topics.trash` request without requiring heredoc JSON for routine lifecycle changes.",
+		Examples: []string{
+			"anx topics trash <topic-id> --reason \"test artifact\"",
+			"cat trash.json | anx topics trash <topic-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<topic-id>", Description: "Topic id or unique prefix to trash."},
+			{Name: "--reason <text>", Description: "Reason for trashing the topic."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+		},
+	},
+	{
 		Path:        "topics message",
 		Summary:     "Post a message to a Topic conversation without hand-authoring event JSON.",
 		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.",
@@ -190,6 +225,26 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--document-ref <typed-ref>", Description: "Pinned document ref for the card."},
 			{Name: "--ref <typed-ref>", Description: "Additional related typed ref, repeatable."},
 			{Name: "--done <text>", Description: "Definition-of-done checklist item, repeatable."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+		},
+	},
+	{
+		Path:        "cards patch",
+		Summary:     "Patch card metadata from scalar flags, or from advanced JSON.",
+		JSONShape:   "Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.",
+		Composition: "Fetches the Card to discover `updated_at` when `--if-updated-at` is omitted. Use `cards move` for board placement changes.",
+		Examples: []string{
+			"anx cards patch <card-id> --title \"Implement login\"",
+			"anx cards patch <card-id> --summary \"Updated scope\" --if-updated-at <updated_at>",
+			"cat card-patch.json | anx cards patch <card-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<card-id>", Description: "Card id or unique prefix to patch."},
+			{Name: "--title <text>", Description: "Card title."},
+			{Name: "--summary <text>", Description: "Card summary/body."},
+			{Name: "--column-key <key>", Description: "Accepted for guidance only; use `anx cards move --column <key>` for placement."},
+			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from cards get when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 		},
 	},
@@ -876,7 +931,18 @@ func generatedHelpText(topic string) (string, bool) {
 		topic = strings.Join(rewritten, " ")
 	}
 	if helper, ok := localHelperTopicByPath(topic); ok {
-		return formatLocalHelperHelp(helper), true
+		meta, err := registry.LoadEmbedded()
+		if err != nil {
+			return formatLocalHelperHelp(helper, true), true
+		}
+		mapped := mapRuntimePathToRegistryPath(topic)
+		exact, exactOK := commandByCLIPath(meta.Commands, mapped)
+		if exactOK && runtimeSupportsCommand(exact.CommandID) {
+			gen := formatGeneratedCommandHelp(topic, exact, false)
+			local := formatLocalHelperHelp(helper, false)
+			return strings.TrimSpace(gen + "\n\n" + local + "\n\n" + formatGlobalFlagUsage(topic)), true
+		}
+		return formatLocalHelperHelp(helper, true), true
 	}
 	meta, err := registry.LoadEmbedded()
 	if err != nil {
@@ -889,7 +955,7 @@ func generatedHelpText(topic string) (string, bool) {
 		if !runtimeSupportsCommand(exact.CommandID) {
 			return "", false
 		}
-		return formatGeneratedCommandHelp(topic, exact), true
+		return formatGeneratedCommandHelp(topic, exact, true), true
 	}
 
 	commands := runtimeCommandsForTopic(meta, topic)
@@ -1063,7 +1129,7 @@ func localHelperTopicByPath(path string) (localHelperTopic, bool) {
 	return localHelperTopic{}, false
 }
 
-func formatLocalHelperHelp(topic localHelperTopic) string {
+func formatLocalHelperHelp(topic localHelperTopic, includeGlobalFlags bool) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Local Help: %s\n\n", strings.TrimSpace(topic.Path)))
 	b.WriteString("- Kind: `local helper`\n")
@@ -1086,12 +1152,14 @@ func formatLocalHelperHelp(topic localHelperTopic) string {
 			b.WriteString(fmt.Sprintf("  %-28s %s\n", strings.TrimSpace(flag.Name), strings.TrimSpace(flag.Description)))
 		}
 	}
-	b.WriteString("\n\n")
-	b.WriteString(formatGlobalFlagUsage(topic.Path))
+	if includeGlobalFlags {
+		b.WriteString("\n\n")
+		b.WriteString(formatGlobalFlagUsage(topic.Path))
+	}
 	return strings.TrimSpace(b.String())
 }
 
-func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
+func formatGeneratedCommandHelp(topic string, cmd registry.Command, includeGlobalFlags bool) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Generated Help: %s\n\n", topic))
 	b.WriteString(fmt.Sprintf("- Command ID: `%s`\n", cmd.CommandID))
@@ -1147,8 +1215,10 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command) string {
 		b.WriteString("\n\n")
 		b.WriteString(extra)
 	}
-	b.WriteString("\n\n")
-	b.WriteString(formatGlobalFlagUsage(topic))
+	if includeGlobalFlags {
+		b.WriteString("\n\n")
+		b.WriteString(formatGlobalFlagUsage(topic))
+	}
 	return strings.TrimSpace(b.String())
 }
 

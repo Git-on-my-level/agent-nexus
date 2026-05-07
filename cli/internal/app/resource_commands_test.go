@@ -2617,6 +2617,133 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 	}
 }
 
+func TestTopicLifecycleCommandsAcceptFlagOnlyBodies(t *testing.T) {
+	t.Parallel()
+
+	const topicID = "topic_lifecycle_flags_123456"
+
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode %s body: %v", r.URL.Path, err)
+		}
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/trash":
+			if got := anyStringValue(payload["reason"]); got != "test artifact" {
+				t.Fatalf("expected trash reason, got %#v", payload)
+			}
+			seen["trash"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","state":"trashed"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/archive":
+			if len(payload) != 0 {
+				t.Fatalf("expected empty archive body, got %#v", payload)
+			}
+			seen["archive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","state":"archived"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/restore":
+			if len(payload) != 0 {
+				t.Fatalf("expected empty restore body, got %#v", payload)
+			}
+			seen["restore"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","state":"active"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/unarchive":
+			if len(payload) != 0 {
+				t.Fatalf("expected empty unarchive body, got %#v", payload)
+			}
+			seen["unarchive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","state":"active"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	for _, args := range [][]string{
+		{"--json", "--base-url", server.URL, "topics", "trash", topicID, "--reason", "test artifact"},
+		{"--json", "--base-url", server.URL, "topics", "archive", topicID},
+		{"--json", "--base-url", server.URL, "topics", "restore", topicID},
+		{"--json", "--base-url", server.URL, "topics", "unarchive", topicID},
+	} {
+		assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, args))
+	}
+	for _, name := range []string{"trash", "archive", "restore", "unarchive"} {
+		if !seen[name] {
+			t.Fatalf("expected %s request", name)
+		}
+	}
+}
+
+func TestPatchCommandsAcceptConvenienceFlags(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topicID      = "topic_patch_flags_123456"
+		cardID       = "card_patch_flags_123456"
+		topicUpdated = "2026-04-20T01:00:00Z"
+		cardUpdated  = "2026-04-20T02:00:00Z"
+	)
+
+	var topicPatchSeen, cardPatchSeen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/"+topicID:
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Old topic","updated_at":"` + topicUpdated + `"}}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/topics/"+topicID:
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics patch body: %v", err)
+			}
+			if got := anyStringValue(payload["if_updated_at"]); got != topicUpdated {
+				t.Fatalf("expected discovered topic token %q, got %#v", topicUpdated, payload)
+			}
+			patch, _ := payload["patch"].(map[string]any)
+			if got := anyStringValue(patch["title"]); got != "New topic" {
+				t.Fatalf("expected topic patch title, got %#v", payload)
+			}
+			topicPatchSeen = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"New topic","updated_at":"2026-04-20T01:05:00Z"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+cardID:
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","title":"Old card","summary":"Old body","updated_at":"` + cardUpdated + `"}}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+cardID:
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards patch body: %v", err)
+			}
+			if got := anyStringValue(payload["if_updated_at"]); got != cardUpdated {
+				t.Fatalf("expected discovered card token %q, got %#v", cardUpdated, payload)
+			}
+			patch, _ := payload["patch"].(map[string]any)
+			if got := anyStringValue(patch["summary"]); got != "New body" {
+				t.Fatalf("expected card patch summary, got %#v", payload)
+			}
+			cardPatchSeen = true
+			_, _ = w.Write([]byte(`{"card":{"id":"` + cardID + `","summary":"New body","updated_at":"2026-04-20T02:05:00Z"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"topics", "patch", topicID,
+		"--title", "New topic",
+	}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"cards", "patch", cardID,
+		"--summary", "New body",
+	}))
+	if !topicPatchSeen || !cardPatchSeen {
+		t.Fatalf("expected both patch requests, topic=%v card=%v", topicPatchSeen, cardPatchSeen)
+	}
+}
+
 func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	t.Parallel()
 
