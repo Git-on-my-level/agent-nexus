@@ -3369,6 +3369,37 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 	}
 }
 
+func TestDocsTrashRequiresReasonFlagOrJSONBody(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-docs-trash", `{"agent":"agent-docs-trash","actor_id":"actor_docs_trash","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-docs-trash", "docs", "trash", "document_docs_trash_1"}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(base, "--reason", "superseded", "--dry-run")))
+	data := asMap(payload["data"])
+	body := asMap(data["body"])
+	if got := anyStringValue(body["reason"]); got != "superseded" {
+		t.Fatalf("expected reason flag in dry-run body, got %#v", payload)
+	}
+
+	payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"from-json"}`), append(base, "--from-file=-", "--dry-run")))
+	data = asMap(payload["data"])
+	body = asMap(data["body"])
+	if got := anyStringValue(body["reason"]); got != "from-json" {
+		t.Fatalf("expected JSON reason in dry-run body, got %#v", payload)
+	}
+
+	payload = assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, append(base, "--dry-run")))
+	errPayload := asMap(payload["error"])
+	if got := anyStringValue(errPayload["code"]); got != "invalid_request" {
+		t.Fatalf("expected invalid_request for missing reason, got %#v", payload)
+	}
+	if msg := anyStringValue(errPayload["message"]); !strings.Contains(msg, "requires --reason or non-empty `--from-file` JSON body") {
+		t.Fatalf("expected missing reason guidance, got %#v", payload)
+	}
+}
+
 func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 	t.Parallel()
 

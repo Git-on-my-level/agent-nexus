@@ -21,6 +21,7 @@ type localHelperFlag struct {
 type localHelperTopic struct {
 	Path        string
 	Summary     string
+	QuickStart  string
 	JSONShape   string
 	Composition string
 	Examples    []string
@@ -205,6 +206,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs create",
 		Summary:     "Create a durable document lineage, with a file-first text-doc path for agents.",
+		QuickStart:  "Flags: `--topic <topic-ref-or-handle> --title <text> --body-file <path>`; use `--body <text>` for short inline content or `--from-file <path>` for advanced JSON.",
 		JSONShape:   "Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.",
 		Composition: "Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.",
 		Examples: []string{
@@ -653,6 +655,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs revise",
 		Summary:     "Revise a durable document from a local file or JSON body; stages a diff proposal by default.",
+		QuickStart:  "Flags: `docs revise <doc-ref> --body-file <path>` stages a proposal; add `--apply` to write immediately.",
 		JSONShape:   "Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.",
 		Composition: "Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.",
 		Examples: []string{
@@ -669,6 +672,24 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--apply", Description: "Apply immediately, or apply a staged proposal when combined with --proposal-id."},
 			{Name: "--proposal-id <proposal-id>", Description: "Staged proposal id to apply; must be combined with --apply."},
 			{Name: "--propose", Description: "Stage a proposal (default; included for explicitness)."},
+		},
+	},
+	{
+		Path:        "docs trash",
+		Summary:     "Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).",
+		QuickStart:  "Flags: `docs trash <doc-ref> --reason <text>`; `--from-file <path>` remains the advanced JSON compatibility path.",
+		JSONShape:   "`{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.",
+		Composition: "Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; JSON input remains supported for existing automation.",
+		Examples: []string{
+			"anx docs trash doc:runbook --reason \"superseded\"",
+			"cat trash.json | anx docs trash doc:runbook --from-file=-",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id to trash."},
+			{Name: "--reason <text>", Description: "Reason for trashing the document."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
 	{
@@ -707,6 +728,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs message",
 		Summary:     "Post a message to a Document conversation without hand-authoring event JSON.",
+		QuickStart:  "Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.",
 		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.",
 		Composition: "Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.",
 		Examples: []string{
@@ -726,6 +748,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs reply",
 		Summary:     "Reply to an existing Document message.",
+		QuickStart:  "Flags: `docs reply <doc-ref> --to <message-id> --body-file <path>` or `--body <text>`.",
 		JSONShape:   "Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.",
 		Composition: "Fetches the Document and validates the target message exists on its backing thread before posting the reply.",
 		Examples: []string{
@@ -988,6 +1011,9 @@ func generatedHelpText(topic string) (string, bool) {
 		if exactOK && runtimeSupportsCommand(exact.CommandID) {
 			gen := formatGeneratedCommandHelp(topic, exact, false)
 			local := formatLocalHelperHelp(helper, false)
+			if strings.HasPrefix(topic, "docs ") {
+				return strings.TrimSpace(local + "\n\n" + gen + "\n\n" + formatGlobalFlagUsage(topic)), true
+			}
 			return strings.TrimSpace(gen + "\n\n" + local + "\n\n" + formatGlobalFlagUsage(topic)), true
 		}
 		return formatLocalHelperHelp(helper, true), true
@@ -1187,6 +1213,9 @@ func formatLocalHelperHelp(topic localHelperTopic, includeGlobalFlags bool) stri
 	b.WriteString(fmt.Sprintf("Local Help: %s\n\n", strings.TrimSpace(topic.Path)))
 	b.WriteString("- Kind: `local helper`\n")
 	b.WriteString(fmt.Sprintf("- Summary: %s\n", strings.TrimSpace(topic.Summary)))
+	if strings.TrimSpace(topic.QuickStart) != "" {
+		b.WriteString(fmt.Sprintf("- Quick start: %s\n", strings.TrimSpace(topic.QuickStart)))
+	}
 	if strings.TrimSpace(topic.Composition) != "" {
 		b.WriteString(fmt.Sprintf("- Composition: %s\n", strings.TrimSpace(topic.Composition)))
 	}

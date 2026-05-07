@@ -65,7 +65,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs get` (command): Get document
 - `docs history` (command): List document revisions
 - `docs revision` (group): Nested generated help topic.
-- `docs trash` (command): Move document to trash
 - `docs archive` (command): Archive document
 - `docs unarchive` (command): Unarchive document
 - `docs restore` (command): Restore document from trash
@@ -149,6 +148,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards cards list` (local-helper): List all cards on a board in canonical column order without hydrating thread details.
 - `workspace summary` (local-helper): First-run workspace orientation: boards plus compact card/doc/inbox counts.
 - `docs revise` (local-helper): Revise a durable document from a local file or JSON body; stages a diff proposal by default.
+- `docs trash` (local-helper): Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - `docs content` (local-helper): Show the current document content together with authoritative head revision metadata.
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
@@ -2517,37 +2517,6 @@ Global flags:
 Tip: `anx help <command path>` for full command-level generated details.
 ```
 
-## `docs trash`
-
-Move document to trash
-
-```text
-Generated Help: docs trash
-
-- Command ID: `docs.trash`
-- CLI path: `docs trash`
-- HTTP: `POST /docs/{document_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move a document lineage to trash with an explicit operator reason.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `docs archive`
 
 Archive document
@@ -4348,6 +4317,31 @@ Global flags:
 Create a durable document lineage, with a file-first text-doc path for agents.
 
 ```text
+Local Help: docs create
+
+- Kind: `local helper`
+- Summary: Create a durable document lineage, with a file-first text-doc path for agents.
+- Quick start: Flags: `--topic <topic-ref-or-handle> --title <text> --body-file <path>`; use `--body <text>` for short inline content or `--from-file <path>` for advanced JSON.
+- Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
+- JSON body: Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
+- Examples:
+  - `anx docs create --topic topic:<topic-handle> --title "Runbook" --body-file runbook.md`
+  - `anx docs create --topic topic:<topic-handle> --title "Note" --body "Short update"`
+  - `anx docs create --subject-ref topic:<topic-handle> --title "Runbook" --summary "Durable context" --body-file runbook.md`
+  - `cat doc-create.json | anx docs create`
+
+Flags:
+  --topic <topic-ref-or-handle> Anchor the document to a topic typed ref or handle.
+  --subject-ref <typed-ref>    Explicit document subject ref when not using --topic.
+  --title <text>               Document title for flag-built text docs.
+  --summary <text>             Optional document summary for list/detail headers.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --ref <typed-ref>            Additional typed ref (repeatable).
+  --body-file <path>           Load Markdown/text content from a local file, or stdin with `-`.
+  --body <text>                Inline document body text (Markdown/text) when not using --body-file.
+  --from-file <path>           Advanced JSON request body from file.
+  --dry-run                    Validate and render the request without sending it.
+
 Generated Help: docs create
 
 - Command ID: `docs.create`
@@ -4377,30 +4371,6 @@ Inputs:
   - body `refs` (list<any>)
   - body `request_key` (string)
   Enum values: content_type: binary, structured, text
-
-Local Help: docs create
-
-- Kind: `local helper`
-- Summary: Create a durable document lineage, with a file-first text-doc path for agents.
-- Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
-- JSON body: Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
-- Examples:
-  - `anx docs create --topic topic:<topic-handle> --title "Runbook" --body-file runbook.md`
-  - `anx docs create --topic topic:<topic-handle> --title "Note" --body "Short update"`
-  - `anx docs create --subject-ref topic:<topic-handle> --title "Runbook" --summary "Durable context" --body-file runbook.md`
-  - `cat doc-create.json | anx docs create`
-
-Flags:
-  --topic <topic-ref-or-handle> Anchor the document to a topic typed ref or handle.
-  --subject-ref <typed-ref>    Explicit document subject ref when not using --topic.
-  --title <text>               Document title for flag-built text docs.
-  --summary <text>             Optional document summary for list/detail headers.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
-  --ref <typed-ref>            Additional typed ref (repeatable).
-  --body-file <path>           Load Markdown/text content from a local file, or stdin with `-`.
-  --body <text>                Inline document body text (Markdown/text) when not using --body-file.
-  --from-file <path>           Advanced JSON request body from file.
-  --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -5384,6 +5354,28 @@ Global flags:
 Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 
 ```text
+Local Help: docs revise
+
+- Kind: `local helper`
+- Summary: Revise a durable document from a local file or JSON body; stages a diff proposal by default.
+- Quick start: Flags: `docs revise <doc-ref> --body-file <path>` stages a proposal; add `--apply` to write immediately.
+- Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
+- JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
+- Examples:
+  - `anx docs revise doc:runbook --body-file notes.md`
+  - `anx docs revise --apply --proposal-id <proposal-id>`
+  - `anx docs revise doc:runbook --apply --body-file notes.md`
+  - `cat revision.json | anx docs revise doc:runbook`
+
+Flags:
+  <ref>                        Document ref, alias, or id to revise.
+  --body-file <path>           Load revised Markdown/text content from a local file or stdin with `-`.
+  --from-file <path>           Advanced JSON revision body from a file.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --apply                      Apply immediately, or apply a staged proposal when combined with --proposal-id.
+  --proposal-id <proposal-id>  Staged proposal id to apply; must be combined with --apply.
+  --propose                    Stage a proposal (default; included for explicitness).
+
 Generated Help: docs revise
 
 - Command ID: `docs.revisions.create`
@@ -5412,30 +5404,58 @@ Inputs:
   - body `refs` (list<any>)
   Enum values: content_type: binary, structured, text
 
-Local Help: docs revise
-
-- Kind: `local helper`
-- Summary: Revise a durable document from a local file or JSON body; stages a diff proposal by default.
-- Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
-- JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
-- Examples:
-  - `anx docs revise doc:runbook --body-file notes.md`
-  - `anx docs revise --apply --proposal-id <proposal-id>`
-  - `anx docs revise doc:runbook --apply --body-file notes.md`
-  - `cat revision.json | anx docs revise doc:runbook`
-
-Flags:
-  <ref>                        Document ref, alias, or id to revise.
-  --body-file <path>           Load revised Markdown/text content from a local file or stdin with `-`.
-  --from-file <path>           Advanced JSON revision body from a file.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
-  --apply                      Apply immediately, or apply a staged proposal when combined with --proposal-id.
-  --proposal-id <proposal-id>  Staged proposal id to apply; must be combined with --apply.
-  --propose                    Stage a proposal (default; included for explicitness).
-
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revise ... ; anx --json docs revise ... ; anx docs revise ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs trash`
+
+Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
+
+```text
+Local Help: docs trash
+
+- Kind: `local helper`
+- Summary: Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
+- Quick start: Flags: `docs trash <doc-ref> --reason <text>`; `--from-file <path>` remains the advanced JSON compatibility path.
+- Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; JSON input remains supported for existing automation.
+- JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
+- Examples:
+  - `anx docs trash doc:runbook --reason "superseded"`
+  - `cat trash.json | anx docs trash doc:runbook --from-file=-`
+
+Flags:
+  <ref>                        Document ref, handle, or id to trash.
+  --reason <text>              Reason for trashing the document.
+  --from-file <path>           Advanced JSON request body from file or stdin (`-`).
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --dry-run                    Validate and render the request without sending it.
+
+Generated Help: docs trash
+
+- Command ID: `docs.trash`
+- CLI path: `docs trash`
+- HTTP: `POST /docs/{document_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move a document lineage to trash with an explicit operator reason.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `docs`, `write`
+- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs unarchive`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5505,6 +5525,7 @@ Local Help: docs message
 
 - Kind: `local helper`
 - Summary: Post a message to a Document conversation without hand-authoring event JSON.
+- Quick start: Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.
 - Composition: Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.
 - Examples:
@@ -5536,6 +5557,7 @@ Local Help: docs reply
 
 - Kind: `local helper`
 - Summary: Reply to an existing Document message.
+- Quick start: Flags: `docs reply <doc-ref> --to <message-id> --body-file <path>` or `--body <text>`.
 - Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `docs message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
