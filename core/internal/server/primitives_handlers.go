@@ -151,10 +151,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	threadID := anyString(stored["thread_id"])
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
 	if strings.TrimSpace(anyString(stored["type"])) == "human_attention_requested" && opts.projectionMaintainer != nil {
-		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to index human attention request")
-			return
-		}
+		_ = opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC())
 	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{"event": stored}))
