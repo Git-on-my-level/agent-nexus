@@ -57,6 +57,9 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 		}
 		outPath = resolved
 	}
+	if outPath == "-" {
+		outPath = ""
+	}
 	if outPath != "" {
 		if err := os.WriteFile(outPath, body, 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "artifact_content_write_failed", fmt.Sprintf("failed to write %s", outPath), err)
@@ -292,6 +295,20 @@ func dryRunResult(commandName string, commandID string, pathParams map[string]st
 		data["dry_run"] = true
 	}
 	result.Text = result.Text + " No request was sent."
+	return result
+}
+
+// dryRunResultWithFlagOverlays adds _overrides to the JSON envelope when flags won over a non-empty JSON field.
+func dryRunResultWithFlagOverlays(commandName string, commandID string, pathParams map[string]string, query []queryParam, body any, flagOverwrites map[string]any) *commandResult {
+	result := dryRunResult(commandName, commandID, pathParams, query, body)
+	if result == nil || len(flagOverwrites) == 0 {
+		return result
+	}
+	data, _ := result.Data.(map[string]any)
+	if data != nil {
+		data["_overrides"] = flagOverwrites
+		data["anx_cli_recovery"] = map[string]any{"kind": "json_flag_overlay"}
+	}
 	return result
 }
 

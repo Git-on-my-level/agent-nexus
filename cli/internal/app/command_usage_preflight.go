@@ -282,6 +282,21 @@ func preflightRootCommands() map[string]struct{} {
 
 func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	specs := map[string]map[string]preflightFlagSpec{}
+	addLayer := func(layer map[string]map[string]preflightFlagSpec) {
+		for path, flags := range layer {
+			current := specs[path]
+			if current == nil {
+				current = map[string]preflightFlagSpec{}
+				specs[path] = current
+			}
+			for name, spec := range flags {
+				current[name] = spec
+			}
+		}
+	}
+	// Lowest precedence: lifecycle verbs derived from the resource registry.
+	// `manualPreflightFlagSpecs` and `localHelperTopics` may still override.
+	addLayer(derivedLifecyclePreflightSpecs())
 	for _, topic := range localHelperTopics {
 		flags := map[string]preflightFlagSpec{}
 		for _, flag := range topic.Flags {
@@ -291,19 +306,10 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			}
 		}
 		if len(flags) > 0 {
-			specs[strings.Join(strings.Fields(topic.Path), " ")] = flags
+			addLayer(map[string]map[string]preflightFlagSpec{strings.Join(strings.Fields(topic.Path), " "): flags})
 		}
 	}
-	for path, flags := range manualPreflightFlagSpecs() {
-		current := specs[path]
-		if current == nil {
-			current = map[string]preflightFlagSpec{}
-			specs[path] = current
-		}
-		for name, spec := range flags {
-			current[name] = spec
-		}
-	}
+	addLayer(manualPreflightFlagSpecs())
 	return specs
 }
 
@@ -436,23 +442,10 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"actor-id":      valueFlag,
 			"dry-run":       boolFlag,
 		},
-		"topics archive": {
-			"topic-id":  valueFlag,
-			"from-file": valueFlag,
-		},
-		"topics unarchive": {
-			"topic-id":  valueFlag,
-			"from-file": valueFlag,
-		},
-		"topics trash": {
-			"topic-id":  valueFlag,
-			"from-file": valueFlag,
-			"reason":    valueFlag,
-		},
-		"topics restore": {
-			"topic-id":  valueFlag,
-			"from-file": valueFlag,
-		},
+		// Lifecycle verbs (archive/unarchive/trash/restore/purge) for topics,
+		// boards, docs, cards, artifacts, and events are derived from
+		// `lifecycleResourceSpecs()` in lifecycle_spec.go. Add overrides here
+		// only when a parser exposes a flag outside the standard convention.
 		"docs list": merge(map[string]preflightFlagSpec{
 			"thread-id": valueFlag,
 			"q":         valueFlag,
@@ -514,22 +507,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"events explain": {
 			"type": valueFlag,
 		},
-		"events archive": {
-			"event-id": valueFlag,
-			"dry-run":  boolFlag,
-		},
-		"events unarchive": {
-			"event-id": valueFlag,
-			"dry-run":  boolFlag,
-		},
-		"events trash": {
-			"event-id": valueFlag,
-			"dry-run":  boolFlag,
-		},
-		"events restore": {
-			"event-id": valueFlag,
-			"dry-run":  boolFlag,
-		},
 		"inbox list": {
 			"thread-id": valueFlag,
 			"type":      valueFlag,
@@ -555,27 +532,27 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}, lifecycle),
 		"topics reply":  {"topic": valueFlag, "topic-id": valueFlag},
 		"docs content":  {"document-id": valueFlag},
-		"docs message":  {"document": valueFlag, "document-id": valueFlag},
-		"docs messages": {"document": valueFlag, "document-id": valueFlag},
-		"docs reply":    {"document": valueFlag, "document-id": valueFlag},
+		"docs message":  {"document-id": valueFlag},
+		"docs messages": {"document-id": valueFlag},
+		"docs reply":    {"document-id": valueFlag},
 		"docs revise": {
-			"document": valueFlag, "document-id": valueFlag,
+			"document-id": valueFlag,
 			"proposal-id": valueFlag,
-			"from-file":   valueFlag, "json-file": valueFlag,
-			"body-file": valueFlag, "content-file": valueFlag,
-			"actor-id": valueFlag,
-			"apply":    boolFlag, "propose": boolFlag,
+			"from-file":   valueFlag,
+			"body-file":   valueFlag,
+			"actor-id":    valueFlag,
+			"apply":       boolFlag,
+			"propose":     boolFlag,
 		},
-		"cards message":  {"card": valueFlag, "card-id": valueFlag},
-		"cards messages": {"card": valueFlag, "card-id": valueFlag},
-		"cards reply":    {"card": valueFlag, "card-id": valueFlag},
+		"cards message":  {"card-id": valueFlag},
+		"cards messages": {"card-id": valueFlag},
+		"cards reply":    {"card-id": valueFlag},
 		"cards create": {
 			"board":               valueFlag,
 			"board-id":            valueFlag,
 			"title":               valueFlag,
 			"body":                valueFlag,
 			"body-file":           valueFlag,
-			"content-file":        valueFlag,
 			"from-file":           valueFlag,
 			"actor-id":            valueFlag,
 			"request-key":         valueFlag,
@@ -593,7 +570,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"dry-run":             boolFlag,
 		},
 		"cards patch": {
-			"card":          valueFlag,
 			"card-id":       valueFlag,
 			"from-file":     valueFlag,
 			"title":         valueFlag,
@@ -602,19 +578,31 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"if-updated-at": valueFlag,
 			"actor-id":      valueFlag,
 		},
-		"cards revise": {"card": valueFlag, "card-id": valueFlag, "body-file": valueFlag, "content-file": valueFlag, "from-file": valueFlag},
+		"cards revise": {"card-id": valueFlag, "body-file": valueFlag, "from-file": valueFlag},
 		"cards move": {
-			"card":                valueFlag,
 			"card-id":             valueFlag,
 			"column":              valueFlag,
 			"if-board-updated-at": valueFlag,
 			"actor-id":            valueFlag,
 			"from-file":           valueFlag,
-			"body-file":           valueFlag,
+			"dry-run":             boolFlag,
 		},
-		"cards assign":      {"card": valueFlag, "card-id": valueFlag},
-		"cards resolve":     {"card": valueFlag, "card-id": valueFlag},
-		"cards reopen":      {"card": valueFlag, "card-id": valueFlag},
+		"cards assign": {"card-id": valueFlag},
+		"cards resolve": {
+			"card-id":             valueFlag,
+			"column":              valueFlag,
+			"resolution":          valueFlag,
+			"resolution-ref":      valueFlag,
+			"reason":              valueFlag,
+			"body":                valueFlag,
+			"body-file":           valueFlag,
+			"summary":             valueFlag,
+			"if-board-updated-at": valueFlag,
+			"actor-id":            valueFlag,
+			"from-file":           valueFlag,
+			"dry-run":             boolFlag,
+		},
+		"cards reopen": {"card-id": valueFlag},
 		"threads message":   {"thread": valueFlag, "thread-id": valueFlag},
 		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
 		"boards workspace":  {"board-id": valueFlag},

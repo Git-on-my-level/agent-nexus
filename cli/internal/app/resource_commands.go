@@ -1172,185 +1172,12 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 	case "inspect":
 		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
 		return result, "artifacts inspect", callErr
-	case "trash":
-		fs := newSilentFlagSet("artifacts trash")
-		var artifactIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to trash")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for trashing")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts trash", errnorm.Usage("invalid_flags", err.Error())
+	case "archive", "unarchive", "trash", "restore", "purge":
+		spec, ok := lifecycleSpecFor("artifacts")
+		if !ok {
+			return nil, "artifacts", errnorm.Usage("internal_error", "missing lifecycle spec for artifacts")
 		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(artifactIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts trash", err
-		}
-		if len(positionals) > 0 {
-			return nil, "artifacts trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts trash`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts trash", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts trash", "artifacts.trash", "artifact_id", id, artifactIDLookupSpec, nil, body)
-		return result, "artifacts trash", callErr
-	case "archive":
-		fs := newSilentFlagSet("artifacts archive")
-		var artifactIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to archive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for archiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts archive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(artifactIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts archive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "artifacts archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts archive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts archive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts archive", "artifacts.archive", "artifact_id", id, artifactIDLookupSpec, nil, body)
-		return result, "artifacts archive", callErr
-	case "unarchive":
-		fs := newSilentFlagSet("artifacts unarchive")
-		var artifactIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to unarchive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts unarchive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(artifactIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts unarchive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "artifacts unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts unarchive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts unarchive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts unarchive", "artifacts.unarchive", "artifact_id", id, artifactIDLookupSpec, nil, body)
-		return result, "artifacts unarchive", callErr
-	case "restore":
-		fs := newSilentFlagSet("artifacts restore")
-		var artifactIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to restore")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for restoring")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts restore", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(artifactIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts restore", err
-		}
-		if len(positionals) > 0 {
-			return nil, "artifacts restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts restore`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "artifacts restore", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts restore", "artifacts.restore", "artifact_id", id, artifactIDLookupSpec, nil, body)
-		return result, "artifacts restore", callErr
-	case "purge":
-		fs := newSilentFlagSet("artifacts purge")
-		var artifactIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id to permanently delete")
-		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts purge", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(artifactIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts purge", err
-		}
-		if len(positionals) > 0 {
-			return nil, "artifacts purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts purge`")
-		}
-		body := map[string]any{}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "artifacts purge", "artifacts.purge", "artifact_id", id, artifactIDLookupSpec, nil, body)
-		return result, "artifacts purge", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	default:
 		return nil, "artifacts", artifactsSubcommandSpec.unknownError(args[0])
 	}
@@ -1511,235 +1338,12 @@ func (a *App) runBoardsCommand(ctx context.Context, args []string, cfg config.Re
 			nil,
 		)
 		return result, "boards workspace", callErr
-	case "archive":
-		fs := newSilentFlagSet("boards archive")
-		var boardIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to archive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for archiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards archive", errnorm.Usage("invalid_flags", err.Error())
+	case "archive", "unarchive", "trash", "restore", "purge":
+		spec, ok := lifecycleSpecFor("boards")
+		if !ok {
+			return nil, "boards", errnorm.Usage("internal_error", "missing lifecycle spec for boards")
 		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(boardIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards archive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "boards archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards archive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "boards archive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"boards archive",
-			"boards.archive",
-			"board_id",
-			id,
-			boardIDLookupSpec,
-			nil,
-			body,
-		)
-		return result, "boards archive", callErr
-	case "unarchive":
-		fs := newSilentFlagSet("boards unarchive")
-		var boardIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to unarchive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards unarchive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(boardIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards unarchive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "boards unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards unarchive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "boards unarchive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"boards unarchive",
-			"boards.unarchive",
-			"board_id",
-			id,
-			boardIDLookupSpec,
-			nil,
-			body,
-		)
-		return result, "boards unarchive", callErr
-	case "trash":
-		fs := newSilentFlagSet("boards trash")
-		var boardIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to trash")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for trashing")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards trash", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(boardIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards trash", err
-		}
-		if len(positionals) > 0 {
-			return nil, "boards trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards trash`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "boards trash", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"boards trash",
-			"boards.trash",
-			"board_id",
-			id,
-			boardIDLookupSpec,
-			nil,
-			body,
-		)
-		return result, "boards trash", callErr
-	case "restore":
-		fs := newSilentFlagSet("boards restore")
-		var boardIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to restore")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for restoring")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards restore", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(boardIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards restore", err
-		}
-		if len(positionals) > 0 {
-			return nil, "boards restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards restore`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "boards restore", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"boards restore",
-			"boards.restore",
-			"board_id",
-			id,
-			boardIDLookupSpec,
-			nil,
-			body,
-		)
-		return result, "boards restore", callErr
-	case "purge":
-		fs := newSilentFlagSet("boards purge")
-		var boardIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&boardIDFlag, "board-id", "Board id to permanently delete")
-		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "boards purge", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(boardIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "board id"); err != nil {
-			return nil, "boards purge", err
-		}
-		if len(positionals) > 0 {
-			return nil, "boards purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx boards purge`")
-		}
-		body := map[string]any{}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"boards purge",
-			"boards.purge",
-			"board_id",
-			id,
-			boardIDLookupSpec,
-			nil,
-			body,
-		)
-		return result, "boards purge", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	case "cards":
 		return a.runBoardCardsCommand(ctx, args[1:], cfg)
 	default:
@@ -2025,185 +1629,12 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 
 		result, callErr := a.invokeDocsRevisionGetWithIDResolution(ctx, cfg, documentID, revisionID)
 		return result, "docs revision get", callErr
-	case "trash":
-		fs := newSilentFlagSet("docs trash")
-		var documentIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to trash")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for trashing")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs trash", errnorm.Usage("invalid_flags", err.Error())
+	case "archive", "unarchive", "trash", "restore", "purge":
+		spec, ok := lifecycleSpecFor("docs")
+		if !ok {
+			return nil, "docs", errnorm.Usage("internal_error", "missing lifecycle spec for docs")
 		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(documentIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs trash", err
-		}
-		if len(positionals) > 0 {
-			return nil, "docs trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs trash`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "docs trash", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs trash", "docs.trash", "document_id", id, documentIDLookupSpec, nil, body)
-		return result, "docs trash", callErr
-	case "archive":
-		fs := newSilentFlagSet("docs archive")
-		var documentIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to archive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for archiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs archive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(documentIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs archive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "docs archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs archive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "docs archive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs archive", "docs.archive", "document_id", id, documentIDLookupSpec, nil, body)
-		return result, "docs archive", callErr
-	case "unarchive":
-		fs := newSilentFlagSet("docs unarchive")
-		var documentIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to unarchive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs unarchive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(documentIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs unarchive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "docs unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs unarchive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "docs unarchive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs unarchive", "docs.unarchive", "document_id", id, documentIDLookupSpec, nil, body)
-		return result, "docs unarchive", callErr
-	case "restore":
-		fs := newSilentFlagSet("docs restore")
-		var documentIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to restore")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for restoring")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs restore", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(documentIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs restore", err
-		}
-		if len(positionals) > 0 {
-			return nil, "docs restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs restore`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "docs restore", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs restore", "docs.restore", "document_id", id, documentIDLookupSpec, nil, body)
-		return result, "docs restore", callErr
-	case "purge":
-		fs := newSilentFlagSet("docs purge")
-		var documentIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&documentIDFlag, "document-id", "Document id to permanently delete")
-		fs.Var(&reasonFlag, "reason", "Reason for permanent deletion")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "docs purge", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(documentIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "document id"); err != nil {
-			return nil, "docs purge", err
-		}
-		if len(positionals) > 0 {
-			return nil, "docs purge", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx docs purge`")
-		}
-		body := map[string]any{}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs purge", "docs.purge", "document_id", id, documentIDLookupSpec, nil, body)
-		return result, "docs purge", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	default:
 		return nil, "docs", docsSubcommandSpec.unknownError(args[0])
 	}
@@ -2268,158 +1699,12 @@ func (a *App) runEventsCommand(ctx context.Context, args []string, cfg config.Re
 	case "explain":
 		result, err := a.runEventsExplainCommand(args[1:])
 		return result, "events explain", err
-	case "archive":
-		fs := newSilentFlagSet("events archive")
-		var eventIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&eventIDFlag, "event-id", "Event id to archive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for archiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "events archive", errnorm.Usage("invalid_flags", err.Error())
+	case "archive", "unarchive", "trash", "restore":
+		spec, ok := lifecycleSpecFor("events")
+		if !ok {
+			return nil, "events", errnorm.Usage("internal_error", "missing lifecycle spec for events")
 		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(eventIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "event id"); err != nil {
-			return nil, "events archive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "events archive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events archive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "events archive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events archive", "events.archive", "event_id", id, eventIDLookupSpec, nil, body)
-		return result, "events archive", callErr
-	case "unarchive":
-		fs := newSilentFlagSet("events unarchive")
-		var eventIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&eventIDFlag, "event-id", "Event id to unarchive")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for unarchiving")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "events unarchive", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(eventIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "event id"); err != nil {
-			return nil, "events unarchive", err
-		}
-		if len(positionals) > 0 {
-			return nil, "events unarchive", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events unarchive`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "events unarchive", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events unarchive", "events.unarchive", "event_id", id, eventIDLookupSpec, nil, body)
-		return result, "events unarchive", callErr
-	case "trash":
-		fs := newSilentFlagSet("events trash")
-		var eventIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&eventIDFlag, "event-id", "Event id to trash")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for trashing")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "events trash", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(eventIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "event id"); err != nil {
-			return nil, "events trash", err
-		}
-		if len(positionals) > 0 {
-			return nil, "events trash", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events trash`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "events trash", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events trash", "events.trash", "event_id", id, eventIDLookupSpec, nil, body)
-		return result, "events trash", callErr
-	case "restore":
-		fs := newSilentFlagSet("events restore")
-		var eventIDFlag trackedString
-		var actorIDFlag trackedString
-		var reasonFlag trackedString
-		fs.Var(&eventIDFlag, "event-id", "Event id to restore")
-		fs.Var(&actorIDFlag, "actor-id", "Actor id")
-		fs.Var(&reasonFlag, "reason", "Reason for restoring")
-		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "events restore", errnorm.Usage("invalid_flags", err.Error())
-		}
-		positionals := fs.Args()
-		id := strings.TrimSpace(eventIDFlag.value)
-		if id == "" && len(positionals) > 0 {
-			id = strings.TrimSpace(positionals[0])
-			positionals = positionals[1:]
-		}
-		if err := validateID(id, "event id"); err != nil {
-			return nil, "events restore", err
-		}
-		if len(positionals) > 0 {
-			return nil, "events restore", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx events restore`")
-		}
-		body := map[string]any{}
-		actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-		if err != nil {
-			return nil, "events restore", err
-		}
-		if actorID != "" {
-			body["actor_id"] = actorID
-		} else if strings.TrimSpace(cfg.ActorID) != "" {
-			body["actor_id"] = strings.TrimSpace(cfg.ActorID)
-		}
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			body["reason"] = strings.TrimSpace(reasonFlag.value)
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "events restore", "events.restore", "event_id", id, eventIDLookupSpec, nil, body)
-		return result, "events restore", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	default:
 		return nil, "events", eventsSubcommandSpec.unknownError(args[0])
 	}
@@ -3216,15 +2501,14 @@ func (a *App) parseJSONBodyInput(args []string, commandName string) (any, error)
 func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, bool, error) {
 	fs := newSilentFlagSet("docs create")
 	var fromFileFlag, contentFileFlag trackedString
-	var titleFlag, summaryFlag, topicFlag, subjectFlag, actorIDFlag trackedString
+	var titleFlag, summaryFlag, topicFlag, subjectFlag, bodyFlag, actorIDFlag trackedString
 	var dryRunFlag trackedBool
 	var refFlags trackedStrings
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&fromFileFlag, "json-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON body from file path or stdin with -")
 	fs.Var(&contentFileFlag, "body-file", "Load document content from a local file or stdin with -")
-	fs.Var(&contentFileFlag, "content-file", "Load document content from a local file")
 	fs.Var(&titleFlag, "title", "Document title")
 	fs.Var(&summaryFlag, "summary", "Document summary")
+	fs.Var(&bodyFlag, "body", "Inline document body text (text/Markdown)")
 	fs.Var(&topicFlag, "topic", "Topic typed ref or handle to anchor the document")
 	fs.Var(&subjectFlag, "subject-ref", "Explicit typed subject ref")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -3249,6 +2533,9 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 	if err != nil {
 		return nil, false, err
 	}
+	if len(payload) > 0 && strings.TrimSpace(bodyFlag.value) != "" {
+		return nil, false, errnorm.Usage("invalid_args", "`--body` cannot be combined with JSON body input for `anx docs create`")
+	}
 	var body any
 	if len(payload) > 0 {
 		body, err = decodeJSONPayload(payload)
@@ -3256,7 +2543,15 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 			return nil, false, err
 		}
 	} else {
+		if strings.TrimSpace(bodyFlag.value) != "" && contentFile != "" {
+			return nil, false, errnorm.Usage("invalid_request", "`--body` and `--body-file` cannot be combined for `anx docs create`")
+		}
 		body = docsCreateBodyFromFlags(titleFlag.value, summaryFlag.value, topicFlag.value, subjectFlag.value, refFlags.values)
+		if inline := strings.TrimSpace(bodyFlag.value); inline != "" {
+			if bodyMap, ok := body.(map[string]any); ok {
+				bodyMap["content"] = inline
+			}
+		}
 	}
 	body, err = a.applyContentFileOverride(body, contentFile, "docs create")
 	if err != nil {
@@ -3315,8 +2610,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 	var fromFileFlag, titleFlag, summaryFlag, topicFlag, actorIDFlag trackedString
 	var documentRefFlags, pinnedRefFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&fromFileFlag, "body-file", "Advanced JSON request body from file or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file or stdin with -")
 	fs.Var(&titleFlag, "title", "Board title")
 	fs.Var(&summaryFlag, "summary", "Board summary")
 	fs.Var(&topicFlag, "topic", "Primary topic typed ref or handle")
@@ -3414,10 +2708,9 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 	fs := newSilentFlagSet(commandName)
 	var fromFileFlag, contentFileFlag trackedString
 	var dryRunFlag trackedBool
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON body from file path or stdin with -")
 	if options.allowContentFile {
-		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
+		fs.Var(&contentFileFlag, "body-file", "Load document/content field from file path or stdin with -")
 	}
 	if options.allowDryRun {
 		fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
@@ -3477,10 +2770,9 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	var idArgFlag, fromFileFlag, contentFileFlag trackedString
 	var dryRunFlag trackedBool
 	fs.Var(&idArgFlag, idFlag, idLabel)
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON body from file path or stdin with -")
 	if options.allowContentFile {
-		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
+		fs.Var(&contentFileFlag, "body-file", "Load document/content field from file path or stdin with -")
 	}
 	if options.allowDryRun {
 		fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
@@ -3592,8 +2884,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
 	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done only; use trash to abandon work)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -3715,8 +3006,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	var boardIDFlag, fromFileFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&requestKeyFlag, "request-key", "Request key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
@@ -3796,8 +3086,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
 	fs.Var(&resolutionFlag, "resolution", "Terminal resolution (done only); card must already be in the done column (use `anx cards move` to change columns)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&clearDocumentRefFlag, "clear-document-ref", "Clear the document ref")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, errnorm.Usage("invalid_flags", err.Error())
@@ -3889,8 +3178,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id")
 	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id")
@@ -4021,8 +3309,7 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -4215,8 +3502,7 @@ func validateTypedRefShape(ref string) error {
 func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("derived rebuild")
 	var fromFileFlag, actorIDFlag trackedString
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -4261,8 +3547,7 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("inbox respond")
 	var fromFileFlag, inboxItemIDFlag, responseTextFlag, notifyModeFlag, actorIDFlag trackedString
-	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
 	fs.Var(&responseTextFlag, "response-text", "Freeform response text")
 	fs.Var(&notifyModeFlag, "notify-mode", "Notification mode: original, target, none")
@@ -5561,14 +4846,14 @@ func (a *App) applyContentFileOverride(body any, contentFile string, commandName
 
 	payload, ok := body.(map[string]any)
 	if !ok {
-		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object when --content-file is provided", commandName))
+		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object when --body-file content overlay is provided", commandName))
 	}
 	payload["content"] = string(content)
 	return payload, nil
 }
 
 // skipJSONStdinForContentFile is true when the user supplied document content via
-// --body-file/--content-file (including `-` for stdin) without --from-file/--json-file.
+// --body-file (including `-` for stdin) without --from-file.
 // In that case stdin must not be consumed as the JSON mutation body; it is reserved for
 // the raw document stream read by applyContentFileOverride/readRawFile.
 func skipJSONStdinForContentFile(fromFile, contentFile string) bool {

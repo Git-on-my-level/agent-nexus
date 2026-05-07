@@ -16,13 +16,38 @@ var topicsSubcommandSpec = subcommandSpec{
 		"list", "get", "create", "patch", "message", "messages", "reply", "timeline", "workspace",
 		"archive", "unarchive", "trash", "restore",
 	},
-	examples: []string{"anx topics list", "anx topics create --title \"Launch\" --summary \"Coordinate launch work\"", "anx topics message topic:launch --body-file message.md", "anx topics messages topic:launch", "anx topics reply topic:launch --to <message-id> --body-file reply.md", "anx topics workspace topic:launch", "anx topics archive topic:launch"},
+	examples: []string{
+		"anx topics list",
+		"anx topics create --title \"Launch\" --summary \"Coordinate launch work\"",
+		"anx topics message topic:launch --body-file message.md",
+		"anx topics messages topic:launch",
+		"anx topics reply topic:launch --to <message-id> --body-file reply.md",
+		"anx topics workspace topic:launch",
+		"anx topics archive topic:launch --reason \"wrapped up\"",
+		"anx topics trash topic:launch --reason \"obsolete\"",
+		"anx topics archive topic:launch --from-file lifecycle.json",
+	},
 }
 
 var cardsSubcommandSpec = subcommandSpec{
-	command:  "cards",
-	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board board:launch --title \"Implement login\" --body-file card.md", "anx cards message card:implement-login --body-file update.md", "anx cards messages card:implement-login", "anx cards reply card:implement-login --to <message-id> --body-file reply.md", "anx cards revise card:implement-login --body-file card.md", "anx cards history card:implement-login", "anx cards assign card:implement-login --assignee-ref actor:agent-alpha", "anx cards resolve card:implement-login --reason \"Works as expected\"", "anx cards move card:implement-login --column review", "anx cards get card:implement-login"},
+	command: "cards",
+	valid:   []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
+	examples: []string{
+		"anx cards list",
+		"anx cards create --board board:launch --title \"Implement login\" --body-file card.md",
+		"anx cards message card:implement-login --body-file update.md",
+		"anx cards messages card:implement-login",
+		"anx cards reply card:implement-login --to <message-id> --body-file reply.md",
+		"anx cards revise card:implement-login --body-file card.md",
+		"anx cards history card:implement-login",
+		"anx cards assign card:implement-login --assignee-ref actor:agent-alpha",
+		"anx cards resolve card:implement-login --reason \"ok\" --body \"Validated in staging\"",
+		"anx cards move card:implement-login --column review",
+		"anx cards archive card:implement-login --reason \"blocked external\"",
+		"anx cards trash card:implement-login --reason \"duplicate\"",
+		"anx cards archive card:implement-login --from-file lifecycle.json",
+		"anx cards get card:implement-login",
+	},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -163,46 +188,12 @@ func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Re
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics workspace", "topics.workspace", "topic_id", id, topicIDLookupSpec, nil, nil)
 		return result, "topics workspace", callErr
-	case "archive":
-		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics archive")
-		if err != nil {
-			return nil, "topics archive", err
+	case "archive", "unarchive", "trash", "restore":
+		spec, ok := lifecycleSpecFor("topics")
+		if !ok {
+			return nil, "topics", errnorm.Usage("internal_error", "missing lifecycle spec for topics")
 		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "topics archive", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics archive", "topics.archive", "topic_id", id, topicIDLookupSpec, nil, body)
-		return result, "topics archive", callErr
-	case "unarchive":
-		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics unarchive")
-		if err != nil {
-			return nil, "topics unarchive", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "topics unarchive", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics unarchive", "topics.unarchive", "topic_id", id, topicIDLookupSpec, nil, body)
-		return result, "topics unarchive", callErr
-	case "trash":
-		id, body, err := a.parseTopicTrashInput(args[1:], "topics trash")
-		if err != nil {
-			return nil, "topics trash", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "topics trash", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics trash", "topics.trash", "topic_id", id, topicIDLookupSpec, nil, body)
-		return result, "topics trash", callErr
-	case "restore":
-		id, body, err := a.parseTopicIDAndOptionalJSONBody(args[1:], "topics restore")
-		if err != nil {
-			return nil, "topics restore", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "topics restore", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "topics restore", "topics.restore", "topic_id", id, topicIDLookupSpec, nil, body)
-		return result, "topics restore", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	default:
 		return nil, "topics", topicsSubcommandSpec.unknownError(args[0])
 	}
@@ -327,9 +318,12 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards revise", "cards.revisions.create", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards revise", callErr
 	case "move":
-		id, body, err := a.parseCardMoveInput(ctx, args[1:], cfg, "cards move")
+		id, body, dryRun, flagOverwrites, err := a.parseCardMoveInput(ctx, args[1:], cfg, "cards move")
 		if err != nil {
 			return nil, "cards move", err
+		}
+		if dryRun {
+			return dryRunResultWithFlagOverlays("cards move", "cards.move", map[string]string{"card_id": id}, nil, body, flagOverwrites), "cards move", nil
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards move", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards move", callErr
@@ -344,6 +338,9 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		plan, err := a.parseCardResolveInput(args[1:], cfg, "cards resolve")
 		if err != nil {
 			return nil, "cards resolve", err
+		}
+		if plan.dryRun {
+			return dryRunResultWithFlagOverlays("cards resolve", "cards.move", map[string]string{"card_id": plan.cardID}, nil, plan.moveBody, plan.dryRunFlagOverwrites), "cards resolve", nil
 		}
 		if plan.hasEvidenceMessage {
 			ref, err := a.postCardResolveEvidence(ctx, cfg, plan)
@@ -365,50 +362,12 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards reopen", "cards.move", "card_id", id, cardIDLookupSpec, nil, body)
 		return result, "cards reopen", callErr
-	case "archive":
-		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards archive")
-		if err != nil {
-			return nil, "cards archive", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "cards archive", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards archive", "cards.archive", "card_id", id, cardIDLookupSpec, nil, body)
-		return result, "cards archive", callErr
-	case "trash":
-		id, bodyAny, err := a.parseIDAndBodyInput(args[1:], "card-id", "card id", "cards trash")
-		if err != nil {
-			return nil, "cards trash", err
-		}
-		body, ok := bodyAny.(map[string]any)
+	case "archive", "trash", "restore", "purge":
+		spec, ok := lifecycleSpecFor("cards")
 		if !ok {
-			return nil, "cards trash", errnorm.Usage("invalid_request", "JSON body for `anx cards trash` must be an object")
+			return nil, "cards", errnorm.Usage("internal_error", "missing lifecycle spec for cards")
 		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "cards trash", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards trash", "cards.trash", "card_id", id, cardIDLookupSpec, nil, body)
-		return result, "cards trash", callErr
-	case "restore":
-		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards restore")
-		if err != nil {
-			return nil, "cards restore", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "cards restore", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards restore", "cards.restore", "card_id", id, cardIDLookupSpec, nil, body)
-		return result, "cards restore", callErr
-	case "purge":
-		id, body, err := a.parseCardIDAndOptionalJSONBody(args[1:], "cards purge")
-		if err != nil {
-			return nil, "cards purge", err
-		}
-		if err := finalizeOptionalMutationBodyActorID(body, cfg); err != nil {
-			return nil, "cards purge", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards purge", "cards.purge", "card_id", id, cardIDLookupSpec, nil, body)
-		return result, "cards purge", callErr
+		return a.runLifecycleVerb(ctx, cfg, spec, sub, args[1:])
 	default:
 		return nil, "cards", cardsSubcommandSpec.unknownError(args[0])
 	}
@@ -423,8 +382,7 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 	var fromFileFlag, titleFlag, summaryFlag, actorIDFlag trackedString
 	var ownerRefFlags, documentRefFlags, boardRefFlags, relatedRefFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&fromFileFlag, "body-file", "Advanced JSON request body from file or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file or stdin with -")
 	fs.Var(&titleFlag, "title", "Topic title")
 	fs.Var(&summaryFlag, "summary", "Topic summary")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -501,12 +459,11 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	var beforeCardIDFlag, afterCardIDFlag trackedString
 	var assigneeRefFlags, relatedRefFlags, doneFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&boardFlag, "board", "Board id for the new card")
-	fs.Var(&boardFlag, "board-id", "Board id for the new card")
+	fs.Var(&boardFlag, "board", "Parent board ref, handle, or id for the new card")
+	fs.Var(&boardFlag, "board-id", "Parent board ref, handle, or id for the new card")
 	fs.Var(&titleFlag, "title", "Card title")
 	fs.Var(&bodyFlag, "body", "Inline card summary/body text")
 	fs.Var(&contentFileFlag, "body-file", "Load card summary/body text from a local file or stdin with -")
-	fs.Var(&contentFileFlag, "content-file", "Load card summary/body text from a local file")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&requestKeyFlag, "request-key", "Request key for idempotency")
@@ -723,8 +680,7 @@ func (a *App) parseCardPatchInput(ctx context.Context, args []string, cfg config
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, fromFileFlag, titleFlag, summaryFlag, columnKeyFlag, ifUpdatedAtFlag, actorIDFlag trackedString
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON patch request body from file")
 	fs.Var(&titleFlag, "title", "Card title")
 	fs.Var(&summaryFlag, "summary", "Card summary/body")
@@ -796,10 +752,8 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, contentFileFlag, titleFlag, ifBaseRevisionFlag, actorIDFlag, fromFileFlag trackedString
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&contentFileFlag, "body-file", "Load revised card summary/body text from a local file or stdin with -")
-	fs.Var(&contentFileFlag, "content-file", "Load revised card summary/body text from a local file")
 	fs.Var(&titleFlag, "title", "Optional revised card title")
 	fs.Var(&ifBaseRevisionFlag, "if-base-revision", "Base card revision id; discovered from cards get when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -839,7 +793,7 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 	}
 	revision := map[string]any{}
 	if contentFile := strings.TrimSpace(contentFileFlag.value); contentFile != "" {
-		content, err := a.readTextFlagFile(contentFile, commandName, "--content-file")
+		content, err := a.readTextFlagFile(contentFile, commandName, "--body-file")
 		if err != nil {
 			return "", nil, err
 		}
@@ -849,7 +803,7 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 		revision["title"] = title
 	}
 	if len(revision) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", "`anx cards revise` requires --content-file, --title, or --from-file")
+		return "", nil, errnorm.Usage("invalid_request", "`anx cards revise` requires --body-file, --title, or --from-file")
 	}
 	body := map[string]any{"revision": revision}
 	if ifBaseRevision := strings.TrimSpace(ifBaseRevisionFlag.value); ifBaseRevision != "" {
@@ -871,8 +825,7 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 func parseCardRevisionGetInput(args []string, commandName string) (string, string, error) {
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, revisionIDFlag trackedString
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&revisionIDFlag, "revision", "Revision id")
 	fs.Var(&revisionIDFlag, "revision-id", "Revision id")
 	if err := fs.Parse(args); err != nil {
@@ -907,8 +860,7 @@ func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg confi
 	var cardIDFlag, ifUpdatedAtFlag, actorIDFlag trackedString
 	var assigneeRefFlags trackedStrings
 	var clearFlag trackedBool
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
 	fs.Var(&ifUpdatedAtFlag, "if-updated-at", "Card updated_at concurrency token; discovered from cards get when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -944,56 +896,73 @@ func (a *App) parseCardAssignInput(ctx context.Context, args []string, cfg confi
 	return cardID, body, nil
 }
 
-func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, error) {
+func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, map[string]any, bool, map[string]any, error) {
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag, fromFileFlag trackedString
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	var dryRunFlag trackedBool
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&columnFlag, "column", "Target board column key")
-	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; use boards get for the parent board when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	fs.Var(&fromFileFlag, "body-file", "Advanced JSON move request body from file or stdin with -")
-	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file or stdin with -")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+		return "", nil, false, nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	cardID, err := parseCardIDFromFlagOrPositionals(firstNonEmpty(cardIDFlag.value, leadingCardID), fs.Args(), commandName)
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, nil, err
+	}
+	dryRun := dryRunFlag.set && dryRunFlag.value
+	recordOverwrite := func(bodyMap map[string]any, overrides map[string]any, key string, newVal any) map[string]any {
+		if prev, ok := bodyMap[key]; ok && strings.TrimSpace(anyString(prev)) != "" {
+			if overrides == nil {
+				overrides = map[string]any{}
+			}
+			overrides[key] = newVal
+		}
+		return overrides
 	}
 	if strings.TrimSpace(fromFileFlag.value) != "" {
 		_, bodyAny, err := a.parseIDAndBodyInput(append([]string{"--card-id", cardID, "--from-file", fromFileFlag.value}, []string{}...), "card-id", "card id", commandName)
 		if err != nil {
-			return "", nil, err
+			return "", nil, false, nil, err
 		}
 		bodyMap, ok := bodyAny.(map[string]any)
 		if !ok {
-			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
+			return "", nil, false, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
+		var flagOverwrites map[string]any
 		if column := strings.TrimSpace(columnFlag.value); column != "" {
+			flagOverwrites = recordOverwrite(bodyMap, flagOverwrites, "column_key", column)
 			bodyMap["column_key"] = column
 		}
 		if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+			flagOverwrites = recordOverwrite(bodyMap, flagOverwrites, "if_board_updated_at", ifBoardUpdatedAt)
 			bodyMap["if_board_updated_at"] = ifBoardUpdatedAt
 		}
 		if rawActorID := strings.TrimSpace(actorIDFlag.value); rawActorID != "" {
 			actorID, err := resolveActorIDAlias(rawActorID, cfg)
 			if err != nil {
-				return "", nil, err
+				return "", nil, false, nil, err
 			}
 			if actorID != "" {
+				flagOverwrites = recordOverwrite(bodyMap, flagOverwrites, "actor_id", actorID)
 				bodyMap["actor_id"] = actorID
 			}
 		}
-		if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, bodyMap); err != nil {
-			return "", nil, err
+		if dryRun {
+			return cardID, bodyMap, true, flagOverwrites, nil
 		}
-		return cardID, bodyMap, nil
+		if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, bodyMap); err != nil {
+			return "", nil, false, nil, err
+		}
+		return cardID, bodyMap, false, flagOverwrites, nil
 	}
 	column := strings.TrimSpace(columnFlag.value)
 	if column == "" {
-		return "", nil, errnorm.Usage("invalid_request", "`--column` is required for `anx cards move`")
+		return "", nil, false, nil, errnorm.Usage("invalid_request", "`--column` is required for `anx cards move`")
 	}
 	body := map[string]any{"column_key": column}
 	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
@@ -1001,25 +970,30 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, nil, err
 	}
 	if actorID != "" {
 		body["actor_id"] = actorID
 	}
-	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
-		return "", nil, err
+	if dryRun {
+		return cardID, body, true, nil, nil
 	}
-	return cardID, body, nil
+	if err := a.ensureCardMoveConcurrency(ctx, cfg, cardID, body); err != nil {
+		return "", nil, false, nil, err
+	}
+	return cardID, body, false, nil, nil
 }
 
 type cardResolvePlan struct {
-	cardID             string
-	moveBody           map[string]any
-	resolutionRefs     []string
-	evidenceBody       string
-	evidenceSummary    string
-	evidenceActorIDRaw string
-	hasEvidenceMessage bool
+	cardID               string
+	moveBody             map[string]any
+	resolutionRefs       []string
+	evidenceBody         string
+	evidenceSummary      string
+	evidenceActorIDRaw   string
+	hasEvidenceMessage   bool
+	dryRun               bool
+	dryRunFlagOverwrites map[string]any
 }
 
 func (a *App) parseCardResolveInput(args []string, cfg config.Resolved, commandName string) (cardResolvePlan, error) {
@@ -1027,18 +1001,19 @@ func (a *App) parseCardResolveInput(args []string, cfg config.Resolved, commandN
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, resolutionFlag, ifBoardUpdatedAtFlag, actorIDFlag, bodyFlag, bodyFileFlag, reasonFlag, summaryFlag, fromFileFlag trackedString
 	var resolutionRefFlags trackedStrings
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	var dryRunFlag trackedBool
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&columnFlag, "column", "Target board column key; defaults to done")
 	fs.Var(&resolutionFlag, "resolution", "Resolution value: done (abandon work with trash, not resolution)")
 	fs.Var(&resolutionRefFlags, "resolution-ref", "Evidence event/artifact typed ref (repeatable)")
-	fs.Var(&reasonFlag, "reason", "Free-text resolution evidence; posts a card message before resolving")
-	fs.Var(&bodyFlag, "body", "Post this evidence body to the card thread before resolving")
-	fs.Var(&bodyFileFlag, "body-file", "Load evidence body text from a local file before resolving")
+	fs.Var(&reasonFlag, "reason", "Short audit string stamped on the resolve request (not posted to the backing thread)")
+	fs.Var(&bodyFlag, "body", "Evidence body posted to the card thread before resolving")
+	fs.Var(&bodyFileFlag, "body-file", "Load evidence body text from a local file or stdin with - before resolving")
 	fs.Var(&summaryFlag, "summary", "Optional short evidence event summary")
-	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
+	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; use boards get for the parent board when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file")
+	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file or stdin with -")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
 		return cardResolvePlan{}, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -1046,13 +1021,24 @@ func (a *App) parseCardResolveInput(args []string, cfg config.Resolved, commandN
 	if err != nil {
 		return cardResolvePlan{}, err
 	}
+	dryRun := dryRunFlag.set && dryRunFlag.value
 	column := firstNonEmpty(strings.TrimSpace(columnFlag.value), "done")
 	resolution := firstNonEmpty(strings.TrimSpace(resolutionFlag.value), "done")
 	refs := normalizeStringFilters(resolutionRefFlags.values)
-	body := map[string]any{
+	moveBody := map[string]any{
 		"column_key":      column,
 		"resolution":      resolution,
 		"resolution_refs": refs,
+	}
+	var dryRunFlagOverwrites map[string]any
+	recordOverwrite := func(bodyMap map[string]any, overrides map[string]any, key string, newVal any) map[string]any {
+		if prev, ok := bodyMap[key]; ok && strings.TrimSpace(anyString(prev)) != "" {
+			if overrides == nil {
+				overrides = map[string]any{}
+			}
+			overrides[key] = newVal
+		}
+		return overrides
 	}
 	if strings.TrimSpace(fromFileFlag.value) != "" {
 		payload, err := a.readBodyInput(strings.TrimSpace(fromFileFlag.value))
@@ -1067,61 +1053,76 @@ func (a *App) parseCardResolveInput(args []string, cfg config.Resolved, commandN
 		if !ok {
 			return cardResolvePlan{}, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
-		body = bodyMap
+		moveBody = bodyMap
 		if strings.TrimSpace(columnFlag.value) != "" {
-			body["column_key"] = column
-		} else if strings.TrimSpace(anyString(body["column_key"])) == "" {
-			body["column_key"] = "done"
+			dryRunFlagOverwrites = recordOverwrite(moveBody, dryRunFlagOverwrites, "column_key", column)
+			moveBody["column_key"] = column
+		} else if strings.TrimSpace(anyString(moveBody["column_key"])) == "" {
+			moveBody["column_key"] = "done"
 		}
 		if strings.TrimSpace(resolutionFlag.value) != "" {
-			body["resolution"] = resolution
-		} else if strings.TrimSpace(anyString(body["resolution"])) == "" {
-			body["resolution"] = "done"
+			dryRunFlagOverwrites = recordOverwrite(moveBody, dryRunFlagOverwrites, "resolution", resolution)
+			moveBody["resolution"] = resolution
+		} else if strings.TrimSpace(anyString(moveBody["resolution"])) == "" {
+			moveBody["resolution"] = "done"
 		}
-		refs = normalizeStringFilters(append(stringList(body["resolution_refs"]), resolutionRefFlags.values...))
-		body["resolution_refs"] = refs
+		refs = normalizeStringFilters(append(stringList(moveBody["resolution_refs"]), resolutionRefFlags.values...))
+		moveBody["resolution_refs"] = refs
 	}
 	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
-		body["if_board_updated_at"] = ifBoardUpdatedAt
+		dryRunFlagOverwrites = recordOverwrite(moveBody, dryRunFlagOverwrites, "if_board_updated_at", ifBoardUpdatedAt)
+		moveBody["if_board_updated_at"] = ifBoardUpdatedAt
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {
 		return cardResolvePlan{}, err
 	}
 	if actorID != "" {
-		body["actor_id"] = actorID
+		dryRunFlagOverwrites = recordOverwrite(moveBody, dryRunFlagOverwrites, "actor_id", actorID)
+		moveBody["actor_id"] = actorID
 	}
-	bodyText := ""
-	hasBodyFlag := strings.TrimSpace(reasonFlag.value) != "" || strings.TrimSpace(bodyFlag.value) != "" || strings.TrimSpace(bodyFileFlag.value) != ""
-	if strings.TrimSpace(reasonFlag.value) != "" && (strings.TrimSpace(bodyFlag.value) != "" || strings.TrimSpace(bodyFileFlag.value) != "") {
-		return cardResolvePlan{}, errnorm.Usage("invalid_request", "--reason cannot be combined with --body or --body-file")
+	reason := strings.TrimSpace(reasonFlag.value)
+	bodyInline := strings.TrimSpace(bodyFlag.value)
+	bodyFile := strings.TrimSpace(bodyFileFlag.value)
+	hasBodyInput := bodyInline != "" || bodyFile != ""
+	if bodyInline != "" && bodyFile != "" {
+		return cardResolvePlan{}, errnorm.Usage("invalid_request", "`--body` and `--body-file` cannot be combined for `anx cards resolve`")
 	}
-	if hasBodyFlag {
-		if strings.TrimSpace(reasonFlag.value) != "" {
-			bodyText = strings.TrimSpace(reasonFlag.value)
-		} else {
-			bodyText, err = a.readExplicitMessageText(bodyFlag.value, bodyFileFlag.value, commandName)
-			if err != nil {
-				return cardResolvePlan{}, err
-			}
+	refs = normalizeStringFilters(stringList(moveBody["resolution_refs"]))
+	moveBody["resolution_refs"] = refs
+	hasResolutionRefs := len(refs) > 0
+	hasAuditReason := reason != ""
+	if !hasAuditReason && !hasBodyInput && !hasResolutionRefs {
+		return cardResolvePlan{}, errnorm.Usage("invalid_request", "`anx cards resolve` requires at least one of `--reason`, `--body`, `--body-file`, or `--resolution-ref`")
+	}
+	if !hasBodyInput && !hasResolutionRefs {
+		return cardResolvePlan{}, errnorm.Usage("invalid_request", "`anx cards resolve` requires typed resolution evidence: use `--body`, `--body-file`, or `--resolution-ref` (optional `--reason` stamps the lifecycle audit only)")
+	}
+	if hasAuditReason {
+		moveBody["reason"] = reason
+	}
+	var evidenceBody string
+	hasEvidenceMessage := hasBodyInput
+	if hasBodyInput {
+		evidenceBody, err = a.readExplicitMessageText(bodyFlag.value, bodyFileFlag.value, commandName)
+		if err != nil {
+			return cardResolvePlan{}, err
 		}
-	}
-	if !hasBodyFlag && len(refs) == 0 {
-		bodyText = "Resolved via `anx cards resolve`."
-		hasBodyFlag = true
 	}
 	evidenceActorRaw := strings.TrimSpace(actorIDFlag.value)
 	if evidenceActorRaw == "" {
-		evidenceActorRaw = strings.TrimSpace(anyString(body["actor_id"]))
+		evidenceActorRaw = strings.TrimSpace(anyString(moveBody["actor_id"]))
 	}
 	return cardResolvePlan{
-		cardID:             cardID,
-		moveBody:           body,
-		resolutionRefs:     refs,
-		evidenceBody:       bodyText,
-		evidenceSummary:    summaryFlag.value,
-		evidenceActorIDRaw: evidenceActorRaw,
-		hasEvidenceMessage: hasBodyFlag,
+		cardID:               cardID,
+		moveBody:             moveBody,
+		resolutionRefs:       refs,
+		evidenceBody:         evidenceBody,
+		evidenceSummary:      summaryFlag.value,
+		evidenceActorIDRaw:   evidenceActorRaw,
+		hasEvidenceMessage:   hasEvidenceMessage,
+		dryRun:               dryRun,
+		dryRunFlagOverwrites: dryRunFlagOverwrites,
 	}, nil
 }
 
@@ -1157,8 +1158,7 @@ func (a *App) parseCardReopenInput(ctx context.Context, args []string, cfg confi
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag trackedString
-	fs.Var(&cardIDFlag, "card", "Card id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
 	fs.Var(&columnFlag, "column", "Target reopened column; defaults to ready")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -1614,128 +1614,6 @@ func (a *App) parseTopicIDAndBodyInput(args []string, commandName string) (strin
 		return "", nil, err
 	}
 	bodyMap, ok := body.(map[string]any)
-	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-	}
-	return id, bodyMap, nil
-}
-
-func (a *App) parseTopicIDAndOptionalJSONBody(args []string, commandName string) (string, map[string]any, error) {
-	fs := newSilentFlagSet(commandName)
-	var topicIDFlag, fromFile trackedString
-	fs.Var(&topicIDFlag, "topic-id", "Topic id")
-	fs.Var(&fromFile, "from-file", "Load JSON body from file path")
-	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	id := strings.TrimSpace(topicIDFlag.value)
-	if id == "" && len(positionals) > 0 {
-		id = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if err := validateID(id, "topic id"); err != nil {
-		return "", nil, err
-	}
-	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
-	if err != nil {
-		return "", nil, err
-	}
-	if len(payload) == 0 {
-		return id, map[string]any{}, nil
-	}
-	decoded, err := decodeJSONPayload(payload)
-	if err != nil {
-		return "", nil, err
-	}
-	bodyMap, ok := decoded.(map[string]any)
-	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-	}
-	return id, bodyMap, nil
-}
-
-func (a *App) parseTopicTrashInput(args []string, commandName string) (string, map[string]any, error) {
-	leadingTopicID, args := popLeadingPositional(args)
-	fs := newSilentFlagSet(commandName)
-	var topicIDFlag, fromFile, reasonFlag trackedString
-	fs.Var(&topicIDFlag, "topic-id", "Topic id")
-	fs.Var(&fromFile, "from-file", "Load advanced JSON body from file path")
-	fs.Var(&reasonFlag, "reason", "Operator-visible trash reason")
-	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	id := firstNonEmpty(strings.TrimSpace(topicIDFlag.value), leadingTopicID)
-	if id == "" && len(positionals) > 0 {
-		id = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if err := validateID(id, "topic id"); err != nil {
-		return "", nil, err
-	}
-	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	if strings.TrimSpace(fromFile.value) != "" && strings.TrimSpace(reasonFlag.value) != "" {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
-	}
-	if reason := strings.TrimSpace(reasonFlag.value); reason != "" {
-		return id, map[string]any{"reason": reason}, nil
-	}
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
-	if err != nil {
-		return "", nil, err
-	}
-	if len(payload) == 0 {
-		return "", nil, errnorm.Usage("invalid_request", "`anx topics trash` requires --reason or JSON body input")
-	}
-	decoded, err := decodeJSONPayload(payload)
-	if err != nil {
-		return "", nil, err
-	}
-	bodyMap, ok := decoded.(map[string]any)
-	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-	}
-	return id, bodyMap, nil
-}
-
-func (a *App) parseCardIDAndOptionalJSONBody(args []string, commandName string) (string, map[string]any, error) {
-	fs := newSilentFlagSet(commandName)
-	var cardIDFlag, fromFile trackedString
-	fs.Var(&cardIDFlag, "card-id", "Card id")
-	fs.Var(&fromFile, "from-file", "Load JSON body from file path")
-	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	id := strings.TrimSpace(cardIDFlag.value)
-	if id == "" && len(positionals) > 0 {
-		id = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if err := validateID(id, "card id"); err != nil {
-		return "", nil, err
-	}
-	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	payload, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
-	if err != nil {
-		return "", nil, err
-	}
-	if len(payload) == 0 {
-		return id, map[string]any{}, nil
-	}
-	decoded, err := decodeJSONPayload(payload)
-	if err != nil {
-		return "", nil, err
-	}
-	bodyMap, ok := decoded.(map[string]any)
 	if !ok {
 		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 	}

@@ -108,8 +108,7 @@ func (a *App) parseDocMessageInput(ctx context.Context, args []string, cfg confi
 	var documentIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&documentIDFlag, "document", "Document id to message")
-	fs.Var(&documentIDFlag, "document-id", "Document id to message")
+	fs.Var(&documentIDFlag, "document-id", "Document ref, handle, or id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
@@ -172,8 +171,7 @@ func (a *App) parseCardMessageInput(ctx context.Context, args []string, cfg conf
 	var cardIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&cardIDFlag, "card", "Card id to message")
-	fs.Var(&cardIDFlag, "card-id", "Card id to message")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
@@ -303,8 +301,7 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	var maxEventsFlag trackedInt
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&cardIDFlag, "card", "Card id whose messages should be listed")
-	fs.Var(&cardIDFlag, "card-id", "Card id whose messages should be listed")
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
@@ -432,8 +429,7 @@ func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg conf
 	var maxEventsFlag trackedInt
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&documentIDFlag, "document", "Document id whose messages should be listed")
-	fs.Var(&documentIDFlag, "document-id", "Document id whose messages should be listed")
+	fs.Var(&documentIDFlag, "document-id", "Document ref, handle, or id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")

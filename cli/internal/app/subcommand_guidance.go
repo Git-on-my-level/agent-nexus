@@ -87,9 +87,16 @@ var authBootstrapSubcommandSpec = subcommandSpec{
 }
 
 var authPrincipalsSubcommandSpec = subcommandSpec{
-	command:  "auth principals",
-	valid:    []string{"list", "revoke"},
-	examples: []string{"anx auth principals list", "anx auth principals list --handles-only", "anx auth principals list --taggable", "anx auth principals list --limit 20", "anx auth principals revoke --agent-id <agent-id>", "anx auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'"},
+	command: "auth principals",
+	valid:   []string{"list", "revoke"},
+	examples: []string{
+		"anx auth principals list",
+		"anx auth principals list --handles-only",
+		"anx auth principals list --taggable",
+		"anx auth principals list --limit 20",
+		"anx auth principals revoke --agent-id <agent-id>",
+		"anx auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'",
+	},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -105,9 +112,12 @@ var authAuditSubcommandSpec = subcommandSpec{
 }
 
 var actorsSubcommandSpec = subcommandSpec{
-	command:  "actors",
-	valid:    []string{"list", "create"},
-	examples: []string{"anx actors list --q bot --limit 50", "anx actors create --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z"},
+	command: "actors",
+	valid:   []string{"list", "create"},
+	examples: []string{
+		"anx actors list --q bot --limit 50",
+		"anx actors create --id bot-1 --display-name \"Bot 1\" --created-at 2026-03-04T10:00:00Z",
+	},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -138,9 +148,15 @@ var provenanceSubcommandSpec = subcommandSpec{
 }
 
 var threadsSubcommandSpec = subcommandSpec{
-	command:  "threads",
-	valid:    []string{"list", "get", "message", "reply", "timeline", "context", "inspect", "workspace", "review"},
-	examples: []string{"anx topics workspace topic:launch", "anx cards message card:implement-login --body-file update.md", "anx threads message <thread-id> --body-file note.md", "anx threads list --state active", "anx threads workspace --state active"},
+	command: "threads",
+	valid:   []string{"list", "get", "message", "reply", "timeline", "context", "inspect", "workspace", "review"},
+	examples: []string{
+		"anx topics workspace topic:launch",
+		"anx cards message card:implement-login --body-file update.md",
+		"anx threads message <thread-id> --body-file note.md",
+		"anx threads list --state active",
+		"anx threads workspace --state active",
+	},
 	aliases: map[string]string{
 		"ls": "list",
 	},
@@ -154,6 +170,7 @@ var artifactsSubcommandSpec = subcommandSpec{
 		"anx artifacts create --file ./notes.md --ref topic:launch",
 		"anx artifacts attachments create --file ./notes.md --ref topic:launch",
 		"anx artifacts download --artifact-id <id> --output ./out.bin",
+		"anx artifacts archive artifact:notes --reason \"obsolete\"",
 	},
 	aliases: map[string]string{
 		"ls":   "list",
@@ -163,21 +180,46 @@ var artifactsSubcommandSpec = subcommandSpec{
 }
 
 var boardsSubcommandSpec = subcommandSpec{
-	command:  "boards",
-	valid:    []string{"list", "create", "get", "patch", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
-	examples: []string{"anx boards list --state active", "anx boards create --topic topic:launch --title \"Launch\"", "anx boards workspace board:launch", "anx boards patch board:launch --from-file board-patch.json", "anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md"},
+	command: "boards",
+	valid:   []string{"list", "create", "get", "patch", "workspace", "archive", "unarchive", "trash", "restore", "purge", "cards"},
+	examples: []string{
+		"anx boards list --state active",
+		"anx boards create --topic topic:launch --title \"Launch\"",
+		"anx boards workspace board:launch",
+		"anx boards patch board:launch --from-file board-patch.json",
+		"anx boards archive board:launch --reason \"merged elsewhere\"",
+		"anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md",
+	},
 }
 
 var boardsCardsSubcommandSpec = subcommandSpec{
-	command:  "boards cards",
-	valid:    []string{"list", "create", "create-batch", "get", "patch", "move", "archive"},
-	examples: []string{"anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md", "anx cards message card:buy-groceries --body-file update.md", "anx cards move card:buy-groceries --column review", "anx cards resolve card:buy-groceries --body-file evidence.md", "anx boards cards list board:launch", "anx boards cards get board:launch card:buy-groceries", "anx boards cards create-batch --board-id board:launch --from-file batch.json"},
+	command: "boards cards",
+	valid:   []string{"list", "create", "create-batch", "get", "patch", "move", "archive"},
+	examples: []string{
+		"anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md",
+		"anx cards message card:buy-groceries --body-file update.md",
+		"anx cards move card:buy-groceries --column review",
+		"anx cards resolve card:buy-groceries --reason \"ok\" --body \"Validated\"",
+		"anx boards cards list board:launch",
+		"anx boards cards get board:launch card:buy-groceries",
+		"anx boards cards create-batch --board-id board:launch --from-file batch.json",
+	},
 }
 
 var docsSubcommandSpec = subcommandSpec{
-	command:  "docs",
-	valid:    []string{"list", "create", "revise", "get", "content", "message", "messages", "reply", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
-	examples: []string{"anx docs create --topic topic:launch --title \"Runbook\" --body-file runbook.md", "anx docs message doc:runbook --body-file note.md", "anx docs messages doc:runbook", "anx docs reply doc:runbook --to <message-id> --body-file reply.md", "anx docs revise doc:runbook --body-file runbook.md", "anx docs revise --apply --proposal-id <proposal-id>", "anx docs content doc:runbook"},
+	command: "docs",
+	valid:   []string{"list", "create", "revise", "get", "content", "message", "messages", "reply", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
+	examples: []string{
+		"anx docs create --topic topic:launch --title \"Runbook\" --body-file runbook.md",
+		"anx docs create --topic topic:launch --title \"Note\" --body \"one-liner\"",
+		"anx docs message doc:runbook --body-file note.md",
+		"anx docs messages doc:runbook",
+		"anx docs reply doc:runbook --to <message-id> --body-file reply.md",
+		"anx docs revise doc:runbook --body-file runbook.md",
+		"anx docs revise --apply --proposal-id <proposal-id>",
+		"anx docs content doc:runbook",
+		"anx docs archive doc:runbook --reason \"superseded\"",
+	},
 	aliases: map[string]string{
 		"ls":   "list",
 		"read": "content",
@@ -192,9 +234,13 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 }
 
 var eventsSubcommandSpec = subcommandSpec{
-	command:  "events",
-	valid:    []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
-	examples: []string{"anx events list --thread-id <thread-id> --type message_posted --mine", "anx events tail --max-events 20"},
+	command: "events",
+	valid:   []string{"list", "get", "create", "validate", "stream", "tail", "explain", "archive", "unarchive", "trash", "restore"},
+	examples: []string{
+		"anx events list --thread-id <thread-id> --type message_posted --mine",
+		"anx events tail --max-events 20",
+		"anx events archive event:noise --reason \"duplicate signal\"",
+	},
 	aliases: map[string]string{
 		"watch": "stream",
 		"ls":    "list",
@@ -202,9 +248,12 @@ var eventsSubcommandSpec = subcommandSpec{
 }
 
 var inboxSubcommandSpec = subcommandSpec{
-	command:  "inbox",
-	valid:    []string{"list", "get", "respond", "stream", "tail"},
-	examples: []string{"anx inbox get --id <id-or-alias>", "anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>"},
+	command: "inbox",
+	valid:   []string{"list", "get", "respond", "stream", "tail"},
+	examples: []string{
+		"anx inbox get --id <id-or-alias>",
+		"anx inbox respond --inbox-item-id <id-or-alias> --response-text <text>",
+	},
 	aliases: map[string]string{
 		"ls":    "list",
 		"watch": "stream",

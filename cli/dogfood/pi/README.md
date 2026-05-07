@@ -111,8 +111,8 @@ Scenario command-shape guidance:
 - use `anx topics message <topic-ref-or-handle> --body-file <path>` and `anx topics reply <topic-ref-or-handle> --to <message-id-or-ref> --body-file <path>` for ordinary topic conversation
 - use `anx docs message <doc-ref-or-handle> --body-file <path>` and `anx docs reply <doc-ref-or-handle> --to <message-id-or-ref> --body-file <path>` for document conversation
 - use `anx cards message <card-ref-or-handle> --body-file <path>` and `anx cards reply <card-ref-or-handle> --to <message-id-or-ref> --body-file <path>` for card conversation
-- document revisions use one command: `anx docs revise <doc-ref-or-handle> --content-file <path>` stages a diff proposal by default, and the returned apply command uses `anx docs revise --apply --proposal-id <proposal-id>`
-- use `anx docs revise --apply <doc-ref-or-handle> --content-file <path>` only when you want to write the new revision immediately without staging a proposal
+- document revisions use one command: `anx docs revise <doc-ref-or-handle> --body-file <path>` stages a diff proposal by default, and the returned apply command uses `anx docs revise --apply --proposal-id <proposal-id>`
+- use `anx docs revise --apply <doc-ref-or-handle> --body-file <path>` only when you want to write the new revision immediately without staging a proposal
 - use `anx events validate --from-file <path>` only when you need a local payload check for an unusual raw event
 - use `anx events create --from-file <path> --dry-run` only when you need the exact raw event create request preview without sending it
 - use raw `anx events create` only for unusual contract-level records; ordinary messages must go through topic/doc/card message commands so the CLI fills actor_id, backing thread_id, and refs

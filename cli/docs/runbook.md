@@ -197,8 +197,8 @@ anx --agent agent-a boards list --state active
 anx --agent agent-a boards create --topic incident-42 --title "Launch board"
 anx --agent agent-a boards workspace product-launch
 # Cards: draft prose locally, then use domain verbs for active work.
-anx --agent agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --content-file card.md
-anx --agent agent-a cards revise rescue-digest --content-file card.md
+anx --agent agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
+anx --agent agent-a cards revise rescue-digest --body-file card.md
 anx --agent agent-a cards assign rescue-digest --assignee-ref actor:agent-a
 anx --agent agent-a cards move rescue-digest --column review
 anx --agent agent-a cards resolve rescue-digest --body-file evidence.md

@@ -296,7 +296,7 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 	if err := os.WriteFile(contentFile, []byte("body\n"), 0o600); err != nil {
 		t.Fatalf("write content file: %v", err)
 	}
-	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--content-file", contentFile})
+	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--body-file", contentFile})
 	if !strings.Contains(cardOut, "URL: "+server.URL+"/o/david-zhang/w/personal/boards/board_123?card=card_123") {
 		t.Fatalf("expected card create URL, got:\n%s", cardOut)
 	}
@@ -409,7 +409,7 @@ func TestMutatingCommandDoesNotRetrySlugPrefixAfterNotFound(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"wrong id"}`), []string{"--json", "--base-url", server.URL, "cards", "trash", "cli"}))
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"wrong id"}`), []string{"--json", "--base-url", server.URL, "cards", "trash", "cli", "--from-file=-"}))
 	if got := anyStringValue(asMap(payload["error"])["code"]); got != "not_found" {
 		t.Fatalf("expected original not_found error, got %#v", payload)
 	}
@@ -1738,6 +1738,50 @@ func TestDocsCreateDryRunValidatesPayloadBeforeSuccess(t *testing.T) {
 	}
 }
 
+func TestDocsCreateInlineBodyDryRun(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", "http://127.0.0.1:9",
+		"docs", "create",
+		"--topic", "topic:foo",
+		"--title", "Note",
+		"--body", "one-liner",
+		"--dry-run",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data := asMap(payload["data"])
+	body := asMap(data["body"])
+	if got := anyStringValue(body["content"]); got != "one-liner" {
+		t.Fatalf("expected inline content in dry-run body, got %q payload=%#v", got, payload)
+	}
+}
+
+func TestBareCardFlagRejectedOnRevise(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", "http://127.0.0.1:9",
+		"cards", "revise", "card:foo", "--card", "card:bar",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got, ok := errObj["code"].(string); !ok || got != "invalid_flags" {
+		t.Fatalf("expected invalid_flags, got %#v payload=%#v", errObj["code"], payload)
+	}
+}
+
+func TestCatAliasRoutesArtifactsAndDocsToContent(t *testing.T) {
+	t.Parallel()
+	if got := artifactsSubcommandSpec.normalize("cat"); got != "content" {
+		t.Fatalf("expected artifacts cat alias, got %q", got)
+	}
+	if got := docsSubcommandSpec.normalize("cat"); got != "content" {
+		t.Fatalf("expected docs cat alias, got %q", got)
+	}
+}
+
 func TestDocsCreateFromFlagsAndContentFile(t *testing.T) {
 	t.Parallel()
 
@@ -1770,7 +1814,7 @@ func TestDocsCreateFromFlagsAndContentFile(t *testing.T) {
 		"--topic", "topic_1",
 		"--title", "Runbook",
 		"--summary", "Durable context",
-		"--content-file", contentFile,
+		"--body-file", contentFile,
 	})
 	assertEnvelopeOK(t, raw)
 
@@ -1913,7 +1957,7 @@ func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 		"docs", "revise",
 		"--document-id", "doc_1",
 		"--from-file", updateFile,
-		"--content-file", contentFile,
+		"--body-file", contentFile,
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
@@ -1922,7 +1966,7 @@ func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	}
 	body, _ := data["body"].(map[string]any)
 	if got := anyStringValue(body["content"]); got != strings.TrimSpace(content) {
-		t.Fatalf("expected content-file override in proposal content, got %q payload=%#v", got, payload)
+		t.Fatalf("expected body-file override in proposal content, got %q payload=%#v", got, payload)
 	}
 	diff, _ := data["diff"].(map[string]any)
 	if diffText := anyStringValue(diff["text"]); !strings.Contains(diffText, "line 1") {
@@ -1968,7 +2012,7 @@ func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
 		"--agent", "agent-docs-content-only",
 		"docs", "revise",
 		"--document-id", "doc_1",
-		"--content-file", contentFile,
+		"--body-file", contentFile,
 	})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["data"].(map[string]any)
@@ -1977,7 +2021,7 @@ func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
 		t.Fatalf("expected discovered base revision, got %q payload=%#v", got, payload)
 	}
 	if got := anyStringValue(body["content"]); got != "new content" {
-		t.Fatalf("expected content-file markdown, got %q payload=%#v", got, payload)
+		t.Fatalf("expected body-file markdown, got %q payload=%#v", got, payload)
 	}
 }
 
@@ -2879,7 +2923,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "create", "--board", boardID, "--topic", "topic_cards_123", "--title", "Implement login", "--content-file", cardFile,
+		"cards", "create", "--board", boardID, "--topic", "topic_cards_123", "--title", "Implement login", "--body-file", cardFile,
 	}))
 	if got := anyStringValue(createPayload["command_id"]); got != "cards.create" {
 		t.Fatalf("expected cards.create command_id, got %#v", createPayload)
@@ -2887,7 +2931,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 
 	revisePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
-		"cards", "revise", cardID, "--content-file", revisedFile,
+		"cards", "revise", cardID, "--body-file", revisedFile,
 	}))
 	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
 		t.Fatalf("expected cards revise command, got %#v", revisePayload)
@@ -3038,7 +3082,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 	}
 }
 
-func TestCardsResolveReasonPostsEvidenceBeforeMove(t *testing.T) {
+func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -3067,7 +3111,7 @@ func TestCardsResolveReasonPostsEvidenceBeforeMove(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				t.Fatalf("decode evidence body: %v", err)
 			}
-			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Works as expected.")
+			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Validated in staging.")
 			postedEvidence = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `"}}`))
@@ -3084,6 +3128,9 @@ func TestCardsResolveReasonPostsEvidenceBeforeMove(t *testing.T) {
 			}
 			if got := anyStringValue(payload["resolution"]); got != "done" {
 				t.Fatalf("expected done resolution, got %#v", payload)
+			}
+			if got := anyStringValue(payload["reason"]); got != "Works as expected." {
+				t.Fatalf("expected audit reason on move, got %#v", payload)
 			}
 			refs := asSlice(payload["resolution_refs"])
 			if len(refs) != 1 || anyStringValue(refs[0]) != "event:"+eventID {
@@ -3102,13 +3149,31 @@ func TestCardsResolveReasonPostsEvidenceBeforeMove(t *testing.T) {
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-resolve-reason",
-		"cards", "resolve", cardID, "--reason", "Works as expected.",
+		"cards", "resolve", cardID, "--reason", "Works as expected.", "--body", "Validated in staging.",
 	}))
 	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
 		t.Fatalf("expected final cards.move command_id, got %#v", payload)
 	}
 	if !postedEvidence || !moved {
 		t.Fatalf("expected evidence post and move")
+	}
+}
+
+func TestCardsResolveWithoutEvidenceFlagsRejected(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-resolve-empty", `{"agent":"agent-resolve-empty","actor_id":"actor","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-resolve-empty",
+		"cards", "resolve", "card:foo",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got, ok := errObj["code"].(string); !ok || got != "invalid_request" {
+		t.Fatalf("expected error code invalid_request, got %#v payload=%#v", errObj["code"], payload)
+	}
+	if !strings.Contains(fmt.Sprint(payload), "requires at least one of") {
+		t.Fatalf("expected evidence requirement in payload=%#v", payload)
 	}
 }
 
@@ -3168,6 +3233,139 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 	}
 	if !moved {
 		t.Fatalf("expected move request")
+	}
+}
+
+func TestCardsMoveDryRunSurfacesFlagOverlay(t *testing.T) {
+	t.Parallel()
+
+	const (
+		cardID       = "card_move_dry_overlay_123456"
+		boardUpdated = "2026-04-21T02:05:00Z"
+		profileActor = "actor_move_dry_overlay"
+	)
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-move-dry-overlay", `{"agent":"agent-move-dry-overlay","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	bodyFile := filepath.Join(home, "move.json")
+	bodyJSON := `{"column_key":"review","if_board_updated_at":"` + boardUpdated + `"}`
+	if err := os.WriteFile(bodyFile, []byte(bodyJSON), 0o600); err != nil {
+		t.Fatalf("write move body: %v", err)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"--base-url", "http://127.0.0.1:9",
+		"--agent", "agent-move-dry-overlay",
+		"cards", "move", cardID,
+		"--from-file", bodyFile,
+		"--column", "done",
+		"--dry-run",
+	}))
+	data := asMap(payload["data"])
+	body := asMap(data["body"])
+	if got := anyStringValue(body["column_key"]); got != "done" {
+		t.Fatalf("expected column_key=done after flag overlay, got %#v", body)
+	}
+	overrides := asMap(data["_overrides"])
+	if overrides == nil {
+		t.Fatalf("expected _overrides to surface in dry-run envelope, got %#v", data)
+	}
+	if got := anyStringValue(overrides["column_key"]); got != "done" {
+		t.Fatalf("expected _overrides.column_key=done, got %#v", overrides)
+	}
+	recovery := asMap(data["anx_cli_recovery"])
+	if recovery == nil {
+		t.Fatalf("expected anx_cli_recovery hint in dry-run envelope, got %#v", data)
+	}
+	if got := anyStringValue(recovery["kind"]); got != "json_flag_overlay" {
+		t.Fatalf("expected anx_cli_recovery.kind=json_flag_overlay, got %#v", recovery)
+	}
+}
+
+func lifecycleMatrixSampleID(resource string) string {
+	switch resource {
+	case "artifacts":
+		return "artifact_lc_mtx_1"
+	case "boards":
+		return "board_lc_mtx_1"
+	case "docs":
+		return "document_lc_mtx_1"
+	case "events":
+		return "event_lc_mtx_1"
+	case "cards":
+		return "card_lc_mtx_1"
+	case "topics":
+		return "topic_lc_mtx_1"
+	default:
+		return "resource_lc_mtx_1"
+	}
+}
+
+func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range lifecycleResourceSpecs() {
+		spec := spec
+		for _, verb := range spec.verbs {
+			verb := verb
+			t.Run(spec.resource+"_"+verb, func(t *testing.T) {
+				t.Parallel()
+				home := t.TempDir()
+				writeAgentProfile(t, home, "agent-lifecycle-matrix", `{"agent":"agent-lifecycle-matrix","actor_id":"actor_matrix_prof","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-lifecycle-matrix"}
+				id := lifecycleMatrixSampleID(spec.resource)
+				prefix := append([]string(nil), base...)
+				prefix = append(prefix, spec.resource, verb, id)
+
+				payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(prefix, "--reason=audit-x", "--dry-run")))
+				data := asMap(payload["data"])
+				body := asMap(data["body"])
+				if got := anyStringValue(body["reason"]); got != "audit-x" {
+					t.Fatalf("reason: got %q want audit-x payload=%#v", got, payload)
+				}
+
+				if verb != "purge" {
+					actorArgs := append(append([]string(nil), prefix...), "--actor-id", "actor_matrix_prof")
+					if lifecycleTrashRequiresReasonOrJSON(spec.resource, verb) {
+						actorArgs = append(actorArgs, "--reason=actor-matrix-dry-run")
+					}
+					actorArgs = append(actorArgs, "--dry-run")
+					payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, actorArgs))
+					data := asMap(payload["data"])
+					body := asMap(data["body"])
+					if got := anyStringValue(body["actor_id"]); got != "actor_matrix_prof" {
+						t.Fatalf("actor_id: got %q payload=%#v", got, payload)
+					}
+				}
+
+				bodyFile := filepath.Join(home, spec.resource+"_"+verb+"_overlay.json")
+				if err := os.WriteFile(bodyFile, []byte(`{"reason":"from-json","actor_id":"actor_old"}`), 0o600); err != nil {
+					t.Fatalf("write overlay json: %v", err)
+				}
+				payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(prefix, "--from-file", bodyFile, "--reason", "override", "--dry-run")))
+				data = asMap(payload["data"])
+				body = asMap(data["body"])
+				if got := anyStringValue(body["reason"]); got != "override" {
+					t.Fatalf("overlay reason: got %q payload=%#v", got, payload)
+				}
+				overrides := asMap(data["_overrides"])
+				if overrides == nil || anyStringValue(overrides["reason"]) != "override" {
+					t.Fatalf("expected _overrides.reason=override, got %#v", data)
+				}
+				recovery := asMap(data["anx_cli_recovery"])
+				if anyStringValue(recovery["kind"]) != "json_flag_overlay" {
+					t.Fatalf("expected json_flag_overlay, got %#v", data)
+				}
+
+				payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"stdin-json"}`), append(prefix, "--from-file=-", "--dry-run")))
+				data = asMap(payload["data"])
+				body = asMap(data["body"])
+				if got := anyStringValue(body["reason"]); got != "stdin-json" {
+					t.Fatalf("stdin reason: got %q payload=%#v", got, payload)
+				}
+			})
+		}
 	}
 }
 

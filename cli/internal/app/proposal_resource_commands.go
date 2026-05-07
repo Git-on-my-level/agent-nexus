@@ -106,13 +106,10 @@ func (a *App) parseDocsReviseInput(args []string) (docsReviseInput, error) {
 	fs := newSilentFlagSet("docs revise")
 	var documentIDFlag, proposalIDFlag, fromFileFlag, contentFileFlag, actorIDFlag trackedString
 	var applyFlag, proposeFlag trackedBool
-	fs.Var(&documentIDFlag, "document-id", "Document id")
-	fs.Var(&documentIDFlag, "document", "Document id")
+	fs.Var(&documentIDFlag, "document-id", "Document ref, handle, or id")
 	fs.Var(&proposalIDFlag, "proposal-id", "Staged revision proposal id")
 	fs.Var(&fromFileFlag, "from-file", "Load advanced JSON revision body from file")
-	fs.Var(&fromFileFlag, "json-file", "Load advanced JSON revision body from file")
 	fs.Var(&contentFileFlag, "body-file", "Load revised document content from a local file or stdin with -")
-	fs.Var(&contentFileFlag, "content-file", "Load revised document content from a local file")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&applyFlag, "apply", "Apply immediately instead of staging a proposal")
 	fs.Var(&proposeFlag, "propose", "Stage a proposal (default)")
@@ -172,7 +169,7 @@ func docsReviseBodyArgs(fromFile string, contentFile string) []string {
 		args = append(args, "--from-file", strings.TrimSpace(fromFile))
 	}
 	if strings.TrimSpace(contentFile) != "" {
-		args = append(args, "--content-file", strings.TrimSpace(contentFile))
+		args = append(args, "--body-file", strings.TrimSpace(contentFile))
 	}
 	return args
 }

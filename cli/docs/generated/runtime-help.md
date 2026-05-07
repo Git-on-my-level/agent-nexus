@@ -75,7 +75,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards get` (command): Get card
 - `cards history` (command): List card revisions
 - `cards archive` (command): Archive card
-- `cards trash` (command): Move card to trash
 - `cards purge` (command): Permanently delete archived or trashed card
 - `cards restore` (command): Restore archived or trashed card
 - `cards timeline` (command): Get card timeline
@@ -116,9 +115,10 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `secret get --reveal` (command): Reveal secret value
 - `secret exec` (command): Reveal multiple secrets by name
 - `secret update` (command): Update secret value
+- `lifecycle verbs` (local-helper): Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - `topics create` (local-helper): Create a topic from plain flags, or from advanced JSON.
 - `topics patch` (local-helper): Patch a topic from scalar flags, or from advanced JSON.
-- `topics trash` (local-helper): Trash a topic with a simple reason flag, or from advanced JSON.
+- `topics trash` (local-helper): Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - `topics message` (local-helper): Post a message to a Topic conversation without hand-authoring event JSON.
 - `topics messages` (local-helper): List messages from a Topic conversation.
 - `topics reply` (local-helper): Reply to an existing Topic message.
@@ -136,6 +136,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
 - `cards resolve` (local-helper): Resolve a card into the done column with optional free-text evidence.
 - `cards reopen` (local-helper): Move a resolved card back into active workflow.
+- `cards trash` (local-helper): Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - `events list` (local-helper): Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - `events validate` (local-helper): Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - `events explain` (local-helper): Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
@@ -1501,9 +1502,9 @@ Local inspection helpers:
   docs messages            List document conversation messages.
   docs reply               Reply to a specific document message.
   Mutation flow:
-  docs create              Create durable context from flags plus `--content-file`, or from advanced JSON.
-  docs revise              Revise from `--content-file`; stages a diff proposal by default, or direct-writes with `--apply`.
-   Tip: agents should draft Markdown locally and pass `--content-file <path>`. `docs revise doc:<handle> --content-file <path>` discovers the base revision and returns an apply command for the staged proposal.
+  docs create              Create durable context from flags plus `--body` / `--body-file`, or from advanced JSON.
+  docs revise              Revise from `--body-file`; stages a diff proposal by default, or direct-writes with `--apply`.
+   Tip: agents should draft Markdown locally and pass `--body-file <path>`. `docs revise doc:<handle> --body-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1535,11 +1536,11 @@ Commands:
   cards trash              Move card to trash
 
 Agent-facing Card workflow:
-  cards create             Create a board work card from flags plus `--content-file`.
+  cards create             Create a board work card from flags plus `--body` / `--body-file`.
   cards message            Post a card conversation update without event JSON.
   cards messages           List card conversation messages.
   cards reply              Reply to a specific card message.
-  cards revise             Revise card title/body from `--content-file`; discovers `if_base_revision` when omitted.
+  cards revise             Revise card title/body from `--body-file`; discovers `if_base_revision` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs or an evidence body.
@@ -1658,8 +1659,9 @@ Commands:
 Common attachment flow:
   artifacts create --file <path> --ref <typed-ref>
                             Upload a file attachment with repeatable typed refs.
+  artifacts content <id>   With no --output, streams raw artifact bytes to stdout.
   artifacts content <id> --output <path>
-                            Download raw artifact bytes to a file.
+                            Download raw artifact bytes to a file (`--output -` is an explicit alias for stdout).
   artifacts content <id> --output .
                             Download using the server-provided filename.
   artifacts download       Alias for raw byte download (same as artifacts content).
@@ -2805,38 +2807,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards archive ... ; anx --json cards archive ... ; anx cards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `cards trash`
-
-Move card to trash
-
-```text
-Generated Help: cards trash
-
-- Command ID: `cards.trash`
-- CLI path: `cards trash`
-- HTTP: `POST /cards/{card_id}/trash`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
-- Output: Returns `{ board, card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`
-
-Inputs:
-  Required:
-  - path `card_id`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx cards trash ... ; anx --json cards trash ... ; anx cards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4020,6 +3990,35 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `lifecycle verbs`
+
+Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
+
+```text
+Local Help: lifecycle verbs
+
+- Kind: `local helper`
+- Summary: Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
+- Composition: Canonical resources and verbs are listed in `internal/app/lifecycle_spec.go`. When a flag replaces a non-empty JSON field, `--json --dry-run` includes `_overrides` and `anx_cli_recovery.kind=json_flag_overlay`.
+- JSON body: Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.
+- Examples:
+  - `anx artifacts archive artifact:notes --reason "obsolete"`
+  - `anx boards trash board:launch --reason "merged elsewhere" --dry-run --json`
+  - `anx cards archive card:foo --from-file lifecycle.json --actor-id actor:agent-beta`
+
+Flags:
+  --reason <text>              Short audit string stamped on the lifecycle event.
+  --from-file <path>           Advanced JSON body from file or stdin (`-`).
+  --actor-id <actor-id>        Actor id (every verb except purge); overlays JSON `actor_id`.
+  --dry-run                    Validate and render the request without sending it.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx lifecycle verbs ... ; anx --json lifecycle verbs ... ; anx lifecycle verbs ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `topics create`
 
 Create a topic from plain flags, or from advanced JSON.
@@ -4141,7 +4140,7 @@ Global flags:
 
 ## `topics trash`
 
-Trash a topic with a simple reason flag, or from advanced JSON.
+Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 
 ```text
 Generated Help: topics trash
@@ -4171,17 +4170,19 @@ CLI input:
 Local Help: topics trash
 
 - Kind: `local helper`
-- Summary: Trash a topic with a simple reason flag, or from advanced JSON.
-- Composition: Builds the `topics.trash` request without requiring heredoc JSON for routine lifecycle changes.
-- JSON body: Either `--reason` building `{ reason }`, or advanced JSON body from stdin/--from-file.
+- Summary: Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
+- Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
+- JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
 - Examples:
-  - `anx topics trash <topic-id> --reason "test artifact"`
-  - `cat trash.json | anx topics trash <topic-id>`
+  - `anx topics trash topic:launch --reason "test artifact"`
+  - `cat trash.json | anx topics trash topic:launch --from-file=-`
 
 Flags:
   <topic-id>                   Topic id or unique prefix to trash.
   --reason <text>              Reason for trashing the topic.
-  --from-file <path>           Advanced JSON request body from file.
+  --from-file <path>           Advanced JSON request body from file or stdin (`-`).
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4385,6 +4386,7 @@ Local Help: docs create
 - JSON body: Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
 - Examples:
   - `anx docs create --topic topic:<topic-handle> --title "Runbook" --body-file runbook.md`
+  - `anx docs create --topic topic:<topic-handle> --title "Note" --body "Short update"`
   - `anx docs create --subject-ref topic:<topic-handle> --title "Runbook" --summary "Durable context" --body-file runbook.md`
   - `cat doc-create.json | anx docs create`
 
@@ -4396,7 +4398,7 @@ Flags:
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
   --ref <typed-ref>            Additional typed ref (repeatable).
   --body-file <path>           Load Markdown/text content from a local file, or stdin with `-`.
-  --content-file <path>        Backward-compatible alias for --body-file.
+  --body <text>                Inline document body text (Markdown/text) when not using --body-file.
   --from-file <path>           Advanced JSON request body from file.
   --dry-run                    Validate and render the request without sending it.
 
@@ -4471,7 +4473,6 @@ Flags:
   --title <text>               Card title.
   --body <text>                Inline card summary/body text.
   --body-file <path>           Load card summary/body text from a local file, or stdin with `-`.
-  --content-file <path>        Backward-compatible alias for --body-file.
   --topic <topic-ref-or-handle> Related topic typed ref or handle.
   --column <key>               Initial board column; defaults to backlog.
   --assignee-ref <typed-ref>   Assignee actor ref, repeatable.
@@ -4679,16 +4680,17 @@ Local Help: cards revise
 
 - Kind: `local helper`
 - Summary: Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
-- Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.
+- Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--body-file` and optional `title`.
 - JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
 - Examples:
-  - `anx cards revise card:implement-login --content-file card.md`
-  - `anx cards revise card:implement-login --title "Updated title" --content-file card.md`
+  - `anx cards revise card:implement-login --body-file card.md`
+  - `anx cards revise card:implement-login --title "Updated title" --body-file card.md`
+  - `cat card.md | anx cards revise card:implement-login --body-file -`
   - `anx cards revise card:implement-login --from-file card-revision.json`
 
 Flags:
   <ref>                        Card ref, handle, or id to revise.
-  --content-file <path>        Load revised card summary/body text from a local file.
+  --body-file <path>           Load revised card summary/body text from a local file or stdin with `-`.
   --title <text>               Optional revised card title.
   --if-base-revision <revision-id> Base card revision id; discovered when omitted.
   --from-file <path>           Advanced JSON revision request body from file.
@@ -4814,6 +4816,7 @@ Flags:
   --column <key>               Target board column.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
+  --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -4858,18 +4861,18 @@ Local Help: cards resolve
 
 - Kind: `local helper`
 - Summary: Resolve a card into the done column with optional free-text evidence.
-- Composition: With `--reason`, `--body`, or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence. With no evidence flags, posts a default resolution note.
+- Composition: With evidence from `--body`, `--body-file`, or `--resolution-ref`, posts a card message first when a body is supplied, then passes resolution refs (including the new `event:<id>` when posted) into `cards.move`. `--reason` stamps the lifecycle audit only.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
-  - `anx cards resolve card:implement-login --reason "Works as expected"`
-  - `anx cards resolve card:implement-login`
-  - `anx cards resolve card:implement-login --column done --reason "Implemented and tested"`
+  - `anx cards resolve card:implement-login --reason "ok" --body "Validated in staging"`
   - `anx cards resolve card:implement-login --resolution-ref event:<event-id>`
+  - `anx cards resolve card:implement-login --column done --body-file evidence.md`
+  - `cat note.md | anx cards resolve card:implement-login --body-file -`
 
 Flags:
   <ref>                        Card ref, handle, or id to resolve.
   --column <key>               Target board column, default done.
-  --reason <text>              Post inline resolution evidence to the card thread before resolving.
+  --reason <text>              Short audit string stamped on the resolve request (not posted to the backing thread).
   --resolution-ref <typed-ref> Evidence event/artifact typed ref, repeatable.
   --body <text>                Post inline evidence to the card thread before resolving.
   --body-file <path>           Load evidence text from a file before resolving.
@@ -4878,6 +4881,7 @@ Flags:
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
   --from-file <path>           Advanced JSON move request body from file.
+  --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
@@ -4910,6 +4914,55 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards reopen ... ; anx --json cards reopen ... ; anx cards reopen ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards trash`
+
+Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
+
+```text
+Generated Help: cards trash
+
+- Command ID: `cards.trash`
+- CLI path: `cards trash`
+- HTTP: `POST /cards/{card_id}/trash`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
+- Output: Returns `{ board, card }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
+- Concepts: `cards`, `write`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`
+
+Inputs:
+  Required:
+  - path `card_id`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
+
+Local Help: cards trash
+
+- Kind: `local helper`
+- Summary: Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
+- Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
+- JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
+- Examples:
+  - `anx cards trash card:implement-login --reason "duplicate"`
+  - `cat trash.json | anx cards trash card:implement-login --from-file=-`
+
+Flags:
+  <ref>                        Card ref, handle, or id to trash.
+  --reason <text>              Reason for trashing the card.
+  --from-file <path>           Advanced JSON request body from file or stdin (`-`).
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --dry-run                    Validate and render the request without sending it.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards trash ... ; anx --json cards trash ... ; anx cards trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5366,14 +5419,14 @@ Local Help: docs revise
 - Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
 - JSON body: Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.
 - Examples:
-  - `anx docs revise doc:runbook --content-file notes.md`
+  - `anx docs revise doc:runbook --body-file notes.md`
   - `anx docs revise --apply --proposal-id <proposal-id>`
-  - `anx docs revise doc:runbook --apply --content-file notes.md`
+  - `anx docs revise doc:runbook --apply --body-file notes.md`
   - `cat revision.json | anx docs revise doc:runbook`
 
 Flags:
   <ref>                        Document ref, alias, or id to revise.
-  --content-file <path>        Load revised Markdown/text content from a local file.
+  --body-file <path>           Load revised Markdown/text content from a local file or stdin with `-`.
   --from-file <path>           Advanced JSON revision body from a file.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
   --apply                      Apply immediately, or apply a staged proposal when combined with --proposal-id.

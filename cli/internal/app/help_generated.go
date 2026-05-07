@@ -46,6 +46,23 @@ var runtimeGeneratedPacketResources = []string{}
 
 var localHelperTopics = []localHelperTopic{
 	{
+		Path:        "lifecycle verbs",
+		Summary:     "Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.",
+		JSONShape:   "Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.",
+		Composition: "Canonical resources and verbs are listed in `internal/app/lifecycle_spec.go`. When a flag replaces a non-empty JSON field, `--json --dry-run` includes `_overrides` and `anx_cli_recovery.kind=json_flag_overlay`.",
+		Examples: []string{
+			"anx artifacts archive artifact:notes --reason \"obsolete\"",
+			"anx boards trash board:launch --reason \"merged elsewhere\" --dry-run --json",
+			"anx cards archive card:foo --from-file lifecycle.json --actor-id actor:agent-beta",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--reason <text>", Description: "Short audit string stamped on the lifecycle event."},
+			{Name: "--from-file <path>", Description: "Advanced JSON body from file or stdin (`-`)."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id (every verb except purge); overlays JSON `actor_id`."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
 		Path:        "topics create",
 		Summary:     "Create a topic from plain flags, or from advanced JSON.",
 		JSONShape:   "Either flags building `{ topic }`, or advanced JSON body `{ topic }` from stdin/--from-file.",
@@ -89,17 +106,19 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "topics trash",
-		Summary:     "Trash a topic with a simple reason flag, or from advanced JSON.",
-		JSONShape:   "Either `--reason` building `{ reason }`, or advanced JSON body from stdin/--from-file.",
-		Composition: "Builds the `topics.trash` request without requiring heredoc JSON for routine lifecycle changes.",
+		Summary:     "Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).",
+		JSONShape:   "`{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.",
+		Composition: "Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.",
 		Examples: []string{
-			"anx topics trash <topic-id> --reason \"test artifact\"",
-			"cat trash.json | anx topics trash <topic-id>",
+			"anx topics trash topic:launch --reason \"test artifact\"",
+			"cat trash.json | anx topics trash topic:launch --from-file=-",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<topic-id>", Description: "Topic id or unique prefix to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the topic."},
-			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
 	{
@@ -190,6 +209,7 @@ var localHelperTopics = []localHelperTopic{
 		Composition: "Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.",
 		Examples: []string{
 			"anx docs create --topic topic:<topic-handle> --title \"Runbook\" --body-file runbook.md",
+			"anx docs create --topic topic:<topic-handle> --title \"Note\" --body \"Short update\"",
 			"anx docs create --subject-ref topic:<topic-handle> --title \"Runbook\" --summary \"Durable context\" --body-file runbook.md",
 			"cat doc-create.json | anx docs create",
 		},
@@ -201,7 +221,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref (repeatable)."},
 			{Name: "--body-file <path>", Description: "Load Markdown/text content from a local file, or stdin with `-`."},
-			{Name: "--content-file <path>", Description: "Backward-compatible alias for --body-file."},
+			{Name: "--body <text>", Description: "Inline document body text (Markdown/text) when not using --body-file."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -222,7 +242,6 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--title <text>", Description: "Card title."},
 			{Name: "--body <text>", Description: "Inline card summary/body text."},
 			{Name: "--body-file <path>", Description: "Load card summary/body text from a local file, or stdin with `-`."},
-			{Name: "--content-file <path>", Description: "Backward-compatible alias for --body-file."},
 			{Name: "--topic <topic-ref-or-handle>", Description: "Related topic typed ref or handle."},
 			{Name: "--column <key>", Description: "Initial board column; defaults to backlog."},
 			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor ref, repeatable."},
@@ -314,15 +333,16 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "cards revise",
 		Summary:     "Revise a card title and/or summary/body from local files without hand-authoring patch JSON.",
 		JSONShape:   "`{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.",
-		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--content-file` and optional `title`.",
+		Composition: "Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--body-file` and optional `title`.",
 		Examples: []string{
-			"anx cards revise card:implement-login --content-file card.md",
-			"anx cards revise card:implement-login --title \"Updated title\" --content-file card.md",
+			"anx cards revise card:implement-login --body-file card.md",
+			"anx cards revise card:implement-login --title \"Updated title\" --body-file card.md",
+			"cat card.md | anx cards revise card:implement-login --body-file -",
 			"anx cards revise card:implement-login --from-file card-revision.json",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id to revise."},
-			{Name: "--content-file <path>", Description: "Load revised card summary/body text from a local file."},
+			{Name: "--body-file <path>", Description: "Load revised card summary/body text from a local file or stdin with `-`."},
 			{Name: "--title <text>", Description: "Optional revised card title."},
 			{Name: "--if-base-revision <revision-id>", Description: "Base card revision id; discovered when omitted."},
 			{Name: "--from-file <path>", Description: "Advanced JSON revision request body from file."},
@@ -381,6 +401,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--column <key>", Description: "Target board column."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
 	{
@@ -403,17 +424,17 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "cards resolve",
 		Summary:     "Resolve a card into the done column with optional free-text evidence.",
 		JSONShape:   "`{ column_key: \"done\", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
-		Composition: "With `--reason`, `--body`, or `--body-file`, posts a card message first and passes its `event:<id>` as terminal resolution evidence. With no evidence flags, posts a default resolution note.",
+		Composition: "With evidence from `--body`, `--body-file`, or `--resolution-ref`, posts a card message first when a body is supplied, then passes resolution refs (including the new `event:<id>` when posted) into `cards.move`. `--reason` stamps the lifecycle audit only.",
 		Examples: []string{
-			"anx cards resolve card:implement-login --reason \"Works as expected\"",
-			"anx cards resolve card:implement-login",
-			"anx cards resolve card:implement-login --column done --reason \"Implemented and tested\"",
+			"anx cards resolve card:implement-login --reason \"ok\" --body \"Validated in staging\"",
 			"anx cards resolve card:implement-login --resolution-ref event:<event-id>",
+			"anx cards resolve card:implement-login --column done --body-file evidence.md",
+			"cat note.md | anx cards resolve card:implement-login --body-file -",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id to resolve."},
 			{Name: "--column <key>", Description: "Target board column, default done."},
-			{Name: "--reason <text>", Description: "Post inline resolution evidence to the card thread before resolving."},
+			{Name: "--reason <text>", Description: "Short audit string stamped on the resolve request (not posted to the backing thread)."},
 			{Name: "--resolution-ref <typed-ref>", Description: "Evidence event/artifact typed ref, repeatable."},
 			{Name: "--body <text>", Description: "Post inline evidence to the card thread before resolving."},
 			{Name: "--body-file <path>", Description: "Load evidence text from a file before resolving."},
@@ -422,6 +443,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
 	{
@@ -437,6 +459,23 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Card ref, handle, or id to reopen."},
 			{Name: "--column <key>", Description: "Target reopened column; defaults to ready."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
+		},
+	},
+	{
+		Path:        "cards trash",
+		Summary:     "Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).",
+		JSONShape:   "`{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.",
+		Composition: "Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.",
+		Examples: []string{
+			"anx cards trash card:implement-login --reason \"duplicate\"",
+			"cat trash.json | anx cards trash card:implement-login --from-file=-",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Card ref, handle, or id to trash."},
+			{Name: "--reason <text>", Description: "Reason for trashing the card."},
+			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
 	{
@@ -617,14 +656,14 @@ var localHelperTopics = []localHelperTopic{
 		JSONShape:   "Proposal mode returns `proposal_id`, `target_command_id`, `path`, `body`, `diff`, `apply_command`; `--apply` sends the revision immediately or applies a staged proposal.",
 		Composition: "Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.",
 		Examples: []string{
-			"anx docs revise doc:runbook --content-file notes.md",
+			"anx docs revise doc:runbook --body-file notes.md",
 			"anx docs revise --apply --proposal-id <proposal-id>",
-			"anx docs revise doc:runbook --apply --content-file notes.md",
+			"anx docs revise doc:runbook --apply --body-file notes.md",
 			"cat revision.json | anx docs revise doc:runbook",
 		},
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Document ref, alias, or id to revise."},
-			{Name: "--content-file <path>", Description: "Load revised Markdown/text content from a local file."},
+			{Name: "--body-file <path>", Description: "Load revised Markdown/text content from a local file or stdin with `-`."},
 			{Name: "--from-file <path>", Description: "Advanced JSON revision body from a file."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 			{Name: "--apply", Description: "Apply immediately, or apply a staged proposal when combined with --proposal-id."},
@@ -1058,8 +1097,9 @@ func localGroupHelpSupplement(topic string) string {
 		return strings.TrimSpace(`Common attachment flow:
   artifacts create --file <path> --ref <typed-ref>
                             Upload a file attachment with repeatable typed refs.
+  artifacts content <id>   With no --output, streams raw artifact bytes to stdout.
   artifacts content <id> --output <path>
-                            Download raw artifact bytes to a file.
+                            Download raw artifact bytes to a file (` + "`--output -`" + ` is an explicit alias for stdout).
   artifacts content <id> --output .
                             Download using the server-provided filename.
   artifacts download       Alias for raw byte download (same as artifacts content).
@@ -1078,9 +1118,9 @@ Lower-level helpers:
   docs messages            List document conversation messages.
   docs reply               Reply to a specific document message.
   Mutation flow:
-  docs create              Create durable context from flags plus ` + "`--content-file`" + `, or from advanced JSON.
-  docs revise              Revise from ` + "`--content-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
-   Tip: agents should draft Markdown locally and pass ` + "`--content-file <path>`" + `. ` + "`docs revise doc:<handle> --content-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
+  docs create              Create durable context from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `, or from advanced JSON.
+  docs revise              Revise from ` + "`--body-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
+   Tip: agents should draft Markdown locally and pass ` + "`--body-file <path>`" + `. ` + "`docs revise doc:<handle> --body-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
@@ -1106,11 +1146,11 @@ Read paths:
     anx boards cards get board:<board-handle> card:<card-handle>`)
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
-  cards create             Create a board work card from flags plus ` + "`--content-file`" + `.
+  cards create             Create a board work card from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `.
   cards message            Post a card conversation update without event JSON.
   cards messages           List card conversation messages.
   cards reply              Reply to a specific card message.
-  cards revise             Revise card title/body from ` + "`--content-file`" + `; discovers ` + "`if_base_revision`" + ` when omitted.
+  cards revise             Revise card title/body from ` + "`--body-file`" + `; discovers ` + "`if_base_revision`" + ` when omitted.
   cards move               Move workflow column; discovers the parent board concurrency token when omitted.
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs or an evidence body.

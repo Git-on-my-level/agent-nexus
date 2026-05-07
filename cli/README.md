@@ -19,8 +19,8 @@ go run ./cmd/anx --agent agent-example boards create --topic <topic-ref-or-handl
 printf 'Current discussion note.\n' > message.md
 go run ./cmd/anx --agent agent-example topics message <topic-ref-or-handle> --body-file message.md
 printf 'Investigate checkout failures and keep evidence links current.\n' > card.md
-go run ./cmd/anx --agent agent-example cards create --board <board-ref-or-handle> --topic <topic-ref-or-handle> --title "Investigate checkout failures" --content-file card.md
-go run ./cmd/anx --agent agent-example cards revise <card-ref-or-handle> --content-file card.md
+go run ./cmd/anx --agent agent-example cards create --board <board-ref-or-handle> --topic <topic-ref-or-handle> --title "Investigate checkout failures" --body-file card.md
+go run ./cmd/anx --agent agent-example cards revise <card-ref-or-handle> --body-file card.md
 go run ./cmd/anx --agent agent-example events stream --last-event-id event_123
 go run ./cmd/anx --agent agent-example provenance walk --from event:event_123 --depth 2
 printf '{"topic":{"title":"Incident #43","summary":"Triage #43","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | go run ./cmd/anx --agent agent-example draft create --command topics.create

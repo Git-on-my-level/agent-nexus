@@ -30,9 +30,9 @@ The CLI should teach the same workspace model as the web UI:
 
 - **Topics** are for topic-centered discussion and current context around a project, incident, decision, or recurring process.
 - **Boards** are for active work tracking: status, ownership, columns, ordering, and movement.
-- **Cards** are the work items on Boards. Their summary/body is text-heavy agent work, so `cards create` and `cards revise` should prefer local files via `--content-file`.
+- **Cards** are the work items on Boards. Their summary/body is text-heavy agent work, so `cards create` and `cards revise` should prefer local files via `--body-file` (or inline `--body` where appropriate).
 - **Domain messages** are ordinary conversation/status updates on a Topic, Document, or Card backing thread. Use `topics message/messages/reply`, `docs message/messages/reply`, and `cards message/messages/reply` for agent authoring; use `--body-file` for file-backed message bodies; do not make agents hand-author `message_posted` event JSON for routine domain discussion.
-- **Docs** are durable context and institutional knowledge. `docs create` and `docs revise` should also prefer local files via `--content-file`.
+- **Docs** are durable context and institutional knowledge. `docs create` and `docs revise` should also prefer local files via `--body-file` (or inline `--body` on create).
 
 Use the smallest domain verb that says what is happening:
 
@@ -44,7 +44,17 @@ Use the smallest domain verb that says what is happening:
 - `assign`, `resolve`, and `reopen` are Card workflow verbs with domain meaning.
 - `workspace` is the composed read for an agent that needs the useful surrounding context.
 
-Do not add compatibility aliases for new CLI surfaces. If an old command path conflicts with this model, prefer a clean replacement and update help, generated metadata, tests, and this guide together.
+### Flag conventions
+
+- **Lifecycle verbs:** `archive`, `unarchive`, `trash`, `restore`, and `purge` (where supported) share one parser-driven surface across artifacts, boards, docs, events, cards, and topics: optional `--from-file` JSON, `--reason`, `--actor-id` (except `purge`), and `--dry-run`, plus the resource id as a leading positional or `--<resource>-id`. The canonical verb matrix per resource is `internal/app/lifecycle_spec.go`; `--reason` / `--actor-id` overlay JSON from `--from-file` when both are supplied.
+- **Body (human prose / file bytes):** `--body` for inline text; `--body-file <path|->` for a path or stdin (`-`). Use `--from-file` only for advanced JSON mutation bodies.
+- **Resource id:** the leading positional accepts a ref, handle, or internal id. The explicit flag form is `--<resource>-id` (for example `--card-id`, `--board-id`). Do not introduce bare `--card` / `--board` flags as alternate spellings of id flags; that short flag space stays reserved for relational anchors (for example `--board` on `cards create` names the parent board).
+- **`--reason` vs `--body`:** on lifecycle verbs, `--reason` is a short audit string stamped on the lifecycle/trash event. `--body` / `--body-file` are for evidence or narrative posted on a backing thread (for example card messages), not aliases of `--reason`.
+- **Concurrency tokens:** when a command documents `--if-updated-at`, `--if-board-updated-at`, or similar, its help text names the `anx ... get` command that yields the correct token.
+
+Do not add compatibility aliases for new CLI surfaces. Transitional aliases removed in the CLI ergonomics consolidation include: `--content-file`, `--json-file`, and bare `--card` / `--board` as duplicates of `--<resource>-id` on the same command.
+
+If an old command path conflicts with this model, prefer a clean replacement and update help, generated metadata, tests, and this guide together.
 
 ## Output And Runtime Invariants
 
