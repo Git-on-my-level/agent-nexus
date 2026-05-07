@@ -102,7 +102,7 @@ func (a *App) runProvenanceWalk(ctx context.Context, args []string, cfg config.R
 	var fromFlag trackedString
 	var depthFlag trackedInt
 	var includeEventChain trackedBool
-	fs.Var(&fromFlag, "from", "Start typed ref (event:<id>|thread:<id>|artifact:<id>|topic:<id>)")
+	fs.Var(&fromFlag, "from", "Start typed ref (event:<handle>|thread:<handle>|artifact:<handle>|topic:<handle>)")
 	fs.Var(&depthFlag, "depth", "Traversal depth (0 means root only)")
 	fs.Var(&includeEventChain, "include-event-chain", "Include event.thread_id as provenance edges")
 	if err := fs.Parse(args); err != nil {
@@ -620,17 +620,17 @@ Usage:
   anx provenance walk --from <typed-ref> [--depth <n>] [--include-event-chain]
 
 Typed ref roots:
-  event:<id>
-  thread:<id>
-  artifact:<id>
-  topic:<id>
+  event:launch-update
+  thread:launch-discussion
+  artifact:launch-notes
+  topic:launch
 
 Heuristics
 
-- Start from ` + "`event:<id>`" + ` when explaining one update or mutation.
-- Start from ` + "`thread:<id>`" + ` when explaining backing-thread evidence and history.
-- Start from ` + "`artifact:<id>`" + ` when tracing a file or attachment back to its source.
-- Start from ` + "`topic:<id>`" + ` when explaining operator-facing topic state and linked refs.
+- Start from ` + "`event:launch-update`" + ` when explaining one update or mutation.
+- Start from ` + "`thread:launch-discussion`" + ` when explaining backing-thread evidence and history.
+- Start from ` + "`artifact:launch-notes`" + ` when tracing a file or attachment back to its source.
+- Start from ` + "`topic:launch`" + ` when explaining operator-facing topic state and linked refs.
 - Prefer shallow depths like 1-3 before broader traversals.
 
 Examples:

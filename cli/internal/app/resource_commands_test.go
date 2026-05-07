@@ -313,8 +313,10 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/cards/card_123"):
-			_, _ = w.Write([]byte(`{"card":{"id":"card_123","board_ref":"board:board_123","title":"Card URL"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/cards/card:card_123"):
+			_, _ = w.Write([]byte(`{"card":{"id":"98341768-646f-48e5-8b98-ddda78ff0fcd","ref":"card:cli-json-body-input","handle":"cli-json-body-input","board_ref":"board:869c2f55-1dd6-479f-9c10-57b1988472e9","title":"Card URL"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/boards/869c2f55-1dd6-479f-9c10-57b1988472e9"):
+			_, _ = w.Write([]byte(`{"board":{"id":"869c2f55-1dd6-479f-9c10-57b1988472e9","ref":"board:anx-features","handle":"anx-features","title":"ANX Features"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -324,9 +326,156 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	home := t.TempDir()
 	hostedBase := server.URL + "/ws/david-zhang/personal"
 	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
-	expected := server.URL + "/o/david-zhang/w/personal/boards/board_123?card=card_123"
+	expected := server.URL + "/o/david-zhang/w/personal/boards/anx-features?card=cli-json-body-input"
 	if out != expected {
 		t.Fatalf("expected %q, got %q", expected, out)
+	}
+}
+
+func TestGetCommandResolvesUniqueSlugPrefixAfterNotFound(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/topics/anx-dog":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"topic not found"}}`))
+		case "/topics":
+			_, _ = w.Write([]byte(`{"topics":[{"id":"topic_internal_123","ref":"topic:anx-dogfooding","handle":"anx-dogfooding","title":"ANX Dogfooding"}]}`))
+		case "/topics/topic:anx-dogfooding":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_internal_123","ref":"topic:anx-dogfooding","handle":"anx-dogfooding","title":"ANX Dogfooding"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "topics", "get", "anx-dog"}))
+	topic := asMap(asMap(payload["data"])["topic"])
+	if got := anyStringValue(topic["ref"]); got != "topic:anx-dogfooding" {
+		t.Fatalf("expected resolved topic ref, got %#v", payload)
+	}
+	want := []string{"/topics/anx-dog", "/topics", "/topics/topic:anx-dogfooding"}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected request sequence:\n%v", seen)
+	}
+}
+
+func TestGetCommandRejectsAmbiguousSlugPrefix(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.EscapedPath() {
+		case "/cards/cli":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"card not found"}}`))
+		case "/cards":
+			_, _ = w.Write([]byte(`{"cards":[{"id":"c1","ref":"card:cli-json-body-input","handle":"cli-json-body-input"},{"id":"c2","ref":"card:cli-url-output","handle":"cli-url-output"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "cli"}))
+	if got := anyStringValue(asMap(payload["error"])["code"]); got != "ambiguous_resource_prefix" {
+		t.Fatalf("expected ambiguous_resource_prefix, got %#v", payload)
+	}
+}
+
+func TestMutatingCommandDoesNotRetrySlugPrefixAfterNotFound(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/cards/cli/trash":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"card not found"}}`))
+		case "/cards":
+			t.Fatalf("mutating command must not list resources for prefix retry")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"wrong id"}`), []string{"--json", "--base-url", server.URL, "cards", "trash", "cli"}))
+	if got := anyStringValue(asMap(payload["error"])["code"]); got != "not_found" {
+		t.Fatalf("expected original not_found error, got %#v", payload)
+	}
+	want := []string{"/cards/cli/trash"}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected request sequence:\n%v", seen)
+	}
+}
+
+func TestCardsGetPassesTypedRefAndHandleToCore(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/cards/card:cli-json-body-input", "/cards/cli-json-body-input":
+			_, _ = w.Write([]byte(`{"card":{"id":"card_internal_123","ref":"card:cli-json-body-input","handle":"cli-json-body-input","title":"CLI JSON body input"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	typed := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "card:cli-json-body-input"}))
+	if data := asMap(typed["data"]); anyStringValue(asMap(data["card"])["ref"]) != "card:cli-json-body-input" {
+		t.Fatalf("expected typed ref in card payload, got %#v", typed)
+	}
+	handle := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "cli-json-body-input"}))
+	if data := asMap(handle["data"]); anyStringValue(asMap(data["card"])["handle"]) != "cli-json-body-input" {
+		t.Fatalf("expected handle in card payload, got %#v", handle)
+	}
+	if len(seen) != 2 || seen[0] != "/cards/card:cli-json-body-input" || seen[1] != "/cards/cli-json-body-input" {
+		t.Fatalf("expected CLI to pass refs/handles through to core, got %#v", seen)
+	}
+}
+
+func TestCardsListJSONAndTextUsePublicIdentity(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/cards" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cards":[{"id":"card_internal_1234567890","ref":"card:cli-json-body-input","handle":"cli-json-body-input","title":"CLI JSON body input","column_key":"ready"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	text := runCLIForTest(t, home, nil, nil, []string{"--base-url", server.URL, "cards", "list"})
+	if !strings.Contains(text, "card:cli-json-body-input") || strings.Contains(text, "card_intern") {
+		t.Fatalf("expected text output to lead with public ref and hide internal ids, got:\n%s", text)
+	}
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "list"}))
+	data := asMap(payload["data"])
+	cards := asSlice(data["cards"])
+	card := asMap(cards[0])
+	if anyStringValue(card["ref"]) != "card:cli-json-body-input" || anyStringValue(card["handle"]) != "cli-json-body-input" {
+		t.Fatalf("expected JSON identity fields to expose ref and handle, got %#v", card)
+	}
+	if _, exists := card["short_id"]; exists {
+		t.Fatalf("did not expect CLI-added short_id in card payload, got %#v", card)
 	}
 }
 
@@ -496,7 +645,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	}
 }
 
-func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
+func TestInboxListIncludesAliasesAndLinkedPublicIdentity(t *testing.T) {
 	t.Parallel()
 
 	const inboxID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
@@ -525,15 +674,6 @@ func TestInboxListIncludesAliasesAndLinkedShortIDs(t *testing.T) {
 	expectedAlias := inboxAliasByID([]string{inboxID})[inboxID]
 	if got := anyStringValue(item["alias"]); got != expectedAlias {
 		t.Fatalf("expected alias %q, got %q payload=%#v", expectedAlias, got, payload)
-	}
-	if got := anyStringValue(item["short_id"]); got != shortID(inboxID) {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(inboxID), got, payload)
-	}
-	if got := anyStringValue(item["thread_short_id"]); got != shortID(threadID) {
-		t.Fatalf("expected thread_short_id %q, got %q payload=%#v", shortID(threadID), got, payload)
-	}
-	if got := anyStringValue(item["source_event_short_id"]); got != shortID(eventID) {
-		t.Fatalf("expected source_event_short_id %q, got %q payload=%#v", shortID(eventID), got, payload)
 	}
 }
 
@@ -719,6 +859,39 @@ func TestInboxAliasStableAcrossListMembershipChanges(t *testing.T) {
 	}
 }
 
+func TestInboxResolveRequiresExactIDOrAlias(t *testing.T) {
+	t.Parallel()
+
+	const targetID = "inbox:action_needed:thread_target:none:event_target"
+	alias := inboxAliasByID([]string{targetID})[targetID]
+	result := &commandResult{Data: map[string]any{
+		"body": map[string]any{
+			"items": []any{
+				map[string]any{"id": targetID, "alias": alias, "subject_ref": "thread:target"},
+			},
+		},
+	}}
+
+	for _, raw := range []string{targetID, alias, strings.ToUpper(alias)} {
+		match, err := resolveInboxItemFromListResult(result, raw)
+		if err != nil {
+			t.Fatalf("expected exact inbox id/alias %q to resolve: %v", raw, err)
+		}
+		if match.ID != targetID {
+			t.Fatalf("expected target id %q for %q, got %#v", targetID, raw, match)
+		}
+	}
+
+	for _, raw := range []string{
+		strings.TrimSuffix(targetID, "target"),
+		strings.TrimSuffix(alias, alias[len(alias)-1:]),
+	} {
+		if _, err := resolveInboxItemFromListResult(result, raw); err == nil {
+			t.Fatalf("expected partial inbox id/alias %q to be rejected", raw)
+		}
+	}
+}
+
 func TestInboxRespondPostsGenericResponse(t *testing.T) {
 	t.Parallel()
 
@@ -777,7 +950,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	if !strings.Contains(message, "did you mean `anx events stream`?") {
 		t.Fatalf("expected stream correction, got %q", message)
 	}
-	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type message_posted --mine --full-id`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
+	if !strings.Contains(message, "`anx events list --thread-id <thread-id> --type message_posted --mine`") || !strings.Contains(message, "`anx events tail --max-events 20`") {
 		t.Fatalf("expected list/tail examples, got %q", message)
 	}
 }
@@ -1009,11 +1182,8 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--type", "message_posted",
 		"--mine",
 	})
-	if strings.Contains(textShort, mineEventID) {
-		t.Fatalf("expected default short-id rendering without --full-id, got:\n%s", textShort)
-	}
-	if !strings.Contains(textShort, shortID(mineEventID)) {
-		t.Fatalf("expected short id rendering by default, got:\n%s", textShort)
+	if !strings.Contains(textShort, mineEventID) {
+		t.Fatalf("expected ref-native id rendering by default, got:\n%s", textShort)
 	}
 }
 
@@ -1141,6 +1311,32 @@ func TestDocsCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revise", "--apply", "--proposal-id", proposalIDFromEnvelope(t, docsRevisionPayload)}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "history", "--document-id", "doc_1"}))
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "--document-id", "doc_1", "--revision-id", "rev_1"}))
+}
+
+func TestDocsRevisionGetPassesTypedRefsAndHandlesToCore(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/docs/document:runbook/revisions/document_revision:v2", "/docs/runbook/revisions/v2":
+			_, _ = w.Write([]byte(`{"document_ref":"document:runbook","document_handle":"runbook","revision":{"revision_id":"document_revision:v2","revision_number":2}}`))
+		case "/docs", "/docs/runbook/revisions":
+			t.Fatalf("did not expect docs list/history fallback for %s", r.URL.EscapedPath())
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "document:runbook", "document_revision:v2"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "docs", "revision", "get", "runbook", "v2"}))
+	if len(seen) != 2 || seen[0] != "/docs/document:runbook/revisions/document_revision:v2" || seen[1] != "/docs/runbook/revisions/v2" {
+		t.Fatalf("expected docs revision get to pass refs/handles through to core, got %#v", seen)
+	}
 }
 
 func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
@@ -2178,53 +2374,6 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 	}
 }
 
-func TestNormalizeMutationBodyIDsSkipsNestedStructuredDocContent(t *testing.T) {
-	t.Parallel()
-
-	app := &App{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"thread_1234567890"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	body := map[string]any{
-		"document":     map[string]any{"id": "doc_1"},
-		"content_type": "structured",
-		"refs":         []any{"thread:thread_123"},
-		"content": map[string]any{
-			"thread_id": "thread_12345",
-			"nested": map[string]any{
-				"refs": []any{"thread:9a61af8e-d2c"},
-			},
-		},
-	}
-
-	normalizedAny, err := app.normalizeMutationBodyIDs(context.Background(), config.Resolved{BaseURL: server.URL}, "docs.revisions.create", nil, body)
-	if err != nil {
-		t.Fatalf("normalize docs.revisions.create body: %v", err)
-	}
-	normalized, _ := normalizedAny.(map[string]any)
-	refs := asSlice(normalized["refs"])
-	if len(refs) != 1 || anyStringValue(refs[0]) != "thread:thread_1234567890" {
-		t.Fatalf("expected top-level docs refs to be normalized, got %#v", normalized)
-	}
-	content := asMap(normalized["content"])
-	if got := anyStringValue(content["thread_id"]); got != "thread_12345" {
-		t.Fatalf("expected structured content.thread_id to remain untouched, got %#v", normalized)
-	}
-	nested := asMap(content["nested"])
-	nestedRefs := asSlice(nested["refs"])
-	if len(nestedRefs) != 1 || anyStringValue(nestedRefs[0]) != "thread:9a61af8e-d2c" {
-		t.Fatalf("expected nested structured refs to remain untouched, got %#v", normalized)
-	}
-}
-
 func TestNormalizeMutationBodyIDsPreservesUnsupportedTypedRefsVerbatim(t *testing.T) {
 	t.Parallel()
 
@@ -2463,8 +2612,8 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "timeline", "--card-id", cardID,
 	})
-	if !strings.Contains(textOut, shortID(cardID)) || !strings.Contains(textOut, "events: 1") {
-		t.Fatalf("expected card short id and event count in default text output, got:\n%s", textOut)
+	if !strings.Contains(textOut, cardID) || !strings.Contains(textOut, "events: 1") {
+		t.Fatalf("expected card id and event count in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -3055,6 +3204,87 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 }
 
+func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
+	t.Parallel()
+
+	const (
+		topicID      = "topic_lifecycle_123456"
+		profileActor = "actor_lifecycle_profile"
+	)
+
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/archive":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics archive body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected archive actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["archive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/unarchive":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics unarchive body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected unarchive actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["unarchive"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/restore":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics restore body: %v", err)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected restore actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["restore"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/topics/"+topicID+"/trash":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode topics trash body: %v", err)
+			}
+			if got := anyStringValue(payload["reason"]); got != "cleanup" {
+				t.Fatalf("expected trash reason, got %#v", payload)
+			}
+			if got := anyStringValue(payload["actor_id"]); got != profileActor {
+				t.Fatalf("expected trash actor_id %q, got %#v", profileActor, payload)
+			}
+			seen["trash"] = true
+			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-lifecycle", `{"agent":"agent-lifecycle","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	for _, args := range [][]string{
+		{"topics", "archive", topicID},
+		{"topics", "unarchive", topicID},
+		{"topics", "restore", topicID},
+		{"topics", "trash", topicID, "--reason", "cleanup"},
+	} {
+		payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json", "--base-url", server.URL, "--agent", "agent-lifecycle"}, args...)))
+		if got := anyStringValue(payload["command"]); got == "" {
+			t.Fatalf("expected command in payload %#v", payload)
+		}
+	}
+	for _, name := range []string{"archive", "unarchive", "restore", "trash"} {
+		if !seen[name] {
+			t.Fatalf("expected %s request", name)
+		}
+	}
+}
+
 func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -3164,7 +3394,7 @@ func TestCardsMessagesListsMessageEventsForCardThread(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "messages", cardID, "--max-events", "1",
 	})
-	if !strings.Contains(textOut, "reply_to: "+shortID("event_1")) {
+	if !strings.Contains(textOut, "reply_to: "+"event_1") {
 		t.Fatalf("expected reply target in message list text, got:\n%s", textOut)
 	}
 }
@@ -3604,173 +3834,6 @@ func TestBoardCommands(t *testing.T) {
 	}
 }
 
-func TestBoardsListAddsNestedShortIDAndWorkspaceResolvesShortBoardID(t *testing.T) {
-	t.Parallel()
-
-	const canonicalID = "board_1234567890abcdef"
-	prefixID := shortID(canonicalID)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+prefixID+"/workspace":
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"board not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalID+"/workspace":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalID + `","board":{"id":"` + canonicalID + `","title":"Ops Board","state":"active"},"cards":{"items":[],"count":0},"documents":{"items":[],"count":0},"inbox":{"items":[],"count":0},"board_summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false},"warnings":{"items":[],"count":0},"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},"generated_at":"2026-03-08T00:00:00Z"}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-
-	listPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "list",
-	}))
-	data, _ := listPayload["data"].(map[string]any)
-	items, _ := data["boards"].([]any)
-	if len(items) != 1 {
-		t.Fatalf("expected one board list item, got %#v", listPayload)
-	}
-	item, _ := items[0].(map[string]any)
-	board, _ := item["board"].(map[string]any)
-	if got := anyStringValue(board["short_id"]); got != prefixID {
-		t.Fatalf("expected board short_id %q, got %#v", prefixID, listPayload)
-	}
-
-	workspacePayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "workspace",
-		"--board-id", prefixID,
-	}))
-	workspaceData, _ := workspacePayload["data"].(map[string]any)
-	if got := anyStringValue(workspaceData["board_id"]); got != canonicalID {
-		t.Fatalf("expected canonical board_id %q, got %#v", canonicalID, workspacePayload)
-	}
-}
-
-func TestBoardCardsListAddsCardShortIDAndGetResolvesShortCardID(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const canonicalCardID = "card_1234567890abcdef"
-	const shortCardID = "card_12345"
-	const threadID = "thread_1234567890abcdef"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":1}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadID + `","title":"Fix CLI card discovery","column_key":"backlog","rank":"a"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+canonicalCardID:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadID + `","title":"Fix CLI card discovery","column_key":"backlog"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	listPayload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "list",
-		shortBoardID,
-	}))
-	data, _ := listPayload["data"].(map[string]any)
-	cards, _ := data["cards"].([]any)
-	if len(cards) != 1 {
-		t.Fatalf("expected one card, got %#v", listPayload)
-	}
-	card, _ := cards[0].(map[string]any)
-	if got := anyStringValue(card["short_id"]); got != shortCardID {
-		t.Fatalf("expected card short_id %q from canonical card id, got %#v", shortCardID, card)
-	}
-
-	getByPositionals := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "get",
-		shortBoardID,
-		shortCardID,
-	}))
-	getData, _ := getByPositionals["data"].(map[string]any)
-	gotCard, _ := getData["card"].(map[string]any)
-	if got := anyStringValue(gotCard["id"]); got != canonicalCardID {
-		t.Fatalf("expected canonical card id %q, got %#v", canonicalCardID, getByPositionals)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "get",
-		"--board-id", shortBoardID,
-		"--card-id", shortCardID,
-	}))
-}
-
-func TestBoardCardsGetResolvesThreadIDFallbackAndRejectsAmbiguousThreadPrefix(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const cardA = "card_alpha_1234567890"
-	const cardB = "card_beta_1234567890"
-	const threadA = "thread_alpha_1234567890"
-	const threadB = "thread_alpine_1234567890"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":2}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[{"id":"` + cardA + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadA + `","title":"Alpha","column_key":"backlog"},{"id":"` + cardB + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadB + `","title":"Beta","column_key":"review"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards/"+cardA:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + cardA + `","board_id":"` + canonicalBoardID + `","thread_id":"` + threadA + `","title":"Alpha","column_key":"backlog"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "get",
-		shortBoardID,
-		threadA,
-	}))
-	data, _ := payload["data"].(map[string]any)
-	card, _ := data["card"].(map[string]any)
-	if got := anyStringValue(card["id"]); got != cardA {
-		t.Fatalf("expected thread fallback to resolve %q, got %#v", cardA, payload)
-	}
-
-	errPayload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "get",
-		shortBoardID,
-		"thread_al",
-	}))
-	errObj, _ := errPayload["error"].(map[string]any)
-	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "ambiguous") || !strings.Contains(message, "boards cards list") {
-		t.Fatalf("expected ambiguous error with list guidance, got %#v", errPayload)
-	}
-}
-
 func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 	t.Parallel()
 
@@ -3857,108 +3920,6 @@ func TestWorkspaceSummaryEmptyStateIncludesNextStepHint(t *testing.T) {
 	}
 }
 
-func TestCreateCommandsResolveShortBoardAndTopicIDs(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const canonicalTopicID = "topic_1234567890abcdef"
-	const shortTopicID = "topic_1234"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/topics":
-			_, _ = w.Write([]byte(`{"topics":[{"id":"` + canonicalTopicID + `","title":"Ops Topic","state":"active"}]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode board create body: %v", err)
-			}
-			board, _ := payload["board"].(map[string]any)
-			wantRef := "topic:" + canonicalTopicID
-			if got := anyStringValue(board["primary_topic_ref"]); got != wantRef {
-				t.Fatalf("expected resolved primary_topic_ref %q, got %#v", wantRef, payload)
-			}
-			refs := asSlice(board["pinned_refs"])
-			if len(refs) != 1 || anyStringValue(refs[0]) != wantRef {
-				t.Fatalf("expected resolved pinned topic ref %q, got %#v", wantRef, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"board_created","title":"CLI board","primary_topic_ref":"` + wantRef + `"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/cards":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode card create body: %v", err)
-			}
-			if got := anyStringValue(payload["board_id"]); got != canonicalBoardID {
-				t.Fatalf("expected resolved board_id %q, got %#v", canonicalBoardID, payload)
-			}
-			_, _ = w.Write([]byte(`{"card":{"id":"card_created","board_id":"` + canonicalBoardID + `","title":"Card","column_key":"backlog"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	contentFile := filepath.Join(home, "card.md")
-	if err := os.WriteFile(contentFile, []byte("Card body\n"), 0o600); err != nil {
-		t.Fatalf("write card content file: %v", err)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "create",
-		"--topic", shortTopicID,
-		"--title", "CLI board",
-	}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"cards", "create",
-		"--board", shortBoardID,
-		"--title", "Card",
-		"--content-file", contentFile,
-	}))
-}
-
-func TestGlobalCardGetResolvesShortIDOnBoardCardNotFound(t *testing.T) {
-	t.Parallel()
-
-	const canonicalCardID = "card_1234567890abcdef"
-	const shortCardID = "card_12345"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+shortCardID:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"board card not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/cards":
-			_, _ = w.Write([]byte(`{"cards":[{"id":"` + canonicalCardID + `","title":"Fix CLI card discovery","column_key":"backlog"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/cards/"+canonicalCardID:
-			_, _ = w.Write([]byte(`{"card":{"id":"` + canonicalCardID + `","title":"Fix CLI card discovery","column_key":"backlog"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"cards", "get", shortCardID,
-	}))
-	data, _ := payload["data"].(map[string]any)
-	card, _ := data["card"].(map[string]any)
-	if got := anyStringValue(card["id"]); got != canonicalCardID {
-		t.Fatalf("expected short card id to resolve to %q, got %#v", canonicalCardID, payload)
-	}
-}
-
 func TestWorkspaceSummaryAllowsPartialOptionalReadFailure(t *testing.T) {
 	t.Parallel()
 
@@ -3996,36 +3957,12 @@ func TestWorkspaceSummaryAllowsPartialOptionalReadFailure(t *testing.T) {
 	}
 }
 
-func TestDocumentedShortIDResourcesHaveRegressionCoverage(t *testing.T) {
+func TestAgentGuideDocumentsRefNativeIdentity(t *testing.T) {
 	t.Parallel()
 
-	documented := []resourceIDLookupSpec{
-		threadIDLookupSpec,
-		topicIDLookupSpec,
-		cardIDLookupSpec,
-		artifactIDLookupSpec,
-		boardIDLookupSpec,
-		boardCardIDLookupSpec,
-		documentIDLookupSpec,
-		eventIDLookupSpec,
-	}
-	covered := map[string]bool{
-		"threads.list":      true,
-		"topics.list":       true,
-		"cards.list":        true,
-		"artifacts.list":    true,
-		"boards.list":       true,
-		"boards.cards.list": true,
-		"docs.list":         true,
-		"events.list":       true,
-	}
-	for _, spec := range documented {
-		if !covered[spec.listCommandID] {
-			t.Fatalf("short_id-capable %s lacks resolver regression coverage entry", spec.listCommandID)
-		}
-	}
-	if !strings.Contains(agentGuideText(), "short_id") {
-		t.Fatalf("agent guide no longer documents short_id behavior; update coverage assumptions")
+	guide := agentGuideText()
+	if !strings.Contains(guide, "typed refs and handles") || !strings.Contains(guide, "`ref` and `handle`") {
+		t.Fatalf("agent guide no longer documents ref-native identity behavior; update coverage assumptions")
 	}
 }
 
@@ -4051,252 +3988,6 @@ func TestBoardCardsMoveRejectsBeforeAndAfterFlags(t *testing.T) {
 	if message := anyStringValue(errObj["message"]); !strings.Contains(message, "--before-card-id and --after-card-id cannot be combined") {
 		t.Fatalf("expected placement flag guidance, got %q", message)
 	}
-}
-
-func TestBoardCardMutationsResolveShortThreadIDsInBodies(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const canonicalCardThreadID = "thread_1234567890abcdef"
-	const shortCardThreadID = "thread_123"
-	const canonicalAnchorThreadID = "thread_anchor_1234567890"
-	const shortAnchorThreadID = "thread_anc"
-	const updatedAt = "2026-03-08T00:00:00Z"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalCardThreadID + `","title":"Execution Track"},{"id":"` + canonicalAnchorThreadID + `","title":"Review Anchor"}]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode create body: %v", err)
-			}
-			if got := anyStringValue(payload["thread_id"]); got != canonicalCardThreadID {
-				t.Fatalf("expected canonical create thread_id %q, got %#v", canonicalCardThreadID, payload)
-			}
-			if got := anyStringValue(payload["after_thread_id"]); got != canonicalAnchorThreadID {
-				t.Fatalf("expected canonical create after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"card_123","board_id":"` + canonicalBoardID + `","thread_id":"` + canonicalCardThreadID + `","parent_thread":"` + canonicalCardThreadID + `","title":"Execution Track","body":"","version":1,"column_key":"ready","rank":"a","assignee":null,"priority":null,"status":"todo","pinned_document_id":null,"created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/cards/card_123/move":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode move body: %v", err)
-			}
-			if got := anyStringValue(payload["after_thread_id"]); got != canonicalAnchorThreadID {
-				t.Fatalf("expected canonical move after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"board_id":"` + canonicalBoardID + `","thread_id":"` + canonicalCardThreadID + `","column_key":"review","rank":"b","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	addFile := filepath.Join(home, "board-add.json")
-	if err := os.WriteFile(addFile, []byte(`{"thread_id":"`+shortCardThreadID+`","column_key":"ready","after_thread_id":"`+shortAnchorThreadID+`"}`), 0o600); err != nil {
-		t.Fatalf("write add file: %v", err)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "create",
-		"--board-id", shortBoardID,
-		"--from-file", addFile,
-	}))
-
-	moveFile := filepath.Join(home, "board-thread-move.json")
-	if err := os.WriteFile(moveFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","column_key":"review","after_thread_id":"`+shortAnchorThreadID+`"}`), 0o600); err != nil {
-		t.Fatalf("write move file: %v", err)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "move",
-		"--board-id", shortBoardID,
-		"--card-id", "card_123",
-		"--from-file", moveFile,
-	}))
-}
-
-func TestBoardCardMoveResolvesShortAfterCardID(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const movingCardID = "card_moving_1234567890ab"
-	const afterCardID = "card_afterxx_1234567890ab"
-	const shortAfterCardID = "card_after"
-	const updatedAt = "2026-03-08T00:00:00Z"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[
-				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
-				{"id":"` + afterCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"b","title":"Anchor","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}
-			]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+movingCardID+"/move":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode move body: %v", err)
-			}
-			if got := anyStringValue(payload["after_card_id"]); got != afterCardID {
-				t.Fatalf("expected canonical move after_card_id %q, got %#v", afterCardID, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"review","rank":"c","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "move",
-		"--board-id", shortBoardID,
-		"--card-id", movingCardID,
-		"--if-board-updated-at", updatedAt,
-		"--column", "review",
-		"--after-card-id", shortAfterCardID,
-	}))
-}
-
-func TestBoardCardMoveResolvesShortAfterCardIDFromFile(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const shortBoardID = "board_1234"
-	const movingCardID = "card_moving_1234567890ab"
-	const afterCardID = "card_afterxx_1234567890ab"
-	const shortAfterCardID = "card_after"
-	const updatedAt = "2026-03-08T00:00:00Z"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + canonicalBoardID + `","title":"Ops Board","state":"active"},"summary":{"card_count":0,"cards_by_column":{"backlog":0,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":0,"document_count":0,"latest_activity_at":null,"has_document_refs":false}}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/"+canonicalBoardID+"/cards":
-			_, _ = w.Write([]byte(`{"board_id":"` + canonicalBoardID + `","cards":[
-				{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"a","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}},
-				{"id":"` + afterCardID + `","board_id":"` + canonicalBoardID + `","column_key":"ready","rank":"b","title":"Anchor","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}
-			]}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+movingCardID+"/move":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode move body: %v", err)
-			}
-			if got := anyStringValue(payload["after_card_id"]); got != afterCardID {
-				t.Fatalf("expected canonical move after_card_id %q, got %#v", afterCardID, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + movingCardID + `","board_id":"` + canonicalBoardID + `","column_key":"review","rank":"c","title":"Moving","body":"","version":1,"parent_thread":null,"thread_id":null,"pinned_document_id":null,"assignee":null,"priority":null,"status":"todo","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + updatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	moveFile := filepath.Join(home, "board-card-move-after-card.json")
-	if err := os.WriteFile(moveFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","column_key":"review","after_card_id":"`+shortAfterCardID+`"}`), 0o600); err != nil {
-		t.Fatalf("write move file: %v", err)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "move",
-		"--board-id", shortBoardID,
-		"--card-id", movingCardID,
-		"--from-file", moveFile,
-	}))
-}
-
-func TestBoardCardUpdateAndMoveAllowJSONBodyWithoutConcurrencyFlags(t *testing.T) {
-	t.Parallel()
-
-	const canonicalBoardID = "board_1234567890abcdef"
-	const canonicalCardID = "card_1234567890abcdef"
-	const canonicalAnchorThreadID = "thread_anchor_1234567890"
-	const shortAnchorThreadID = "thread_anc"
-	const updatedAt = "2026-03-08T00:00:00Z"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalAnchorThreadID + `","title":"Review Anchor"}]}`))
-		case r.Method == http.MethodPatch && r.URL.Path == "/cards/"+canonicalCardID:
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode update body: %v", err)
-			}
-			if got := anyStringValue(payload["if_board_updated_at"]); got != updatedAt {
-				t.Fatalf("expected update concurrency token %q, got %#v", updatedAt, payload)
-			}
-			patch, _ := payload["patch"].(map[string]any)
-			if got := anyStringValue(patch["resolution"]); got != "done" {
-				t.Fatalf("expected update patch resolution done, got %#v", payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","column_key":"done","resolution":"done"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/cards/"+canonicalCardID+"/move":
-			var payload map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode move body: %v", err)
-			}
-			if got := anyStringValue(payload["if_board_updated_at"]); got != updatedAt {
-				t.Fatalf("expected move concurrency token %q, got %#v", updatedAt, payload)
-			}
-			if got := anyStringValue(payload["after_thread_id"]); got != canonicalAnchorThreadID {
-				t.Fatalf("expected canonical move after_thread_id %q, got %#v", canonicalAnchorThreadID, payload)
-			}
-			_, _ = w.Write([]byte(`{"board":{"id":"` + canonicalBoardID + `","updated_at":"` + updatedAt + `"},"card":{"id":"` + canonicalCardID + `","board_id":"` + canonicalBoardID + `","column_key":"review"}}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	updateFile := filepath.Join(home, "board-card-update.json")
-	if err := os.WriteFile(updateFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","patch":{"resolution":"done"}}`), 0o600); err != nil {
-		t.Fatalf("write update file: %v", err)
-	}
-	moveFile := filepath.Join(home, "board-card-move.json")
-	if err := os.WriteFile(moveFile, []byte(`{"if_board_updated_at":"`+updatedAt+`","column_key":"review","after_thread_id":"`+shortAnchorThreadID+`"}`), 0o600); err != nil {
-		t.Fatalf("write move file: %v", err)
-	}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "patch",
-		"--card-id", canonicalCardID,
-		"--from-file", updateFile,
-	}))
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "cards", "move",
-		"--board-id", canonicalBoardID,
-		"--card-id", canonicalCardID,
-		"--from-file", moveFile,
-	}))
 }
 
 func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testing.T) {
@@ -4451,65 +4142,6 @@ func TestThreadsContextDiscoversByState(t *testing.T) {
 	}
 }
 
-func TestThreadsContextSupportsFullIDForEventSections(t *testing.T) {
-	t.Parallel()
-
-	const eventID = "event_1234567890abcdef"
-	const artifactID = "artifact_1234567890abcdef"
-	const cardID = "card_1234567890abcdef"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/threads/thread_1/context" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"thread":{"id":"thread_1","title":"Pilot Rescue"},
-			"recent_events":[
-				{"id":"` + eventID + `","type":"message_posted","summary":"ship Friday rescue scope"}
-			],
-			"key_artifacts":[{"id":"` + artifactID + `","kind":"attachment","summary":"Launch brief"}],
-			"open_cards":[{"id":"` + cardID + `","status":"open","title":"Publish launch brief"}]
-		}`))
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", "thread_1",
-		"--full-id",
-	})
-	if !strings.Contains(textFull, eventID) {
-		t.Fatalf("expected full event id in output, got:\n%s", textFull)
-	}
-	if !strings.Contains(textFull, artifactID) {
-		t.Fatalf("expected full artifact id in output, got:\n%s", textFull)
-	}
-	if !strings.Contains(textFull, cardID) {
-		t.Fatalf("expected full card id in output, got:\n%s", textFull)
-	}
-
-	textShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", "thread_1",
-	})
-	if strings.Contains(textShort, eventID) {
-		t.Fatalf("expected short-id rendering without --full-id, got:\n%s", textShort)
-	}
-	if !strings.Contains(textShort, shortID(eventID)) {
-		t.Fatalf("expected short event id in default output, got:\n%s", textShort)
-	}
-	if strings.Contains(textShort, artifactID) || !strings.Contains(textShort, shortID(artifactID)) {
-		t.Fatalf("expected short artifact id in default output, got:\n%s", textShort)
-	}
-	if strings.Contains(textShort, cardID) || !strings.Contains(textShort, shortID(cardID)) {
-		t.Fatalf("expected short card id in default output, got:\n%s", textShort)
-	}
-}
-
 func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 	t.Parallel()
 
@@ -4648,75 +4280,6 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	}
 }
 
-func TestThreadsWorkspaceJSONIncludesShortIDs(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet && r.URL.Path == "/threads/thread_ws_main/workspace" {
-			_, _ = w.Write([]byte(`{
-				"thread_id":"thread_ws_main",
-				"thread":{"id":"thread_ws_main","title":"T"},
-				"context":{
-					"recent_events":[{"id":"event_ws_1","thread_id":"thread_ws_main","type":"message_posted"}],
-					"key_artifacts":[],
-					"open_cards":[],
-					"documents":[]
-				},
-				"collaboration":{
-					"key_artifacts":[],
-					"open_cards":[],
-					"artifact_count":0,
-					"open_card_count":0
-				},
-				"inbox":{"thread_id":"thread_ws_main","items":[],"count":0},
-				"pending_attention":{"thread_id":"thread_ws_main","items":[],"count":0},
-				"related_threads":{"count":1,"items":[{"thread":{"id":"thread_ws_related","title":"R"},"match_reason":"ref"}]},
-				"total_review_items":0
-			}`))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "--base-url", server.URL,
-		"threads", "workspace", "--thread-id", "thread_ws_main",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-
-	mainID := "thread_ws_main"
-	threadObj := asMap(data["thread"])
-	if threadObj == nil {
-		t.Fatalf("expected thread object in data, got %#v", data)
-	}
-	if got := anyStringValue(threadObj["short_id"]); got != shortID(mainID) {
-		t.Fatalf("thread.short_id: want %q got %q", shortID(mainID), got)
-	}
-
-	ctx := asMap(data["context"])
-	if ctx == nil {
-		t.Fatalf("expected context, got %#v", data)
-	}
-	events, _ := ctx["recent_events"].([]any)
-	ev0, _ := events[0].(map[string]any)
-	if got := anyStringValue(ev0["short_id"]); got != shortID("event_ws_1") {
-		t.Fatalf("context.recent_events[0].short_id: want %q got %q", shortID("event_ws_1"), got)
-	}
-
-	rt := asMap(data["related_threads"])
-	rtItems, _ := rt["items"].([]any)
-	rt0, _ := rtItems[0].(map[string]any)
-	rtThread := asMap(rt0["thread"])
-	if got := anyStringValue(rtThread["short_id"]); got != shortID("thread_ws_related") {
-		t.Fatalf("related_threads[0].thread.short_id: want %q got %q", shortID("thread_ws_related"), got)
-	}
-
-}
-
 func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 	t.Parallel()
 
@@ -4817,23 +4380,18 @@ func TestThreadsContextHeadersShowTransportMetadataOnOptIn(t *testing.T) {
 		t.Fatalf("expected payload summary to remain visible, got:\n%s", out)
 	}
 }
-
-func TestThreadsContextCommandResolvesUniquePrefix(t *testing.T) {
+func TestThreadsContextPassesTypedRefAndHandleToCore(t *testing.T) {
 	t.Parallel()
 
-	const canonicalID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
-	const shortPrefix = "fff63e25-084b-4598-af8f"
-
+	seen := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+shortPrefix+"/context":
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `"},{"id":"thread_2"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+canonicalID+"/context":
-			_, _ = w.Write([]byte(`{"thread":{"id":"` + canonicalID + `"},"recent_events":[],"key_artifacts":[],"open_cards":[]}`))
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/threads/thread:launch-plan/context", "/threads/launch-plan/context":
+			_, _ = w.Write([]byte(`{"thread":{"id":"thread_internal_123","ref":"thread:launch-plan","handle":"launch-plan","title":"Launch plan"},"recent_events":[],"key_artifacts":[],"open_cards":[]}`))
+		case "/threads":
+			t.Fatalf("did not expect threads list fallback for %s", r.URL.EscapedPath())
 		default:
 			http.NotFound(w, r)
 		}
@@ -4841,153 +4399,10 @@ func TestThreadsContextCommandResolvesUniquePrefix(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", shortPrefix,
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	thread, _ := data["thread"].(map[string]any)
-	if got := anyStringValue(thread["id"]); got != canonicalID {
-		t.Fatalf("expected canonical thread id %q, got %q payload=%#v", canonicalID, got, payload)
-	}
-}
-
-func TestThreadsContextDeduplicatesResolvedDuplicateIDs(t *testing.T) {
-	t.Parallel()
-
-	const canonicalID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
-	const shortPrefix = "fff63e25-084b-4598-af8f"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+shortPrefix+"/context":
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `"}]}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+canonicalID+"/context":
-			_, _ = w.Write([]byte(`{
-				"thread":{"id":"` + canonicalID + `","title":"Pilot Rescue"},
-				"recent_events":[{"id":"event_actor_1","type":"message_posted","summary":"ship Friday scope"}],
-				"key_artifacts":[],
-				"open_cards":[]
-			}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", shortPrefix,
-		"--thread-id", canonicalID,
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	threadIDs := stringList(data["thread_ids"])
-	if len(threadIDs) != 1 || threadIDs[0] != canonicalID {
-		t.Fatalf("expected one canonical thread_id %q, got %#v", canonicalID, data)
-	}
-	threadCount, _ := data["thread_count"].(float64)
-	if got := int(threadCount); got != 1 {
-		t.Fatalf("expected thread_count=1, got %#v", data)
-	}
-	contexts, _ := data["contexts"].([]any)
-	if len(contexts) != 1 {
-		t.Fatalf("expected one deduplicated context, got %#v", data)
-	}
-	recentEvents, _ := data["recent_events"].([]any)
-	if len(recentEvents) != 1 {
-		t.Fatalf("expected one deduplicated recent event, got %#v", data)
-	}
-	collaboration, _ := data["collaboration_summary"].(map[string]any)
-	if got := intValue(collaboration["artifact_count"]); got != 0 {
-		t.Fatalf("expected artifact_count=0 after dedupe, got %#v", collaboration)
-	}
-	if _, ok := collaboration["recommendation_count"]; ok {
-		t.Fatalf("expected simplified collaboration_summary after dedupe, got %#v", collaboration)
-	}
-}
-
-func TestThreadsContextCommandAmbiguousPrefixShowsGuidance(t *testing.T) {
-	t.Parallel()
-
-	const ambiguousPrefix = "fff63e25"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+ambiguousPrefix+"/context":
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"fff63e25-084b-4598-af8f-b6d0a4fbf001"},{"id":"fff63e25-9999-4598-af8f-b6d0a4fbf002"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", ambiguousPrefix,
-	})
-	payload := assertEnvelopeError(t, raw)
-	errObj, _ := payload["error"].(map[string]any)
-	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
-		t.Fatalf("unexpected error payload: %#v", payload)
-	}
-	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "ambiguous") || !strings.Contains(message, "short_id=") {
-		t.Fatalf("expected ambiguity guidance message, got %q payload=%#v", message, payload)
-	}
-}
-
-func TestThreadsContextCommandMissingIDShowsGuidance(t *testing.T) {
-	t.Parallel()
-
-	const missingID = "does-not-exist"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/"+missingID+"/context":
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"thread not found"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads":
-			_, _ = w.Write([]byte(`{"threads":[{"id":"fff63e25-084b-4598-af8f-b6d0a4fbf001"}]}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", missingID,
-	})
-	payload := assertEnvelopeError(t, raw)
-	errObj, _ := payload["error"].(map[string]any)
-	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
-		t.Fatalf("unexpected error payload: %#v", payload)
-	}
-	message := anyStringValue(errObj["message"])
-	if !strings.Contains(message, "is missing") || !strings.Contains(message, "truncated") {
-		t.Fatalf("expected missing-id guidance message, got %q payload=%#v", message, payload)
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "threads", "context", "--thread-id", "thread:launch-plan"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "threads", "context", "--thread-id", "launch-plan"}))
+	if len(seen) != 2 || seen[0] != "/threads/thread:launch-plan/context" || seen[1] != "/threads/launch-plan/context" {
+		t.Fatalf("expected threads context to pass refs/handles through to core, got %#v", seen)
 	}
 }
 
@@ -5027,36 +4442,36 @@ func TestThreadsContextCommandEndpointNotFoundDoesNotAttemptIDResolution(t *test
 	}
 }
 
-func TestThreadsListIncludesShortID(t *testing.T) {
+func TestNotificationsReadPassesWakeupIDToCoreWithoutArtifactListFallback(t *testing.T) {
 	t.Parallel()
 
-	const canonicalID = "fff63e25-084b-4598-af8f-b6d0a4fbf001"
-
+	const wakeupID = "artifact_wakeup_prefix"
+	seen := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/threads" {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"threads":[{"id":"` + canonicalID + `","title":"Alpha","state":"active"}]}`))
+		seen = append(seen, r.Method+" "+r.URL.EscapedPath())
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/agent-notifications/read":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode notifications read body: %v", err)
+			}
+			if got := anyStringValue(payload["wakeup_id"]); got != wakeupID {
+				t.Fatalf("expected raw wakeup_id %q, got %#v", wakeupID, payload)
+			}
+			_, _ = w.Write([]byte(`{"notification":{"wakeup_id":"` + wakeupID + `","status":"read"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts":
+			t.Fatalf("did not expect artifacts list fallback")
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "list",
-	})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	threads, _ := data["threads"].([]any)
-	if len(threads) != 1 {
-		t.Fatalf("expected one thread in list payload, got %#v", payload)
-	}
-	thread, _ := threads[0].(map[string]any)
-	if got := anyStringValue(thread["short_id"]); got != shortID(canonicalID) {
-		t.Fatalf("expected short_id %q, got %q payload=%#v", shortID(canonicalID), got, payload)
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "notifications", "read", "--wakeup-id", wakeupID}))
+	if len(seen) != 1 || seen[0] != "POST /agent-notifications/read" {
+		t.Fatalf("expected only notification mutation request, got %#v", seen)
 	}
 }
 
@@ -5398,6 +4813,198 @@ func TestArtifactContentJSONOutputFile(t *testing.T) {
 	}
 }
 
+func TestArtifactsCreateFileRefUsesAttachmentEndpoint(t *testing.T) {
+	t.Parallel()
+
+	uploaded := []byte("menu bytes")
+	filePath := filepath.Join(t.TempDir(), "menu.txt")
+	if err := os.WriteFile(filePath, uploaded, 0o600); err != nil {
+		t.Fatalf("write upload file: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts/attachments" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if got := r.FormValue("refs"); got != `["topic:topic_1","card:card_1"]` {
+			t.Fatalf("unexpected refs field: %q", got)
+		}
+		if got := r.FormValue("summary"); got != "Menu" {
+			t.Fatalf("unexpected summary field: %q", got)
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			t.Fatalf("form file: %v", err)
+		}
+		defer file.Close()
+		if header.Filename != "menu.txt" {
+			t.Fatalf("unexpected uploaded filename: %q", header.Filename)
+		}
+		got, err := io.ReadAll(file)
+		if err != nil {
+			t.Fatalf("read form file: %v", err)
+		}
+		if !bytes.Equal(got, uploaded) {
+			t.Fatalf("unexpected uploaded bytes: got=%q want=%q", got, uploaded)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_menu","kind":"attachment","filename":"menu.txt"}}`))
+	}))
+	defer server.Close()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create",
+		"--file", filePath,
+		"--ref", "topic:topic_1",
+		"--ref", "card:card_1",
+		"--summary", "Menu",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "artifacts create" {
+		t.Fatalf("unexpected command label: %#v", payload)
+	}
+}
+
+func TestArtifactsCreateFromFilePreservesAdvancedJSONPath(t *testing.T) {
+	t.Parallel()
+
+	bodyFile := filepath.Join(t.TempDir(), "artifact.json")
+	if err := os.WriteFile(bodyFile, []byte(`{"artifact":{"kind":"note","refs":["topic:topic_1"]},"content_type":"text","content":"hello"}`), 0o600); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts" {
+			http.NotFound(w, r)
+			return
+		}
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got["content"] != "hello" {
+			t.Fatalf("expected JSON artifact body, got %#v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_json","kind":"note"}}`))
+	}))
+	defer server.Close()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create", "--from-file", bodyFile,
+	})
+	assertEnvelopeOK(t, raw)
+}
+
+func TestArtifactsContentUnknownFlagFailsBeforeNetwork(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{
+		"--json",
+		"artifacts", "content", "--bogus",
+	})
+	payload := assertEnvelopeError(t, raw)
+	errObj, _ := payload["error"].(map[string]any)
+	if got := anyStringValue(errObj["code"]); got != "invalid_flags" {
+		t.Fatalf("expected invalid_flags, got %#v", payload)
+	}
+	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "bogus") {
+		t.Fatalf("expected unknown flag in error message, got %#v", payload)
+	}
+}
+
+func TestArtifactsContentOutputDotUsesContentDispositionFilename(t *testing.T) {
+	expected := []byte("download body")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts/artifact-named/content" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="report.txt"`)
+		_, _ = w.Write(expected)
+	}))
+	defer server.Close()
+
+	cwd := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	out := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--base-url", server.URL,
+		"artifacts", "content", "artifact-named", "--output", ".",
+	})
+	if !strings.Contains(out, "wrote 13 bytes to report.txt") {
+		t.Fatalf("expected write summary, got %q", out)
+	}
+	got, err := os.ReadFile(filepath.Join(cwd, "report.txt"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected output bytes: got=%q want=%q", got, expected)
+	}
+}
+
+func TestArtifactsContentOutputDotFallsBackToMetadataFilename(t *testing.T) {
+	expected := []byte("metadata fallback")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact-meta/content":
+			_, _ = w.Write(expected)
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact-meta":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"artifact":{"id":"artifact-meta","filename":"fallback.bin"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cwd := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "content", "artifact-meta", "--output", ".",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	if got := anyStringValue(data["output_path"]); got != "fallback.bin" {
+		t.Fatalf("expected metadata fallback output path, got %#v", data)
+	}
+	got, err := os.ReadFile(filepath.Join(cwd, "fallback.bin"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("unexpected output bytes: got=%q want=%q", got, expected)
+	}
+}
+
 func TestArtifactsInspectCommand(t *testing.T) {
 	t.Parallel()
 
@@ -5527,8 +5134,7 @@ func TestEventsTailReconnect(t *testing.T) {
 }
 
 var (
-	goldenInboxAliasPattern   = regexp.MustCompile(`"alias": "ibx_[^"]+"`)
-	goldenInboxItemShortIDPat = regexp.MustCompile(`"short_id": "inbox:[^"]+"`)
+	goldenInboxAliasPattern = regexp.MustCompile(`"alias": "ibx_[^"]+"`)
 )
 
 func assertGolden(t *testing.T, goldenFile string, actual string) {
@@ -5544,12 +5150,11 @@ func assertGolden(t *testing.T, goldenFile string, actual string) {
 }
 
 func stableMachineInboxJSON(s string) string {
-	s = goldenInboxAliasPattern.ReplaceAllString(s, `"alias": "ibx_STABLE"`)
-	return goldenInboxItemShortIDPat.ReplaceAllString(s, `"short_id": "inbox:STABLE"`)
+	return goldenInboxAliasPattern.ReplaceAllString(s, `"alias": "ibx_STABLE"`)
 }
 
 // assertGoldenStabilizedInboxAliases compares thread machine JSON but normalizes non-deterministic
-// inbox item fields (per-run ibx_ alias, truncated inbox: short_id).
+// inbox item fields (per-run ibx_ alias).
 func assertGoldenStabilizedInboxAliases(t *testing.T, goldenFile string, actual string) {
 	t.Helper()
 	path := filepath.Join("testdata", goldenFile)
@@ -5655,310 +5260,6 @@ func TestEventsStreamDefaultNoFollow(t *testing.T) {
 	if !strings.Contains(raw, `"id": "e-1"`) {
 		t.Fatalf("unexpected stream output: %s", raw)
 	}
-}
-
-func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/timeline":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-				"thread_id":"thread_123",
-				"events":[
-					{"id":"event_100","thread_id":"thread_123","type":"message_posted","created_at":"2026-03-07T00:00:00Z","summary":"ship machine-facing fixes"},
-					{"id":"event_101","thread_id":"thread_123","type":"human_attention_requested","created_at":"2026-03-07T00:01:00Z","summary":"confirm frame shape"}
-				],
-				"artifacts":{}
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"event":{"id":"event_456","thread_id":"thread_123","type":"message_posted","summary":"canonical event payload"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
-				"recent_events":[
-					{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
-					{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
-				],
-				"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
-				"open_cards":[{"id":"card_ctx_1","status":"open"}],
-					"documents":[
-						{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
-					]
-				}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-					"thread_id":"thread_123",
-					"thread":{"id":"thread_123","title":"Machine-facing consistency"},
-					"context":{
-						"recent_events":[
-							{"id":"event_ctx_1","thread_id":"thread_123","type":"message_posted","summary":"normalize frame shape"},
-							{"id":"event_ctx_2","thread_id":"thread_123","type":"human_attention_requested","summary":"confirm canonical command labels"}
-						],
-						"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
-						"open_cards":[{"id":"card_ctx_1","status":"open"}],
-						"documents":[
-							{"id":"doc_ctx_1","title":"Runbook","state":"active","updated_at":"2026-03-07T00:02:00Z","head_revision":{"revision_id":"rev_ctx_1","revision_number":3,"content_type":"text","artifact_id":"artifact_doc_ctx_1","created_at":"2026-03-07T00:02:00Z"}}
-						]
-					},
-					"collaboration":{
-						"key_artifacts":[{"id":"artifact_ctx_1","kind":"attachment"}],
-						"open_cards":[{"id":"card_ctx_1","status":"open"}],
-						"artifact_count":1,
-						"open_card_count":1
-					},
-					"inbox":{
-						"thread_id":"thread_123",
-						"items":[
-							{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}
-						],
-						"count":1
-					},
-					"pending_attention":{
-						"thread_id":"thread_123",
-						"items":[
-							{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}
-						],
-						"count":1
-					},
-					"related_threads":{"count":0,"items":[]},
-					"total_review_items":1,
-					"follow_up":{
-						"context_refresh_command":"anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
-						"events_get_examples":[
-							"anx events get --event-id event_ctx_1 --json",
-							"anx events get --event-id event_ctx_2 --json"
-						],
-						"events_get_template":"anx events get --event-id <event-id> --json"
-					},
-					"context_source":"threads.context",
-					"inbox_source":"inbox.list"
-				}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-				"boards":[
-					{
-						"board":{"id":"board_1234567890abcdef","title":"Machine Board","state":"active"},
-						"summary":{
-							"card_count":1,
-							"cards_by_column":{"backlog":0,"ready":0,"in_progress":1,"blocked":0,"review":0,"done":0},
-							"unresolved_card_count":2,
-							"document_count":1,
-							"latest_activity_at":"2026-03-07T00:03:00Z",
-							"has_document_refs":true
-						}
-					}
-				]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/boards/board_1234567890abcdef/workspace":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-				"board_id":"board_1234567890abcdef",
-				"board":{"id":"board_1234567890abcdef","title":"Machine Board","state":"active","updated_at":"2026-03-07T00:03:00Z"},
-				"cards":{
-					"items":[
-						{
-							"card":{"board_id":"board_1234567890abcdef","thread_id":"thread_123","column_key":"in_progress","rank":"m","pinned_document_id":null,"created_at":"2026-03-07T00:00:00Z","created_by":"actor_1","updated_at":"2026-03-07T00:03:00Z","updated_by":"actor_1"},
-							"thread":{"id":"thread_123","title":"Machine-facing consistency"},
-							"summary":{"related_topic_count":1,"decision_request_count":1,"decision_count":0,"recommendation_count":1,"document_count":1,"inbox_count":1,"latest_activity_at":"2026-03-07T00:03:00Z","stale":false},
-							"pinned_document":null
-						}
-					],
-					"count":1
-				},
-				"documents":{"items":[{"id":"doc_ctx_1","title":"Runbook","state":"active"}],"count":1},
-				"inbox":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed"}],"count":1},
-				"board_summary":{
-					"card_count":1,
-					"cards_by_column":{"backlog":0,"ready":0,"in_progress":1,"blocked":0,"review":0,"done":0},
-					"unresolved_card_count":1,
-					"document_count":1,
-					"latest_activity_at":"2026-03-07T00:03:00Z",
-					"has_document_refs":true
-				},
-				"warnings":{"items":[],"count":0},
-				"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","topics":"derived","inbox":"derived","warnings":"derived"},
-				"generated_at":"2026-03-07T00:03:00Z"
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-					"items":[
-					{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"},
-					{"id":"inbox:action_needed:thread_other:none:event_other","thread_id":"thread_other","type":"action_needed","summary":"ignore other thread"}
-				]
-			}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/stream/events":
-			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"type\":\"message_posted\"}}\n\n")
-		case r.Method == http.MethodGet && r.URL.Path == "/stream/inbox":
-			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\"}}\n\n")
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	env := map[string]string{}
-
-	eventsListOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"events", "list",
-		"--thread-id", "thread_123",
-		"--type", "message_posted",
-	})
-	assertGolden(t, "events_list_machine.golden.json", eventsListOut)
-
-	eventsGetOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"events", "get",
-		"--event-id", "event_456",
-	})
-	assertGolden(t, "events_get_machine.golden.json", eventsGetOut)
-
-	threadsContextOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "context",
-		"--thread-id", "thread_123",
-	})
-	assertGolden(t, "threads_context_machine.golden.json", threadsContextOut)
-
-	threadsInspectOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "inspect",
-		"--thread-id", "thread_123",
-	})
-	assertGoldenStabilizedInboxAliases(t, "threads_inspect_machine.golden.json", threadsInspectOut)
-	threadsInspectPayload := assertEnvelopeOK(t, threadsInspectOut)
-	if got := anyStringValue(threadsInspectPayload["command"]); got != "threads inspect" {
-		t.Fatalf("expected threads inspect command label, got %#v", threadsInspectPayload)
-	}
-	if got := anyStringValue(threadsInspectPayload["command_id"]); got != "threads.inspect" {
-		t.Fatalf("expected threads.inspect command_id, got %#v", threadsInspectPayload)
-	}
-	threadsInspectData, _ := threadsInspectPayload["data"].(map[string]any)
-	if _, ok := threadsInspectData["thread"].(map[string]any); !ok {
-		t.Fatalf("expected thread section in inspect payload, got %#v", threadsInspectData)
-	}
-	if _, ok := threadsInspectData["context"].(map[string]any); !ok {
-		t.Fatalf("expected context section in inspect payload, got %#v", threadsInspectData)
-	}
-	if _, ok := threadsInspectData["collaboration"].(map[string]any); !ok {
-		t.Fatalf("expected collaboration section in inspect payload, got %#v", threadsInspectData)
-	}
-	if _, ok := threadsInspectData["inbox"].(map[string]any); !ok {
-		t.Fatalf("expected inbox section in inspect payload, got %#v", threadsInspectData)
-	}
-
-	threadsWorkspaceOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "workspace",
-		"--thread-id", "thread_123",
-	})
-	assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", threadsWorkspaceOut)
-	threadsWorkspacePayload := assertEnvelopeOK(t, threadsWorkspaceOut)
-	if got := anyStringValue(threadsWorkspacePayload["command"]); got != "threads workspace" {
-		t.Fatalf("expected threads workspace command label, got %#v", threadsWorkspacePayload)
-	}
-	if got := anyStringValue(threadsWorkspacePayload["command_id"]); got != "threads.workspace" {
-		t.Fatalf("expected threads.workspace command_id, got %#v", threadsWorkspacePayload)
-	}
-	threadsWorkspaceData, _ := threadsWorkspacePayload["data"].(map[string]any)
-	if _, ok := threadsWorkspaceData["context"].(map[string]any); !ok {
-		t.Fatalf("expected context section in workspace payload, got %#v", threadsWorkspaceData)
-	}
-	if _, ok := threadsWorkspaceData["related_threads"].(map[string]any); !ok {
-		t.Fatalf("expected related_threads section in workspace payload, got %#v", threadsWorkspaceData)
-	}
-	if _, ok := threadsWorkspaceData["pending_attention"].(map[string]any); !ok {
-		t.Fatalf("expected pending_attention section in workspace payload, got %#v", threadsWorkspaceData)
-	}
-
-	boardsListOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "list",
-	})
-	assertGolden(t, "boards_list_machine.golden.json", boardsListOut)
-
-	boardsWorkspaceOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"boards", "workspace",
-		"--board-id", "board_1234567890abcdef",
-	})
-	assertGolden(t, "boards_workspace_machine.golden.json", boardsWorkspaceOut)
-
-	threadsReviewOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "review",
-		"--thread-id", "thread_123",
-	})
-	threadsReviewPayload := assertEnvelopeOK(t, threadsReviewOut)
-	if got := anyStringValue(threadsReviewPayload["command"]); got != "threads review" {
-		t.Fatalf("expected threads review command label, got %#v", threadsReviewPayload)
-	}
-	if got := anyStringValue(threadsReviewPayload["command_id"]); got != "threads.review" {
-		t.Fatalf("expected threads.review command_id, got %#v", threadsReviewPayload)
-	}
-	threadsReviewData, _ := threadsReviewPayload["data"].(map[string]any)
-	if got := anyBoolValue(threadsReviewData["review_mode"]); !got {
-		t.Fatalf("expected review_mode marker in review payload, got %#v", threadsReviewData)
-	}
-
-	threadsRecommendationsOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"threads", "workspace",
-		"--thread-id", "thread_123",
-	})
-	assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", threadsRecommendationsOut)
-	threadsRecommendationsPayload := assertEnvelopeOK(t, threadsRecommendationsOut)
-	if got := anyStringValue(threadsRecommendationsPayload["command"]); got != "threads workspace" {
-		t.Fatalf("expected threads workspace command label, got %#v", threadsRecommendationsPayload)
-	}
-	if got := anyStringValue(threadsRecommendationsPayload["command_id"]); got != "threads.workspace" {
-		t.Fatalf("expected threads.workspace command_id, got %#v", threadsRecommendationsPayload)
-	}
-	threadsRecommendationsData, _ := threadsRecommendationsPayload["data"].(map[string]any)
-	if _, ok := threadsRecommendationsData["collaboration"].(map[string]any); !ok {
-		t.Fatalf("expected collaboration section in payload, got %#v", threadsRecommendationsData)
-	}
-	if _, ok := threadsRecommendationsData["pending_attention"].(map[string]any); !ok {
-		t.Fatalf("expected pending_attention section in payload, got %#v", threadsRecommendationsData)
-	}
-	if _, ok := threadsRecommendationsData["follow_up"].(map[string]any); !ok {
-		t.Fatalf("expected follow_up section in payload, got %#v", threadsRecommendationsData)
-	}
-
-	eventsStreamOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"events", "stream",
-		"--max-events", "1",
-	})
-	assertGolden(t, "events_stream_machine.golden.json", eventsStreamOut)
-
-	inboxStreamOut := runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"inbox", "stream",
-		"--max-events", "1",
-	})
-	assertGolden(t, "inbox_stream_machine.golden.json", inboxStreamOut)
 }
 
 func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
@@ -6193,7 +5494,7 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	if !strings.Contains(message, "expected one of: get") {
 		t.Fatalf("expected valid subcommands in required message, got %q", message)
 	}
-	if !strings.Contains(message, "`anx docs revision get <document-id> <revision-id>`") {
+	if !strings.Contains(message, "`anx docs revision get doc:runbook <revision-id>`") {
 		t.Fatalf("expected usage examples in required message, got %q", message)
 	}
 }
@@ -6468,5 +5769,191 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 		if refs := topic["board_refs"].([]any); len(refs) != 1 || refs[0] != "board:y" {
 			t.Fatalf("expected board_refs preserved, got %#v", refs)
 		}
+	})
+}
+
+func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
+
+	threadCtxJSON := `{
+		"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+		"recent_events":[
+			{"id":"event_ctx_1","ref":"event:event_ctx_1","handle":"event_ctx_1","type":"message_posted","summary":"normalize frame shape","thread_id":"thread_123","created_at":"2026-03-07T00:00:00Z"},
+			{"id":"event_ctx_2","ref":"event:event_ctx_2","handle":"event_ctx_2","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123","created_at":"2026-03-07T00:01:00Z"}
+		],
+		"key_artifacts":[
+			{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","handle":"artifact_ctx_1","kind":"attachment"}
+		],
+		"open_cards":[
+			{"id":"card_ctx_1","ref":"card:card-ctx-1","handle":"card-ctx-1","status":"open"}
+		],
+		"documents":[
+			{
+				"id":"doc_ctx_1","ref":"document:runbook","handle":"runbook","state":"active","title":"Runbook","updated_at":"2026-03-07T00:02:00Z",
+				"head_revision":{"artifact_id":"artifact_doc_ctx_1","content_type":"text","created_at":"2026-03-07T00:02:00Z","revision_id":"rev_ctx_1","revision_number":3}
+			}
+		]
+	}`
+
+	threadWorkspaceJSON := `{
+		"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+		"collaboration":{"key_artifacts":[{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","kind":"attachment"}],"open_cards":[{"id":"card_ctx_1","ref":"card:card-ctx-1","status":"open"}],"artifact_count":1,"open_card_count":1},
+		"context":{
+			"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"},
+			"recent_events":[
+				{"id":"event_ctx_1","ref":"event:event_ctx_1","type":"message_posted","summary":"normalize frame shape","thread_id":"thread_123"},
+				{"id":"event_ctx_2","ref":"event:event_ctx_2","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123"}
+			],
+			"key_artifacts":[{"id":"artifact_ctx_1","ref":"artifact:artifact_ctx_1","kind":"attachment"}],
+			"open_cards":[{"id":"card_ctx_1","ref":"card:card-ctx-1","status":"open"}],
+			"documents":[{"id":"doc_ctx_1","ref":"document:runbook","state":"active","title":"Runbook","updated_at":"2026-03-07T00:02:00Z","head_revision":{"artifact_id":"artifact_doc_ctx_1","content_type":"text","created_at":"2026-03-07T00:02:00Z","revision_id":"rev_ctx_1","revision_number":3}}]
+		},
+		"inbox":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}],"count":1,"thread_id":"thread_123"},
+		"pending_attention":{"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"}],"count":1,"thread_id":"thread_123"},
+		"related_threads":{"items":[],"count":0},
+		"follow_up":{
+			"context_refresh_command":"anx threads context --thread-id thread_123 --include-artifact-content --full-id --json",
+			"events_get_template":"anx events get --event-id <event-id> --json",
+			"events_get_examples":["anx events get --event-id event_ctx_1 --json","anx events get --event-id event_ctx_2 --json"]
+		},
+		"total_review_items":1
+	}`
+
+	timelineJSON := `{"thread_id":"thread_123","events":[
+		{"id":"event_100","ref":"event:event_100","handle":"event_100","type":"message_posted","summary":"ship machine-facing fixes","thread_id":"thread_123","created_at":"2026-03-07T00:00:00Z"},
+		{"id":"event_101","ref":"event:event_101","handle":"event_101","type":"human_attention_requested","summary":"confirm canonical command labels","thread_id":"thread_123","created_at":"2026-03-07T00:01:00Z"}
+	]}`
+
+	boardsListJSON := `{"boards":[{"board":{"id":"board_1234567890abcdef","ref":"board:machine-board","handle":"machine-board","state":"active","title":"Machine Board"},"summary":{"card_count":1,"cards_by_column":{"backlog":0,"blocked":0,"done":0,"in_progress":1,"ready":0,"review":0},"document_count":1,"has_document_refs":true,"latest_activity_at":"2026-03-07T00:03:00Z","unresolved_card_count":2}}]}`
+
+	boardWorkspaceJSON := `{
+		"board":{"id":"board_1234567890abcdef","ref":"board:machine-board","handle":"machine-board","state":"active","title":"Machine Board","updated_at":"2026-03-07T00:03:00Z"},
+		"board_summary":{"card_count":1,"cards_by_column":{"backlog":0,"blocked":0,"done":0,"in_progress":1,"ready":0,"review":0},"document_count":1,"has_document_refs":true,"latest_activity_at":"2026-03-07T00:03:00Z","unresolved_card_count":1},
+		"cards":{"count":1,"items":[{"card":{"board_id":"board_1234567890abcdef","ref":"card:card-ctx-1","handle":"card-ctx-1","column_key":"in_progress","created_at":"2026-03-07T00:00:00Z","created_by":"actor_1","pinned_document_id":null,"rank":"m","thread_id":"thread_123","updated_at":"2026-03-07T00:03:00Z","updated_by":"actor_1"},"pinned_document":null,"summary":{"decision_count":0,"decision_request_count":1,"document_count":1,"inbox_count":1,"latest_activity_at":"2026-03-07T00:03:00Z","recommendation_count":1,"related_topic_count":1,"stale":false},"thread":{"id":"thread_123","ref":"thread:machine-facing-consistency","handle":"machine-facing-consistency","title":"Machine-facing consistency"}}]},
+		"documents":{"count":1,"items":[{"id":"doc_ctx_1","ref":"document:runbook","handle":"runbook","state":"active","title":"Runbook"}]},
+		"generated_at":"2026-03-07T00:03:00Z",
+		"inbox":{"count":1,"items":[{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed"}]},
+		"section_kinds":{"board":"canonical","cards":"canonical","documents":"derived","inbox":"derived","topics":"derived","warnings":"derived"},
+		"warnings":{"count":0,"items":[]},
+		"topics":{"count":0,"items":[]}
+	}`
+
+	eventGetJSON := `{"event":{"id":"event_456","ref":"event:event_456","handle":"event_456","type":"message_posted","summary":"canonical event payload","thread_id":"thread_123"}}`
+
+	inboxListJSON := `{"items":[
+		{"id":"inbox:action_needed:thread_123:none:event_ctx_2","thread_id":"thread_123","type":"action_needed","summary":"confirm canonical command labels"},
+		{"id":"inbox:action_needed:thread_other:none:evt_x","thread_id":"thread_other","type":"action_needed","summary":"unrelated"}
+	]}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/context":
+			_, _ = w.Write([]byte(threadCtxJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/workspace":
+			_, _ = w.Write([]byte(threadWorkspaceJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/threads/thread_123/timeline":
+			_, _ = w.Write([]byte(timelineJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/events/event_456":
+			_, _ = w.Write([]byte(eventGetJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards":
+			_, _ = w.Write([]byte(boardsListJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/boards/board_1234567890abcdef/workspace":
+			_, _ = w.Write([]byte(boardWorkspaceJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/inbox":
+			_, _ = w.Write([]byte(inboxListJSON))
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/events":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: es_1\nevent: event\ndata: {\"event\":{\"id\":\"event_stream_1\",\"ref\":\"event:event_stream_1\",\"handle\":\"event_stream_1\",\"type\":\"message_posted\"}}\n\n")
+		case r.Method == http.MethodGet && r.URL.Path == "/stream/inbox":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "id: ibx_1\nevent: inbox_item\ndata: {\"item\":{\"id\":\"inbox:1\",\"thread_id\":\"thread_123\",\"ref\":\"inbox:inbox-1\",\"handle\":\"inbox-1\"}}\n\n")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	env := map[string]string{}
+
+	t.Run("events_list", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "list",
+			"--thread-id", "thread_123",
+			"--type", "message_posted",
+		})
+		assertGolden(t, "events_list_machine.golden.json", raw)
+	})
+
+	t.Run("events_get", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "get",
+			"--event-id", "event_456",
+		})
+		assertGolden(t, "events_get_machine.golden.json", raw)
+	})
+
+	t.Run("events_stream", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"events", "stream",
+			"--max-events", "1",
+		})
+		assertGolden(t, "events_stream_machine.golden.json", raw)
+	})
+
+	t.Run("threads_context", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "context",
+			"--thread-id", "thread_123",
+		})
+		assertGolden(t, "threads_context_machine.golden.json", raw)
+	})
+
+	t.Run("threads_inspect", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "inspect",
+			"--thread-id", "thread_123",
+		})
+		assertGoldenStabilizedInboxAliases(t, "threads_inspect_machine.golden.json", raw)
+	})
+
+	t.Run("threads_workspace", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"threads", "workspace",
+			"--thread-id", "thread_123",
+		})
+		assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", raw)
+	})
+
+	t.Run("boards_list", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"boards", "list",
+		})
+		assertGolden(t, "boards_list_machine.golden.json", raw)
+	})
+
+	t.Run("boards_workspace", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"boards", "workspace",
+			"--board-id", "board_1234567890abcdef",
+		})
+		assertGolden(t, "boards_workspace_machine.golden.json", raw)
+	})
+
+	t.Run("inbox_stream", func(t *testing.T) {
+		raw := runCLIForTest(t, home, env, nil, []string{
+			"--json", "--base-url", server.URL,
+			"inbox", "stream",
+			"--max-events", "1",
+		})
+		assertGolden(t, "inbox_stream_machine.golden.json", raw)
 	})
 }

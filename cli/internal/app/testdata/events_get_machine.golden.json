@@ -4,7 +4,9 @@
   "command_id": "events.get",
   "data": {
     "event": {
+      "handle": "event_456",
       "id": "event_456",
+      "ref": "event:event_456",
       "summary": "canonical event payload",
       "thread_id": "thread_123",
       "type": "message_posted"

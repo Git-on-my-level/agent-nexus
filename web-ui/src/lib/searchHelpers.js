@@ -1,5 +1,6 @@
 import { coreClient } from "./coreClient.js";
 import { filterTopLevelDocuments } from "./documentVisibility.js";
+import { resourceRouteSegment } from "./resourceIdentity.js";
 
 /**
  * Resolves the backing collaboration thread id for topic search results.
@@ -19,11 +20,20 @@ export function backingThreadIdFromTopicRecord(topic) {
 
 /** Option shape for SearchableEntityPicker when listing topics as thread anchors. */
 export function topicSearchResultToPickerOption(topic) {
-  const id = backingThreadIdFromTopicRecord(topic);
+  const id =
+    String(
+      topic?.thread_ref ??
+        topic?.backing_thread_ref ??
+        topic?.thread_handle ??
+        "",
+    ).trim() || backingThreadIdFromTopicRecord(topic);
+  const topicRef = String(topic?.ref ?? topic?.topic_ref ?? "").trim();
   return {
     id,
     title: topic.title || id,
-    subtitle: [topic.state].filter(Boolean).join(" · "),
+    subtitle: [topic.state, topicRef || topic?.handle]
+      .filter(Boolean)
+      .join(" · "),
     keywords: [],
   };
 }
@@ -36,8 +46,10 @@ export function topicSearchResultToBoardRefOption(topic) {
   if (!topic || typeof topic !== "object") {
     return { id: "", title: "", subtitle: "", keywords: [] };
   }
-  const rawId = String(topic.id ?? "").trim();
-  if (!rawId) {
+  const publicRef = String(topic.ref ?? topic.topic_ref ?? "").trim();
+  const handle = String(topic.handle ?? "").trim();
+  const rawValue = publicRef || handle || String(topic.id ?? "").trim();
+  if (!rawValue) {
     return {
       id: "",
       title: String(topic.title ?? "").trim() || "",
@@ -45,12 +57,9 @@ export function topicSearchResultToBoardRefOption(topic) {
       keywords: [],
     };
   }
-  const typedRef = rawId.includes(":") ? rawId : `topic:${rawId}`;
-  const timeline = backingThreadIdFromTopicRecord(topic);
-  const subtitleParts = [topic.state];
-  if (timeline) {
-    subtitleParts.push(`Timeline ${timeline}`);
-  }
+  const typedRef = rawValue.includes(":") ? rawValue : `topic:${rawValue}`;
+  const topicRef = publicRef || typedRef;
+  const subtitleParts = [topic.state, topicRef || topic?.handle];
   return {
     id: typedRef,
     title: topic.title || typedRef,
@@ -88,9 +97,13 @@ export function documentSearchPickerSubtitle(document) {
   if (summary) {
     parts.push(summary);
   }
-  const threadId = String(document.thread_id ?? "").trim();
-  if (threadId) {
-    parts.push(`Timeline ${threadId}`);
+  const publicRef =
+    String(document.ref ?? "").trim() ||
+    (resourceRouteSegment(document, "document")
+      ? `document:${resourceRouteSegment(document, "document")}`
+      : "");
+  if (publicRef) {
+    parts.push(publicRef);
   }
   return parts.join(" · ");
 }
@@ -131,9 +144,13 @@ export function boardSearchPickerSubtitle(board) {
   if (summary) {
     parts.push(summary);
   }
-  const threadId = String(board.thread_id ?? "").trim();
-  if (threadId) {
-    parts.push(`Timeline ${threadId}`);
+  const publicRef =
+    String(board.ref ?? "").trim() ||
+    (resourceRouteSegment(board, "board")
+      ? `board:${resourceRouteSegment(board, "board")}`
+      : "");
+  if (publicRef) {
+    parts.push(publicRef);
   }
   return parts.join(" · ");
 }

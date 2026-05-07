@@ -33,6 +33,10 @@ func (s *Store) ListRefEdgesBySource(ctx context.Context, sourceRef string, rela
 	if !ok {
 		return nil, fmt.Errorf("%w: source_ref must be typed-ref format", ErrInvalidRefEdgeQuery)
 	}
+	if resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: sourceType, Ref: sourceRef}); err == nil {
+		sourceType = resolved.Type
+		sourceID = resolved.ID
+	}
 
 	query := `SELECT source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json
 		   FROM ref_edges
@@ -53,7 +57,7 @@ func (s *Store) ListRefEdgesBySource(ctx context.Context, sourceRef string, rela
 	}
 	defer rows.Close()
 
-	return scanRefEdges(rows)
+	return s.scanRefEdges(ctx, rows)
 }
 
 func (s *Store) ListRefEdgesByTarget(ctx context.Context, targetRef string, relationFilter string) ([]RefEdge, error) {
@@ -69,6 +73,10 @@ func (s *Store) ListRefEdgesByTarget(ctx context.Context, targetRef string, rela
 	targetType, targetID, ok := splitTypedRef(targetRef)
 	if !ok {
 		return nil, fmt.Errorf("%w: target_ref must be typed-ref format", ErrInvalidRefEdgeQuery)
+	}
+	if resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: targetType, Ref: targetRef}); err == nil {
+		targetType = resolved.Type
+		targetID = resolved.ID
 	}
 
 	query := `SELECT source_type, source_id, target_type, target_id, edge_type, created_at, metadata_json
@@ -90,10 +98,10 @@ func (s *Store) ListRefEdgesByTarget(ctx context.Context, targetRef string, rela
 	}
 	defer rows.Close()
 
-	return scanRefEdges(rows)
+	return s.scanRefEdges(ctx, rows)
 }
 
-func scanRefEdges(rows *sql.Rows) ([]RefEdge, error) {
+func (s *Store) scanRefEdges(ctx context.Context, rows *sql.Rows) ([]RefEdge, error) {
 	out := make([]RefEdge, 0)
 	for rows.Next() {
 		var (
@@ -118,8 +126,8 @@ func scanRefEdges(rows *sql.Rows) ([]RefEdge, error) {
 		}
 
 		edge := RefEdge{
-			SourceRef:    makeTypedRef(sourceType, sourceID),
-			TargetRef:    makeTypedRef(targetType, targetID),
+			SourceRef:    makePublicTypedRef(ctx, s.db, sourceType, sourceID),
+			TargetRef:    makePublicTypedRef(ctx, s.db, targetType, targetID),
 			Relation:     edgeType,
 			DiscoveredAt: createdAt,
 		}
@@ -128,6 +136,8 @@ func scanRefEdges(rows *sql.Rows) ([]RefEdge, error) {
 			if err := json.Unmarshal([]byte(metadataJSON.String), &edge.Metadata); err != nil {
 				return nil, fmt.Errorf("decode ref edge metadata: %w", err)
 			}
+			delete(edge.Metadata, "resolved_target_id")
+			delete(edge.Metadata, "resolved_source_id")
 		}
 		out = append(out, edge)
 	}

@@ -463,7 +463,7 @@ const chapterBoardStates = {
   "chapter-1": {
     boards: [
       {
-        id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "board-mission-board",
         title: "Saturday Lemonade Stand Mission Board",
         status: "active",
         created_by: "actor-boss-kid",
@@ -484,8 +484,8 @@ const chapterBoardStates = {
     ],
     cards: [
       {
-        id: "0cfdd886-64dd-4d08-9ded-551605254d71",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-boss-coordination",
+        board_id: "board-mission-board",
         column_key: "in_progress",
         summary: "Boss kid coordination: afternoon rush game plan",
         title: "Boss kid coordination: afternoon rush game plan",
@@ -503,8 +503,8 @@ const chapterBoardStates = {
         updated_by: "actor-boss-kid",
       },
       {
-        id: "3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-kitchen-prep",
+        board_id: "board-mission-board",
         column_key: "in_progress",
         summary: "Kitchen Prep: pitcher two by 11:45, ice lockdown, mint test batch",
         title: "Kitchen Prep: pitcher two by 11:45, ice lockdown, mint test batch",
@@ -520,8 +520,8 @@ const chapterBoardStates = {
         updated_by: "actor-backoffice-kid",
       },
       {
-        id: "3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-sign-rewrite",
+        board_id: "board-mission-board",
         column_key: "in_progress",
         summary: "Rewrite the sign so the price is giant and the joke is small",
         title: "Rewrite the sign so the price is giant and the joke is small",
@@ -541,7 +541,7 @@ const chapterBoardStates = {
   "chapter-3": {
     boards: [
       {
-        id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "board-mission-board",
         title: "Saturday Lemonade Stand Mission Board",
         status: "active",
         created_by: "actor-boss-kid",
@@ -563,8 +563,8 @@ const chapterBoardStates = {
     ],
     cards: [
       {
-        id: "0cfdd886-64dd-4d08-9ded-551605254d71",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-boss-coordination",
+        board_id: "board-mission-board",
         column_key: "done",
         resolution: "done",
         resolution_refs: ["artifact:artifact-prep-checklist"],
@@ -585,8 +585,8 @@ const chapterBoardStates = {
         updated_by: "actor-boss-kid",
       },
       {
-        id: "3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-kitchen-prep",
+        board_id: "board-mission-board",
         column_key: "in_progress",
         summary: "Kitchen Prep: guard the mint cap, paper cups, and combo-safe supply limits",
         title: "Kitchen Prep: guard the mint cap, paper cups, and combo-safe supply limits",
@@ -603,8 +603,8 @@ const chapterBoardStates = {
         updated_by: "actor-backoffice-kid",
       },
       {
-        id: "3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
-        board_id: "991a7ede-c737-4040-b44a-ca225a20b496",
+        id: "card-sign-rewrite",
+        board_id: "board-mission-board",
         column_key: "done",
         resolution: "done",
         resolution_refs: ["artifact:artifact-sales-scoreboard"],
@@ -635,7 +635,7 @@ const chapterEvents = {
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
+        "board:board-mission-board",
       ],
       summary: "Mission board is UP, team huddle time!",
       payload: {
@@ -816,8 +816,8 @@ const chapterEvents = {
         "artifact:artifact-weather-note",
         "artifact:artifact-rival-stand-rumor",
         "artifact:artifact-secret-menu-sketch",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
-        "card:3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
+        "board:board-mission-board",
+        "card:card-kitchen-prep",
       ],
       summary: "Backoffice kid final: prep plan locked, supply cliffs named, mint verdict delivered",
       payload: {
@@ -864,13 +864,13 @@ const chapterEvents = {
         "artifact:artifact-supply-stash",
         "artifact:artifact-rival-stand-rumor",
         "artifact:artifact-secret-menu-sketch",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
-        "card:0cfdd886-64dd-4d08-9ded-551605254d71",
+        "board:board-mission-board",
+        "card:card-boss-coordination",
       ],
       summary: "Boss kid final statement: the plan is locked, the team talked to each other, and we are ready for the soccer crowd",
       payload: {
         evidence: [
-          "Created the Saturday Lemonade Stand Mission Board (991a7ede) with 3 role-scoped cards, all in_progress",
+          "Created the Saturday Lemonade Stand Mission Board (board-mission-board) with 3 role-scoped cards, all in_progress",
           "Ruby (sales kid) posted 2 messages and created 1 card for sign rewrite - confirmed giant price direction and mint polling results (2/3 kids curious about mint)",
           "Theo (backoffice kid) posted 2 messages and created 1 card for kitchen prep - confirmed pitcher two at 11:45, 28 cups available, ice under protection, mint test possible",
           "Replied directly to both Ruby and Theo in-thread to close the loop on decisions",
@@ -934,7 +934,7 @@ const chapterEvents = {
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
+        "board:board-mission-board",
       ],
       summary: "Message: LUNCH RUSH IS HERE - new assignments, no slacking",
       payload: {
@@ -1141,8 +1141,8 @@ const chapterEvents = {
         "artifact:artifact-supply-stash",
         "artifact:artifact-rival-stand-rumor",
         "artifact:artifact-secret-menu-sketch",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
-        "card:0cfdd886-64dd-4d08-9ded-551605254d71",
+        "board:board-mission-board",
+        "card:card-boss-coordination",
       ],
       summary: "Boss kid chapter 2 statement: lunch rush managed, decisions locked, cup backup deployed",
       payload: {
@@ -1217,7 +1217,7 @@ const chapterEvents = {
       thread_id: "thread-kids-lemonade-main",
       refs: [
         "thread:thread-kids-lemonade-main",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
+        "board:board-mission-board",
       ],
       summary: "Message: paper cups rescued us, now I need tagged answers before the combo goes live",
       payload: {
@@ -1383,8 +1383,8 @@ const chapterEvents = {
         "thread:thread-kids-lemonade-sales",
         "thread:thread-kids-lemonade-backoffice",
         "document:kid-boss-lemonade-plan",
-        "board:991a7ede-c737-4040-b44a-ca225a20b496",
-        "card:0cfdd886-64dd-4d08-9ded-551605254d71",
+        "board:board-mission-board",
+        "card:card-boss-coordination",
         "artifact:artifact-secret-menu-sketch",
       ],
       summary: "Boss kid chapter 3 statement: the combo only worked because the tags turned into real handoffs",
@@ -1418,7 +1418,7 @@ const chapterEvents = {
         "thread:thread-kids-lemonade-main",
         "thread:thread-kids-lemonade-sales",
         "document:kid-sales-pitch-notebook",
-        "card:3d051f3d-3dcc-4e8e-9ccd-6b5f1c524195",
+        "card:card-sign-rewrite",
         "artifact:artifact-sales-scoreboard",
         "artifact:artifact-sign-slogans",
       ],
@@ -1453,7 +1453,7 @@ const chapterEvents = {
         "thread:thread-kids-lemonade-main",
         "thread:thread-kids-lemonade-backoffice",
         "document:kid-prep-notebook",
-        "card:3c552c4c-ddf4-4e76-84ca-aebd7d8d8cc4",
+        "card:card-kitchen-prep",
         "artifact:artifact-prep-checklist",
         "artifact:artifact-supply-stash",
         "artifact:artifact-secret-menu-sketch",

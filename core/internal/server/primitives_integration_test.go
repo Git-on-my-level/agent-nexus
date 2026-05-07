@@ -217,6 +217,404 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestNamedResourceAPIsUsePublicRefsAndHandles(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	topicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"title":"Public Ref Topic",
+			"summary":"Topic summary",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":[],
+			"provenance":{"sources":["test:public-refs"]}
+		}
+	}`, http.StatusCreated)
+	defer topicResp.Body.Close()
+	var topicPayload struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(topicResp.Body).Decode(&topicPayload); err != nil {
+		t.Fatalf("decode topic create: %v", err)
+	}
+	topicRef := assertPublicResourceIdentity(t, topicPayload.Topic, "topic")
+
+	getTopicResp, err := http.Get(h.baseURL + "/topics/" + url.PathEscape(topicRef))
+	if err != nil {
+		t.Fatalf("GET topic by ref: %v", err)
+	}
+	defer getTopicResp.Body.Close()
+	if getTopicResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET topic by ref status: %d", getTopicResp.StatusCode)
+	}
+
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Public Ref Board","owners":["actor-1"],"refs":["`+topicRef+`"]}
+	}`, http.StatusCreated)
+	defer boardResp.Body.Close()
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(boardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board create: %v", err)
+	}
+	boardRef := assertPublicResourceIdentity(t, boardPayload.Board, "board")
+	boardHandle := asString(boardPayload.Board["handle"])
+
+	getBoardResp, err := http.Get(h.baseURL + "/boards/" + url.PathEscape(boardRef))
+	if err != nil {
+		t.Fatalf("GET board by ref: %v", err)
+	}
+	defer getBoardResp.Body.Close()
+	if getBoardResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET board by ref status: %d", getBoardResp.StatusCode)
+	}
+
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+url.PathEscape(boardHandle)+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(boardPayload.Board["updated_at"])+`",
+		"title":"Public Ref Card",
+		"summary":"Card summary",
+		"related_refs":["`+topicRef+`"],
+		"column_key":"ready"
+	}`, http.StatusCreated)
+	defer cardResp.Body.Close()
+	var cardPayload struct {
+		Card map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(cardResp.Body).Decode(&cardPayload); err != nil {
+		t.Fatalf("decode card create: %v", err)
+	}
+	cardRef := assertPublicResourceIdentity(t, cardPayload.Card, "card")
+
+	getCardResp, err := http.Get(h.baseURL + "/cards/" + url.PathEscape(cardRef))
+	if err != nil {
+		t.Fatalf("GET card by ref: %v", err)
+	}
+	defer getCardResp.Body.Close()
+	if getCardResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET card by ref status: %d", getCardResp.StatusCode)
+	}
+
+	docResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Public Ref Document","summary":"Doc summary","refs":["`+topicRef+`"],"provenance":{"sources":["test:public-refs"]}},
+		"content":"Initial document body",
+		"content_type":"text",
+		"refs":["`+topicRef+`"]
+	}`, http.StatusCreated)
+	defer docResp.Body.Close()
+	var docPayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(docResp.Body).Decode(&docPayload); err != nil {
+		t.Fatalf("decode document create: %v", err)
+	}
+	docRef := assertPublicResourceIdentity(t, docPayload.Document, "document")
+
+	getDocResp, err := http.Get(h.baseURL + "/docs/" + url.PathEscape(docRef))
+	if err != nil {
+		t.Fatalf("GET document by ref: %v", err)
+	}
+	defer getDocResp.Body.Close()
+	if getDocResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected GET document by ref status: %d", getDocResp.StatusCode)
+	}
+
+	revResp := postJSONExpectStatus(t, h.baseURL+"/docs/"+url.PathEscape(docRef)+"/revisions", `{
+		"actor_id":"actor-1",
+		"if_base_revision":"`+asString(docPayload.Revision["revision_id"])+`",
+		"content":"Updated document body",
+		"content_type":"text",
+		"refs":["`+topicRef+`"],
+		"provenance":{"sources":["test:public-refs"]}
+	}`, http.StatusCreated)
+	defer revResp.Body.Close()
+}
+
+func TestListFiltersResolvePublicRefsAndHandles(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-list-refs","display_name":"Actor","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	topicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-list-refs",
+		"topic":{"title":"List Filter Topic","summary":"Topic summary","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["test:list-filters"]}}
+	}`, http.StatusCreated)
+	defer topicResp.Body.Close()
+	var topicPayload struct {
+		Topic map[string]any `json:"topic"`
+	}
+	if err := json.NewDecoder(topicResp.Body).Decode(&topicPayload); err != nil {
+		t.Fatalf("decode topic create: %v", err)
+	}
+	topicRef := assertPublicResourceIdentity(t, topicPayload.Topic, "topic")
+	topicID := asString(topicPayload.Topic["id"])
+	topicHandle := asString(topicPayload.Topic["handle"])
+
+	docResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-list-refs",
+		"document":{"title":"List Filter Document","summary":"Doc summary","refs":["`+topicRef+`"],"provenance":{"sources":["test:list-filters"]}},
+		"content":"document body",
+		"content_type":"text",
+		"refs":["`+topicRef+`"]
+	}`, http.StatusCreated)
+	defer docResp.Body.Close()
+	var docPayload struct {
+		Document map[string]any `json:"document"`
+		Revision map[string]any `json:"revision"`
+	}
+	if err := json.NewDecoder(docResp.Body).Decode(&docPayload); err != nil {
+		t.Fatalf("decode document create: %v", err)
+	}
+	docID := asString(docPayload.Document["id"])
+	docRef := assertPublicResourceIdentity(t, docPayload.Document, "document")
+	docHandle := asString(docPayload.Document["handle"])
+	threadID := asString(docPayload.Document["thread_id"])
+	threadRef, threadHandle := loadThreadPublicIdentity(t, h.baseURL, threadID)
+
+	artifactResp := postJSONExpectStatus(t, h.baseURL+"/artifacts", `{
+		"actor_id":"actor-list-refs",
+		"artifact":{"kind":"attachment","refs":["`+threadRef+`"],"summary":"List filter artifact"},
+		"content":"artifact body",
+		"content_type":"text"
+	}`, http.StatusCreated)
+	defer artifactResp.Body.Close()
+	var artifactPayload struct {
+		Artifact map[string]any `json:"artifact"`
+	}
+	if err := json.NewDecoder(artifactResp.Body).Decode(&artifactPayload); err != nil {
+		t.Fatalf("decode artifact create: %v", err)
+	}
+	artifactID := asString(artifactPayload.Artifact["id"])
+	artifactRef := assertPublicResourceIdentity(t, artifactPayload.Artifact, "artifact")
+	artifactHandle := asString(artifactPayload.Artifact["handle"])
+
+	assertListDocsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), docID)
+	assertListDocsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadHandle), docID)
+	assertListDocsContains(t, h.baseURL, "q="+url.QueryEscape(docRef), docID)
+	assertListDocsContains(t, h.baseURL, "q="+url.QueryEscape(docHandle), docID)
+	assertListTopicsContains(t, h.baseURL, "q="+url.QueryEscape(topicRef), topicID)
+	assertListTopicsContains(t, h.baseURL, "q="+url.QueryEscape(topicHandle), topicID)
+	assertListThreadsContains(t, h.baseURL, "q="+url.QueryEscape(threadRef), threadID)
+	assertListThreadsContains(t, h.baseURL, "q="+url.QueryEscape(threadHandle), threadID)
+	assertListEventsContainsType(t, h.baseURL, "topic_id="+url.QueryEscape(topicRef), "topic_created")
+	assertListEventsContainsType(t, h.baseURL, "topic_id="+url.QueryEscape(topicHandle), "topic_created")
+	assertListEventsContainsType(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), "document_created")
+	assertListEventsContainsType(t, h.baseURL, "thread_id="+url.QueryEscape(threadHandle), "document_created")
+	assertListArtifactsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), artifactID)
+	assertListArtifactsContains(t, h.baseURL, "thread_id="+url.QueryEscape(threadHandle), artifactID)
+	assertListArtifactsContains(t, h.baseURL, "ids="+url.QueryEscape(artifactRef), artifactID)
+	assertListArtifactsContains(t, h.baseURL, "ids="+url.QueryEscape(artifactHandle), artifactID)
+
+	postJSONExpectStatus(t, h.baseURL+"/events", `{
+		"actor_id":"actor-list-refs",
+		"event":{"type":"message_posted","thread_id":"`+threadHandle+`","refs":["`+topicRef+`"],"summary":"handle-addressed event","payload":{},"provenance":{"sources":["test:list-filters"]}}
+	}`, http.StatusCreated).Body.Close()
+	assertListEventsContainsType(t, h.baseURL, "thread_id="+url.QueryEscape(threadRef), "message_posted")
+
+	assertGETStatus(t, h.baseURL+"/docs?thread_id="+url.QueryEscape(topicRef), http.StatusBadRequest)
+	assertGETStatus(t, h.baseURL+"/events?topic_id="+url.QueryEscape(threadRef), http.StatusBadRequest)
+	assertGETStatus(t, h.baseURL+"/events?thread_id="+url.QueryEscape(topicRef), http.StatusBadRequest)
+	assertGETStatus(t, h.baseURL+"/artifacts?thread_id="+url.QueryEscape(topicRef), http.StatusBadRequest)
+	assertGETStatus(t, h.baseURL+"/artifacts?ids="+url.QueryEscape(docRef), http.StatusBadRequest)
+	if docHandle == "" {
+		t.Fatalf("document handle missing: %#v", docPayload.Document)
+	}
+}
+
+func assertPublicResourceIdentity(t *testing.T, resource map[string]any, kind string) string {
+	t.Helper()
+	handle := asString(resource["handle"])
+	ref := asString(resource["ref"])
+	if handle == "" {
+		t.Fatalf("%s response missing handle: %#v", kind, resource)
+	}
+	if ref != kind+":"+handle {
+		t.Fatalf("%s response ref = %q, want %q", kind, ref, kind+":"+handle)
+	}
+	if isUUIDLikeForTest(handle) || isUUIDLikeForTest(ref) {
+		t.Fatalf("%s response public identity should not be UUID-like: ref=%q handle=%q", kind, ref, handle)
+	}
+	return ref
+}
+
+func isUUIDLikeForTest(value string) bool {
+	value = strings.TrimSpace(strings.TrimPrefix(value, "topic:"))
+	value = strings.TrimPrefix(value, "board:")
+	value = strings.TrimPrefix(value, "card:")
+	value = strings.TrimPrefix(value, "document:")
+	return len(value) == 36 && strings.Count(value, "-") == 4
+}
+
+func loadThreadPublicIdentity(t *testing.T, baseURL, threadID string) (string, string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/threads/" + url.PathEscape(threadID))
+	if err != nil {
+		t.Fatalf("GET thread identity: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET thread identity status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Thread map[string]any `json:"thread"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode thread identity: %v", err)
+	}
+	ref := assertPublicResourceIdentity(t, payload.Thread, "thread")
+	handle := asString(payload.Thread["handle"])
+	return ref, handle
+}
+
+func assertListTopicsContains(t *testing.T, baseURL, query, topicID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/topics?" + query)
+	if err != nil {
+		t.Fatalf("GET topics list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET topics list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Topics []map[string]any `json:"topics"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode topics list: %v", err)
+	}
+	for _, topic := range payload.Topics {
+		if asString(topic["id"]) == topicID {
+			return
+		}
+	}
+	t.Fatalf("expected topic %q in topics list for %q, got %#v", topicID, query, payload.Topics)
+}
+
+func assertListThreadsContains(t *testing.T, baseURL, query, threadID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/threads?" + query)
+	if err != nil {
+		t.Fatalf("GET threads list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET threads list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Threads []map[string]any `json:"threads"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode threads list: %v", err)
+	}
+	for _, thread := range payload.Threads {
+		if asString(thread["id"]) == threadID {
+			return
+		}
+	}
+	t.Fatalf("expected thread %q in threads list for %q, got %#v", threadID, query, payload.Threads)
+}
+
+func assertListDocsContains(t *testing.T, baseURL, query, documentID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/docs?" + query)
+	if err != nil {
+		t.Fatalf("GET docs list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET docs list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Documents []map[string]any `json:"documents"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode docs list: %v", err)
+	}
+	for _, document := range payload.Documents {
+		if asString(document["id"]) == documentID {
+			return
+		}
+	}
+	t.Fatalf("expected document %q in docs list for %q, got %#v", documentID, query, payload.Documents)
+}
+
+func assertListEventsContainsType(t *testing.T, baseURL, query, eventType string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/events?" + query)
+	if err != nil {
+		t.Fatalf("GET events list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET events list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode events list: %v", err)
+	}
+	for _, event := range payload.Events {
+		if asString(event["type"]) == eventType {
+			return
+		}
+	}
+	t.Fatalf("expected event type %q in events list for %q, got %#v", eventType, query, payload.Events)
+}
+
+func assertListArtifactsContains(t *testing.T, baseURL, query, artifactID string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/artifacts?" + query)
+	if err != nil {
+		t.Fatalf("GET artifacts list: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET artifacts list status=%d body=%s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Artifacts []map[string]any `json:"artifacts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode artifacts list: %v", err)
+	}
+	for _, artifact := range payload.Artifacts {
+		if asString(artifact["id"]) == artifactID {
+			return
+		}
+	}
+	t.Fatalf("expected artifact %q in artifacts list for %q, got %#v", artifactID, query, payload.Artifacts)
+}
+
+func assertGETStatus(t *testing.T, targetURL string, want int) {
+	t.Helper()
+	resp, err := http.Get(targetURL)
+	if err != nil {
+		t.Fatalf("GET %s: %v", targetURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != want {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("GET %s status=%d want=%d body=%s", targetURL, resp.StatusCode, want, string(body))
+	}
+}
+
 func TestWriteHandlersRejectTrailingJSONBody(t *testing.T) {
 	t.Parallel()
 
@@ -890,13 +1288,13 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if headRevisionID == "" {
 		t.Fatal("expected created revision id")
 	}
-	if got := asString(created["document"]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(created["document"]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected canonical head_revision_ref, got %#v", created["document"])
 	}
-	if got := asString(created["revision"]["document_ref"]); got != "document:doc-1" {
+	if got := asString(created["revision"]["document_ref"]); got != asString(created["document"]["ref"]) {
 		t.Fatalf("expected canonical revision document_ref, got %#v", created["revision"])
 	}
-	if got := asString(created["revision"]["artifact_ref"]); got != "artifact:"+asString(created["revision"]["artifact_id"]) {
+	if got := asString(created["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
 		t.Fatalf("expected canonical revision artifact_ref, got %#v", created["revision"])
 	}
 	if _, exists := created["revision"]["prev_revision_ref"]; exists {
@@ -954,7 +1352,7 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if got := asString(listed.Documents[0]["subject_ref"]); got != "thread:"+documentThreadID {
 		t.Fatalf("expected listed document subject_ref, got %#v", listed.Documents[0])
 	}
-	if got := asString(listed.Documents[0]["head_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(listed.Documents[0]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected listed document head_revision_ref, got %#v", listed.Documents[0])
 	}
 	if got := asString(listed.Documents[0]["state"]); got != "active" {
@@ -1042,16 +1440,16 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if newHeadRevisionID == "" || newHeadRevisionID == headRevisionID {
 		t.Fatalf("unexpected new revision id: old=%q new=%q", headRevisionID, newHeadRevisionID)
 	}
-	if got := asString(updated["document"]["head_revision_ref"]); got != "document_revision:"+newHeadRevisionID {
+	if got := asString(updated["document"]["head_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected updated head_revision_ref, got %#v", updated["document"])
 	}
-	if got := asString(updated["revision"]["document_ref"]); got != "document:doc-1" {
+	if got := asString(updated["revision"]["document_ref"]); got != asString(updated["document"]["ref"]) {
 		t.Fatalf("expected updated revision document_ref, got %#v", updated["revision"])
 	}
-	if got := asString(updated["revision"]["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(updated["revision"]["prev_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected updated revision prev_revision_ref, got %#v", updated["revision"])
 	}
-	if got := asString(updated["revision"]["artifact_ref"]); got != "artifact:"+asString(updated["revision"]["artifact_id"]) {
+	if got := asString(updated["revision"]["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
 		t.Fatalf("expected updated revision artifact_ref, got %#v", updated["revision"])
 	}
 
@@ -1147,18 +1545,26 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if loadedOpenAPIRevResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected GET OpenAPI revision status: %d", loadedOpenAPIRevResp.StatusCode)
 	}
-	var loadedOpenAPIRev map[string]map[string]any
+	var loadedOpenAPIRev map[string]any
 	if err := json.NewDecoder(loadedOpenAPIRevResp.Body).Decode(&loadedOpenAPIRev); err != nil {
 		t.Fatalf("decode loaded OpenAPI revision: %v", err)
 	}
-	loadedProv, _ := loadedOpenAPIRev["revision"]["provenance"].(map[string]any)
+	loadedOpenAPIRevision, _ := loadedOpenAPIRev["revision"].(map[string]any)
+	loadedProv, _ := loadedOpenAPIRevision["provenance"].(map[string]any)
 	if loadedProv == nil {
-		t.Fatalf("expected persisted revision provenance on GET, got %#v", loadedOpenAPIRev["revision"])
+		t.Fatalf("expected persisted revision provenance on GET, got %#v", loadedOpenAPIRevision)
 	}
 	loadedSources, _ := loadedProv["sources"].([]any)
 	if len(loadedSources) != 1 || loadedSources[0] != "operator" {
 		t.Fatalf("expected loaded provenance sources [operator], got %#v", loadedProv["sources"])
 	}
+	if got := asString(loadedOpenAPIRev["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected revision envelope document_ref, got %#v", loadedOpenAPIRev)
+	}
+	if got := asString(loadedOpenAPIRev["document_handle"]); got == "" {
+		t.Fatalf("expected revision envelope document_handle, got %#v", loadedOpenAPIRev)
+	}
+	assertMapOmitsKeys(t, loadedOpenAPIRevision, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 
 	historyResp, err := http.Get(h.baseURL + "/docs/doc-1/history")
 	if err != nil {
@@ -1177,16 +1583,42 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 		t.Fatalf("expected four revisions in history, got %d payload=%#v", len(revisions), historyPayload)
 	}
 	firstHistory, _ := revisions[0].(map[string]any)
-	if got := asString(firstHistory["document_ref"]); got != "document:doc-1" {
+	if got := asString(firstHistory["document_ref"]); got != asString(created["document"]["ref"]) {
 		t.Fatalf("expected history revision document_ref, got %#v", firstHistory)
 	}
 	if got := asString(firstHistory["artifact_ref"]); got == "" {
 		t.Fatalf("expected history revision artifact_ref, got %#v", firstHistory)
 	}
 	secondHistory, _ := revisions[1].(map[string]any)
-	if got := asString(secondHistory["prev_revision_ref"]); got != "document_revision:"+headRevisionID {
+	if got := asString(secondHistory["prev_revision_ref"]); !strings.HasPrefix(got, "document_revision:") {
 		t.Fatalf("expected history revision prev_revision_ref, got %#v", secondHistory)
 	}
+	assertMapOmitsKeys(t, firstHistory, "document_id", "artifact_id", "prev_revision_id", "thread_id")
+
+	revisionsResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions")
+	if err != nil {
+		t.Fatalf("GET /docs/{document_id}/revisions: %v", err)
+	}
+	defer revisionsResp.Body.Close()
+	if revisionsResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected revisions status: got %d", revisionsResp.StatusCode)
+	}
+	var revisionsPayload map[string]any
+	if err := json.NewDecoder(revisionsResp.Body).Decode(&revisionsPayload); err != nil {
+		t.Fatalf("decode revisions response: %v", err)
+	}
+	if got := asString(revisionsPayload["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected revisions envelope document_ref, got %#v", revisionsPayload)
+	}
+	if got := asString(revisionsPayload["document_handle"]); got == "" {
+		t.Fatalf("expected revisions envelope document_handle, got %#v", revisionsPayload)
+	}
+	openAPIRevisions, _ := revisionsPayload["revisions"].([]any)
+	if len(openAPIRevisions) != 4 {
+		t.Fatalf("expected four revisions from /revisions, got %d payload=%#v", len(openAPIRevisions), revisionsPayload)
+	}
+	firstOpenAPIRevision, _ := openAPIRevisions[0].(map[string]any)
+	assertMapOmitsKeys(t, firstOpenAPIRevision, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 
 	revisionResp, err := http.Get(h.baseURL + "/docs/doc-1/revisions/" + headRevisionID)
 	if err != nil {
@@ -1196,23 +1628,31 @@ func TestDocumentsLifecycleRoundTrip(t *testing.T) {
 	if revisionResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected revision status: got %d", revisionResp.StatusCode)
 	}
-	var revisionPayload map[string]map[string]any
+	var revisionPayload map[string]any
 	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
 		t.Fatalf("decode revision response: %v", err)
 	}
-	if revisionPayload["revision"]["content"] != "initial text" {
-		t.Fatalf("unexpected revision content: %#v", revisionPayload["revision"]["content"])
+	revisionMap, _ := revisionPayload["revision"].(map[string]any)
+	if got := asString(revisionPayload["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected fetched revision envelope document_ref, got %#v", revisionPayload)
 	}
-	if got := asString(revisionPayload["revision"]["document_ref"]); got != "document:doc-1" {
-		t.Fatalf("expected fetched revision document_ref, got %#v", revisionPayload["revision"])
+	if got := asString(revisionPayload["document_handle"]); got == "" {
+		t.Fatalf("expected fetched revision envelope document_handle, got %#v", revisionPayload)
 	}
-	if got := asString(revisionPayload["revision"]["artifact_ref"]); got != "artifact:"+asString(revisionPayload["revision"]["artifact_id"]) {
-		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionPayload["revision"])
+	if revisionMap["content"] != "initial text" {
+		t.Fatalf("unexpected revision content: %#v", revisionMap["content"])
 	}
-	loadedRevisionHash, _ := revisionPayload["revision"]["revision_hash"].(string)
+	if got := asString(revisionMap["document_ref"]); got != asString(created["document"]["ref"]) {
+		t.Fatalf("expected fetched revision document_ref, got %#v", revisionMap)
+	}
+	if got := asString(revisionMap["artifact_ref"]); !strings.HasPrefix(got, "artifact:") {
+		t.Fatalf("expected fetched revision artifact_ref, got %#v", revisionMap)
+	}
+	loadedRevisionHash, _ := revisionMap["revision_hash"].(string)
 	if loadedRevisionHash != createRevisionHash {
 		t.Fatalf("revision_hash mismatch on GET revision: got %q want %q", loadedRevisionHash, createRevisionHash)
 	}
+	assertMapOmitsKeys(t, revisionMap, "document_id", "artifact_id", "prev_revision_id", "thread_id")
 }
 
 func TestDocumentCreateRequestKeyReplaysSingleWrite(t *testing.T) {
@@ -1549,13 +1989,14 @@ func TestLegacyContentPathIsStrippedFromArtifactAndRevisionResponses(t *testing.
 	if revisionResp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected legacy revision status: %d", revisionResp.StatusCode)
 	}
-	var revisionPayload map[string]map[string]any
+	var revisionPayload map[string]any
 	if err := json.NewDecoder(revisionResp.Body).Decode(&revisionPayload); err != nil {
 		t.Fatalf("decode legacy revision payload: %v", err)
 	}
-	revisionArtifact, ok := revisionPayload["revision"]["artifact"].(map[string]any)
+	revision, _ := revisionPayload["revision"].(map[string]any)
+	revisionArtifact, ok := revision["artifact"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected legacy revision artifact metadata map, got %#v", revisionPayload["revision"]["artifact"])
+		t.Fatalf("expected legacy revision artifact metadata map, got %#v", revision["artifact"])
 	}
 	if _, ok := revisionArtifact["content_path"]; ok {
 		t.Fatalf("expected legacy revision response to omit content_path: %#v", revisionArtifact)
@@ -1630,20 +2071,21 @@ func TestDocumentRevisionMerkleChainIntegrity(t *testing.T) {
 			t.Fatalf("GET revision %d: %v", i, err)
 		}
 		defer revResp.Body.Close()
-		var revPayload map[string]map[string]any
+		var revPayload map[string]any
 		if err := json.NewDecoder(revResp.Body).Decode(&revPayload); err != nil {
 			t.Fatalf("decode revision %d: %v", i, err)
 		}
+		revision, _ := revPayload["revision"].(map[string]any)
 
-		revisionHash, _ := revPayload["revision"]["revision_hash"].(string)
+		revisionHash, _ := revision["revision_hash"].(string)
 		if revisionHash == "" {
 			t.Fatalf("revision %d missing revision_hash", i)
 		}
 
 		contentHash := sha256Hex([]byte(contents[i]))
 		revNum := i + 1
-		createdAt, _ := revPayload["revision"]["created_at"].(string)
-		createdBy, _ := revPayload["revision"]["created_by"].(string)
+		createdAt, _ := revision["created_at"].(string)
+		createdBy, _ := revision["created_by"].(string)
 		expectedHash := testComputeRevisionHash(contentHash, prevHash, "merkle-doc", revNum, createdAt, createdBy)
 
 		if revisionHash != expectedHash {
@@ -1937,6 +2379,18 @@ func shouldAutoStepProjectionMaintainer(r *http.Request, statusCode int) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+func assertMapOmitsKeys(t *testing.T, m map[string]any, keys ...string) {
+	t.Helper()
+	if m == nil {
+		t.Fatalf("expected map, got nil")
+	}
+	for _, key := range keys {
+		if _, exists := m[key]; exists {
+			t.Fatalf("expected map to omit %q, got %#v", key, m)
+		}
 	}
 }
 

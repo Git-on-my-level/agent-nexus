@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -48,6 +50,13 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	}
 
 	outPath := strings.TrimSpace(outputPath)
+	if outPath == "." {
+		resolved, resolveErr := a.resolveArtifactContentOutputPath(ctx, authCfg, strings.TrimSpace(pathParams["artifact_id"]), resp.Headers)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		outPath = resolved
+	}
 	if outPath != "" {
 		if err := os.WriteFile(outPath, body, 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "artifact_content_write_failed", fmt.Sprintf("failed to write %s", outPath), err)
@@ -84,6 +93,76 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 	}
 	text := fmt.Sprintf("%s status: %d\nbytes: %d", commandName, resp.StatusCode, len(body))
 	return &commandResult{Text: text, Data: data}, nil
+}
+
+func (a *App) resolveArtifactContentOutputPath(ctx context.Context, cfg config.Resolved, artifactID string, headers http.Header) (string, error) {
+	if filename := artifactContentDispositionFilename(headers); filename != "" {
+		return filename, nil
+	}
+	filename, err := a.artifactFilenameFromMetadata(ctx, cfg, artifactID)
+	if err != nil {
+		return "", err
+	}
+	if filename == "" {
+		return "", errnorm.Usage("artifact_filename_unavailable", "--output . requires Content-Disposition filename or artifact filename metadata")
+	}
+	return filename, nil
+}
+
+func artifactContentDispositionFilename(headers http.Header) string {
+	raw := strings.TrimSpace(headers.Get("Content-Disposition"))
+	if raw == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(raw)
+	if err != nil {
+		return ""
+	}
+	return cleanArtifactOutputFilename(firstNonEmpty(params["filename"], params["filename*"]))
+}
+
+func (a *App) artifactFilenameFromMetadata(ctx context.Context, cfg config.Resolved, artifactID string) (string, error) {
+	client, err := httpclient.New(cfg)
+	if err != nil {
+		return "", errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+	}
+	callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+	resp, invokeErr := client.RawCall(callCtx, httpclient.RawRequest{
+		Method:  http.MethodGet,
+		Path:    "/artifacts/" + url.PathEscape(strings.TrimSpace(artifactID)),
+		Headers: generatedHeaders(cfg),
+	})
+	if invokeErr != nil {
+		return "", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "artifact metadata request failed", invokeErr)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	}
+	parsed := parseResponseBody(resp.Body)
+	body, _ := parsed.(map[string]any)
+	artifact := extractNestedMap(body, "artifact")
+	if artifact == nil {
+		artifact = body
+	}
+	for _, key := range []string{"filename", "original_filename", "name"} {
+		if filename := cleanArtifactOutputFilename(anyString(artifact[key])); filename != "" {
+			return filename, nil
+		}
+	}
+	return "", nil
+}
+
+func cleanArtifactOutputFilename(filename string) string {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return ""
+	}
+	filename = filepath.Base(filename)
+	if filename == "." || filename == string(filepath.Separator) {
+		return ""
+	}
+	return filename
 }
 
 func (a *App) invokeRawJSON(ctx context.Context, cfg config.Resolved, commandName string, method string, path string, body any) (*commandResult, error) {
@@ -164,7 +243,7 @@ func (a *App) invokeTypedJSON(ctx context.Context, cfg config.Resolved, commandN
 
 	headersSorted := normalizedHeaders(resp.Header)
 	parsedBody := parseResponseBody(responseBody)
-	parsedBody, enriched := enrichListBodyWithShortIDs(commandID, parsedBody)
+	parsedBody, enriched := enrichListBodyWithPublicIdentity(commandID, parsedBody)
 	if enriched {
 		if encoded, marshalErr := json.Marshal(parsedBody); marshalErr == nil {
 			responseBody = encoded
@@ -229,21 +308,18 @@ func (a *App) invokeTypedJSONWithIDResolution(
 ) (*commandResult, error) {
 	pathParams := map[string]string{pathParamName: rawID}
 	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
-	if err == nil {
-		return result, nil
+	if err == nil || !commandAllowsPrefixRetry(commandID) || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
+		return result, err
 	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
+	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
+	if strings.TrimSpace(resolvedID) == "" || resolvedID == rawID {
+		return result, err
 	}
-	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: resolvedID}, query, body)
+	pathParams[pathParamName] = resolvedID
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
 }
 
 func (a *App) invokeArtifactContentWithIDResolution(
@@ -255,28 +331,200 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	lookupSpec resourceIDLookupSpec,
 	outputPath string,
 ) (*commandResult, error) {
-	result, err := a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
-	if err == nil {
-		return result, nil
+	pathParams := map[string]string{pathParamName: rawID}
+	result, err := a.invokeArtifactContent(ctx, cfg, commandName, pathParams, outputPath)
+	if err == nil || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
+		return result, err
 	}
-	if !isResolvableResourceNotFoundError(err, lookupSpec) {
-		return nil, err
-	}
-	resolvedID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, rawID, lookupSpec)
+	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
-	if resolvedID == rawID {
-		return nil, missingResourceIDError(rawID, lookupSpec)
+	if strings.TrimSpace(resolvedID) == "" || resolvedID == rawID {
+		return result, err
 	}
-	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: resolvedID}, outputPath)
+	pathParams[pathParamName] = resolvedID
+	return a.invokeArtifactContent(ctx, cfg, commandName, pathParams, outputPath)
+}
+
+func isRemoteNotFound(err error) bool {
+	var normalized *errnorm.Error
+	if !errors.As(err, &normalized) || normalized == nil {
+		return false
+	}
+	if normalized.Code == "not_found" {
+		return true
+	}
+	details, _ := normalized.Details.(map[string]any)
+	switch status := details["status"].(type) {
+	case int:
+		return status == http.StatusNotFound
+	case float64:
+		return int(status) == http.StatusNotFound
+	default:
+		return false
+	}
+}
+
+func commandAllowsPrefixRetry(commandID string) bool {
+	return strings.EqualFold(resolveCommandMethod(commandID), http.MethodGet)
+}
+
+func (a *App) resolveUniqueResourcePrefix(ctx context.Context, cfg config.Resolved, spec resourceIDLookupSpec, rawID string, originalPathParams map[string]string) (string, error) {
+	rawID = strings.TrimSpace(rawID)
+	if rawID == "" || strings.TrimSpace(spec.listCommandID) == "" || strings.TrimSpace(spec.listField) == "" {
+		return "", nil
+	}
+	listPathParams := map[string]string{}
+	if commandSpec, ok := commandSpecByID(spec.listCommandID); ok {
+		for _, param := range commandSpec.PathParams {
+			if value := strings.TrimSpace(originalPathParams[param]); value != "" {
+				listPathParams[param] = value
+			}
+		}
+	}
+	listResult, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, listPathParams, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	matches := uniqueResourcePrefixMatches(commandResultBody(listResult), spec, rawID)
+	switch len(matches) {
+	case 0:
+		return "", nil
+	case 1:
+		return matches[0].resolvedID, nil
+	default:
+		labels := make([]string, 0, len(matches))
+		for _, match := range matches {
+			labels = append(labels, match.label)
+		}
+		sort.Strings(labels)
+		return "", errnorm.Usage(
+			"ambiguous_resource_prefix",
+			fmt.Sprintf("%s prefix %q matched multiple %s: %s", spec.idLabel, rawID, spec.resourcePlural, strings.Join(labels, ", ")),
+		)
+	}
+}
+
+type resourcePrefixMatch struct {
+	resolvedID string
+	label      string
+}
+
+func uniqueResourcePrefixMatches(body map[string]any, spec resourceIDLookupSpec, rawID string) []resourcePrefixMatch {
+	items, _ := body[spec.listField].([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	rawKind, rawValue, _, typedErr := parseTypedRef(rawID)
+	if typedErr == nil && canonicalResourceKind(rawKind) == canonicalResourceKind(spec.resource) {
+		rawID = rawValue
+	}
+	rawID = strings.TrimSpace(rawID)
+	if rawID == "" {
+		return nil
+	}
+	matchesByID := map[string]resourcePrefixMatch{}
+	for _, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		target := resourceLookupTarget(item, spec)
+		if target == nil {
+			continue
+		}
+		candidates := resourceLookupCandidates(target, spec.resource)
+		if !resourceLookupMatches(candidates, rawID) {
+			continue
+		}
+		resolvedID := preferredLookupID(target, spec.resource)
+		if resolvedID == "" {
+			continue
+		}
+		matchesByID[resolvedID] = resourcePrefixMatch{resolvedID: resolvedID, label: firstNonEmpty(preferredLookupLabel(target, spec.resource), resolvedID)}
+	}
+	matches := make([]resourcePrefixMatch, 0, len(matchesByID))
+	for _, match := range matchesByID {
+		matches = append(matches, match)
+	}
+	return matches
+}
+
+func resourceLookupTarget(item map[string]any, spec resourceIDLookupSpec) map[string]any {
+	if item == nil {
+		return nil
+	}
+	target := item
+	if len(spec.idFieldPath) > 1 {
+		for _, segment := range spec.idFieldPath[:len(spec.idFieldPath)-1] {
+			next, _ := target[segment].(map[string]any)
+			if next == nil {
+				return item
+			}
+			target = next
+		}
+	}
+	return target
+}
+
+func resourceLookupCandidates(item map[string]any, kind string) []string {
+	kind = canonicalResourceKind(kind)
+	values := []string{
+		anyString(item["ref"]),
+		refID(anyString(item["ref"])),
+		anyString(item["handle"]),
+		anyString(item[kind+"_ref"]),
+		refID(anyString(item[kind+"_ref"])),
+		anyString(item[kind+"_handle"]),
+		anyString(item["id"]),
+	}
+	return normalizeStringFilters(values)
+}
+
+func resourceLookupMatches(candidates []string, rawID string) bool {
+	rawID = strings.ToLower(strings.TrimSpace(rawID))
+	if rawID == "" {
+		return false
+	}
+	for _, candidate := range candidates {
+		candidate = strings.ToLower(strings.TrimSpace(candidate))
+		if candidate == rawID || strings.HasPrefix(candidate, rawID) {
+			return true
+		}
+	}
+	return false
+}
+
+func preferredLookupID(item map[string]any, kind string) string {
+	if ref := strings.TrimSpace(anyString(item["ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item["handle"])); handle != "" {
+		return handle
+	}
+	kind = canonicalResourceKind(kind)
+	if ref := strings.TrimSpace(anyString(item[kind+"_ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item[kind+"_handle"])); handle != "" {
+		return handle
+	}
+	return strings.TrimSpace(anyString(item["id"]))
+}
+
+func preferredLookupLabel(item map[string]any, kind string) string {
+	if ref := strings.TrimSpace(anyString(item["ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item["handle"])); handle != "" {
+		return canonicalResourceKind(kind) + ":" + handle
+	}
+	return publicRefFromID(kind, anyString(item["id"]))
 }
 
 func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Resolved, refsJSON, filePath, summary, artifactJSON, actorID string) (*commandResult, error) {
 	refsJSON = strings.TrimSpace(refsJSON)
 	var refsProbe []any
 	if err := json.Unmarshal([]byte(refsJSON), &refsProbe); err != nil || len(refsProbe) == 0 {
-		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"thread:<id>\"])")
+		return nil, errnorm.Usage("invalid_request", "--refs must be a JSON array of typed ref strings (e.g. [\"topic:launch\"])")
 	}
 	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
 	file, err := os.Open(cleanPath)

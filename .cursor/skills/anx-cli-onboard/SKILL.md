@@ -79,7 +79,7 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 ## Command habits
 
 - Use list/get/context/workspace commands to orient before editing.
-- Default output uses **10-character** `short_id` prefixes; the CLI **resolves** those prefixes to canonical ids on input. Use `--full-id` when you need full ids for copy/paste or when resolution reports an ambiguous prefix.
+- Default output leads with **public typed refs** (`topic:<handle>`, `board:<handle>`, `card:<handle>`) and bare handles. The CLI resolves handles and typed refs to canonical resources on input. Use `--full-id` (debug/admin only) when you need the internal UUID for debugging.
 - Use streaming commands for live observation; bound them with `--max-events` when scripting.
 - Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability.
 - Prefer narrow filters over broad listings when triaging large state.

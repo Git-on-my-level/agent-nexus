@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
+  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let board = $state(/** @type {Record<string, any> | null} */ (null));
@@ -15,9 +16,16 @@
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   let boardId = $derived(String($page.params.boardId ?? "").trim());
+  let boardRouteSegment = $derived(
+    resourceRouteSegment(board, "board") || boardId,
+  );
 
   function boardDetailHref() {
-    return workspacePath(organizationSlug, workspaceSlug, `/boards/${boardId}`);
+    return workspacePath(
+      organizationSlug,
+      workspaceSlug,
+      `/boards/${encodeURIComponent(boardRouteSegment)}`,
+    );
   }
 
   function boardsHref() {

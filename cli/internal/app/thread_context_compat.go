@@ -154,40 +154,6 @@ func (a *App) loadThreadContextEnvelope(ctx context.Context, cfg config.Resolved
 	if invokeErr != nil {
 		return 0, nil, nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "threads context request failed", invokeErr)
 	}
-	if resp.StatusCode == http.StatusNotFound {
-		bodyText := strings.ToLower(strings.TrimSpace(string(resp.Body)))
-		if strings.Contains(bodyText, "endpoint not found") {
-			return resp.StatusCode, normalizedHeaders(resp.Headers), nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-		}
-
-		resolvedThreadID, resolveErr := a.resolveResourceIDFromList(ctx, cfg, threadID, threadIDLookupSpec)
-		if resolveErr != nil {
-			return 0, nil, nil, resolveErr
-		}
-		if strings.TrimSpace(resolvedThreadID) != strings.TrimSpace(threadID) {
-			path = "/threads/" + url.PathEscape(strings.TrimSpace(resolvedThreadID)) + "/context"
-			if encoded := url.Values(queryValues).Encode(); encoded != "" {
-				path += "?" + encoded
-			}
-			resp, invokeErr = client.RawCall(ctx, httpclient.RawRequest{
-				Method:  http.MethodGet,
-				Path:    path,
-				Headers: generatedHeaders(authCfg),
-			})
-			if invokeErr != nil {
-				return 0, nil, nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "threads context request failed", invokeErr)
-			}
-			if resp.StatusCode == http.StatusNotFound {
-				bodyText := strings.ToLower(strings.TrimSpace(string(resp.Body)))
-				if strings.Contains(bodyText, "endpoint not found") {
-					return resp.StatusCode, normalizedHeaders(resp.Headers), nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-				}
-			}
-			if resp.StatusCode >= http.StatusBadRequest {
-				return resp.StatusCode, normalizedHeaders(resp.Headers), nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-			}
-		}
-	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		return resp.StatusCode, normalizedHeaders(resp.Headers), nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
 	}

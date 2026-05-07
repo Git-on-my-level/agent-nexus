@@ -1,6 +1,6 @@
 {
   "name": "agent-nexus-ui",
-  "version": "0.8.2",
+  "version": "0.9.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -13,6 +13,7 @@
     "screenshot": "node scripts/capture-screenshot.mjs",
     "qa:baseline": "node scripts/qa-capture.mjs --baseline",
     "qa:diff": "node scripts/qa-visual.mjs --diff",
+    "generate:icons": "node scripts/generate-pwa-icons.mjs",
     "lint": "eslint . && node scripts/check-svelte5-runes.js && node scripts/check-topic-create-call-sites.mjs && prettier --check \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",
     "format": "prettier --write \"src/**/*.{js,svelte,css}\" \"tests/**/*.js\" \"*.{json,js,cjs}\" \".github/workflows/*.yml\"",
     "test:unit": "vitest run",

@@ -20,6 +20,10 @@
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import {
+    resourceDisplayLabel,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   const defaultBoardListFilters = {
     states: ["active"],
@@ -213,8 +217,8 @@
 
   /** @param {number} i */
   function boardHrefAtVisibleIndex(i) {
-    const id = boardIdAtVisibleIndex(i);
-    return workspaceHref(`/boards/${id}`);
+    const segment = resourceRouteSegment(boards[i]?.board, "board");
+    return workspaceHref(`/boards/${encodeURIComponent(segment)}`);
   }
 
   function boardIdsForBulkArchive() {
@@ -553,7 +557,7 @@
       {@const selected = boardSel.selectedIds.has(board.id)}
       {#if boardSel.selectMode}
         <div
-          aria-label={`${selected ? "Deselect" : "Select"} ${board.title || board.id}`}
+          aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(board)}`}
           aria-pressed={selected}
           class="flex cursor-pointer items-stretch outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel {showBorderTop
             ? 'border-t border-line'
@@ -580,7 +584,7 @@
             class="pointer-events-none flex min-w-0 flex-1 items-start justify-between gap-3 px-3 py-2.5 sm:px-4"
           >
             <WorkspaceResourceListRow
-              title={board.title || board.id}
+              title={resourceDisplayLabel(board)}
               description={board.summary ?? ""}
             >
               {#snippet badges()}
@@ -618,9 +622,11 @@
             class="group relative min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-line-subtle sm:px-4"
           >
             <a
-              aria-label={`Open board ${board.title || board.id}`}
+              aria-label={`Open board ${resourceDisplayLabel(board)}`}
               class="absolute inset-0 z-0"
-              href={workspaceHref(`/boards/${board.id}`)}
+              href={workspaceHref(
+                `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
+              )}
             ></a>
             <div
               class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
@@ -628,7 +634,7 @@
               <div class="min-w-0 flex-1">
                 <div class="flex min-w-0 items-start justify-between gap-3">
                   <WorkspaceResourceListRow
-                    title={board.title || board.id}
+                    title={resourceDisplayLabel(board)}
                     description={board.summary ?? ""}
                     titleClass="group-hover:text-accent-text transition-colors"
                   >

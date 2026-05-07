@@ -11,7 +11,7 @@ describe("eventRefRules", () => {
     it("returns rule for known event type", () => {
       const rule = getEventRefRule("topic_created");
       expect(rule).toBeTruthy();
-      expect(rule.refs_must_include).toEqual(["topic:<topic_id>"]);
+      expect(rule.refs_must_include).toEqual(["topic:<topic_handle>"]);
     });
 
     it("returns null for unknown event type", () => {

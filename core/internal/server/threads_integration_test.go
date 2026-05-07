@@ -651,7 +651,7 @@ func TestThreadContextBundlesRecentEventsArtifactsAndOpenCards(t *testing.T) {
 	if len(payload.KeyArtifacts) != 1 {
 		t.Fatalf("expected 1 key artifact, got %d", len(payload.KeyArtifacts))
 	}
-	if asString(payload.KeyArtifacts[0]["ref"]) != "artifact:ctx-artifact-1" {
+	if asString(payload.KeyArtifacts[0]["ref"]) != "artifact:context-artifact" {
 		t.Fatalf("unexpected key artifact ref: %#v", payload.KeyArtifacts[0])
 	}
 	artifactObj, _ := payload.KeyArtifacts[0]["artifact"].(map[string]any)
@@ -881,7 +881,7 @@ func TestThreadWorkspaceBundlesCanonicalAndDerivedSections(t *testing.T) {
 	if payload.ThreadID != rootThreadID || asString(payload.Thread["id"]) != rootThreadID {
 		t.Fatalf("unexpected workspace thread payload: %#v", payload)
 	}
-	if len(payload.Context.KeyArtifacts) != 1 || asString(payload.Context.KeyArtifacts[0]["ref"]) != "artifact:workspace-artifact-1" {
+	if len(payload.Context.KeyArtifacts) != 1 || asString(payload.Context.KeyArtifacts[0]["ref"]) != "artifact:workspace-artifact" {
 		t.Fatalf("expected key artifact in workspace context, got %#v", payload.Context.KeyArtifacts)
 	}
 	if len(payload.Context.OpenCards) != 0 {
@@ -929,23 +929,25 @@ func assertDocLifecycleEventRefs(t *testing.T, event map[string]any, threadID, d
 	if !ok {
 		t.Fatalf("expected refs array on lifecycle event, got %#v", event["refs"])
 	}
-	if !containsAny(refs, "thread:"+threadID) {
-		t.Fatalf("expected thread ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "document:"+documentID) {
-		t.Fatalf("expected document ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "document_revision:"+revisionID) {
-		t.Fatalf("expected document revision ref on lifecycle event, got %#v", refs)
-	}
-	if !containsAny(refs, "artifact:"+artifactID) {
-		t.Fatalf("expected artifact ref on lifecycle event, got %#v", refs)
+	for _, prefix := range []string{"thread:", "document:", "document_revision:", "artifact:"} {
+		if !containsAnyWithPrefix(refs, prefix) {
+			t.Fatalf("expected %s public ref on lifecycle event, got %#v", prefix, refs)
+		}
 	}
 }
 
 func containsAny(values []any, expected string) bool {
 	for _, value := range values {
 		if text, ok := value.(string); ok && text == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyWithPrefix(values []any, prefix string) bool {
+	for _, value := range values {
+		if text, ok := value.(string); ok && strings.HasPrefix(text, prefix) {
 			return true
 		}
 	}

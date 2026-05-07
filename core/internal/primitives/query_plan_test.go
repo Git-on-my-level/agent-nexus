@@ -89,14 +89,14 @@ func TestBuildListThreadsQueryAddsWhereBeforeQFilter(t *testing.T) {
 	if strings.Contains(query, "derived_topic_views") {
 		t.Fatalf("list threads should not join derived_topic_views, got query:\n%s", query)
 	}
-	if !strings.Contains(query, "threads.thread_id") || !strings.Contains(query, "json_extract(body_json, '$.subject_ref')") {
+	if !strings.Contains(query, "threads.thread_id") || !strings.Contains(query, "threads.handle") || !strings.Contains(query, "'thread:' ||") || !strings.Contains(query, "json_extract(body_json, '$.subject_ref')") {
 		t.Fatalf("expected backing-thread search fields in query, got:\n%s", query)
 	}
 	if !strings.Contains(query, "json_extract(body_json, '$.title')") {
 		t.Fatalf("expected title in thread search, got:\n%s", query)
 	}
-	if len(args) != 5 {
-		t.Fatalf("expected 5 query args, got %d (%#v)", len(args), args)
+	if len(args) != 7 {
+		t.Fatalf("expected 7 query args, got %d (%#v)", len(args), args)
 	}
 }
 
