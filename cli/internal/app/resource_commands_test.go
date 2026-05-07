@@ -558,6 +558,56 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	}
 }
 
+func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
+	t.Parallel()
+
+	var captured map[string]any
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic:launch":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_internal_1","ref":"topic:launch","handle":"launch","thread_id":"thread_from_topic"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/events":
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Fatalf("decode human ask body: %v", err)
+			}
+			_, _ = w.Write([]byte(`{"event":{"id":"event_ask_1","type":"human_attention_requested","thread_id":"thread_from_topic"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--agent", "agent-a",
+		"human", "ask", "Should we ship Friday?",
+		"--subject-ref", "topic:launch",
+		"--recommended-response", "Ship Friday with a rollback plan ready.",
+	})
+	assertEnvelopeOK(t, raw)
+
+	if len(seen) != 2 || seen[0] != "GET /topics/topic:launch" || seen[1] != "POST /events" {
+		t.Fatalf("expected topic lookup before event create, got %#v", seen)
+	}
+	event, _ := captured["event"].(map[string]any)
+	if got := strings.TrimSpace(anyStringValue(event["thread_id"])); got != "thread_from_topic" {
+		t.Fatalf("expected thread_from_topic from topic lookup, got %#v", captured)
+	}
+	rawRefs, _ := event["refs"].([]any)
+	refs := make([]string, 0, len(rawRefs))
+	for _, raw := range rawRefs {
+		refs = append(refs, strings.TrimSpace(anyStringValue(raw)))
+	}
+	if !hasString(refs, "thread:thread_from_topic") || !hasString(refs, "topic:launch") {
+		t.Fatalf("expected resolved thread and subject refs, got %#v", refs)
+	}
+}
+
 func TestHumanCommandRequiresSubjectRef(t *testing.T) {
 	t.Parallel()
 

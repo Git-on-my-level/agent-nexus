@@ -24,6 +24,10 @@ type manualProjectionHarness struct {
 }
 
 func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
+	return newManualProjectionTestServerWithAttachedMaintainer(t, false)
+}
+
+func newManualProjectionTestServerWithAttachedMaintainer(t *testing.T, attachMaintainer bool) manualProjectionHarness {
 	t.Helper()
 
 	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
@@ -46,14 +50,20 @@ func newManualProjectionTestServer(t *testing.T) manualProjectionHarness {
 		DirtyBatchSize:   20,
 		SystemActorID:    actors.SystemActorID,
 	})
-	handler := NewHandler(
-		contract.Version,
+	options := []HandlerOption{
 		WithHealthCheck(workspace.Ping),
 		WithActorRegistry(registry),
 		WithPrimitiveStore(primitiveStore),
 		WithSchemaContract(contract),
 		WithAllowUnauthenticatedWrites(true),
 		WithEnableDevActorMode(true),
+	}
+	if attachMaintainer {
+		options = append(options, WithProjectionMaintainer(maintainer))
+	}
+	handler := NewHandler(
+		contract.Version,
+		options...,
 	)
 	server := httptest.NewServer(handler)
 	t.Cleanup(func() {
@@ -190,6 +200,45 @@ func TestProjectionMaintainerStepClearsPendingStatus(t *testing.T) {
 	}
 	if statuses[threadID].IsDirty() || statuses[threadID].InProgress() || statuses[threadID].LastErrorMessage != "" {
 		t.Fatalf("expected clean refresh status after worker run, got %#v", statuses[threadID])
+	}
+}
+
+func TestHumanAttentionRequestIndexesInboxBeforeCreateReturns(t *testing.T) {
+	t.Parallel()
+
+	h := newManualProjectionTestServerWithAttachedMaintainer(t, true)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Immediate inbox thread")
+	created := createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Need a decision", "thread:"+threadID, nil, nil)
+	requestEventID := asString(created["id"])
+	if requestEventID == "" {
+		t.Fatal("expected created human attention event id")
+	}
+
+	inboxResp, err := http.Get(h.baseURL + "/inbox")
+	if err != nil {
+		t.Fatalf("GET /inbox: %v", err)
+	}
+	defer inboxResp.Body.Close()
+	if inboxResp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected inbox status: %d", inboxResp.StatusCode)
+	}
+
+	var inboxPayload struct {
+		Items               []map[string]any `json:"items"`
+		ProjectionFreshness map[string]any   `json:"projection_freshness"`
+	}
+	if err := json.NewDecoder(inboxResp.Body).Decode(&inboxPayload); err != nil {
+		t.Fatalf("decode inbox payload: %v", err)
+	}
+	if got := asString(inboxPayload.ProjectionFreshness["status"]); got != "current" {
+		t.Fatalf("expected current inbox freshness immediately after create, got %#v", inboxPayload.ProjectionFreshness)
+	}
+	if _, ok := findInboxItem(inboxPayload.Items, func(item map[string]any) bool {
+		return asString(item["source_event_id"]) == requestEventID
+	}); !ok {
+		t.Fatalf("expected immediate human attention inbox item for %s, got %#v", requestEventID, inboxPayload.Items)
 	}
 }
 

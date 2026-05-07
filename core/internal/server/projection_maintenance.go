@@ -192,6 +192,55 @@ func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time
 	return nil
 }
 
+func (m *ProjectionMaintainer) RefreshThread(ctx context.Context, threadID string, now time.Time) error {
+	if m == nil || m.opts.primitiveStore == nil {
+		return nil
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	m.stepMu.Lock()
+	defer m.stepMu.Unlock()
+
+	startedGeneration, err := m.opts.primitiveStore.MarkTopicProjectionRefreshStarted(ctx, threadID, now)
+	if err != nil {
+		m.recordError("start_dirty_projection", now, err)
+		return fmt.Errorf("mark dirty projection %s started: %w", threadID, err)
+	}
+	if err := m.opts.primitiveStore.ClearDerivedTopicProjectionDirty(ctx, threadID); err != nil {
+		m.recordError("clear_dirty_projection", now, err)
+		return fmt.Errorf("clear dirty projection %s: %w", threadID, err)
+	}
+	if startedGeneration == 0 {
+		return nil
+	}
+	if err := refreshDerivedTopicProjection(ctx, m.opts, threadID, now, m.systemActorID); err != nil {
+		failureMessage := fmt.Sprintf("refresh dirty projection %s: %v", threadID, err)
+		if queueErr := m.opts.primitiveStore.RequeueTopicProjectionRefresh(ctx, threadID, now); queueErr != nil {
+			m.recordError("requeue_failed_projection", now, queueErr)
+			return fmt.Errorf("%s: %w", failureMessage, queueErr)
+		}
+		if markErr := m.opts.primitiveStore.MarkTopicProjectionRefreshFailed(ctx, threadID, startedGeneration, now, failureMessage); markErr != nil {
+			m.recordError("mark_failed_projection", now, markErr)
+			return fmt.Errorf("%s: %w", failureMessage, markErr)
+		}
+		m.recordError("refresh_dirty_projection", now, err)
+		return fmt.Errorf("refresh dirty projection %s: %w", threadID, err)
+	}
+	completedAt := time.Now().UTC()
+	if err := m.opts.primitiveStore.MarkTopicProjectionRefreshSucceeded(ctx, threadID, startedGeneration, completedAt); err != nil {
+		m.recordError("mark_succeeded_projection", completedAt, err)
+		return fmt.Errorf("mark dirty projection %s succeeded: %w", threadID, err)
+	}
+	m.clearError()
+	return nil
+}
+
 func (m *ProjectionMaintainer) Snapshot(ctx context.Context, now time.Time) ProjectionMaintenanceSnapshot {
 	if m == nil || m.opts.primitiveStore == nil {
 		return ProjectionMaintenanceSnapshot{}
