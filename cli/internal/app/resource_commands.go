@@ -1092,22 +1092,8 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		result, err := a.invokeTypedJSON(ctx, cfg, "artifacts list", "artifacts.list", nil, query, nil)
 		return result, "artifacts list", err
 	case "get":
-		id, err := parseResourceIDArg(args[1:], "artifact-id", "artifact id", "artifact")
-		if err != nil {
-			return nil, "artifacts get", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"artifacts get",
-			"artifacts.get",
-			"artifact_id",
-			id,
-			artifactIDLookupSpec,
-			nil,
-			nil,
-		)
-		return result, "artifacts get", callErr
+		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
+		return result, "artifacts inspect", callErr
 	case "create":
 		body, err := a.parseJSONBodyInput(args[1:], "artifacts create")
 		if err != nil {
@@ -1115,15 +1101,19 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "artifacts create", "artifacts.create", nil, nil, body)
 		return addResourceURLToResult(cfg, "artifacts.create", result), "artifacts create", callErr
-	case "content":
-		fs := newSilentFlagSet("artifacts content")
+	case "content", "download":
+		commandName := "artifacts content"
+		if sub == "download" {
+			commandName = "artifacts download"
+		}
+		fs := newSilentFlagSet(commandName)
 		var artifactIDFlag trackedString
 		var outputPath string
 		fs.Var(&artifactIDFlag, "artifact-id", "Artifact id")
 		fs.StringVar(&outputPath, "o", "", "Write raw artifact bytes to file")
 		fs.StringVar(&outputPath, "output", "", "Write raw artifact bytes to file")
 		if err := fs.Parse(args[1:]); err != nil {
-			return nil, "artifacts content", errnorm.Usage("invalid_flags", err.Error())
+			return nil, commandName, errnorm.Usage("invalid_flags", err.Error())
 		}
 		positionals := fs.Args()
 		id := strings.TrimSpace(artifactIDFlag.value)
@@ -1132,21 +1122,21 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 			positionals = positionals[1:]
 		}
 		if len(positionals) > 0 {
-			return nil, "artifacts content", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx artifacts content`")
+			return nil, commandName, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 		}
 		if err := validateID(id, "artifact id"); err != nil {
-			return nil, "artifacts content", err
+			return nil, commandName, err
 		}
 		result, callErr := a.invokeArtifactContentWithIDResolution(
 			ctx,
 			cfg,
-			"artifacts content",
+			commandName,
 			"artifact_id",
 			id,
 			artifactIDLookupSpec,
 			strings.TrimSpace(outputPath),
 		)
-		return result, "artifacts content", callErr
+		return result, commandName, callErr
 	case "inspect":
 		result, callErr := a.runArtifactsInspectCommand(ctx, args[1:], cfg)
 		return result, "artifacts inspect", callErr
@@ -3155,6 +3145,8 @@ func (a *App) parseDocsCreateInput(args []string, cfg config.Resolved) (any, boo
 	var dryRunFlag trackedBool
 	var refFlags trackedStrings
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "json-file", "Load JSON body from file path")
+	fs.Var(&contentFileFlag, "body-file", "Load document content from a local file or stdin with -")
 	fs.Var(&contentFileFlag, "content-file", "Load document content from a local file")
 	fs.Var(&titleFlag, "title", "Document title")
 	fs.Var(&summaryFlag, "summary", "Document summary")
@@ -3240,6 +3232,7 @@ func (a *App) parseBoardCreateInput(args []string, cfg config.Resolved, commandN
 	var fromFileFlag, titleFlag, summaryFlag, topicFlag, actorIDFlag trackedString
 	var documentRefFlags, pinnedRefFlags trackedStrings
 	var dryRunFlag trackedBool
+	fs.Var(&fromFileFlag, "body-file", "Advanced JSON request body from file or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&titleFlag, "title", "Board title")
 	fs.Var(&summaryFlag, "summary", "Board summary")
@@ -3339,6 +3332,7 @@ func (a *App) parseJSONBodyInputWithOptions(args []string, commandName string, o
 	var fromFileFlag, contentFileFlag trackedString
 	var dryRunFlag trackedBool
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	if options.allowContentFile {
 		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
 	}
@@ -3390,6 +3384,7 @@ func (a *App) parseIDAndBodyInputWithOptions(args []string, idFlag string, idLab
 	var dryRunFlag trackedBool
 	fs.Var(&idArgFlag, idFlag, idLabel)
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	if options.allowContentFile {
 		fs.Var(&contentFileFlag, "content-file", "Load request content field from file path")
 	}
@@ -3492,6 +3487,7 @@ func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
 	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done only; use trash to abandon work)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
@@ -3614,6 +3610,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	var boardIDFlag, fromFileFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	fs.Var(&boardIDFlag, "board-id", "Board id")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&requestKeyFlag, "request-key", "Request key")
@@ -3694,6 +3691,7 @@ func (a *App) parseBoardCardUpdateInput(ctx context.Context, args []string, cfg 
 	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
 	fs.Var(&resolutionFlag, "resolution", "Terminal resolution (done only); card must already be in the done column (use `anx cards move` to change columns)")
 	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&clearDocumentRefFlag, "clear-document-ref", "Clear the document ref")
 	if err := fs.Parse(args); err != nil {
@@ -3786,6 +3784,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id")
@@ -3827,9 +3826,6 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		return "", "", nil, err
 	}
 	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag) {
-			return "", "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
-		}
 		body, err := decodeJSONPayload(payload)
 		if err != nil {
 			return "", "", nil, err
@@ -3843,6 +3839,35 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		}
 		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
 			return "", "", nil, err
+		}
+		if column := strings.TrimSpace(columnFlag.value); column != "" {
+			bodyMap["column_key"] = column
+		}
+		if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
+			bodyMap["if_board_updated_at"] = ifBoardUpdatedAt
+		}
+		if beforeCardID := strings.TrimSpace(beforeCardIDFlag.value); beforeCardID != "" {
+			resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCardID)
+			if err != nil {
+				return "", "", nil, err
+			}
+			bodyMap["before_card_id"] = resolved
+		}
+		if afterCardID := strings.TrimSpace(afterCardIDFlag.value); afterCardID != "" {
+			resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCardID)
+			if err != nil {
+				return "", "", nil, err
+			}
+			bodyMap["after_card_id"] = resolved
+		}
+		if rawActorID := strings.TrimSpace(actorIDFlag.value); rawActorID != "" {
+			actorID, err := resolveActorIDAlias(rawActorID, cfg)
+			if err != nil {
+				return "", "", nil, err
+			}
+			if actorID != "" {
+				bodyMap["actor_id"] = actorID
+			}
 		}
 		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
 			return "", "", nil, err
@@ -3887,6 +3912,7 @@ func (a *App) parseBoardCardArchiveInput(ctx context.Context, args []string, cfg
 	fs.Var(&cardIDFlag, "card-id", "Card id")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	if err := fs.Parse(args); err != nil {
 		return nil, nil, errnorm.Usage("invalid_flags", err.Error())
@@ -4196,6 +4222,7 @@ func validateTypedRefShape(ref string) error {
 func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("derived rebuild")
 	var fromFileFlag, actorIDFlag trackedString
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
@@ -4241,6 +4268,7 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("inbox respond")
 	var fromFileFlag, inboxItemIDFlag, responseTextFlag, notifyModeFlag, actorIDFlag trackedString
+	fs.Var(&fromFileFlag, "body-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
 	fs.Var(&responseTextFlag, "response-text", "Freeform response text")
@@ -5821,6 +5849,14 @@ func (a *App) applyContentFileOverride(body any, contentFile string, commandName
 }
 
 func (a *App) readRawFile(path string) ([]byte, error) {
+	path = strings.TrimSpace(path)
+	if path == "-" {
+		content, err := a.readStdinBody()
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read stdin", err)
+		}
+		return content, nil
+	}
 	readFile := a.ReadFile
 	if readFile == nil {
 		readFile = os.ReadFile
@@ -5833,7 +5869,18 @@ func (a *App) readRawFile(path string) ([]byte, error) {
 }
 
 func (a *App) readBodyInput(fromFile string) ([]byte, error) {
+	fromFile = strings.TrimSpace(fromFile)
 	if fromFile != "" {
+		if fromFile == "-" {
+			content, err := a.readStdinBody()
+			if err != nil {
+				return nil, errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read stdin", err)
+			}
+			if len(strings.TrimSpace(string(content))) == 0 {
+				return nil, nil
+			}
+			return content, nil
+		}
 		readFile := a.ReadFile
 		if readFile == nil {
 			readFile = os.ReadFile

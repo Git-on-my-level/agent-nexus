@@ -97,9 +97,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `inbox stream` (command): Stream inbox items (SSE)
 - `inbox tail` (command): Stream inbox items (SSE)
 - `artifacts list` (command): List artifacts
-- `artifacts get` (command): Get artifact metadata
 - `artifacts create` (command): Create artifact
 - `artifacts content` (command): Download artifact bytes
+- `artifacts download` (command): Download artifact bytes
 - `artifacts archive` (command): Archive artifact
 - `artifacts unarchive` (command): Unarchive artifact
 - `artifacts trash` (command): Move artifact to trash
@@ -1530,7 +1530,6 @@ Commands:
   artifacts archive        Archive artifact
   artifacts content        Download artifact bytes
   artifacts create         Create artifact
-  artifacts get            Get artifact metadata
   artifacts list           List artifacts
   artifacts purge          Permanently delete trashed artifact
   artifacts restore        Restore artifact from trash
@@ -1539,6 +1538,8 @@ Commands:
 
 Local inspection helper:
   artifacts inspect        Fetch artifact metadata and content in one call.
+  artifacts get            Compatibility alias for artifacts inspect.
+  artifacts download       Download raw artifact bytes (alias for artifacts content).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -3457,34 +3458,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `artifacts get`
-
-Get artifact metadata
-
-```text
-Generated Help: artifacts get
-
-- Command ID: `artifacts.get`
-- CLI path: `artifacts get`
-- HTTP: `GET /artifacts/{artifact_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve immutable artifact metadata referenced from timelines and resources.
-- Output: Returns `{ artifact }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `artifacts`
-- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts content`, `artifacts create`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
-
-Inputs:
-  Required:
-  - path `artifact_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx artifacts get ... ; anx --json artifacts get ... ; anx artifacts get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `artifacts create`
 
 Create artifact
@@ -3542,6 +3515,34 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `artifacts download`
+
+Download artifact bytes
+
+```text
+Generated Help: artifacts download
+
+- Command ID: `artifacts.content`
+- CLI path: `artifacts content`
+- HTTP: `GET /artifacts/{artifact_id}/content`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
+- Output: Raw bytes or JSON/text depending on artifact.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `artifacts`
+- Adjacent commands: `artifacts archive`, `artifacts attachments create`, `artifacts create`, `artifacts get`, `artifacts list`, `artifacts purge`, `artifacts restore`, `artifacts trash`, `artifacts unarchive`
+
+Inputs:
+  Required:
+  - path `artifact_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx artifacts download ... ; anx --json artifacts download ... ; anx artifacts download ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4175,10 +4176,10 @@ Local Help: docs create
 - Kind: `local helper`
 - Summary: Create a durable document lineage, with a file-first text-doc path for agents.
 - Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
-- JSON body: Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
+- JSON body: Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.
 - Examples:
-  - `anx docs create --topic <topic-id> --title "Runbook" --content-file runbook.md`
-  - `anx docs create --subject-ref topic:<topic-id> --title "Runbook" --summary "Durable context" --content-file runbook.md`
+  - `anx docs create --topic <topic-id> --title "Runbook" --body-file runbook.md`
+  - `anx docs create --subject-ref topic:<topic-id> --title "Runbook" --summary "Durable context" --body-file runbook.md`
   - `cat doc-create.json | anx docs create`
 
 Flags:
@@ -4188,7 +4189,8 @@ Flags:
   --summary <text>             Optional document summary for list/detail headers.
   --actor-id <actor-id>        Actor id; defaults from the active profile when available.
   --ref <typed-ref>            Additional typed ref (repeatable).
-  --content-file <path>        Load Markdown/text content from a local file.
+  --body-file <path>           Load Markdown/text content from a local file, or stdin with `-`.
+  --content-file <path>        Backward-compatible alias for --body-file.
   --from-file <path>           Advanced JSON request body from file.
   --dry-run                    Validate and render the request without sending it.
 
@@ -4208,17 +4210,19 @@ Local Help: cards create
 
 - Kind: `local helper`
 - Summary: Create a board work card from flags plus a local prose file, or from advanced JSON.
-- Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.
-- JSON body: Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
+- Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--body-file` so the CLI can fill the stable Card envelope.
+- JSON body: Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
 - Examples:
-  - `anx cards create --board <board-id> --topic <topic-id> --title "Implement login" --content-file card.md`
-  - `anx cards create --board <board-id> --title "Implement login" --content-file card.md --assignee-ref actor:<actor-id>`
+  - `anx cards create --board <board-id> --topic <topic-id> --title "Implement login" --body-file card.md`
+  - `anx cards create --board <board-id> --title "Implement login" --body "Inline summary"`
   - `cat card-create.json | anx cards create`
 
 Flags:
   --board <board-id>           Board id for the new work card.
   --title <text>               Card title.
-  --content-file <path>        Load card summary/body text from a local file.
+  --body <text>                Inline card summary/body text.
+  --body-file <path>           Load card summary/body text from a local file, or stdin with `-`.
+  --content-file <path>        Backward-compatible alias for --body-file.
   --topic <topic-id>           Related topic id; plain ids are normalized to topic:<id>.
   --column <key>               Initial board column; defaults to backlog.
   --assignee-ref <typed-ref>   Assignee actor ref, repeatable.
@@ -4631,7 +4635,7 @@ Local Help: artifacts inspect
 
 - Kind: `local helper`
 - Summary: Fetch artifact metadata and resolved content in one command for operator inspection.
-- Composition: Loads artifact metadata with `artifacts get`, then fetches content with `artifacts content` using the resolved artifact id.
+- Composition: Loads artifact metadata, then fetches content with `artifacts content` using the resolved artifact id.
 - JSON body: `artifact`, `content`, `content_headers`, `content_text`, `content_base64`
 - Examples:
   - `anx artifacts inspect --artifact-id <artifact-id>`

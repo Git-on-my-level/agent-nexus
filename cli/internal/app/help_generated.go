@@ -151,11 +151,11 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "docs create",
 		Summary:     "Create a durable document lineage, with a file-first text-doc path for agents.",
-		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.",
+		JSONShape:   "Either flags plus `--body-file`, or advanced JSON body `{ document, content, content_type }` from stdin/--from-file.",
 		Composition: "Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.",
 		Examples: []string{
-			"anx docs create --topic <topic-id> --title \"Runbook\" --content-file runbook.md",
-			"anx docs create --subject-ref topic:<topic-id> --title \"Runbook\" --summary \"Durable context\" --content-file runbook.md",
+			"anx docs create --topic <topic-id> --title \"Runbook\" --body-file runbook.md",
+			"anx docs create --subject-ref topic:<topic-id> --title \"Runbook\" --summary \"Durable context\" --body-file runbook.md",
 			"cat doc-create.json | anx docs create",
 		},
 		Flags: []localHelperFlag{
@@ -165,7 +165,8 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Optional document summary for list/detail headers."},
 			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref (repeatable)."},
-			{Name: "--content-file <path>", Description: "Load Markdown/text content from a local file."},
+			{Name: "--body-file <path>", Description: "Load Markdown/text content from a local file, or stdin with `-`."},
+			{Name: "--content-file <path>", Description: "Backward-compatible alias for --body-file."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -173,17 +174,19 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "cards create",
 		Summary:     "Create a board work card from flags plus a local prose file, or from advanced JSON.",
-		JSONShape:   "Either flags plus `--content-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.",
-		Composition: "Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--content-file` so the CLI can fill the stable Card envelope.",
+		JSONShape:   "Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.",
+		Composition: "Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--body-file` so the CLI can fill the stable Card envelope.",
 		Examples: []string{
-			"anx cards create --board <board-id> --topic <topic-id> --title \"Implement login\" --content-file card.md",
-			"anx cards create --board <board-id> --title \"Implement login\" --content-file card.md --assignee-ref actor:<actor-id>",
+			"anx cards create --board <board-id> --topic <topic-id> --title \"Implement login\" --body-file card.md",
+			"anx cards create --board <board-id> --title \"Implement login\" --body \"Inline summary\"",
 			"cat card-create.json | anx cards create",
 		},
 		Flags: []localHelperFlag{
 			{Name: "--board <board-id>", Description: "Board id for the new work card."},
 			{Name: "--title <text>", Description: "Card title."},
-			{Name: "--content-file <path>", Description: "Load card summary/body text from a local file."},
+			{Name: "--body <text>", Description: "Inline card summary/body text."},
+			{Name: "--body-file <path>", Description: "Load card summary/body text from a local file, or stdin with `-`."},
+			{Name: "--content-file <path>", Description: "Backward-compatible alias for --body-file."},
 			{Name: "--topic <topic-id>", Description: "Related topic id; plain ids are normalized to topic:<id>."},
 			{Name: "--column <key>", Description: "Initial board column; defaults to backlog."},
 			{Name: "--assignee-ref <typed-ref>", Description: "Assignee actor ref, repeatable."},
@@ -429,7 +432,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "artifacts inspect",
 		Summary:     "Fetch artifact metadata and resolved content in one command for operator inspection.",
 		JSONShape:   "`artifact`, `content`, `content_headers`, `content_text`, `content_base64`",
-		Composition: "Loads artifact metadata with `artifacts get`, then fetches content with `artifacts content` using the resolved artifact id.",
+		Composition: "Loads artifact metadata, then fetches content with `artifacts content` using the resolved artifact id.",
 		Examples: []string{
 			`anx artifacts inspect --artifact-id <artifact-id>`,
 			`anx artifacts inspect <artifact-id-or-alias>`,
@@ -933,7 +936,9 @@ func localGroupHelpSupplement(topic string) string {
   For details: ` + "`anx events explain <event-type>`")
 	case "artifacts":
 		return strings.TrimSpace(`Local inspection helper:
-  artifacts inspect        Fetch artifact metadata and content in one call.`)
+  artifacts inspect        Fetch artifact metadata and content in one call.
+  artifacts get            Compatibility alias for artifacts inspect.
+  artifacts download       Download raw artifact bytes (alias for artifacts content).`)
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
@@ -1444,7 +1449,9 @@ func mapRuntimePathToRegistryPath(path string) string {
 		"events tail":           "events stream",
 		"inbox tail":            "inbox stream",
 		"threads get":           "threads inspect",
+		"artifacts get":         "artifacts inspect",
 		"artifacts content get": "artifacts content",
+		"artifacts download":    "artifacts content",
 		"meta commands":         "meta commands list",
 		"meta command":          "meta commands get",
 		"meta concepts":         "meta concepts list",

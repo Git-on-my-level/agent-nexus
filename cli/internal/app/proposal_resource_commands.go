@@ -110,6 +110,8 @@ func (a *App) parseDocsReviseInput(args []string) (docsReviseInput, error) {
 	fs.Var(&documentIDFlag, "document", "Document id")
 	fs.Var(&proposalIDFlag, "proposal-id", "Staged revision proposal id")
 	fs.Var(&fromFileFlag, "from-file", "Load advanced JSON revision body from file")
+	fs.Var(&fromFileFlag, "json-file", "Load advanced JSON revision body from file")
+	fs.Var(&contentFileFlag, "body-file", "Load revised document content from a local file or stdin with -")
 	fs.Var(&contentFileFlag, "content-file", "Load revised document content from a local file")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	fs.Var(&applyFlag, "apply", "Apply immediately instead of staging a proposal")
