@@ -3834,11 +3834,15 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		if bodyMap == nil {
 			return "", "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
-		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
-			return "", "", nil, err
+		if strings.TrimSpace(beforeCardIDFlag.value) == "" {
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
+				return "", "", nil, err
+			}
 		}
-		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
-			return "", "", nil, err
+		if strings.TrimSpace(afterCardIDFlag.value) == "" {
+			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
+				return "", "", nil, err
+			}
 		}
 		if column := strings.TrimSpace(columnFlag.value); column != "" {
 			bodyMap["column_key"] = column
