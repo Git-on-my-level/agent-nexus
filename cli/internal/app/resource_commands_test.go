@@ -314,7 +314,9 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/cards/card:card_123"):
-			_, _ = w.Write([]byte(`{"card":{"id":"card_123","board_ref":"board:board_123","title":"Card URL"}}`))
+			_, _ = w.Write([]byte(`{"card":{"id":"98341768-646f-48e5-8b98-ddda78ff0fcd","ref":"card:cli-json-body-input","handle":"cli-json-body-input","board_ref":"board:869c2f55-1dd6-479f-9c10-57b1988472e9","title":"Card URL"}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/boards/869c2f55-1dd6-479f-9c10-57b1988472e9"):
+			_, _ = w.Write([]byte(`{"board":{"id":"869c2f55-1dd6-479f-9c10-57b1988472e9","ref":"board:anx-features","handle":"anx-features","title":"ANX Features"}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -324,9 +326,96 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	home := t.TempDir()
 	hostedBase := server.URL + "/ws/david-zhang/personal"
 	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
-	expected := server.URL + "/o/david-zhang/w/personal/boards/board_123?card=card_123"
+	expected := server.URL + "/o/david-zhang/w/personal/boards/anx-features?card=cli-json-body-input"
 	if out != expected {
 		t.Fatalf("expected %q, got %q", expected, out)
+	}
+}
+
+func TestGetCommandResolvesUniqueSlugPrefixAfterNotFound(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/topics/anx-dog":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"topic not found"}}`))
+		case "/topics":
+			_, _ = w.Write([]byte(`{"topics":[{"id":"topic_internal_123","ref":"topic:anx-dogfooding","handle":"anx-dogfooding","title":"ANX Dogfooding"}]}`))
+		case "/topics/topic:anx-dogfooding":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_internal_123","ref":"topic:anx-dogfooding","handle":"anx-dogfooding","title":"ANX Dogfooding"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "topics", "get", "anx-dog"}))
+	topic := asMap(asMap(payload["data"])["topic"])
+	if got := anyStringValue(topic["ref"]); got != "topic:anx-dogfooding" {
+		t.Fatalf("expected resolved topic ref, got %#v", payload)
+	}
+	want := []string{"/topics/anx-dog", "/topics", "/topics/topic:anx-dogfooding"}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected request sequence:\n%v", seen)
+	}
+}
+
+func TestGetCommandRejectsAmbiguousSlugPrefix(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.EscapedPath() {
+		case "/cards/cli":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"card not found"}}`))
+		case "/cards":
+			_, _ = w.Write([]byte(`{"cards":[{"id":"c1","ref":"card:cli-json-body-input","handle":"cli-json-body-input"},{"id":"c2","ref":"card:cli-url-output","handle":"cli-url-output"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "cli"}))
+	if got := anyStringValue(asMap(payload["error"])["code"]); got != "ambiguous_resource_prefix" {
+		t.Fatalf("expected ambiguous_resource_prefix, got %#v", payload)
+	}
+}
+
+func TestMutatingCommandDoesNotRetrySlugPrefixAfterNotFound(t *testing.T) {
+	t.Parallel()
+
+	seen := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		seen = append(seen, r.URL.EscapedPath())
+		switch r.URL.EscapedPath() {
+		case "/cards/cli/trash":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"not_found","message":"card not found"}}`))
+		case "/cards":
+			t.Fatalf("mutating command must not list resources for prefix retry")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"wrong id"}`), []string{"--json", "--base-url", server.URL, "cards", "trash", "cli"}))
+	if got := anyStringValue(asMap(payload["error"])["code"]); got != "not_found" {
+		t.Fatalf("expected original not_found error, got %#v", payload)
+	}
+	want := []string{"/cards/cli/trash"}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected request sequence:\n%v", seen)
 	}
 }
 

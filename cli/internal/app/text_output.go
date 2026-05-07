@@ -1827,27 +1827,34 @@ func formatBoardCardBoardAndCardSummary(body any, headline string) string {
 		lines = appendScalar(lines, "board_updated_at", board, "updated_at")
 	}
 	if card != nil {
+		cardID := strings.TrimSpace(anyString(card["id"]))
+		title := strings.TrimSpace(anyString(card["title"]))
+		subject := displayPublicIdentity(card, "card")
+		if subject == "(unknown)" {
+			subject = cardID
+		}
+		if title != "" && title != subject {
+			if subject != "" {
+				subject = subject + " — " + title
+			} else {
+				subject = title
+			}
+		}
+		if subject == "" {
+			subject = "standalone card"
+		}
+		if strings.HasPrefix(subject, "card:") {
+			lines = append(lines, "- "+subject)
+		} else {
+			lines = append(lines, "- card: "+subject)
+		}
 		threadID := strings.TrimSpace(anyString(card["thread_id"]))
 		if threadID != "" {
-			lines = append(lines, "- thread: "+threadID)
-		} else {
-			cardID := strings.TrimSpace(anyString(card["id"]))
-			title := strings.TrimSpace(anyString(card["title"]))
-			subject := displayPublicIdentity(card, "card")
-			if subject == "(unknown)" {
-				subject = cardID
+			if strings.HasPrefix(threadID, "thread:") {
+				lines = append(lines, "  "+threadID)
+			} else {
+				lines = append(lines, "  thread: "+threadID)
 			}
-			if title != "" && title != subject {
-				if subject != "" {
-					subject = subject + " — " + title
-				} else {
-					subject = title
-				}
-			}
-			if subject == "" {
-				subject = "standalone card"
-			}
-			lines = append(lines, "- card: "+subject)
 		}
 		lines = append(lines, "  column: "+anyString(card["column_key"]))
 		lines = append(lines, "  rank: "+anyString(card["rank"]))
@@ -1885,9 +1892,13 @@ func formatBoardCardCreateResult(body any) string {
 	if subject == "" {
 		subject = "card"
 	}
-	lines = append(lines, "- card: "+subject)
+	if strings.HasPrefix(subject, "card:") {
+		lines = append(lines, "- "+subject)
+	} else {
+		lines = append(lines, "- card: "+subject)
+	}
 	if threadID := threadRefFromCard(card); threadID != "" && threadID != cardID {
-		lines = append(lines, "  thread: "+threadID)
+		lines = append(lines, "  "+threadID)
 	}
 	lines = append(lines, "  column: "+anyString(card["column_key"]))
 	lines = append(lines, "  rank: "+anyString(card["rank"]))

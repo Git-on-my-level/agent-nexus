@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -305,8 +306,20 @@ func (a *App) invokeTypedJSONWithIDResolution(
 	query []queryParam,
 	body any,
 ) (*commandResult, error) {
-	_ = lookupSpec
-	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, map[string]string{pathParamName: rawID}, query, body)
+	pathParams := map[string]string{pathParamName: rawID}
+	result, err := a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
+	if err == nil || !commandAllowsPrefixRetry(commandID) || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
+		return result, err
+	}
+	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if strings.TrimSpace(resolvedID) == "" || resolvedID == rawID {
+		return result, err
+	}
+	pathParams[pathParamName] = resolvedID
+	return a.invokeTypedJSON(ctx, cfg, commandName, commandID, pathParams, query, body)
 }
 
 func (a *App) invokeArtifactContentWithIDResolution(
@@ -318,8 +331,193 @@ func (a *App) invokeArtifactContentWithIDResolution(
 	lookupSpec resourceIDLookupSpec,
 	outputPath string,
 ) (*commandResult, error) {
-	_ = lookupSpec
-	return a.invokeArtifactContent(ctx, cfg, commandName, map[string]string{pathParamName: rawID}, outputPath)
+	pathParams := map[string]string{pathParamName: rawID}
+	result, err := a.invokeArtifactContent(ctx, cfg, commandName, pathParams, outputPath)
+	if err == nil || !isRemoteNotFound(err) || strings.TrimSpace(rawID) == "" {
+		return result, err
+	}
+	resolvedID, resolveErr := a.resolveUniqueResourcePrefix(ctx, cfg, lookupSpec, rawID, pathParams)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	if strings.TrimSpace(resolvedID) == "" || resolvedID == rawID {
+		return result, err
+	}
+	pathParams[pathParamName] = resolvedID
+	return a.invokeArtifactContent(ctx, cfg, commandName, pathParams, outputPath)
+}
+
+func isRemoteNotFound(err error) bool {
+	var normalized *errnorm.Error
+	if !errors.As(err, &normalized) || normalized == nil {
+		return false
+	}
+	if normalized.Code == "not_found" {
+		return true
+	}
+	details, _ := normalized.Details.(map[string]any)
+	switch status := details["status"].(type) {
+	case int:
+		return status == http.StatusNotFound
+	case float64:
+		return int(status) == http.StatusNotFound
+	default:
+		return false
+	}
+}
+
+func commandAllowsPrefixRetry(commandID string) bool {
+	return strings.EqualFold(resolveCommandMethod(commandID), http.MethodGet)
+}
+
+func (a *App) resolveUniqueResourcePrefix(ctx context.Context, cfg config.Resolved, spec resourceIDLookupSpec, rawID string, originalPathParams map[string]string) (string, error) {
+	rawID = strings.TrimSpace(rawID)
+	if rawID == "" || strings.TrimSpace(spec.listCommandID) == "" || strings.TrimSpace(spec.listField) == "" {
+		return "", nil
+	}
+	listPathParams := map[string]string{}
+	if commandSpec, ok := commandSpecByID(spec.listCommandID); ok {
+		for _, param := range commandSpec.PathParams {
+			if value := strings.TrimSpace(originalPathParams[param]); value != "" {
+				listPathParams[param] = value
+			}
+		}
+	}
+	listResult, err := a.invokeTypedJSON(ctx, cfg, spec.listCommand, spec.listCommandID, listPathParams, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	matches := uniqueResourcePrefixMatches(commandResultBody(listResult), spec, rawID)
+	switch len(matches) {
+	case 0:
+		return "", nil
+	case 1:
+		return matches[0].resolvedID, nil
+	default:
+		labels := make([]string, 0, len(matches))
+		for _, match := range matches {
+			labels = append(labels, match.label)
+		}
+		sort.Strings(labels)
+		return "", errnorm.Usage(
+			"ambiguous_resource_prefix",
+			fmt.Sprintf("%s prefix %q matched multiple %s: %s", spec.idLabel, rawID, spec.resourcePlural, strings.Join(labels, ", ")),
+		)
+	}
+}
+
+type resourcePrefixMatch struct {
+	resolvedID string
+	label      string
+}
+
+func uniqueResourcePrefixMatches(body map[string]any, spec resourceIDLookupSpec, rawID string) []resourcePrefixMatch {
+	items, _ := body[spec.listField].([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	rawKind, rawValue, _, typedErr := parseTypedRef(rawID)
+	if typedErr == nil && canonicalResourceKind(rawKind) == canonicalResourceKind(spec.resource) {
+		rawID = rawValue
+	}
+	rawID = strings.TrimSpace(rawID)
+	if rawID == "" {
+		return nil
+	}
+	matchesByID := map[string]resourcePrefixMatch{}
+	for _, rawItem := range items {
+		item, _ := rawItem.(map[string]any)
+		target := resourceLookupTarget(item, spec)
+		if target == nil {
+			continue
+		}
+		candidates := resourceLookupCandidates(target, spec.resource)
+		if !resourceLookupMatches(candidates, rawID) {
+			continue
+		}
+		resolvedID := preferredLookupID(target, spec.resource)
+		if resolvedID == "" {
+			continue
+		}
+		matchesByID[resolvedID] = resourcePrefixMatch{resolvedID: resolvedID, label: firstNonEmpty(preferredLookupLabel(target, spec.resource), resolvedID)}
+	}
+	matches := make([]resourcePrefixMatch, 0, len(matchesByID))
+	for _, match := range matchesByID {
+		matches = append(matches, match)
+	}
+	return matches
+}
+
+func resourceLookupTarget(item map[string]any, spec resourceIDLookupSpec) map[string]any {
+	if item == nil {
+		return nil
+	}
+	target := item
+	if len(spec.idFieldPath) > 1 {
+		for _, segment := range spec.idFieldPath[:len(spec.idFieldPath)-1] {
+			next, _ := target[segment].(map[string]any)
+			if next == nil {
+				return item
+			}
+			target = next
+		}
+	}
+	return target
+}
+
+func resourceLookupCandidates(item map[string]any, kind string) []string {
+	kind = canonicalResourceKind(kind)
+	values := []string{
+		anyString(item["ref"]),
+		refID(anyString(item["ref"])),
+		anyString(item["handle"]),
+		anyString(item[kind+"_ref"]),
+		refID(anyString(item[kind+"_ref"])),
+		anyString(item[kind+"_handle"]),
+		anyString(item["id"]),
+	}
+	return normalizeStringFilters(values)
+}
+
+func resourceLookupMatches(candidates []string, rawID string) bool {
+	rawID = strings.ToLower(strings.TrimSpace(rawID))
+	if rawID == "" {
+		return false
+	}
+	for _, candidate := range candidates {
+		candidate = strings.ToLower(strings.TrimSpace(candidate))
+		if candidate == rawID || strings.HasPrefix(candidate, rawID) {
+			return true
+		}
+	}
+	return false
+}
+
+func preferredLookupID(item map[string]any, kind string) string {
+	if ref := strings.TrimSpace(anyString(item["ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item["handle"])); handle != "" {
+		return handle
+	}
+	kind = canonicalResourceKind(kind)
+	if ref := strings.TrimSpace(anyString(item[kind+"_ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item[kind+"_handle"])); handle != "" {
+		return handle
+	}
+	return strings.TrimSpace(anyString(item["id"]))
+}
+
+func preferredLookupLabel(item map[string]any, kind string) string {
+	if ref := strings.TrimSpace(anyString(item["ref"])); ref != "" {
+		return ref
+	}
+	if handle := strings.TrimSpace(anyString(item["handle"])); handle != "" {
+		return canonicalResourceKind(kind) + ":" + handle
+	}
+	return publicRefFromID(kind, anyString(item["id"]))
 }
 
 func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Resolved, refsJSON, filePath, summary, artifactJSON, actorID string) (*commandResult, error) {
