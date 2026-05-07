@@ -596,14 +596,14 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
 # Trash lane (operational lifecycle) — topics support trash; default topic list hides trashed rows.
 TRASH_TOPIC_PAYLOAD='{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["event:smoke-topic-trash"]}}}'
 run_cli_json_payload_retry "$TMP_DIR/trash-topic-create.json" "$TRASH_TOPIC_PAYLOAD" 3 topics create
-printf '{"reason":"e2e-smoke trash lane assertion"}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash topic-smoke-trash >"$TMP_DIR/topic-trash.json"
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash topic-smoke-trash \
+  --reason "e2e-smoke trash lane assertion" >"$TMP_DIR/topic-trash.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?state=trashed" >"$TMP_DIR/topics-trashed-only.json"
 assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
 
 # Card trash lane (archive / archived_only inventory).
 printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive "$BOARD_CARD_B_ID" >"$TMP_DIR/board-card-b-archive.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive "$BOARD_CARD_B_ID" --from-file=- >"$TMP_DIR/board-card-b-archive.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?state=archived" >"$TMP_DIR/cards-archived-only.json"
 assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
 
