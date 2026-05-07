@@ -22,7 +22,7 @@ var topicsSubcommandSpec = subcommandSpec{
 var cardsSubcommandSpec = subcommandSpec{
 	command:  "cards",
 	valid:    []string{"list", "get", "create", "message", "messages", "reply", "revise", "history", "revision", "patch", "move", "assign", "resolve", "reopen", "archive", "trash", "purge", "restore", "timeline"},
-	examples: []string{"anx cards list", "anx cards create --board board:launch --title \"Implement login\" --content-file card.md", "anx cards message card:implement-login --body-file update.md", "anx cards messages card:implement-login", "anx cards reply card:implement-login --to <message-id> --body-file reply.md", "anx cards revise card:implement-login --content-file card.md", "anx cards history card:implement-login", "anx cards assign card:implement-login --assignee-ref actor:agent-alpha", "anx cards resolve card:implement-login --reason \"Works as expected\"", "anx cards move card:implement-login --column review", "anx cards get card:implement-login"},
+	examples: []string{"anx cards list", "anx cards create --board board:launch --title \"Implement login\" --body-file card.md", "anx cards message card:implement-login --body-file update.md", "anx cards messages card:implement-login", "anx cards reply card:implement-login --to <message-id> --body-file reply.md", "anx cards revise card:implement-login --body-file card.md", "anx cards history card:implement-login", "anx cards assign card:implement-login --assignee-ref actor:agent-alpha", "anx cards resolve card:implement-login --reason \"Works as expected\"", "anx cards move card:implement-login --column review", "anx cards get card:implement-login"},
 }
 
 func (a *App) runTopicsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -423,6 +423,7 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 	var fromFileFlag, titleFlag, summaryFlag, actorIDFlag trackedString
 	var ownerRefFlags, documentRefFlags, boardRefFlags, relatedRefFlags trackedStrings
 	var dryRunFlag trackedBool
+	fs.Var(&fromFileFlag, "body-file", "Advanced JSON request body from file or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&titleFlag, "title", "Topic title")
 	fs.Var(&summaryFlag, "summary", "Topic summary")
@@ -494,7 +495,7 @@ func (a *App) parseTopicCreateInput(args []string, cfg config.Resolved, commandN
 
 func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandName string) (map[string]any, bool, error) {
 	fs := newSilentFlagSet(commandName)
-	var boardFlag, titleFlag, contentFileFlag, fromFileFlag trackedString
+	var boardFlag, titleFlag, bodyFlag, contentFileFlag, fromFileFlag trackedString
 	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag trackedString
 	var columnFlag, topicFlag, documentRefFlag, riskFlag, dueAtFlag trackedString
 	var beforeCardIDFlag, afterCardIDFlag trackedString
@@ -503,6 +504,8 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	fs.Var(&boardFlag, "board", "Board id for the new card")
 	fs.Var(&boardFlag, "board-id", "Board id for the new card")
 	fs.Var(&titleFlag, "title", "Card title")
+	fs.Var(&bodyFlag, "body", "Inline card summary/body text")
+	fs.Var(&contentFileFlag, "body-file", "Load card summary/body text from a local file or stdin with -")
 	fs.Var(&contentFileFlag, "content-file", "Load card summary/body text from a local file")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON request body from file")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
@@ -527,6 +530,7 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	}
 	fieldFlagsSet := strings.TrimSpace(boardFlag.value) != "" ||
 		strings.TrimSpace(titleFlag.value) != "" ||
+		strings.TrimSpace(bodyFlag.value) != "" ||
 		strings.TrimSpace(contentFileFlag.value) != "" ||
 		strings.TrimSpace(actorIDFlag.value) != "" ||
 		strings.TrimSpace(requestKeyFlag.value) != "" ||
@@ -570,9 +574,19 @@ func (a *App) parseCardCreateInput(args []string, cfg config.Resolved, commandNa
 	if title == "" {
 		return nil, false, errnorm.Usage("invalid_request", "`--title` is required for `anx cards create`")
 	}
-	content, err := a.readTextFlagFile(contentFileFlag.value, commandName, "--content-file")
-	if err != nil {
-		return nil, false, err
+	if strings.TrimSpace(bodyFlag.value) != "" && strings.TrimSpace(contentFileFlag.value) != "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--body` and `--body-file` cannot be combined for `anx cards create`")
+	}
+	if strings.TrimSpace(bodyFlag.value) == "" && strings.TrimSpace(contentFileFlag.value) == "" {
+		return nil, false, errnorm.Usage("invalid_request", "`--body` or `--body-file` is required for `anx cards create`")
+	}
+	content := bodyFlag.value
+	if strings.TrimSpace(contentFileFlag.value) != "" {
+		var err error
+		content, err = a.readTextFlagFile(contentFileFlag.value, commandName, "--body-file")
+		if err != nil {
+			return nil, false, err
+		}
 	}
 	card := map[string]any{
 		"title":           title,
@@ -784,6 +798,7 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 	var cardIDFlag, contentFileFlag, titleFlag, ifBaseRevisionFlag, actorIDFlag, fromFileFlag trackedString
 	fs.Var(&cardIDFlag, "card", "Card id")
 	fs.Var(&cardIDFlag, "card-id", "Card id")
+	fs.Var(&contentFileFlag, "body-file", "Load revised card summary/body text from a local file or stdin with -")
 	fs.Var(&contentFileFlag, "content-file", "Load revised card summary/body text from a local file")
 	fs.Var(&titleFlag, "title", "Optional revised card title")
 	fs.Var(&ifBaseRevisionFlag, "if-base-revision", "Base card revision id; discovered from cards get when omitted")
@@ -938,6 +953,7 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; discovered when omitted")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
+	fs.Var(&fromFileFlag, "body-file", "Advanced JSON move request body from file or stdin with -")
 	fs.Var(&fromFileFlag, "from-file", "Advanced JSON move request body from file")
 	if err := fs.Parse(args); err != nil {
 		return "", nil, errnorm.Usage("invalid_flags", err.Error())
@@ -961,8 +977,8 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 		if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
 			bodyMap["if_board_updated_at"] = ifBoardUpdatedAt
 		}
-		if strings.TrimSpace(actorIDFlag.value) != "" {
-			actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
+		if rawActorID := strings.TrimSpace(actorIDFlag.value); rawActorID != "" {
+			actorID, err := resolveActorIDAlias(rawActorID, cfg)
 			if err != nil {
 				return "", nil, err
 			}

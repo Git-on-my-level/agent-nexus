@@ -4940,6 +4940,27 @@ func TestArtifactContentJSONOutputFile(t *testing.T) {
 	}
 }
 
+func TestArtifactDownloadAlias(t *testing.T) {
+	t.Parallel()
+
+	expected := []byte("downloaded artifact")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/artifacts/artifact-download/content" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(expected)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	out := runCLIForTest(t, home, map[string]string{}, nil, []string{"--base-url", server.URL, "artifacts", "download", "--artifact-id", "artifact-download"})
+	if !bytes.Equal([]byte(out), expected) {
+		t.Fatalf("unexpected artifact bytes: got=%q want=%q", out, expected)
+	}
+}
+
 func TestArtifactsCreateFileRefUsesAttachmentEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -5168,6 +5189,22 @@ func TestArtifactsInspectCommand(t *testing.T) {
 	}
 	if got := anyStringValue(content["body_text"]); got != "artifact body" {
 		t.Fatalf("expected artifact content text, got %#v", data)
+	}
+
+	getRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"--base-url", server.URL,
+		"artifacts", "get",
+		"--artifact-id", "artifact_1",
+	})
+	getPayload := assertEnvelopeOK(t, getRaw)
+	if got := anyStringValue(getPayload["command"]); got != "artifacts inspect" {
+		t.Fatalf("expected artifacts get to route to inspect, got %#v", getPayload)
+	}
+	getData := asMap(getPayload["data"])
+	getContent := asMap(getData["content"])
+	if got := anyStringValue(getContent["body_text"]); got != "artifact body" {
+		t.Fatalf("expected artifact get alias to include content, got %#v", getData)
 	}
 }
 
@@ -5623,6 +5660,147 @@ func TestDocsRevisionSubcommandRequiredGuidance(t *testing.T) {
 	}
 	if !strings.Contains(message, "`anx docs revision get doc:runbook <revision-id>`") {
 		t.Fatalf("expected usage examples in required message, got %q", message)
+	}
+}
+
+func TestCLISurfaceBodyFileAndStdinAliases(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader("Card body from stdin\n"), []string{
+		"--json",
+		"cards", "create",
+		"--dry-run",
+		"--board", "board_1",
+		"--title", "Implement stdin",
+		"--body-file=-",
+	})
+	payload := assertEnvelopeOK(t, raw)
+	data := asMap(payload["data"])
+	body := asMap(data["body"])
+	card := asMap(body["card"])
+	if got, _ := card["summary"].(string); got != "Card body from stdin\n" {
+		t.Fatalf("expected stdin body-file summary, got %#v", card)
+	}
+
+	raw = runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json",
+		"cards", "create",
+		"--dry-run",
+		"--board", "board_1",
+		"--title", "Implement inline",
+		"--body", "Inline body",
+	})
+	payload = assertEnvelopeOK(t, raw)
+	data = asMap(payload["data"])
+	body = asMap(data["body"])
+	card = asMap(body["card"])
+	if got := anyStringValue(card["summary"]); got != "Inline body" {
+		t.Fatalf("expected inline body summary, got %#v", card)
+	}
+}
+
+func TestDocsCreateAndReviseBodyFileStdinNotConsumedAsJSON(t *testing.T) {
+	t.Parallel()
+
+	t.Run("docs_create_dry_run", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		stdin := strings.NewReader("# Title\n\nProse from stdin\n")
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json", "docs", "create", "--dry-run",
+			"--topic", "topic:launch",
+			"--title", "Runbook",
+			"--body-file=-",
+		})
+		payload := assertEnvelopeOK(t, raw)
+		data := asMap(payload["data"])
+		body := asMap(data["body"])
+		if got := anyStringValue(body["content"]); got != "# Title\n\nProse from stdin" {
+			t.Fatalf("expected markdown from stdin as content, got %q", got)
+		}
+	})
+
+	t.Run("docs_revise_apply", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial","content_type":"text"}}`))
+				return
+			}
+			if r.Method != http.MethodPost || r.URL.Path != "/docs/doc_1/revisions" {
+				http.NotFound(w, r)
+				return
+			}
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
+			}
+			if got := strings.TrimSpace(anyStringValue(payload["content"])); got != "revised from stdin" {
+				t.Fatalf("expected stdin content, got %q full=%s", got, string(body))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
+		}))
+		defer server.Close()
+
+		home := t.TempDir()
+		writeAgentProfile(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+		stdin := strings.NewReader("revised from stdin")
+		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
+			"--json",
+			"--base-url", server.URL,
+			"--agent", "agent-docs",
+			"docs", "revise", "--apply",
+			"--document-id", "doc_1",
+			"--body-file=-",
+		})
+		assertEnvelopeOK(t, raw)
+	})
+}
+
+func TestCardsMoveMergesFromFileAndFlags(t *testing.T) {
+	t.Parallel()
+
+	var receivedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/cards/card_merge/move" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&receivedBody); err != nil {
+			t.Fatalf("decode move body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"card":{"id":"card_merge","board_id":"board_1","column_key":"review"}}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	bodyFile := filepath.Join(home, "move.json")
+	if err := os.WriteFile(bodyFile, []byte(`{"column_key":"backlog","if_board_updated_at":"old","actor_id":"actor_file"}`), 0o600); err != nil {
+		t.Fatalf("write move body: %v", err)
+	}
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL,
+		"cards", "move", "card_merge",
+		"--from-file", bodyFile,
+		"--column", "review",
+		"--if-board-updated-at", "new",
+		"--actor-id", "actor_flag",
+	})
+	assertEnvelopeOK(t, raw)
+	if got := anyStringValue(receivedBody["column_key"]); got != "review" {
+		t.Fatalf("expected flag column to override file, got %#v", receivedBody)
+	}
+	if got := anyStringValue(receivedBody["if_board_updated_at"]); got != "new" {
+		t.Fatalf("expected flag concurrency token to override file, got %#v", receivedBody)
+	}
+	if got := anyStringValue(receivedBody["actor_id"]); got != "actor_flag" {
+		t.Fatalf("expected flag actor to override file, got %#v", receivedBody)
 	}
 }
 
