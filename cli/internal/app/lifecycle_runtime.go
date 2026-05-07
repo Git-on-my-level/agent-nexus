@@ -165,5 +165,5 @@ func lifecycleTrashRequiresReasonOrJSON(resource, verb string) bool {
 	if verb != "trash" {
 		return false
 	}
-	return resource == "topics" || resource == "cards"
+	return resource == "topics" || resource == "cards" || resource == "docs"
 }

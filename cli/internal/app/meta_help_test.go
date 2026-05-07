@@ -574,11 +574,29 @@ func TestDocsCreateHelpUsesFileFirstLocalHelp(t *testing.T) {
 	if !strings.Contains(output, "Local Help: docs create") {
 		t.Fatalf("expected local docs create help, got output=%s", output)
 	}
+	if quickIdx, inputsIdx := strings.Index(output, "Quick start:"), strings.Index(output, "Inputs:"); quickIdx < 0 || inputsIdx < 0 || quickIdx > inputsIdx {
+		t.Fatalf("expected docs create quick start before generated JSON inputs output=%s", output)
+	}
 	if !strings.Contains(output, "--topic <topic-ref-or-handle>") || !strings.Contains(output, "--body-file <path>") {
 		t.Fatalf("expected file-first docs create flags output=%s", output)
 	}
 	if strings.Contains(output, "document.body_markdown") {
 		t.Fatalf("unexpected stale body_markdown help output=%s", output)
+	}
+}
+
+func TestDocsTrashHelpLeadsWithReasonFlag(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "help", "docs", "trash")
+	if !strings.Contains(output, "Local Help: docs trash") {
+		t.Fatalf("expected local docs trash help, got output=%s", output)
+	}
+	if quickIdx, inputsIdx := strings.Index(output, "Quick start:"), strings.Index(output, "Inputs:"); quickIdx < 0 || inputsIdx < 0 || quickIdx > inputsIdx {
+		t.Fatalf("expected docs trash quick start before generated JSON inputs output=%s", output)
+	}
+	if !strings.Contains(output, "docs trash <doc-ref> --reason <text>") || !strings.Contains(output, "--from-file <path>") {
+		t.Fatalf("expected docs trash reason/from-file flag guidance output=%s", output)
 	}
 }
 
