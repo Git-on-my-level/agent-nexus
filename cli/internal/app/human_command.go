@@ -28,7 +28,7 @@ Flags:
   --proposal <text>             Optional alternative suggestion (repeatable, up to five). Same length limits as server.
   --from-file <path>            Markdown with YAML frontmatter; cannot be mixed with field-building flags or positional title.
   --subject-ref <ref>           Subject typed ref for the human attention item.
-  --thread-id <thread-id>       Backing thread id when subject_ref is not a thread ref.
+  --thread-id <thread-id>       Backing thread id when subject_ref is not thread-backed; topic refs resolve automatically.
   --ref <typed-ref>             Additional related typed ref (repeatable).
   --body <text>                 Optional detailed body.
   --body-file <path>            Read detailed body from a file.
@@ -240,6 +240,13 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if prefix, id, splitErr := splitTypedRef(subjectRef); splitErr == nil && prefix == "thread" && threadID == "" {
 		threadID = strings.TrimSpace(id)
 	}
+	if threadID == "" {
+		resolvedThreadID, err := a.resolveHumanAttentionThreadIDFromSubjectRef(ctx, cfg, subjectRef)
+		if err != nil {
+			return nil, err
+		}
+		threadID = resolvedThreadID
+	}
 	if err := validateID(threadID, "thread id"); err != nil {
 		return nil, err
 	}
@@ -324,6 +331,27 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 
 	return a.invokeTypedJSON(ctx, cfg, "human "+kind, "events.create", nil, nil, bodyMap)
+}
+
+func (a *App) resolveHumanAttentionThreadIDFromSubjectRef(ctx context.Context, cfg config.Resolved, subjectRef string) (string, error) {
+	prefix, _, err := splitTypedRef(subjectRef)
+	if err != nil {
+		return "", err
+	}
+	switch strings.TrimSpace(prefix) {
+	case "topic":
+		topic, err := a.fetchTopicBody(ctx, cfg, subjectRef)
+		if err != nil {
+			return "", err
+		}
+		threadID := strings.TrimSpace(anyString(topic["thread_id"]))
+		if threadID == "" {
+			return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s does not expose a backing thread_id; pass --thread-id explicitly", subjectRef))
+		}
+		return threadID, nil
+	default:
+		return "", nil
+	}
 }
 
 func isHumanEscalationSeverity(value string) bool {

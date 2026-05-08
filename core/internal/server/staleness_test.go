@@ -18,7 +18,7 @@ func TestIsThreadStaleAtIgnoresLegacyCadenceFields(t *testing.T) {
 }
 
 func TestIsMeaningfulThreadActivityEvent(t *testing.T) {
-	t.Parallel()
+	// Avoid parent t.Parallel(): subtests use t.Parallel(); nesting can deadlock when parallelism is limited.
 
 	tests := []struct {
 		name  string

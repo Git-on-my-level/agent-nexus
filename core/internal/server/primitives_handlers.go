@@ -148,7 +148,13 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to append event")
 		return
 	}
-	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{anyString(stored["thread_id"])}, time.Now().UTC())
+	threadID := anyString(stored["thread_id"])
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
+	if strings.TrimSpace(anyString(stored["type"])) == "human_attention_requested" && opts.projectionMaintainer != nil {
+		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
+			log.Printf("best-effort human inbox projection refresh failed (thread=%s): %v", threadID, err)
+		}
+	}
 
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(map[string]any{"event": stored}))
 	if writeIdempotencyError(w, err) {
