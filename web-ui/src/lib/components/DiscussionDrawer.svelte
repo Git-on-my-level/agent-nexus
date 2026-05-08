@@ -673,7 +673,7 @@
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                    d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+                    d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
                   />
                 </svg>
               </span>
@@ -747,7 +747,7 @@
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
+                  d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
                 />
               </svg>
             </span>
@@ -991,12 +991,26 @@
                   <span>{label}</span>
                   {#if displayMessageCount > 0}
                     <span
-                      class="inline-flex min-h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded-md bg-line px-1 py-0.5 text-[0.65rem] font-semibold tabular-nums text-fg"
+                      class="inline-flex shrink-0 items-center gap-0.5 text-fg-muted"
                       aria-hidden="true"
                     >
-                      {displayMessageCount > 99
-                        ? "99+"
-                        : String(displayMessageCount)}
+                      <svg
+                        class="h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linejoin="round"
+                          d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
+                        />
+                      </svg>
+                      <span class="text-[0.65rem] font-semibold tabular-nums">
+                        {displayMessageCount > 99
+                          ? "99+"
+                          : String(displayMessageCount)}
+                      </span>
                     </span>
                   {/if}
                 </span>
@@ -1061,12 +1075,26 @@
               >
               {#if displayMessageCount > 0}
                 <span
-                  class="inline-flex min-h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded-md bg-line px-1 py-0.5 text-[0.65rem] font-semibold tabular-nums text-fg"
+                  class="inline-flex shrink-0 items-center gap-0.5 text-fg-muted"
                   aria-hidden="true"
                 >
-                  {displayMessageCount > 99
-                    ? "99+"
-                    : String(displayMessageCount)}
+                  <svg
+                    class="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linejoin="round"
+                      d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
+                    />
+                  </svg>
+                  <span class="text-[0.65rem] font-semibold tabular-nums">
+                    {displayMessageCount > 99
+                      ? "99+"
+                      : String(displayMessageCount)}
+                  </span>
                 </span>
               {/if}
             </span>

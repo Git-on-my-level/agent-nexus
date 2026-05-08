@@ -44,6 +44,13 @@
   const cardResolution = $derived(String(membership?.resolution ?? "").trim());
   const summaryText = $derived(String(membership?.summary ?? "").trim());
   const cardDueAt = $derived(String(membership?.due_at ?? "").trim());
+  const cardUpdatedAt = $derived(String(membership?.updated_at ?? "").trim());
+  const cardUpdatedRelative = $derived(formatTimestamp(cardUpdatedAt));
+  const cardUpdatedTitle = $derived(
+    cardUpdatedAt
+      ? `Last edited ${new Date(cardUpdatedAt).toLocaleString()}`
+      : "",
+  );
   const assigneeRefs = $derived(
     Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
   );
@@ -183,12 +190,49 @@
           </span>
         {/if}
 
+        {#if cardUpdatedRelative}
+          <span
+            class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
+            title={cardUpdatedTitle}
+            aria-label={`Edited ${cardUpdatedRelative}`}
+          >
+            <svg
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" stroke-linecap="round" />
+            </svg>
+            <span class="tabular-nums">{cardUpdatedRelative}</span>
+          </span>
+        {/if}
+
         {#if timelineMessageCount > 0}
           <span
-            class="rounded-md bg-line px-1 py-0.5 text-micro font-semibold tabular-nums text-fg-muted"
+            class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
             title={`${timelineMessageCount} message${timelineMessageCount === 1 ? "" : "s"} on card thread`}
+            aria-label={`${timelineMessageCount} comment${timelineMessageCount === 1 ? "" : "s"}`}
           >
-            {timelineMessageCount > 99 ? "99+" : timelineMessageCount}
+            <svg
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+              aria-hidden="true"
+            >
+              <path
+                d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="tabular-nums font-semibold"
+              >{timelineMessageCount > 99 ? "99+" : timelineMessageCount}</span
+            >
           </span>
         {/if}
       </div>

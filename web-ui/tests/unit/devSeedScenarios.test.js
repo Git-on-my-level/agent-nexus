@@ -186,6 +186,16 @@ describe("dev seed scenarios", () => {
     expect(seed.events.some((e) => e.type === "document_revised")).toBe(true);
     expect(seed.events.some((e) => e.type === "card_moved")).toBe(true);
     expect(seed.events.some((e) => e.type === "topic_updated")).toBe(true);
+    expect(
+      seed.events.some((e) => e.type === "human_attention_requested"),
+    ).toBe(true);
+    const attn = seed.events.filter(
+      (e) => e.type === "human_attention_requested",
+    );
+    expect(attn.length).toBeGreaterThanOrEqual(3);
+    expect(
+      attn.every((e) => Array.isArray(e.payload?.response_proposals)),
+    ).toBe(true);
   });
 
   it("returns null for an unknown scenario", async () => {

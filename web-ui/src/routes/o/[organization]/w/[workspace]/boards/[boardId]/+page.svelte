@@ -537,8 +537,16 @@
   {@const activeColumns = board.column_schema.filter(
     (c) => c.key !== "backlog" && c.key !== "done",
   )}
-  {@const backlogCards = cardsByColumn["backlog"] ?? []}
-  {@const doneCards = cardsByColumn["done"] ?? []}
+  {@const sortByUpdatedDesc = (a, b) =>
+    String(b?.membership?.updated_at ?? "").localeCompare(
+      String(a?.membership?.updated_at ?? ""),
+    )}
+  {@const backlogCards = [...(cardsByColumn["backlog"] ?? [])].sort(
+    sortByUpdatedDesc,
+  )}
+  {@const doneCards = [...(cardsByColumn["done"] ?? [])].sort(
+    sortByUpdatedDesc,
+  )}
   {@const boardIsEmpty =
     backlogCards.length === 0 &&
     doneCards.length === 0 &&

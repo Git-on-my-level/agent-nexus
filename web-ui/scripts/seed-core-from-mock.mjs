@@ -383,7 +383,7 @@ async function readDevIdentityBundle() {
 async function seedActors() {
   for (const actor of seed.actors) {
     const body = { actor };
-    await request("POST", "/actors", body, [201, 409]);
+    await requestRetryOnServerError("POST", "/actors", body, [201, 409]);
   }
 }
 
@@ -480,7 +480,7 @@ async function seedTopics() {
       provenance: sourceTopic.provenance,
     };
 
-    const response = await request("POST", "/topics", {
+    const response = await requestRetryOnServerError("POST", "/topics", {
       actor_id: actorId,
       topic: topicPayload,
     });
@@ -1087,7 +1087,7 @@ async function seedEvents() {
     };
 
     try {
-      await request("POST", "/events", {
+      await requestRetryOnServerError("POST", "/events", {
         actor_id: actorId,
         event: eventPayload,
       });

@@ -553,7 +553,177 @@ function buildEvents() {
     minute += 5;
   }
   events.push(...buildHomeFeedDiversityEvents());
+  events.push(...buildHumanAttentionSeedEvents());
   return events;
+}
+
+/**
+ * Explicit `human_attention_requested` events populate /inbox after `derived/rebuild`.
+ * `response_proposals` are the operator-facing suggestion chips. Kinds map to Ask / Review /
+ * Escalation groups; `severity` interacts with inbox urgency (Immediate / High / Normal).
+ */
+function buildHumanAttentionSeedEvents() {
+  let t = 600;
+  const nextMinute = () => {
+    t += 1;
+    return t;
+  };
+
+  return [
+    {
+      id: "evt-gds-human-attn-bugbash",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "human_attention_requested",
+      actor_id: "actor-gds-qa",
+      thread_id: "thread-gds-launch",
+      refs: [
+        "thread:thread-gds-launch",
+        "topic:gds-launch",
+        "card:card-gds-bug-bash",
+      ],
+      summary:
+        "Escalation: P0 retail crashes vs slice scope — need a call before capture candidate",
+      payload: {
+        kind: "escalate",
+        title: "Bug-bash triage: lock P0 bar before the capture candidate build",
+        body:
+          "QA has two retail-only crashes. Gameplay wants them deferred to keep the slice on schedule; release policy says retail crashes stay P0. Maya — we need your decision before we tag the capture build.",
+        subject_ref: "card:card-gds-bug-bash",
+        requester_actor_id: "actor-gds-qa",
+        requester_label: "Priya Shah",
+        severity: "critical",
+        coverage_hint:
+          "Policy conflict between slice schedule and retail crash bar; blocks tagging.",
+        response_proposals: [
+          "Keep both as P0 — extend bug-bash 24h and slip capture one day; no waiver on retail crashes.",
+          "Treat as P1 only if each crash has a documented demo-path workaround signed by gameplay + QA leads.",
+          "Ship capture with known-issues + workaround toggles; retail SKU fixes land in the next drop.",
+          "Pause tagging until Maya signs a short P0 waiver memo co-signed by QA and gameplay.",
+        ],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-human-attn-vertical",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "human_attention_requested",
+      actor_id: "actor-gds-narrative",
+      thread_id: "thread-gds-vertical-slice",
+      refs: [
+        "thread:thread-gds-vertical-slice",
+        "topic:gds-vertical-slice",
+        "card:card-gds-quest-slice",
+      ],
+      summary: "Ask: approve hub quest beat order for trailer capture",
+      payload: {
+        kind: "ask",
+        title: "Confirm 20-minute quest path for vertical slice capture",
+        body:
+          "Omar — the courier quest can either emphasize the combat tutorial beats or the hub intro. Trailer wants one cohesive story; we need you to pick the default path for Friday capture.",
+        subject_ref: "topic:gds-vertical-slice",
+        requester_actor_id: "actor-gds-narrative",
+        requester_label: "Omar Reed",
+        severity: "high",
+        related_refs: ["document:gds-narrative-bible", "board:board-gds-creative"],
+        response_proposals: [
+          "Lead with combat tutorial → hub intro; fastest path for press-friendly pacing.",
+          "Lead with hub intro → combat beats; stronger narrative hook for first-time players.",
+          "Ship branch A for capture, keep branch B behind a cheat flag for internal review only.",
+          "Needs 30m writers’ room — block capture story lock until tomorrow 10:00 handoff.",
+        ],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-human-attn-combat",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "human_attention_requested",
+      actor_id: "actor-gds-gameplay",
+      thread_id: "thread-gds-core-loop",
+      refs: [
+        "thread:thread-gds-core-loop",
+        "card:card-gds-core-loop",
+        "document:gds-combat-spec",
+      ],
+      summary: "Ask: input buffer budget for parry assist (demo accessibility)",
+      payload: {
+        kind: "ask",
+        title: "Approve parry buffer window for capture build",
+        body:
+          "Leo — accessibility wants +20ms buffer for controller fatigue; combat feel wants the spec’s 120ms strict. Pick a number for the capture candidate so QA can freeze tuning.",
+        subject_ref: "card:card-gds-core-loop",
+        requester_actor_id: "actor-gds-gameplay",
+        requester_label: "Leo Park",
+        related_refs: ["document:gds-combat-spec"],
+        response_proposals: [
+          "Hold 120ms end-to-end; ship aim-assist for parry in settings instead of widening the global buffer.",
+          "Compromise at 128ms for demo only, revert to 120ms post-capture.",
+          "Raise to 132ms on gamepad only; keyboard/mouse stay at 120ms.",
+        ],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-human-attn-launch-doc",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "human_attention_requested",
+      actor_id: "actor-gds-producer",
+      thread_id: "thread-gds-doc-launch",
+      refs: [
+        "thread:thread-gds-doc-launch",
+        "document:gds-launch-checklist",
+        "topic:gds-launch",
+      ],
+      summary: "Review: launch checklist rollback language before community post",
+      payload: {
+        kind: "review",
+        title: "Sign off rollback + smoke matrix wording in launch checklist",
+        body:
+          "Maya — comms is ready to paste checklist bullets into the store page FAQ. Please confirm the rollback section matches the demo-day runbook you approved with IT.",
+        subject_ref: "document:gds-launch-checklist",
+        requester_actor_id: "actor-gds-producer",
+        requester_label: "Maya Chen",
+        severity: "high",
+        related_refs: ["board:board-gds-launch"],
+        response_proposals: [
+          "Approved as written — publish the FAQ with this rollback language verbatim.",
+          "Tighten step 3 to name the on-call owner; otherwise approved.",
+          "Replace the smoke matrix link with the internal-only doc until the public mirror updates.",
+          "Hold publish — schedule a 15m pass with QA to align rollback verbs with the bug-bash P0 list.",
+        ],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+    {
+      id: "evt-gds-human-attn-art-ui",
+      ts: isoMinutesFromBase(nextMinute()),
+      type: "human_attention_requested",
+      actor_id: "actor-gds-art",
+      thread_id: "thread-gds-art-pipeline",
+      refs: [
+        "thread:thread-gds-art-pipeline",
+        "card:card-gds-ui-kit",
+        "document:gds-art-bible",
+      ],
+      summary: "Review: command UI contrast for HDR capture",
+      payload: {
+        kind: "review",
+        title: "HDR capture pass on tactical command bar contrast",
+        body:
+          "Nina — focus rings read great in SDR, but HDR trailer capture blows out the cyan edge on bright hubs. Need human sign-off on the desat rule or we push capture to SDR.",
+        subject_ref: "card:card-gds-ui-kit",
+        requester_actor_id: "actor-gds-art",
+        requester_label: "Nina Vale",
+        related_refs: ["topic:gds-art-pipeline", "board:board-gds-creative"],
+        response_proposals: [
+          "Approve desat -12% in HDR only; keep SDR unchanged for accessibility baseline.",
+          "Swap cyan edge to teal in HDR; match kit tokens across hubs and combat HUD.",
+          "Force SDR capture for vertical slice; revisit HDR after colorists sign off.",
+        ],
+      },
+      provenance: { sources: ["seed:game-dev-studio"] },
+    },
+  ];
 }
 
 function isoMinutesFromBase(offsetMinutes) {
