@@ -143,9 +143,6 @@ func (m *ProjectionMaintainer) Step(ctx context.Context, now time.Time) error {
 		now = time.Now().UTC()
 	}
 
-	m.stepMu.Lock()
-	defer m.stepMu.Unlock()
-
 	processed, err := m.processDirtyQueue(ctx, now)
 	if err != nil {
 		return err
@@ -163,9 +160,6 @@ func (m *ProjectionMaintainer) RunFullRebuild(ctx context.Context, now time.Time
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-
-	m.stepMu.Lock()
-	defer m.stepMu.Unlock()
 
 	actorID = firstNonEmptyString(actorID, m.systemActorID)
 	allThreadIDs, err := m.loadAllThreadIDs(ctx)
@@ -204,39 +198,51 @@ func (m *ProjectionMaintainer) RefreshThread(ctx context.Context, threadID strin
 		now = time.Now().UTC()
 	}
 
+	// Do not hold stepMu across refreshDerivedTopicProjection; Step uses the same mutex for queue
+	// bookkeeping only (see processDirtyQueue). Holding it through PutDerived would deadlock HTTP
+	// RefreshThread while another goroutine runs Step mid-refresh.
 	m.stepMu.Lock()
-	defer m.stepMu.Unlock()
-
 	startedGeneration, err := m.opts.primitiveStore.MarkTopicProjectionRefreshStarted(ctx, threadID, now)
 	if err != nil {
+		m.stepMu.Unlock()
 		m.recordError("start_dirty_projection", now, err)
 		return fmt.Errorf("mark dirty projection %s started: %w", threadID, err)
 	}
 	if err := m.opts.primitiveStore.ClearDerivedTopicProjectionDirty(ctx, threadID); err != nil {
+		m.stepMu.Unlock()
 		m.recordError("clear_dirty_projection", now, err)
 		return fmt.Errorf("clear dirty projection %s: %w", threadID, err)
 	}
+	m.stepMu.Unlock()
+
 	if startedGeneration == 0 {
 		return nil
 	}
 	if err := refreshDerivedTopicProjection(ctx, m.opts, threadID, now, m.systemActorID); err != nil {
 		failureMessage := fmt.Sprintf("refresh dirty projection %s: %v", threadID, err)
+		m.stepMu.Lock()
 		if queueErr := m.opts.primitiveStore.RequeueTopicProjectionRefresh(ctx, threadID, now); queueErr != nil {
+			m.stepMu.Unlock()
 			m.recordError("requeue_failed_projection", now, queueErr)
 			return fmt.Errorf("%s: %w", failureMessage, queueErr)
 		}
 		if markErr := m.opts.primitiveStore.MarkTopicProjectionRefreshFailed(ctx, threadID, startedGeneration, now, failureMessage); markErr != nil {
+			m.stepMu.Unlock()
 			m.recordError("mark_failed_projection", now, markErr)
 			return fmt.Errorf("%s: %w", failureMessage, markErr)
 		}
+		m.stepMu.Unlock()
 		m.recordError("refresh_dirty_projection", now, err)
 		return fmt.Errorf("refresh dirty projection %s: %w", threadID, err)
 	}
 	completedAt := time.Now().UTC()
+	m.stepMu.Lock()
 	if err := m.opts.primitiveStore.MarkTopicProjectionRefreshSucceeded(ctx, threadID, startedGeneration, completedAt); err != nil {
+		m.stepMu.Unlock()
 		m.recordError("mark_succeeded_projection", completedAt, err)
 		return fmt.Errorf("mark dirty projection %s succeeded: %w", threadID, err)
 	}
+	m.stepMu.Unlock()
 	m.clearError()
 	return nil
 }
@@ -283,15 +289,20 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 		if startedAt.IsZero() {
 			startedAt = time.Now().UTC()
 		}
+		m.stepMu.Lock()
 		startedGeneration, err := m.opts.primitiveStore.MarkTopicProjectionRefreshStarted(ctx, entry.ThreadID, startedAt)
 		if err != nil {
+			m.stepMu.Unlock()
 			m.recordError("start_dirty_projection", startedAt, err)
 			return processed, fmt.Errorf("mark dirty projection %s started: %w", entry.ThreadID, err)
 		}
 		if err := m.opts.primitiveStore.ClearDerivedTopicProjectionDirty(ctx, entry.ThreadID); err != nil {
+			m.stepMu.Unlock()
 			m.recordError("clear_dirty_projection", startedAt, err)
 			return processed, fmt.Errorf("clear dirty projection %s: %w", entry.ThreadID, err)
 		}
+		m.stepMu.Unlock()
+
 		if startedGeneration == 0 {
 			processed++
 			continue
@@ -302,22 +313,29 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 			if parseErr != nil || queuedAt.IsZero() {
 				queuedAt = startedAt
 			}
+			m.stepMu.Lock()
 			if queueErr := m.opts.primitiveStore.RequeueTopicProjectionRefresh(ctx, entry.ThreadID, queuedAt); queueErr != nil {
+				m.stepMu.Unlock()
 				m.recordError("requeue_failed_projection", startedAt, queueErr)
 				return processed, fmt.Errorf("%s: %w", failureMessage, queueErr)
 			}
 			if markErr := m.opts.primitiveStore.MarkTopicProjectionRefreshFailed(ctx, entry.ThreadID, startedGeneration, startedAt, failureMessage); markErr != nil {
+				m.stepMu.Unlock()
 				m.recordError("mark_failed_projection", startedAt, markErr)
 				return processed, fmt.Errorf("%s: %w", failureMessage, markErr)
 			}
+			m.stepMu.Unlock()
 			m.recordError("refresh_dirty_projection", startedAt, err)
 			return processed, fmt.Errorf("refresh dirty projection %s: %w", entry.ThreadID, err)
 		}
 		completedAt := time.Now().UTC()
+		m.stepMu.Lock()
 		if err := m.opts.primitiveStore.MarkTopicProjectionRefreshSucceeded(ctx, entry.ThreadID, startedGeneration, completedAt); err != nil {
+			m.stepMu.Unlock()
 			m.recordError("mark_succeeded_projection", completedAt, err)
 			return processed, fmt.Errorf("mark dirty projection %s succeeded: %w", entry.ThreadID, err)
 		}
+		m.stepMu.Unlock()
 		processed++
 	}
 	return processed, nil
