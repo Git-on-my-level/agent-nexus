@@ -40,7 +40,7 @@ API shape and errors: `../contracts/anx-openapi.yaml` (`/secrets`). Core enforce
 
 - **Flag order:** use `anx secret get --reveal NAME` (not `get NAME --reveal`; Go `flag` stops at the first non-flag).
 - **Pipes:** if the active profile sets `"json": true` (legacy or manual), use `--json=false` or `ANX_JSON=false` when you need plaintext secret-only stdout on `--reveal`. Prefer `secret exec --secret NAME -- cmd` for subprocess env injection.
-- **`secret update`** rotates the encrypted value (human-only; same auth rules as create/delete). Use `--from-stdin` for non-interactive scripts.
+- **`secret create` / `secret update`** require `--from-stdin` for secret values and never prompt implicitly. Create/delete/update remain human-only.
 
 Generated command/concept docs are under `docs/generated/`.
 The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Install the opinionated ANX agent skill with `anx install skill --path <path>`; `anx meta skill anx` renders the same skill to stdout. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.

@@ -109,25 +109,15 @@ def _dispatch(request: dict[str, Any], settings: dict[str, Any]) -> dict[str, An
     try:
         proc = _run(cmd, timeout=timeout_seconds + 10)
     except OSError as exc:
-        return _dispatch_error(
-            f"OpenClaw launch failed: {exc}",
-            wake_session_id=wake_session_id,
-            metadata={"error": str(exc)},
-        )
-    except subprocess.TimeoutExpired:
-        return _dispatch_error(
-            "Timed out waiting for OpenClaw agent response.",
-            wake_session_id=wake_session_id,
-            metadata={"error": "timeout", "timeout_seconds": timeout_seconds},
-        )
+        raise RuntimeError(f"OpenClaw launch failed: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Timed out waiting for OpenClaw agent response after {timeout_seconds}s."
+        ) from exc
 
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "unknown OpenClaw error").strip()
-        return _dispatch_error(
-            f"OpenClaw error: {err[:300]}",
-            wake_session_id=wake_session_id,
-            metadata={"error": err[:500], "returncode": proc.returncode},
-        )
+        raise RuntimeError(f"OpenClaw exited {proc.returncode}: {err[:500]}")
 
     response_text = _sanitize_response_text(_extract_response_text(proc.stdout))
     if not response_text:
@@ -143,15 +133,6 @@ def _dispatch(request: dict[str, Any], settings: dict[str, Any]) -> dict[str, An
             "wake_session_id": wake_session_id,
             "openclaw_command": _redact_prompt_from_command(cmd),
         },
-    }
-
-
-def _dispatch_error(message: str, *, wake_session_id: str, metadata: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "schema_version": RESPONSE_SCHEMA_VERSION,
-        "response_text": message,
-        "native_session_id": None,
-        "metadata": {"adapter_kind": "openclaw", "wake_session_id": wake_session_id, **metadata},
     }
 
 

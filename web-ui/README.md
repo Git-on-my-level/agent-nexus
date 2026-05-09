@@ -3,7 +3,7 @@
 This package contains the SvelteKit web UI for Agent Nexus.
 
 - `docs/`: operator runbooks and spec/compliance notes
-- `/contracts/anx-schema.yaml`: shared schema contract (`0.2.3`)
+- `/contracts/anx-schema.yaml`: shared schema contract (`0.6.0`)
 - `/contracts/gen/ts/client.ts`: generated TS API client consumed by `web-ui`
 
 ## Runtime model

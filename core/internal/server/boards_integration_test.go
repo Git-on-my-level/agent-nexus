@@ -312,9 +312,17 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if !containsAllStrings(boardIDs, []string{boardID, secondBoardID}) {
 		t.Fatalf("unexpected board membership board ids: %#v", boardIDs)
 	}
+	boardHandles := map[string]string{
+		boardID:       asString(createBoardPayload.Board["handle"]),
+		secondBoardID: asString(secondBoardPayload.Board["handle"]),
+	}
 	for _, membership := range memberThreadWorkspace.BoardMemberships.Items {
 		if !cardRelatedRefsContainThread(membership.Card, memberThreadID) {
 			t.Fatalf("expected board membership related_refs to include thread %q, got %#v", memberThreadID, membership.Card)
+		}
+		membershipBoardID := asString(membership.Board["id"])
+		if want := "board:" + boardHandles[membershipBoardID]; asString(membership.Card["board_ref"]) != want {
+			t.Fatalf("expected board membership card board_ref %q, got %#v", want, membership.Card["board_ref"])
 		}
 	}
 }
@@ -761,6 +769,7 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
 		"board":{
+			"id":"archive-board-internal-id",
 			"title":"Archive Board",
 			"refs":["thread:`+primaryThreadID+`"]
 		}
@@ -774,6 +783,10 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 		t.Fatalf("decode create board response: %v", err)
 	}
 	boardID := asString(createBoardPayload.Board["id"])
+	boardHandle := asString(createBoardPayload.Board["handle"])
+	if boardID == "" || boardHandle == "" || boardID == boardHandle {
+		t.Fatalf("expected divergent board id and handle, got id=%q handle=%q", boardID, boardHandle)
+	}
 	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
 
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
@@ -796,6 +809,9 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if cardID == "" {
 		t.Fatalf("expected card id in add response: %#v", addCardPayload.Card)
 	}
+	if want := "board:" + boardHandle; asString(addCardPayload.Card["board_ref"]) != want {
+		t.Fatalf("expected add card board_ref %q, got %#v", want, addCardPayload.Card["board_ref"])
+	}
 	afterAdd := asString(addCardPayload.Board["updated_at"])
 
 	archiveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/archive", `{
@@ -814,7 +830,7 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if asString(archivePayload.Card["id"]) != cardID {
 		t.Fatalf("expected archived card id %q, got %#v", cardID, archivePayload.Card["id"])
 	}
-	if want := "board:" + boardID; asString(archivePayload.Card["board_ref"]) != want {
+	if want := "board:" + boardHandle; asString(archivePayload.Card["board_ref"]) != want {
 		t.Fatalf("expected archived board_ref %q, got %#v", want, archivePayload.Card["board_ref"])
 	}
 	if asString(archivePayload.Card["archived_at"]) == "" {
@@ -892,6 +908,20 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	}
 	boardID := asString(createBoardPayload.Board["id"])
 	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+			"actor_id":"actor-1",
+			"if_board_updated_at":"`+boardUpdatedAt+`",
+			"title":"Member card `+resolution+`",
+			"related_refs":["thread:`+memberThreadID+`"],
+			"column_key":"done",
+			"resolution":"`+resolution+`",
+			"resolution_refs":["event:done-1"]
+		}`, http.StatusBadRequest)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "invalid_request")
+	}
 
 	resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
@@ -1215,6 +1245,16 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 		t.Fatalf("expected noop patch to keep document_ref empty, got %#v", got)
 	}
 	cardToken = asString(noopPatchPayload.Card["updated_at"])
+
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		legacyResolutionResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
+			"actor_id":"actor-1",
+			"if_updated_at":"`+cardToken+`",
+			"patch":{"resolution":"`+resolution+`"}
+		}`, http.StatusBadRequest)
+		defer legacyResolutionResp.Body.Close()
+		assertErrorCode(t, legacyResolutionResp, "invalid_request")
+	}
 
 	staleNoopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
@@ -1556,6 +1596,18 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	cardID := asString(addPayload.Card["id"])
 	cardThreadID := asString(addPayload.Card["thread_id"])
 	moveBase := h.baseURL + "/cards/" + cardID + "/move"
+
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		legacyResolutionResp := postJSONExpectStatus(t, moveBase, `{
+			"actor_id":"actor-1",
+			"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
+			"column_key":"done",
+			"resolution":"`+resolution+`",
+			"resolution_refs":["event:card-completion-1"]
+		}`, http.StatusBadRequest)
+		defer legacyResolutionResp.Body.Close()
+		assertErrorCode(t, legacyResolutionResp, "invalid_request")
+	}
 
 	doneMoveResp := postJSONExpectStatus(t, moveBase, `{
 		"actor_id":"actor-1",

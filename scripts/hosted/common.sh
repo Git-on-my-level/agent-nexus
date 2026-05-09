@@ -364,6 +364,22 @@ blob_s3_inline_credentials_present() {
   printf 'false\n'
 }
 
+shell_quote_env_value() {
+  local value="${1-}"
+  printf "'"
+  printf '%s' "$value" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
+
+emit_env_line() {
+  local key="$1"
+  local value="${2-}"
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "invalid env key: $key"
+  printf '%s=' "$key"
+  shell_quote_env_value "$value"
+  printf '\n'
+}
+
 emit_blob_env_lines() {
   local backend="$1"
   local blob_root="$2"
@@ -376,18 +392,16 @@ emit_blob_env_lines() {
   local s3_session_token="$9"
   local s3_force_path_style="${10:-false}"
 
-  cat <<EOF
-ANX_BLOB_BACKEND=${backend}
-ANX_BLOB_ROOT=${blob_root}
-ANX_BLOB_S3_BUCKET=${s3_bucket}
-ANX_BLOB_S3_PREFIX=${s3_prefix}
-ANX_BLOB_S3_REGION=${s3_region}
-ANX_BLOB_S3_ENDPOINT=${s3_endpoint}
-ANX_BLOB_S3_ACCESS_KEY_ID=${s3_access_key_id}
-ANX_BLOB_S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
-ANX_BLOB_S3_SESSION_TOKEN=${s3_session_token}
-ANX_BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
-EOF
+  emit_env_line ANX_BLOB_BACKEND "$backend"
+  emit_env_line ANX_BLOB_ROOT "$blob_root"
+  emit_env_line ANX_BLOB_S3_BUCKET "$s3_bucket"
+  emit_env_line ANX_BLOB_S3_PREFIX "$s3_prefix"
+  emit_env_line ANX_BLOB_S3_REGION "$s3_region"
+  emit_env_line ANX_BLOB_S3_ENDPOINT "$s3_endpoint"
+  emit_env_line ANX_BLOB_S3_ACCESS_KEY_ID "$s3_access_key_id"
+  emit_env_line ANX_BLOB_S3_SECRET_ACCESS_KEY "$s3_secret_access_key"
+  emit_env_line ANX_BLOB_S3_SESSION_TOKEN "$s3_session_token"
+  emit_env_line ANX_BLOB_S3_FORCE_PATH_STYLE "$s3_force_path_style"
 }
 
 emit_blob_metadata_lines() {
@@ -408,20 +422,18 @@ emit_blob_metadata_lines() {
   effective_location="$(blob_effective_location "$workspace_root" "$backend" "$blob_root" "$s3_bucket" "$s3_prefix")"
   inline_credentials_present="$(blob_s3_inline_credentials_present "$s3_access_key_id" "$s3_secret_access_key" "$s3_session_token")"
 
-  cat <<EOF
-BLOB_BACKEND=${backend}
-BLOB_STORAGE_MODE=$(blob_storage_mode "$backend")
-BLOB_BACKUP_MODE=$(blob_backup_mode "$backend")
-BLOB_ROOT=${blob_root}
-BLOB_EFFECTIVE_LOCATION=${effective_location}
-BLOB_KEY_FORMAT=$(blob_key_format "$backend")
-BLOB_S3_BUCKET=${s3_bucket}
-BLOB_S3_PREFIX=${s3_prefix}
-BLOB_S3_REGION=${s3_region}
-BLOB_S3_ENDPOINT=${s3_endpoint}
-BLOB_S3_FORCE_PATH_STYLE=${s3_force_path_style}
-BLOB_S3_INLINE_CREDENTIALS_PRESENT=${inline_credentials_present}
-EOF
+  emit_env_line BLOB_BACKEND "$backend"
+  emit_env_line BLOB_STORAGE_MODE "$(blob_storage_mode "$backend")"
+  emit_env_line BLOB_BACKUP_MODE "$(blob_backup_mode "$backend")"
+  emit_env_line BLOB_ROOT "$blob_root"
+  emit_env_line BLOB_EFFECTIVE_LOCATION "$effective_location"
+  emit_env_line BLOB_KEY_FORMAT "$(blob_key_format "$backend")"
+  emit_env_line BLOB_S3_BUCKET "$s3_bucket"
+  emit_env_line BLOB_S3_PREFIX "$s3_prefix"
+  emit_env_line BLOB_S3_REGION "$s3_region"
+  emit_env_line BLOB_S3_ENDPOINT "$s3_endpoint"
+  emit_env_line BLOB_S3_FORCE_PATH_STYLE "$s3_force_path_style"
+  emit_env_line BLOB_S3_INLINE_CREDENTIALS_PRESENT "$inline_credentials_present"
 }
 
 emit_workspace_quota_env_lines() {
@@ -432,14 +444,12 @@ emit_workspace_quota_env_lines() {
   local max_upload_bytes="$5"
   local workspace_access_mode="${6:-read_write}"
 
-  cat <<EOF
-ANX_WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
-ANX_WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
-ANX_WORKSPACE_MAX_DOCUMENTS=${max_documents}
-ANX_WORKSPACE_MAX_REVISIONS=${max_revisions}
-ANX_WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
-ANX_WORKSPACE_ACCESS_MODE=${workspace_access_mode}
-EOF
+  emit_env_line ANX_WORKSPACE_MAX_BLOB_BYTES "$max_blob_bytes"
+  emit_env_line ANX_WORKSPACE_MAX_ARTIFACTS "$max_artifacts"
+  emit_env_line ANX_WORKSPACE_MAX_DOCUMENTS "$max_documents"
+  emit_env_line ANX_WORKSPACE_MAX_REVISIONS "$max_revisions"
+  emit_env_line ANX_WORKSPACE_MAX_UPLOAD_BYTES "$max_upload_bytes"
+  emit_env_line ANX_WORKSPACE_ACCESS_MODE "$workspace_access_mode"
 }
 
 emit_workspace_quota_metadata_lines() {
@@ -449,13 +459,11 @@ emit_workspace_quota_metadata_lines() {
   local max_revisions="$4"
   local max_upload_bytes="$5"
 
-  cat <<EOF
-WORKSPACE_MAX_BLOB_BYTES=${max_blob_bytes}
-WORKSPACE_MAX_ARTIFACTS=${max_artifacts}
-WORKSPACE_MAX_DOCUMENTS=${max_documents}
-WORKSPACE_MAX_REVISIONS=${max_revisions}
-WORKSPACE_MAX_UPLOAD_BYTES=${max_upload_bytes}
-EOF
+  emit_env_line WORKSPACE_MAX_BLOB_BYTES "$max_blob_bytes"
+  emit_env_line WORKSPACE_MAX_ARTIFACTS "$max_artifacts"
+  emit_env_line WORKSPACE_MAX_DOCUMENTS "$max_documents"
+  emit_env_line WORKSPACE_MAX_REVISIONS "$max_revisions"
+  emit_env_line WORKSPACE_MAX_UPLOAD_BYTES "$max_upload_bytes"
 }
 
 remap_local_blob_root_for_target() {
@@ -524,7 +532,7 @@ manifest_get() {
   if [[ -z "$line" ]]; then
     return 1
   fi
-  printf '%s\n' "${line#*=}"
+  dotenv_decode_value "$file" "$key"
 }
 
 dotenv_get() {
@@ -537,8 +545,14 @@ upsert_env_var() {
   local value="$3"
   local tmp_file
   tmp_file="$(mktemp)"
-  awk -F= -v key="$key" -v value="$value" '
-    BEGIN { replaced = 0 }
+  local quoted_value
+  quoted_value="$(shell_quote_env_value "$value")"
+  # Avoid awk -v for the value: -v interprets backslashes and corrupts shell-quoted strings.
+  _ANX_HOSTED_UPSERT_QUOTED_VALUE="$quoted_value" awk -F= -v key="$key" '
+    BEGIN {
+      replaced = 0
+      value = ENVIRON["_ANX_HOSTED_UPSERT_QUOTED_VALUE"]
+    }
     $1 == key {
       print key "=" value
       replaced = 1
@@ -596,10 +610,191 @@ bootstrap_token_configured_state() {
 load_dotenv_file() {
   local dotenv_path="$1"
   [[ -f "$dotenv_path" ]] || return 0
-  set -a
-  # shellcheck disable=SC1090
-  source "$dotenv_path"
-  set +a
+  local key value
+  while IFS= read -r key || [[ -n "$key" ]]; do
+    [[ -n "$key" ]] || continue
+    value="$(dotenv_decode_value "$dotenv_path" "$key")"
+    printf -v "$key" '%s' "$value"
+    export "$key"
+  done < <(dotenv_keys "$dotenv_path")
+}
+
+dotenv_keys() {
+  local dotenv_path="$1"
+  awk '
+    BEGIN { sq = sprintf("%c", 39) }
+    function single_quote_closed(raw, i, ch, next2, outside) {
+      if (substr(raw, 1, 1) != sq) {
+        return 1
+      }
+      raw = substr(raw, 2)
+      outside = 0
+      for (i = 1; i <= length(raw); i++) {
+        ch = substr(raw, i, 1)
+        if (outside == 0) {
+          if (ch == sq) {
+            outside = 1
+          }
+        } else {
+          next2 = substr(raw, i, 3)
+          if (next2 == "\\" sq sq) {
+            i += 2
+            outside = 0
+          } else if (ch ~ /[[:space:]]/) {
+            continue
+          } else {
+            return 1
+          }
+        }
+      }
+      return outside
+    }
+    in_single == 1 {
+      if (single_quote_closed(sq $0)) {
+        in_single = 0
+      }
+      next
+    }
+    /^[[:space:]]*($|#)/ { next }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      split($0, parts, "=")
+      print parts[1]
+      raw = substr($0, length(parts[1]) + 2)
+      if (substr(raw, 1, 1) == sq && !single_quote_closed(raw)) {
+        in_single = 1
+      }
+    }
+  ' "$dotenv_path"
+}
+
+dotenv_decode_value() {
+  local dotenv_path="$1"
+  local key="$2"
+  awk -v key="$key" '
+    BEGIN { sq = sprintf("%c", 39) }
+    function single_quote_closed(raw, i, ch, next2, outside) {
+      if (substr(raw, 1, 1) != sq) {
+        return 1
+      }
+      raw = substr(raw, 2)
+      outside = 0
+      for (i = 1; i <= length(raw); i++) {
+        ch = substr(raw, i, 1)
+        if (outside == 0) {
+          if (ch == sq) {
+            outside = 1
+          }
+        } else {
+          next2 = substr(raw, i, 3)
+          if (next2 == "\\" sq sq) {
+            i += 2
+            outside = 0
+          } else if (ch ~ /[[:space:]]/) {
+            continue
+          } else {
+            return 1
+          }
+        }
+      }
+      return outside
+    }
+    function decode_single(raw, line, i, ch, next2, value, outside) {
+      raw = substr(raw, 2)
+      outside = 0
+      while (1) {
+        for (i = 1; i <= length(raw); i++) {
+          ch = substr(raw, i, 1)
+          if (outside == 0) {
+            if (ch == "'\''") {
+              outside = 1
+            } else {
+              value = value ch
+            }
+          } else {
+            next2 = substr(raw, i, 3)
+            if (next2 == "\\'\'''\''") {
+              value = value "'\''"
+              i += 2
+              outside = 0
+            } else if (ch ~ /[[:space:]]/) {
+              continue
+            } else {
+              exit 3
+            }
+          }
+        }
+        if (outside == 1) {
+          print value
+          return 0
+        }
+        if ((getline line) <= 0) {
+          exit 3
+        }
+        value = value "\n"
+        raw = line
+      }
+    }
+    function decode_double(raw, i, ch, next_ch, value, closed) {
+      raw = substr(raw, 2)
+      for (i = 1; i <= length(raw); i++) {
+        ch = substr(raw, i, 1)
+        if (ch == "\"" ) {
+          closed = 1
+          break
+        }
+        if (ch == "\\") {
+          next_ch = substr(raw, i + 1, 1)
+          if (next_ch == "\"" || next_ch == "\\" || next_ch == "$" || next_ch == "`") {
+            value = value next_ch
+            i++
+          } else {
+            value = value ch
+          }
+        } else {
+          value = value ch
+        }
+      }
+      if (closed != 1) {
+        exit 3
+      }
+      print value
+      return 0
+    }
+    in_skip == 1 {
+      if (single_quote_closed(sq $0)) {
+        in_skip = 0
+      }
+      next
+    }
+    $0 ~ ("^" key "=") {
+      raw = substr($0, length(key) + 2)
+      if (substr(raw, 1, 1) == "'\''") {
+        decode_single(raw)
+        found = 1
+        exit 0
+      }
+      if (substr(raw, 1, 1) == "\"") {
+        decode_double(raw)
+        found = 1
+        exit 0
+      }
+      print raw
+      found = 1
+      exit 0
+    }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      split($0, parts, "=")
+      raw = substr($0, length(parts[1]) + 2)
+      if (substr(raw, 1, 1) == sq && !single_quote_closed(raw)) {
+        in_skip = 1
+      }
+    }
+    END {
+      if (found != 1) {
+        exit 1
+      }
+    }
+  ' "$dotenv_path"
 }
 
 sqlite_scalar() {

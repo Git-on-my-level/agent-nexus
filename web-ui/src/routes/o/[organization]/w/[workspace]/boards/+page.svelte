@@ -8,7 +8,7 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { coreClient } from "$lib/coreClient";
-  import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
+  import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { formatTimestamp } from "$lib/formatDate";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
@@ -46,13 +46,11 @@
     const defaultLifecycle = st.length === 1 && String(st[0]) === "active";
     return !defaultLifecycle || Boolean(f.owners.trim()) || Boolean(f.q.trim());
   });
-  let archiveBusyId = $state("");
-  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
-  let confirmModal = $state(emptyConfirmModal());
-  let trashBusyId = $state("");
-  let bulkBusy = $state(false);
+  let lifecycle = $state();
 
-  const boardSel = createWorkspaceListSelection({ bulkBusy: () => bulkBusy });
+  const boardSel = createWorkspaceListSelection({
+    bulkBusy: () => lifecycle?.bulkBusy ?? false,
+  });
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -181,19 +179,28 @@
     boards.filter((row) => boardSel.selectedIds.has(row.board.id)),
   );
 
-  let bulkBoardsCanArchive = $derived(
-    selectedBoardRows.some(
-      (row) => !isBoardArchived(row.board) && !isBoardTrashed(row.board),
-    ),
-  );
-  let bulkBoardsCanUnarchive = $derived(
-    selectedBoardRows.some(
-      (row) => isBoardArchived(row.board) && !isBoardTrashed(row.board),
-    ),
-  );
-  let bulkBoardsCanTrash = $derived(
-    selectedBoardRows.some((row) => !isBoardTrashed(row.board)),
-  );
+  lifecycle = createWorkspaceResourceLifecycleController({
+    resourceSingular: "board",
+    resourcePlural: "boards",
+    selectedItems: () => selectedBoardRows,
+    idFor: (row) => row?.board?.id,
+    isArchived: (row) => isBoardArchived(row?.board),
+    isTrashed: (row) => isBoardTrashed(row?.board),
+    actions: {
+      archive: (id) => coreClient.archiveBoard(id, {}),
+      unarchive: (id) => coreClient.unarchiveBoard(id, {}),
+      trash: (id) => coreClient.trashBoard(id, {}),
+    },
+    reload: () => loadBoards(),
+    clearSelection: () => clearBoardSelection(),
+    setError: (message) => {
+      error = message;
+    },
+  });
+
+  let bulkBoardsCanArchive = $derived(lifecycle.canArchive());
+  let bulkBoardsCanUnarchive = $derived(lifecycle.canUnarchive());
+  let bulkBoardsCanTrash = $derived(lifecycle.canTrash());
 
   function selectAllVisibleBoards() {
     boardSel.selectAllFromVisibleIds(
@@ -221,26 +228,6 @@
     return workspaceHref(`/boards/${encodeURIComponent(segment)}`);
   }
 
-  function boardIdsForBulkArchive() {
-    return selectedBoardRows
-      .filter(
-        (row) => !isBoardArchived(row.board) && !isBoardTrashed(row.board),
-      )
-      .map((row) => row.board.id);
-  }
-
-  function boardIdsForBulkUnarchive() {
-    return selectedBoardRows
-      .filter((row) => isBoardArchived(row.board) && !isBoardTrashed(row.board))
-      .map((row) => row.board.id);
-  }
-
-  function boardIdsForBulkTrash() {
-    return selectedBoardRows
-      .filter((row) => !isBoardTrashed(row.board))
-      .map((row) => row.board.id);
-  }
-
   function isBoardArchived(board) {
     const at = board?.archived_at;
     return typeof at === "string" ? at.trim() !== "" : Boolean(at);
@@ -250,137 +237,9 @@
     return board?.state === "trashed";
   }
 
-  async function archiveBoard(boardId) {
-    const id = String(boardId ?? "").trim();
-    if (!id || archiveBusyId || bulkBusy) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.archiveBoard(id, {});
-      await loadBoards();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
-  async function trashBoard(boardId) {
-    const id = String(boardId ?? "").trim();
-    if (!id || trashBusyId || bulkBusy) return;
-    trashBusyId = id;
-    error = "";
-    try {
-      await coreClient.trashBoard(id, {});
-      confirmModal = emptyConfirmModal();
-      await loadBoards();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      trashBusyId = "";
-    }
-  }
-
-  async function bulkArchiveBoards(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.archiveBoard(id, {});
-      }
-      clearBoardSelection();
-      confirmModal = emptyConfirmModal();
-      await loadBoards();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkUnarchiveBoards(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.unarchiveBoard(id, {});
-      }
-      clearBoardSelection();
-      await loadBoards();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkTrashBoards(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.trashBoard(id, {});
-      }
-      clearBoardSelection();
-      confirmModal = emptyConfirmModal();
-      await loadBoards();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  function handleConfirm() {
-    const bulkIds = confirmModal.bulkIds;
-    const id = confirmModal.entityId;
-    const action = confirmModal.action;
-    confirmModal = emptyConfirmModal();
-    if (bulkIds && bulkIds.length > 0) {
-      if (action === "archive") void bulkArchiveBoards(bulkIds);
-      else if (action === "trash") void bulkTrashBoards(bulkIds);
-      return;
-    }
-    if (action === "archive") void archiveBoard(id);
-    else if (action === "trash") void trashBoard(id);
-  }
-
-  let boardConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
-  let boardConfirmIsBulk = $derived(boardConfirmBulkCount > 0);
-
-  let boardConfirmModalTitle = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return boardConfirmIsBulk
-        ? `Move ${boardConfirmBulkCount} boards to trash`
-        : "Move to trash";
-    }
-    return boardConfirmIsBulk
-      ? `Archive ${boardConfirmBulkCount} boards`
-      : "Archive board";
-  });
-
-  let boardConfirmModalMessage = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return boardConfirmIsBulk
-        ? `These boards (${boardConfirmBulkCount}) will be moved to trash. You can restore them later.`
-        : "This board will be moved to trash. You can restore it later.";
-    }
-    return boardConfirmIsBulk
-      ? `These boards (${boardConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
-      : "This board will be hidden from default views. You can unarchive it later.";
-  });
-
-  let boardConfirmModalBusy = $derived(
-    confirmModal.action === "trash"
-      ? Boolean(trashBusyId) || (boardConfirmIsBulk && bulkBusy)
-      : Boolean(archiveBusyId) || (boardConfirmIsBulk && bulkBusy),
-  );
+  let boardConfirmModalTitle = $derived(lifecycle.confirmTitle());
+  let boardConfirmModalMessage = $derived(lifecycle.confirmMessage());
+  let boardConfirmModalBusy = $derived(lifecycle.confirmBusy());
 
   function applyBoardFilters() {
     boardFiltersApplied = { ...boardFiltersDraft };
@@ -670,34 +529,25 @@
     {#if boardSel.selectMode}
       <WorkspaceListBulkToolbar
         allVisibleSelected={allBoardsVisibleSelected}
-        busy={bulkBusy}
+        busy={lifecycle.bulkBusy}
         canArchive={bulkBoardsCanArchive}
         canTrash={bulkBoardsCanTrash}
         canUnarchive={bulkBoardsCanUnarchive}
         onArchive={() => {
-          const ids = boardIdsForBulkArchive();
+          const ids = lifecycle.idsForArchive();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "archive",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("archive", ids);
         }}
         onClear={clearBoardSelection}
         onDeselectAll={clearBoardSelection}
         onSelectAll={selectAllVisibleBoards}
         onTrash={() => {
-          const ids = boardIdsForBulkTrash();
+          const ids = lifecycle.idsForTrash();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "trash",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("trash", ids);
         }}
-        onUnarchive={() => void bulkUnarchiveBoards(boardIdsForBulkUnarchive())}
+        onUnarchive={() =>
+          void lifecycle.runBulk("unarchive", lifecycle.idsForUnarchive())}
         selectionChromeActive={true}
         selectedCount={boardSel.selectedIds.size}
       />
@@ -712,13 +562,15 @@
   {/if}
 
   <ConfirmModal
-    open={confirmModal.open}
+    open={lifecycle.confirmModal.open}
     title={boardConfirmModalTitle}
     message={boardConfirmModalMessage}
-    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    confirmLabel={lifecycle.confirmModal.action === "trash"
+      ? "Trash"
+      : "Archive"}
+    variant={lifecycle.confirmModal.action === "trash" ? "danger" : "warning"}
     busy={boardConfirmModalBusy}
-    onconfirm={handleConfirm}
-    oncancel={() => (confirmModal = closeConfirmModal(confirmModal))}
+    onconfirm={() => lifecycle.handleConfirm()}
+    oncancel={() => lifecycle.closeConfirm()}
   />
 </WorkspacePageShell>

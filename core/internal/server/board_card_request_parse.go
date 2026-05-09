@@ -245,12 +245,6 @@ func parseAddBoardCardJSON(w http.ResponseWriter, raw map[string]any) (addBoardC
 func validateBoardCardCreateResolutionInput(resolution *string, resolutionRefs []string, columnKey string) error {
 	if resolution != nil {
 		normalizedResolution := strings.TrimSpace(*resolution)
-		if normalizedResolution == "completed" || normalizedResolution == "superseded" {
-			normalizedResolution = "done"
-		}
-		if normalizedResolution == "unresolved" {
-			normalizedResolution = ""
-		}
 		if normalizedResolution != "" {
 			if err := validateCardResolution(normalizedResolution, false); err != nil {
 				return err

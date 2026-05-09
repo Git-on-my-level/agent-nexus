@@ -255,11 +255,16 @@ OBJECT_BACKUP_DIR="${TMP_ROOT}/backup-object-bundle"
 OBJECT_RESTORE_ROOT="${TMP_ROOT}/restored/team-object-restore"
 S3_SOURCE_ROOT="${TMP_ROOT}/source/team-s3"
 S3_BACKUP_DIR="${TMP_ROOT}/backup-s3-bundle"
+S3_BACKUP_WITH_SECRETS_DIR="${TMP_ROOT}/backup-s3-bundle-with-secrets"
 S3_RESTORE_ROOT="${TMP_ROOT}/restored/team-s3-restore"
+S3_RESTORE_WITH_SECRETS_ROOT="${TMP_ROOT}/restored/team-s3-restore-with-secrets"
 RESTORE_INSTANCE_NAME="team-beta"
 RESTORE_PUBLIC_ORIGIN="https://team-beta.example.test"
 RESTORE_CORE_INSTANCE_ID="team-beta-core"
 SEED_PORT="$(pick_loopback_port)"
+S3_ACCESS_KEY_ID_VALUE='ak id # $(touch should-not-run) "double"'
+S3_SECRET_ACCESS_KEY_VALUE="sec ret # \$(touch ${TMP_ROOT}/s3-secret-executed) 'single'"
+S3_SESSION_TOKEN_VALUE=$'session line one\nsession line two # $(touch should-not-run)'
 
 "${SCRIPT_DIR}/provision-workspace.sh" \
   --instance team-alpha \
@@ -538,8 +543,16 @@ seed_workspace_fixture "${S3_SOURCE_ROOT}/workspace" "$CORE_BIN" "$SCHEMA_PATH" 
   --blob-s3-prefix workspaces/team-s3/ \
   --blob-s3-region auto \
   --blob-s3-endpoint https://r2.example.test \
+  --blob-s3-access-key-id "$S3_ACCESS_KEY_ID_VALUE" \
+  --blob-s3-secret-access-key "$S3_SECRET_ACCESS_KEY_VALUE" \
+  --blob-s3-session-token "$S3_SESSION_TOKEN_VALUE" \
   --blob-s3-force-path-style true \
   --force
+
+assert_equals "$S3_ACCESS_KEY_ID_VALUE" "$(dotenv_get "${S3_SOURCE_ROOT}/config/env.production" ANX_BLOB_S3_ACCESS_KEY_ID)" "s3 source env access key id"
+assert_equals "$S3_SECRET_ACCESS_KEY_VALUE" "$(dotenv_get "${S3_SOURCE_ROOT}/config/env.production" ANX_BLOB_S3_SECRET_ACCESS_KEY)" "s3 source env secret access key"
+assert_equals "$S3_SESSION_TOKEN_VALUE" "$(dotenv_get "${S3_SOURCE_ROOT}/config/env.production" ANX_BLOB_S3_SESSION_TOKEN)" "s3 source env session token"
+assert_path_missing "${TMP_ROOT}/s3-secret-executed"
 
 "${SCRIPT_DIR}/backup-workspace.sh" \
   --instance-root "$S3_SOURCE_ROOT" \
@@ -557,6 +570,17 @@ assert_equals "workspaces/team-s3/" "$(manifest_get "${S3_BACKUP_DIR}/manifest.e
 assert_equals "auto" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_REGION)" "s3 manifest region"
 assert_equals "https://r2.example.test" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_ENDPOINT)" "s3 manifest endpoint"
 assert_equals "true" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_FORCE_PATH_STYLE)" "s3 manifest force path style"
+assert_equals "true" "$(manifest_get "${S3_BACKUP_DIR}/manifest.env" BLOB_S3_INLINE_CREDENTIALS_PRESENT)" "s3 manifest inline credentials marker"
+
+"${SCRIPT_DIR}/backup-workspace.sh" \
+  --instance-root "$S3_SOURCE_ROOT" \
+  --output-dir "$S3_BACKUP_WITH_SECRETS_DIR" \
+  --include-config-secrets
+S3_BACKUP_WITH_SECRETS_DIR="$(cd "$S3_BACKUP_WITH_SECRETS_DIR" && pwd -P)"
+assert_equals "$S3_ACCESS_KEY_ID_VALUE" "$(dotenv_get "${S3_BACKUP_WITH_SECRETS_DIR}/config/env.production" ANX_BLOB_S3_ACCESS_KEY_ID)" "s3 backup env access key id"
+assert_equals "$S3_SECRET_ACCESS_KEY_VALUE" "$(dotenv_get "${S3_BACKUP_WITH_SECRETS_DIR}/config/env.production" ANX_BLOB_S3_SECRET_ACCESS_KEY)" "s3 backup env secret access key"
+assert_equals "$S3_SESSION_TOKEN_VALUE" "$(dotenv_get "${S3_BACKUP_WITH_SECRETS_DIR}/config/env.production" ANX_BLOB_S3_SESSION_TOKEN)" "s3 backup env session token"
+assert_path_missing "${TMP_ROOT}/s3-secret-executed"
 
 "${SCRIPT_DIR}/restore-workspace.sh" \
   --backup-dir "$S3_BACKUP_DIR" \
@@ -577,6 +601,21 @@ assert_equals "true" "$(dotenv_get "${S3_RESTORE_ROOT}/config/env.production" AN
 assert_equals "s3" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/instance.env" BLOB_BACKEND)" "s3 restore metadata blob backend"
 assert_equals "reference-remote-blob-store" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_RESTORE_ACTION)" "s3 restore receipt blob action"
 assert_equals "s3://anx-test-blobs/workspaces/team-s3/" "$(dotenv_get "${S3_RESTORE_ROOT}/metadata/restore-receipt.env" TARGET_BLOB_EFFECTIVE_LOCATION)" "s3 restore receipt blob location"
+
+"${SCRIPT_DIR}/restore-workspace.sh" \
+  --backup-dir "$S3_BACKUP_WITH_SECRETS_DIR" \
+  --target-instance-root "$S3_RESTORE_WITH_SECRETS_ROOT" \
+  --instance "team-s3-restore-secrets" \
+  --public-origin "https://team-s3-restore-secrets.example.test" \
+  --listen-port 8024 \
+  --web-ui-port 3024 \
+  --core-instance-id "team-s3-restore-secrets-core"
+S3_RESTORE_WITH_SECRETS_ROOT="$(cd "$S3_RESTORE_WITH_SECRETS_ROOT" && pwd -P)"
+
+assert_equals "$S3_ACCESS_KEY_ID_VALUE" "$(dotenv_get "${S3_RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_BLOB_S3_ACCESS_KEY_ID)" "s3 restore with secrets access key id"
+assert_equals "$S3_SECRET_ACCESS_KEY_VALUE" "$(dotenv_get "${S3_RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_BLOB_S3_SECRET_ACCESS_KEY)" "s3 restore with secrets secret access key"
+assert_equals "$S3_SESSION_TOKEN_VALUE" "$(dotenv_get "${S3_RESTORE_WITH_SECRETS_ROOT}/config/env.production" ANX_BLOB_S3_SESSION_TOKEN)" "s3 restore with secrets session token"
+assert_path_missing "${TMP_ROOT}/s3-secret-executed"
 
 KEEP_SOURCE_ERR="${TMP_ROOT}/keep-source-err"
 if "${SCRIPT_DIR}/restore-workspace.sh" \

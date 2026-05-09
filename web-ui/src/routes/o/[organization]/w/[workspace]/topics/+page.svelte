@@ -26,6 +26,7 @@
   import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { topicListLinkedMetricItems } from "$lib/workspaceRowMetrics.js";
   import {
     resourceDisplayLabel,
@@ -46,16 +47,7 @@
   let creatingTopic = $state(false);
   let createError = $state("");
   let filtersOpen = $state(false);
-  let archiveBusyId = $state("");
-  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
-  let confirmModal = $state({
-    open: false,
-    action: "",
-    entityId: "",
-    bulkIds: null,
-  });
-  let trashBusyId = $state("");
-  let bulkBusy = $state(false);
+  let lifecycle = $state();
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -67,7 +59,7 @@
   });
 
   const topicSel = createWorkspaceListSelection({
-    bulkBusy: () => bulkBusy,
+    bulkBusy: () => lifecycle?.bulkBusy ?? false,
     when: () => listSurface === "topics",
   });
 
@@ -191,15 +183,28 @@
       : [],
   );
 
-  let bulkTopicsCanArchive = $derived(
-    selectedTopics.some((t) => !isTopicArchived(t) && !isTopicTrashed(t)),
-  );
-  let bulkTopicsCanUnarchive = $derived(
-    selectedTopics.some((t) => isTopicArchived(t) && !isTopicTrashed(t)),
-  );
-  let bulkTopicsCanTrash = $derived(
-    selectedTopics.some((t) => !isTopicTrashed(t)),
-  );
+  lifecycle = createWorkspaceResourceLifecycleController({
+    resourceSingular: "topic",
+    resourcePlural: "topics",
+    selectedItems: () => selectedTopics,
+    idFor: (topic) => topic?.id,
+    isArchived: isTopicArchived,
+    isTrashed: isTopicTrashed,
+    actions: {
+      archive: (id) => coreClient.archiveTopic(id, {}),
+      unarchive: (id) => coreClient.unarchiveTopic(id, {}),
+      trash: (id) => coreClient.trashTopic(id, {}),
+    },
+    reload: () => loadTopics(),
+    clearSelection: () => clearTopicSelection(),
+    setError: (message) => {
+      error = message;
+    },
+  });
+
+  let bulkTopicsCanArchive = $derived(lifecycle.canArchive());
+  let bulkTopicsCanUnarchive = $derived(lifecycle.canUnarchive());
+  let bulkTopicsCanTrash = $derived(lifecycle.canTrash());
 
   function selectAllVisibleTopics() {
     topicSel.selectAllFromVisibleIds(topics.map((t) => t.id).filter(Boolean));
@@ -224,22 +229,6 @@
     return workspaceHref(
       `/topics/${encodeURIComponent(resourceRouteSegment(topics[i], "topic"))}`,
     );
-  }
-
-  function topicIdsForBulkArchive() {
-    return selectedTopics
-      .filter((t) => !isTopicArchived(t) && !isTopicTrashed(t))
-      .map((t) => t.id);
-  }
-
-  function topicIdsForBulkUnarchive() {
-    return selectedTopics
-      .filter((t) => isTopicArchived(t) && !isTopicTrashed(t))
-      .map((t) => t.id);
-  }
-
-  function topicIdsForBulkTrash() {
-    return selectedTopics.filter((t) => !isTopicTrashed(t)).map((t) => t.id);
   }
 
   async function applyFilters() {
@@ -344,137 +333,9 @@
     return topic?.state === "trashed";
   }
 
-  async function archiveTopicRow(topicId) {
-    const id = String(topicId ?? "").trim();
-    if (!id || archiveBusyId || bulkBusy) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.archiveTopic(id, {});
-      await loadTopics();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
-  async function trashTopicRow(topicId) {
-    const id = String(topicId ?? "").trim();
-    if (!id || trashBusyId || bulkBusy) return;
-    trashBusyId = id;
-    error = "";
-    try {
-      await coreClient.trashTopic(id, {});
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-      await loadTopics();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      trashBusyId = "";
-    }
-  }
-
-  async function bulkArchiveTopics(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.archiveTopic(id, {});
-      }
-      clearTopicSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-      await loadTopics();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkUnarchiveTopics(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.unarchiveTopic(id, {});
-      }
-      clearTopicSelection();
-      await loadTopics();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkTrashTopics(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.trashTopic(id, {});
-      }
-      clearTopicSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-      await loadTopics();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  function handleConfirm() {
-    const bulkIds = confirmModal.bulkIds;
-    const id = confirmModal.entityId;
-    const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-    if (bulkIds && bulkIds.length > 0) {
-      if (action === "archive") void bulkArchiveTopics(bulkIds);
-      else if (action === "trash") void bulkTrashTopics(bulkIds);
-      return;
-    }
-    if (action === "archive") void archiveTopicRow(id);
-    else if (action === "trash") void trashTopicRow(id);
-  }
-
-  let topicConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
-  let topicConfirmIsBulk = $derived(topicConfirmBulkCount > 0);
-
-  let topicConfirmModalTitle = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return topicConfirmIsBulk
-        ? `Move ${topicConfirmBulkCount} topics to trash`
-        : "Move to trash";
-    }
-    return topicConfirmIsBulk
-      ? `Archive ${topicConfirmBulkCount} topics`
-      : "Archive topic";
-  });
-
-  let topicConfirmModalMessage = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return topicConfirmIsBulk
-        ? `These topics (${topicConfirmBulkCount}) will be moved to trash. You can restore them later.`
-        : "This topic will be moved to trash. You can restore it later.";
-    }
-    return topicConfirmIsBulk
-      ? `These topics (${topicConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
-      : "This topic will be hidden from default views. You can unarchive it later.";
-  });
-
-  let topicConfirmModalBusy = $derived(
-    confirmModal.action === "trash"
-      ? Boolean(trashBusyId) || (topicConfirmIsBulk && bulkBusy)
-      : Boolean(archiveBusyId) || (topicConfirmIsBulk && bulkBusy),
-  );
+  let topicConfirmModalTitle = $derived(lifecycle.confirmTitle());
+  let topicConfirmModalMessage = $derived(lifecycle.confirmMessage());
+  let topicConfirmModalBusy = $derived(lifecycle.confirmBusy());
 </script>
 
 <div
@@ -829,34 +690,25 @@
     {#if topicSel.selectMode}
       <WorkspaceListBulkToolbar
         allVisibleSelected={allTopicsVisibleSelected}
-        busy={bulkBusy}
+        busy={lifecycle.bulkBusy}
         canArchive={bulkTopicsCanArchive}
         canTrash={bulkTopicsCanTrash}
         canUnarchive={bulkTopicsCanUnarchive}
         onArchive={() => {
-          const ids = topicIdsForBulkArchive();
+          const ids = lifecycle.idsForArchive();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "archive",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("archive", ids);
         }}
         onClear={clearTopicSelection}
         onDeselectAll={clearTopicSelection}
         onSelectAll={selectAllVisibleTopics}
         onTrash={() => {
-          const ids = topicIdsForBulkTrash();
+          const ids = lifecycle.idsForTrash();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "trash",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("trash", ids);
         }}
-        onUnarchive={() => void bulkUnarchiveTopics(topicIdsForBulkUnarchive())}
+        onUnarchive={() =>
+          void lifecycle.runBulk("unarchive", lifecycle.idsForUnarchive())}
         selectionChromeActive={true}
         selectedCount={topicSel.selectedIds.size}
       />
@@ -939,14 +791,15 @@
 
 {#if listSurface === "topics"}
   <ConfirmModal
-    open={confirmModal.open}
+    open={lifecycle.confirmModal.open}
     title={topicConfirmModalTitle}
     message={topicConfirmModalMessage}
-    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    confirmLabel={lifecycle.confirmModal.action === "trash"
+      ? "Trash"
+      : "Archive"}
+    variant={lifecycle.confirmModal.action === "trash" ? "danger" : "warning"}
     busy={topicConfirmModalBusy}
-    onconfirm={handleConfirm}
-    oncancel={() =>
-      (confirmModal = { open: false, action: "", entityId: "", bulkIds: null })}
+    onconfirm={() => lifecycle.handleConfirm()}
+    oncancel={() => lifecycle.closeConfirm()}
   />
 {/if}

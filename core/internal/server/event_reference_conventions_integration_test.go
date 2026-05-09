@@ -137,7 +137,7 @@ func TestEventReferenceConventionsRejectUnknownEventType(t *testing.T) {
 		"event":{
 			"type":"my_unknown_event_type",
 			"thread_id":"thread-1",
-			"refs":["customprefix:abc"],
+			"refs":["thread:thread-1"],
 			"summary":"unknown event",
 			"payload":{"x":1},
 			"provenance":{"sources":["inferred"]}

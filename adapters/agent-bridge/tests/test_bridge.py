@@ -1,11 +1,13 @@
 import logging
+import sys
 import pytest
 
 from pathlib import Path
 from types import SimpleNamespace
 
 from anx_agent_bridge.bridge import AgentBridge
-from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig
+from anx_agent_bridge.adapters.subprocess_adapter import SubprocessAdapter
+from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig, WorkspaceConfig
 from anx_agent_bridge.models import WakePacket
 from anx_agent_bridge.anx_client import ANXClientError, ANXStreamDisconnected
 from anx_agent_bridge.util import generate_bridge_proof_keypair
@@ -19,6 +21,7 @@ class StubState:
         self.bridge_signing_public_key_spki_b64 = public_key_b64
         self.bridge_signing_private_key_pkcs8_b64 = private_key_b64
         self._handled = set()
+        self._completion_pending = set()
         self._sessions = {}
 
     def handled_wakeup_ids(self):
@@ -26,6 +29,15 @@ class StubState:
 
     def mark_wakeup_handled(self, wakeup_id: str):
         self._handled.add(wakeup_id)
+
+    def completion_pending_wakeup_ids(self):
+        return self._completion_pending
+
+    def mark_wakeup_completion_pending(self, wakeup_id: str):
+        self._completion_pending.add(wakeup_id)
+
+    def clear_wakeup_completion_pending(self, wakeup_id: str):
+        self._completion_pending.discard(wakeup_id)
 
     def session_map(self):
         return dict(self._sessions)
@@ -159,18 +171,23 @@ class StubAuth:
         return StubAuthState()
 
 
-def build_bridge(events):
+def build_bridge(events, *, workspace_ids=None):
+    workspace_ids = workspace_ids or ["ws_main"]
     config = LoadedConfig(
-        anx=ANXConfig(base_url="http://anx.test", workspace_id="ws_main", workspace_name="Main"),
+        anx=ANXConfig(base_url="http://anx.test", workspace_id=workspace_ids[0], workspace_name="Main"),
         agent=AgentConfig(
             handle="hermes",
             driver_kind="custom",
             adapter_kind="subprocess",
             state_dir=Path("/tmp/anx-agent-bridge-test"),
-            workspace_bindings=["ws_main"],
+            workspace_bindings=workspace_ids,
         ),
         adapter=AdapterConfig(raw={}),
         auth_state_path=Path("/tmp/anx-agent-bridge-test-auth.json"),
+        workspaces=[
+            WorkspaceConfig(id=workspace_id, name=workspace_id, base_url="http://anx.test")
+            for workspace_id in workspace_ids
+        ],
     )
     state = StubState()
     client = StubClient(events)
@@ -279,28 +296,49 @@ def test_packet_event_refs_omits_empty_trigger_event_id():
     ]
 
 
-def test_handle_notification_marks_consumed_when_completion_fails():
+def test_handle_notification_retries_completion_without_redispatch_after_reply_post():
     bridge, state, client = build_bridge([])
+    completion_attempts = {"count": 0}
 
     def fail_completion(*_args, **_kwargs):
-        raise RuntimeError("completion write failed")
+        completion_attempts["count"] += 1
+        if completion_attempts["count"] == 1:
+            raise RuntimeError("completion write failed")
+        return {
+            "notification": {
+                "wakeup_id": "wake-1",
+                "bridge_instance_id": "bridge-test",
+                "delivery_status": "completed",
+            }
+        }
 
     client.complete_agent_wakeup = fail_completion
+    notification = {
+        "wakeup_id": "wake-1",
+        "target_actor_id": "actor-hermes",
+        "thread_id": "thread-1",
+        "request_event_id": "evt-request",
+        "trigger_event_id": "evt-trigger",
+    }
 
-    bridge._handle_notification(
-        {
-            "wakeup_id": "wake-1",
-            "target_actor_id": "actor-hermes",
-            "thread_id": "thread-1",
-            "request_event_id": "evt-request",
-            "trigger_event_id": "evt-trigger",
-        }
-    )
+    bridge._handle_notification(notification)
 
     assert client.notification_reads == ["wake-1"]
     assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" in state.completion_pending_wakeup_ids()
     assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
     assert "completion write failed" in client.failed_wakeups[-1]["error"]
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert [entry["event"]["type"] for entry in client.created_events] == ["message_posted"]
+
+    bridge._handle_notification(notification)
+
+    assert completion_attempts["count"] == 2
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" not in state.completion_pending_wakeup_ids()
+    assert client.notification_reads == ["wake-1", "wake-1"]
+    assert [entry["event"]["type"] for entry in client.created_events] == ["message_posted"]
 
 
 def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
@@ -338,7 +376,7 @@ def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
     assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
 
 
-def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retries(monkeypatch):
+def test_handle_notification_does_not_mark_consumed_after_reply_post_exhausts_retries(monkeypatch):
     bridge, state, client = build_bridge([])
     original_create_event = client.create_event
     attempts = {"message": 0}
@@ -363,10 +401,10 @@ def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retri
     bridge._handle_notification(notification)
     bridge._handle_notification(notification)
 
-    assert attempts["message"] == 3
-    assert len(bridge.adapter.dispatch_calls) == 1
+    assert attempts["message"] == 6
+    assert len(bridge.adapter.dispatch_calls) == 2
     assert client.notification_reads == ["wake-1", "wake-1"]
-    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" not in state.handled_wakeup_ids()
     assert [entry["event"]["type"] for entry in client.created_events] == []
     assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
 
@@ -489,6 +527,51 @@ def test_drain_notifications_continues_after_dispatch_failure():
     assert client.completed_wakeups == [{"wakeup_id": "wake-good", "bridge_instance_id": "bridge-test"}]
 
 
+def test_openclaw_subprocess_runtime_failure_marks_wake_failed(tmp_path: Path):
+    bridge, state, client = build_bridge([])
+    fake_openclaw = tmp_path / "openclaw"
+    fake_openclaw.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "sys.stderr.write('gateway unavailable\\n')\n"
+        "sys.exit(7)\n",
+        encoding="utf-8",
+    )
+    fake_openclaw.chmod(0o755)
+    fake_anx = tmp_path / "anx"
+    fake_anx.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    fake_anx.chmod(0o755)
+    bridge.adapter = SubprocessAdapter(
+        command=[sys.executable, "-m", "anx_agent_bridge.adapters.openclaw"],
+        handle="hermes",
+        workspace_id="ws_main",
+        dispatch_timeout_seconds=10,
+        adapter_raw={
+            "kind": "openclaw",
+            "openclaw_bin": str(fake_openclaw),
+            "anx_cli_bin": str(fake_anx),
+        },
+    )
+
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
+
+    assert state.handled_wakeup_ids() == set()
+    assert client.created_events == []
+    assert client.completed_wakeups == []
+    assert len(client.failed_wakeups) == 1
+    assert client.failed_wakeups[0]["wakeup_id"] == "wake-1"
+    assert "adapter dispatch command exited 1" in client.failed_wakeups[0]["error"]
+    assert "OpenClaw exited 7: gateway unavailable" in client.failed_wakeups[0]["error"]
+
+
 def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatch):
     bridge, _state, client = build_bridge([])
     failures = {"count": 0}
@@ -576,6 +659,20 @@ def test_bridge_checkin_upserts_active_registration():
     assert checkin_payload["workspace_id"] == "ws_main"
     assert checkin_payload["workspace_ids"] == ["ws_main"]
     assert checkin_payload["proof_signature_b64"] != ""
+
+
+def test_bridge_checkin_advertises_same_core_workspace_ids():
+    bridge, _state, client = build_bridge([], workspace_ids=["ws_main", "ws_aux"])
+
+    bridge._publish_checkin()
+
+    reg_payload = client.registration_updates[0]["registration"]
+    checkin_payload = client.bridge_checkins[0]
+    assert bridge.config.anx.base_url == "http://anx.test"
+    assert reg_payload["bridge_workspace_ids"] == ["ws_main", "ws_aux"]
+    assert [item["workspace_id"] for item in reg_payload["workspace_bindings"]] == ["ws_main", "ws_aux"]
+    assert checkin_payload["workspace_id"] == "ws_main"
+    assert checkin_payload["workspace_ids"] == ["ws_main", "ws_aux"]
 
 
 def test_bridge_checkin_does_not_invoke_adapter_doctor():

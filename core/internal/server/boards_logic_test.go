@@ -59,6 +59,27 @@ func TestValidateBoardCardCreateResolutionInput(t *testing.T) {
 			columnKey:      "done",
 			wantErr:        "resolution must be done",
 		},
+		{
+			name:           "rejects legacy completed alias",
+			resolution:     ptr("completed"),
+			resolutionRefs: []string{"event:done-1"},
+			columnKey:      "done",
+			wantErr:        "resolution must be done",
+		},
+		{
+			name:           "rejects legacy superseded alias",
+			resolution:     ptr("superseded"),
+			resolutionRefs: []string{"event:done-1"},
+			columnKey:      "done",
+			wantErr:        "resolution must be done",
+		},
+		{
+			name:           "rejects legacy unresolved alias",
+			resolution:     ptr("unresolved"),
+			resolutionRefs: []string{"event:done-1"},
+			columnKey:      "done",
+			wantErr:        "resolution must be done",
+		},
 	}
 
 	for _, tt := range tests {

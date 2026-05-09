@@ -4,14 +4,11 @@ import (
 	"strings"
 )
 
-// Canonical lifecycle values for OR combined list filtering.
-var canonicalLifecycleStates = []string{"active", "archived", "trashed"}
-
 // NormalizeListLifecycleStates returns a non-empty deduplicated slice in stable order (active, archived, trashed).
 // Callers must pass only canonical lifecycle strings; empty input defaults to active-only.
 func NormalizeListLifecycleStates(states []string) []string {
 	if len(states) == 0 {
-		return []string{"active"}
+		return []string{LifecycleStateActive}
 	}
 	seen := make(map[string]struct{}, len(states))
 	for _, raw := range states {
@@ -28,7 +25,7 @@ func NormalizeListLifecycleStates(states []string) []string {
 		}
 	}
 	if len(out) == 0 {
-		return []string{"active"}
+		return []string{LifecycleStateActive}
 	}
 	return out
 }
@@ -36,11 +33,11 @@ func NormalizeListLifecycleStates(states []string) []string {
 // LifecycleStatePredicate returns SQL for one bucket (qualified column names).
 func LifecycleStatePredicate(archivedCol, trashedCol, state string) string {
 	switch strings.TrimSpace(state) {
-	case "active":
+	case LifecycleStateActive:
 		return "(" + archivedCol + " IS NULL AND " + trashedCol + " IS NULL)"
-	case "archived":
+	case LifecycleStateArchived:
 		return "(" + archivedCol + " IS NOT NULL AND " + trashedCol + " IS NULL)"
-	case "trashed":
+	case LifecycleStateTrashed:
 		return "(" + trashedCol + " IS NOT NULL)"
 	default:
 		return "1=0"

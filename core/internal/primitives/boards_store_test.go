@@ -369,6 +369,38 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	}
 
 	evidenceRefs := []string{"event:card-completion-1"}
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		_, err = store.AddBoardCard(ctx, "actor-3", boardID, primitives.AddBoardCardInput{
+			ParentThreadID:   cardThreadB,
+			ColumnKey:        "done",
+			Resolution:       stringPtr(resolution),
+			ResolutionRefs:   evidenceRefs,
+			IfBoardUpdatedAt: &firstMoveBoardUpdatedAt,
+		})
+		if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+			t.Fatalf("expected add alias %q ErrInvalidBoardRequest, got %v", resolution, err)
+		}
+
+		_, err = store.UpdateBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.UpdateBoardCardInput{
+			Resolution:       stringPtr(resolution),
+			ResolutionRefs:   &evidenceRefs,
+			IfBoardUpdatedAt: &firstMoveBoardUpdatedAt,
+		})
+		if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+			t.Fatalf("expected update alias %q ErrInvalidBoardRequest, got %v", resolution, err)
+		}
+
+		_, err = store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
+			ColumnKey:        "done",
+			Resolution:       stringPtr(resolution),
+			ResolutionRefs:   &evidenceRefs,
+			IfBoardUpdatedAt: &firstMoveBoardUpdatedAt,
+		})
+		if !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+			t.Fatalf("expected move alias %q ErrInvalidBoardRequest, got %v", resolution, err)
+		}
+	}
+
 	movedDone, err := store.MoveBoardCard(ctx, "actor-3", boardID, cardThreadA, primitives.MoveBoardCardInput{
 		ColumnKey:        "done",
 		Resolution:       stringPtr("done"),

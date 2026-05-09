@@ -1,4 +1,4 @@
-# anx-ui — Spec (v0.2.3)
+# anx-ui — Spec (v0.6.0)
 
 ## 0. Purpose
 

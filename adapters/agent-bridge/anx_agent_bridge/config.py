@@ -155,6 +155,21 @@ def _load_workspaces(path: Path, default_base_url: str) -> list[WorkspaceConfig]
     return workspaces
 
 
+def _validate_single_core_workspaces(workspaces: list[WorkspaceConfig]) -> None:
+    enabled_base_urls = {workspace.base_url for workspace in workspaces if workspace.enabled}
+    if len(enabled_base_urls) <= 1:
+        return
+    details = ", ".join(
+        f"{workspace.id}={workspace.base_url}"
+        for workspace in workspaces
+        if workspace.enabled
+    )
+    raise ValueError(
+        "wake config enables workspaces on multiple Agent Nexus base_url values, "
+        f"but this bridge runtime polls one core only: {details}"
+    )
+
+
 def load_config(path: str | os.PathLike[str]) -> LoadedConfig:
     config_path = Path(path).resolve()
     config_dir = config_path.parent
@@ -192,9 +207,10 @@ def load_config(path: str | os.PathLike[str]) -> LoadedConfig:
         "wake.toml",
     )
     workspaces = _load_workspaces(wake_config_path, base_url)
+    _validate_single_core_workspaces(workspaces)
     primary = next(workspace for workspace in workspaces if workspace.enabled)
     anx_cfg = ANXConfig(
-        base_url=base_url,
+        base_url=primary.base_url,
         workspace_id=primary.id,
         workspace_name=primary.name,
         workspace_url=primary.url,

@@ -589,6 +589,12 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			return
 		}
 	}
+	if opts.contract != nil && len(req.Refs) > 0 {
+		if err := schema.ValidateTypedRefs(opts.contract, req.Refs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
 	var hygiene markdownHygieneCollector
 	if req.Body != "" {
 		body := req.Body
@@ -768,6 +774,12 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 				return
 			}
 		}
+		if opts.contract != nil && len(m.Refs) > 0 {
+			if err := schema.ValidateTypedRefs(opts.contract, m.Refs); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d]: %s", i, err.Error()))
+				return
+			}
+		}
 		if m.Body != "" {
 			body := m.Body
 			if !hygiene.normalizeField(w, fmt.Sprintf("items[%d].card.summary", i), &body) {
@@ -882,6 +894,18 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	patchInput, changedFields, ok := parseBoardCardPatchInput(w, req.Patch)
 	if !ok {
 		return
+	}
+	if opts.contract != nil && patchInput.ResolutionRefs != nil {
+		if err := schema.ValidateTypedRefs(opts.contract, *patchInput.ResolutionRefs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
+	if opts.contract != nil && patchInput.Refs != nil {
+		if err := schema.ValidateTypedRefs(opts.contract, *patchInput.Refs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 	}
 	var hygiene markdownHygieneCollector
 	if patchInput.Body != nil {
@@ -1005,12 +1029,6 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	req.ResolutionRefs = uniqueSortedStrings(req.ResolutionRefs)
 	if req.Resolution != nil {
 		normalizedResolution := strings.TrimSpace(*req.Resolution)
-		if normalizedResolution == "completed" || normalizedResolution == "superseded" {
-			normalizedResolution = "done"
-		}
-		if normalizedResolution == "unresolved" {
-			normalizedResolution = ""
-		}
 		if err := validateCardResolution(normalizedResolution, false); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
@@ -2098,15 +2116,7 @@ func stringSlicesEqual(left, right []string) bool {
 
 func replayExpectedCardResolution(raw *string) string {
 	if raw != nil {
-		value := strings.TrimSpace(*raw)
-		switch value {
-		case "completed", "superseded":
-			return "done"
-		case "unresolved", "":
-			return ""
-		default:
-			return value
-		}
+		return strings.TrimSpace(*raw)
 	}
 	return ""
 }
@@ -2226,12 +2236,6 @@ func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (prim
 			appendChanged(field)
 		case "resolution":
 			value := strings.TrimSpace(anyString(raw))
-			if value == "completed" || value == "superseded" {
-				value = "done"
-			}
-			if value == "unresolved" {
-				value = ""
-			}
 			if value != "" {
 				if err := validateCardResolution(value, false); err != nil {
 					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -2303,12 +2307,6 @@ func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeTh
 
 func validateCardResolution(resolution string, allowEmpty bool) error {
 	value := strings.TrimSpace(resolution)
-	if value == "completed" || value == "superseded" {
-		value = "done"
-	}
-	if value == "unresolved" {
-		value = ""
-	}
 	if value == "" && allowEmpty {
 		return nil
 	}
@@ -2322,9 +2320,6 @@ func validateCardResolution(resolution string, allowEmpty bool) error {
 
 func validateMoveCardResolutionRefs(resolution string, resolutionRefs []string) error {
 	resolution = strings.TrimSpace(resolution)
-	if resolution == "completed" || resolution == "superseded" {
-		resolution = "done"
-	}
 	if len(resolutionRefs) == 0 {
 		return errors.New("resolution_refs are required when resolution is set")
 	}

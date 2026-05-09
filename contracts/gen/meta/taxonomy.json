@@ -89,6 +89,14 @@
         "topic_updated"
       ]
     },
+    "lifecycle_state": {
+      "enum_policy": "strict",
+      "values": [
+        "active",
+        "archived",
+        "trashed"
+      ]
+    },
     "priority": {
       "enum_policy": "strict",
       "values": [
