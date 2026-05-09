@@ -547,8 +547,12 @@ upsert_env_var() {
   tmp_file="$(mktemp)"
   local quoted_value
   quoted_value="$(shell_quote_env_value "$value")"
-  awk -F= -v key="$key" -v value="$quoted_value" '
-    BEGIN { replaced = 0 }
+  # Avoid awk -v for the value: -v interprets backslashes and corrupts shell-quoted strings.
+  _ANX_HOSTED_UPSERT_QUOTED_VALUE="$quoted_value" awk -F= -v key="$key" '
+    BEGIN {
+      replaced = 0
+      value = ENVIRON["_ANX_HOSTED_UPSERT_QUOTED_VALUE"]
+    }
     $1 == key {
       print key "=" value
       replaced = 1
