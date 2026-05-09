@@ -1,10 +1,12 @@
 import logging
+import sys
 import pytest
 
 from pathlib import Path
 from types import SimpleNamespace
 
 from anx_agent_bridge.bridge import AgentBridge
+from anx_agent_bridge.adapters.subprocess_adapter import SubprocessAdapter
 from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig, WorkspaceConfig
 from anx_agent_bridge.models import WakePacket
 from anx_agent_bridge.anx_client import ANXClientError, ANXStreamDisconnected
@@ -508,6 +510,51 @@ def test_drain_notifications_continues_after_dispatch_failure():
     assert len(client.failed_wakeups) == 1
     assert client.failed_wakeups[0]["wakeup_id"] == "wake-bad"
     assert client.completed_wakeups == [{"wakeup_id": "wake-good", "bridge_instance_id": "bridge-test"}]
+
+
+def test_openclaw_subprocess_runtime_failure_marks_wake_failed(tmp_path: Path):
+    bridge, state, client = build_bridge([])
+    fake_openclaw = tmp_path / "openclaw"
+    fake_openclaw.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "sys.stderr.write('gateway unavailable\\n')\n"
+        "sys.exit(7)\n",
+        encoding="utf-8",
+    )
+    fake_openclaw.chmod(0o755)
+    fake_anx = tmp_path / "anx"
+    fake_anx.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    fake_anx.chmod(0o755)
+    bridge.adapter = SubprocessAdapter(
+        command=[sys.executable, "-m", "anx_agent_bridge.adapters.openclaw"],
+        handle="hermes",
+        workspace_id="ws_main",
+        dispatch_timeout_seconds=10,
+        adapter_raw={
+            "kind": "openclaw",
+            "openclaw_bin": str(fake_openclaw),
+            "anx_cli_bin": str(fake_anx),
+        },
+    )
+
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
+
+    assert state.handled_wakeup_ids() == set()
+    assert client.created_events == []
+    assert client.completed_wakeups == []
+    assert len(client.failed_wakeups) == 1
+    assert client.failed_wakeups[0]["wakeup_id"] == "wake-1"
+    assert "adapter dispatch command exited 1" in client.failed_wakeups[0]["error"]
+    assert "OpenClaw exited 7: gateway unavailable" in client.failed_wakeups[0]["error"]
 
 
 def test_handle_notification_does_not_emit_failed_when_read_ack_fails(monkeypatch):

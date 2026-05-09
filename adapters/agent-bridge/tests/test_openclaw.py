@@ -5,6 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 _OPENCLAW_PATH = Path(__file__).resolve().parents[1] / "anx_agent_bridge" / "adapters" / "openclaw.py"
 _SPEC = importlib.util.spec_from_file_location("openclaw", _OPENCLAW_PATH)
@@ -143,6 +145,63 @@ def test_openclaw_dispatch_creates_isolated_session_and_does_not_persist_native_
     assert calls[0][3] == "anx-abc123def456"
     assert "shared-session-that-must-not-be-used" not in calls[0]
     assert result["metadata"]["openclaw_command"][5] == "<prompt>"
+
+
+def test_openclaw_dispatch_raises_on_launch_failure(monkeypatch) -> None:
+    def fake_run(cmd: list[str], *, timeout: int):
+        raise FileNotFoundError("missing openclaw")
+
+    monkeypatch.setattr(openclaw, "_resolve_bin", lambda settings, env_key, config_key, default_name: f"/bin/{default_name}")
+    monkeypatch.setattr(openclaw, "_new_wake_session_id", lambda: "anx-abc123def456")
+    monkeypatch.setattr(openclaw, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="OpenClaw launch failed"):
+        openclaw._dispatch(
+            {
+                "mode": "dispatch",
+                "prompt_text": "wake prompt",
+                "wake_packet": {"thread": {"id": "thread_1", "title": "Launch plan"}},
+            },
+            {},
+        )
+
+
+def test_openclaw_dispatch_raises_on_timeout(monkeypatch) -> None:
+    def fake_run(cmd: list[str], *, timeout: int):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout)
+
+    monkeypatch.setattr(openclaw, "_resolve_bin", lambda settings, env_key, config_key, default_name: f"/bin/{default_name}")
+    monkeypatch.setattr(openclaw, "_new_wake_session_id", lambda: "anx-abc123def456")
+    monkeypatch.setattr(openclaw, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="Timed out waiting for OpenClaw agent response"):
+        openclaw._dispatch(
+            {
+                "mode": "dispatch",
+                "prompt_text": "wake prompt",
+                "wake_packet": {"thread": {"id": "thread_1", "title": "Launch plan"}},
+            },
+            {"openclaw_timeout_seconds": 7},
+        )
+
+
+def test_openclaw_dispatch_raises_on_nonzero_exit(monkeypatch) -> None:
+    def fake_run(cmd: list[str], *, timeout: int):
+        return subprocess.CompletedProcess(args=cmd, returncode=2, stdout="", stderr="gateway unavailable")
+
+    monkeypatch.setattr(openclaw, "_resolve_bin", lambda settings, env_key, config_key, default_name: f"/bin/{default_name}")
+    monkeypatch.setattr(openclaw, "_new_wake_session_id", lambda: "anx-abc123def456")
+    monkeypatch.setattr(openclaw, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="OpenClaw exited 2: gateway unavailable"):
+        openclaw._dispatch(
+            {
+                "mode": "dispatch",
+                "prompt_text": "wake prompt",
+                "wake_packet": {"thread": {"id": "thread_1", "title": "Launch plan"}},
+            },
+            {},
+        )
 
 
 def test_openclaw_doctor_reports_gateway_status(monkeypatch) -> None:
