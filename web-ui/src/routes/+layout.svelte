@@ -5,39 +5,28 @@
   import { get } from "svelte/store";
 
   import "../app.css";
-  import { dev } from "$app/environment";
   import {
     actorRegistry,
     actorSessionReady,
     buildActorCreatePayload,
     chooseActor,
     clearSelectedActor,
-    initializeActorSession,
     lookupActorDisplayName,
     principalRegistry,
     replaceActorRegistry,
-    replacePrincipalRegistry,
     selectedActorId,
     shouldShowActorGate,
   } from "$lib/actorSession";
   import { filterActorsForUserSelection } from "$lib/systemActor.js";
-  import { installFetchLoopGuard } from "$lib/dev/fetchLoopGuard.js";
-  import { createRedirectLoopGuard } from "$lib/dev/redirectLoopGuard.js";
   import {
     authenticatedAgent,
     authSessionReady,
-    initializeAuthSession,
     isHumanWorkspacePrincipal,
     logoutAuthSession,
     sessionEndedByAccountStatus,
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
-  import { listAllPrincipals } from "$lib/authPrincipals";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
-  import {
-    buildHostedSignInPath,
-    sanitizeHostedReturnPath,
-  } from "$lib/hosted/launchFlow.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
@@ -51,8 +40,6 @@
     setCurrentCoreBaseUrl,
     setCurrentOrganizationSlug,
     setCurrentWorkspaceSlug,
-    setDevActorMode,
-    setDevActorModeReady,
     devActorMode,
     devActorModeReady,
   } from "$lib/workspaceContext";
@@ -63,13 +50,24 @@
     handleModEnterFormSubmit,
   } from "$lib/formSubmitShortcut.js";
   import {
-    appPath,
     bindWorkspaceHref,
     stripBasePath,
     stripWorkspacePath,
     WORKSPACE_HEADER,
     workspacePath,
   } from "$lib/workspacePaths";
+  import {
+    activateDevPersonaSession as activateWorkspaceDevPersonaSession,
+    buildLoginRedirectDestination,
+    classifyWorkspaceBootstrap,
+    createLoginRedirectController,
+    hydrateWorkspaceBootstrap,
+    installWorkspaceBootstrapLoopGuards,
+    loadDevFixturePersonas as loadWorkspaceDevFixturePersonas,
+    refreshWorkspacePrincipals,
+    shouldRedirectToLoginForBootstrapState,
+    WORKSPACE_BOOTSTRAP_STATES,
+  } from "$lib/workspaceBootstrap.js";
 
   let { children, data } = $props();
 
@@ -166,16 +164,25 @@
       !$authenticatedAgent &&
       onLoginRoute,
   );
+  let workspaceBootstrapState = $derived(
+    classifyWorkspaceBootstrap({
+      activeWorkspaceSlug,
+      identityReady,
+      devActorModeReady: $devActorModeReady,
+      authenticatedAgent: $authenticatedAgent,
+      hostedMode,
+      devActorMode: $devActorMode,
+      onLoginRoute,
+      requiresHumanSession,
+      hasHumanAuthSession,
+    }),
+  );
   // Hosted shells must never allow anonymous workspace browsing: dev_actor_mode
   // on core would otherwise skip login redirect while writes still require an agent.
   let shouldRedirectToLogin = $derived(
     activeWorkspaceSlug &&
-      identityReady &&
-      $devActorModeReady &&
       !onLoginRoute &&
-      ((hostedMode && !$authenticatedAgent) ||
-        (!$devActorMode && !$authenticatedAgent) ||
-        ($devActorMode && requiresHumanSession && !hasHumanAuthSession)),
+      shouldRedirectToLoginForBootstrapState(workspaceBootstrapState),
   );
   /**
    * Block the main workspace shell until hydrateWorkspace finishes (handshake +
@@ -185,7 +192,7 @@
    * exhausting browser connection limits.
    */
   let workspaceBootstrapPending = $derived(
-    activeWorkspaceSlug && identityReady && !$devActorModeReady,
+    workspaceBootstrapState === WORKSPACE_BOOTSTRAP_STATES.HYDRATING,
   );
   let selectedActorName = $derived.by(() => {
     const resolvedName = lookupActorDisplayName(
@@ -257,72 +264,10 @@
     }
   });
 
-  /** Mirrors `shouldRedirectToLogin` using `get()` for use after async session refresh. */
-  function needsLoginRedirectNow() {
-    const p = get(page);
-    const workspace = p.data?.workspace ?? null;
-    const wsSlug = workspace?.slug ?? "";
-    const orgSlug = workspace?.organizationSlug ?? p.params?.organization ?? "";
-    if (!wsSlug) {
-      return false;
-    }
-    if (!(get(actorSessionReady) && get(authSessionReady))) {
-      return false;
-    }
-    if (!get(devActorModeReady)) {
-      return false;
-    }
-
-    const appPath =
-      wsSlug && orgSlug
-        ? stripWorkspacePath(p.url.pathname, orgSlug, wsSlug)
-        : stripBasePath(p.url.pathname);
-    if (appPath === "/login") {
-      return false;
-    }
-
-    const devMode = get(devActorMode);
-    const agent = get(authenticatedAgent);
-    const requiresHumanSession = appPath === "/secrets";
-    const hasHumanAuthSession = isHumanWorkspacePrincipal(agent);
-    const hostedMode = p.data?.shellCapabilities?.mode === "hosted";
-
-    return (
-      ((hostedMode || !devMode) && !agent) ||
-      (devMode && requiresHumanSession && !hasHumanAuthSession)
-    );
-  }
-
-  let loginRedirectGeneration = 0;
-
-  // Runaway-fetch detector: dev throws on trip; prod warns (leaves a trace
-  // without breaking the tab). See src/lib/dev/fetchLoopGuard.js.
-  if (browser) {
-    installFetchLoopGuard(
-      dev
-        ? {}
-        : {
-            onTrip: (message, info) => {
-              console.warn(message, info);
-            },
-          },
-    );
-  }
-
-  // Redirect ping-pong guard: suppresses repeated goto() to the same
-  // destination. Dev uses console.error on trip; prod warns. See
-  // src/lib/dev/redirectLoopGuard.js and hooks.server.js (SSR loop short-circuit).
-  const loginRedirectGuard = browser
-    ? createRedirectLoopGuard(
-        dev
-          ? {}
-          : {
-              onTrip: (message, info) => {
-                console.warn(message, info);
-              },
-            },
-      )
-    : null;
+  const { loginRedirectGuard } = installWorkspaceBootstrapLoopGuards({
+    browser,
+  });
+  const loginRedirectController = createLoginRedirectController();
 
   $effect(() => {
     if (!browser) {
@@ -348,53 +293,21 @@
       return;
     }
 
-    const returnTo = sanitizeHostedReturnPath(
-      `${currentAppPath || "/"}${$page.url.search || ""}`,
-    );
-    const destination = hostedMode
-      ? buildHostedSignInPath({
-          organizationSlug: org,
-          workspaceSlug: ws,
-          workspaceId: $page.data?.workspace?.workspaceId,
-          returnPath: returnTo,
-        })
-      : (() => {
-          const loginPath = workspacePath(org, ws, "/login");
-          const params = new URLSearchParams();
-          if (returnTo !== "/") {
-            params.set("return_to", returnTo);
-          }
-          return params.size > 0
-            ? `${loginPath}?${params.toString()}`
-            : loginPath;
-        })();
+    const destination = buildLoginRedirectDestination({
+      hostedMode,
+      organizationSlug: org,
+      workspaceSlug: ws,
+      workspaceId: $page.data?.workspace?.workspaceId,
+      currentAppPath,
+      search: $page.url.search,
+      workspacePath,
+    });
 
-    const generation = ++loginRedirectGeneration;
-
-    void (async () => {
-      await initializeAuthSession({
-        fetchFn: globalThis.fetch.bind(globalThis),
-        workspaceSlug: ws,
-        authDriver: "layout",
-      });
-      if (generation !== loginRedirectGeneration) {
-        return;
-      }
-      if (!needsLoginRedirectNow()) {
-        return;
-      }
-      if (
-        loginRedirectGuard &&
-        !loginRedirectGuard.shouldNavigate(destination)
-      ) {
-        // Guard tripped: a ping-pong between client (no agent) and server
-        // (has agent) is in progress. Stop firing goto() and let the next
-        // hydrateWorkspace cycle (or a manual reload) resolve the auth state
-        // mismatch. The guard already logged a single, actionable error.
-        return;
-      }
-      await goto(destination);
-    })();
+    void loginRedirectController.redirectIfNeeded({
+      destination,
+      workspaceSlug: ws,
+      loginRedirectGuard,
+    });
   });
 
   $effect(() => {
@@ -447,23 +360,11 @@
   });
 
   async function loadDevFixturePersonas(workspaceSlug = activeWorkspaceSlug) {
-    try {
-      const response = await fetch(appPath("/auth/dev/identities"), {
-        headers: { [WORKSPACE_HEADER]: workspaceSlug },
-      });
-      if (!response.ok) {
-        devFixturePersonas = [];
-        return devFixturePersonas;
-      }
-      const payload = await response.json();
-      devFixturePersonas = Array.isArray(payload.personas)
-        ? payload.personas
-        : [];
-      return devFixturePersonas;
-    } catch {
-      devFixturePersonas = [];
-      return devFixturePersonas;
-    }
+    devFixturePersonas = await loadWorkspaceDevFixturePersonas({
+      workspaceSlug,
+      workspaceHeader: WORKSPACE_HEADER,
+    });
+    return devFixturePersonas;
   }
 
   /**
@@ -472,28 +373,15 @@
    * picking a seeded human (Secrets and other authenticated routes need this).
    */
   async function activateDevPersonaSession(personaId) {
-    const trimmed = String(personaId ?? "").trim();
-    if (!activeWorkspaceSlug || !trimmed) {
-      return { ok: false, status: 0 };
-    }
-    devPersonaBusy = true;
-    try {
-      const response = await fetch(appPath("/auth/dev/session"), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [WORKSPACE_HEADER]: activeWorkspaceSlug,
-        },
-        body: JSON.stringify({ persona_id: trimmed }),
-      });
-      if (!response.ok) {
-        return { ok: false, status: response.status };
-      }
-      await hydrateWorkspace(activeWorkspaceSlug);
-      return { ok: true };
-    } finally {
-      devPersonaBusy = false;
-    }
+    return activateWorkspaceDevPersonaSession({
+      personaId,
+      workspaceSlug: activeWorkspaceSlug,
+      workspaceHeader: WORKSPACE_HEADER,
+      setBusy: (busy) => {
+        devPersonaBusy = busy;
+      },
+      onHydrate: hydrateWorkspace,
+    });
   }
 
   async function switchDevFixturePersona(personaId) {
@@ -530,83 +418,25 @@
   }
 
   async function hydrateWorkspace(workspaceSlug) {
-    setDevActorModeReady(false);
-    initializeActorSession(localStorage, workspaceSlug);
-    let agent = await initializeAuthSession({
-      fetchFn: globalThis.fetch.bind(globalThis),
+    await hydrateWorkspaceBootstrap({
       workspaceSlug,
-      authDriver: "layout",
+      workspaceHeader: WORKSPACE_HEADER,
+      coreClient,
+      storage: localStorage,
+      onActorError: (message) => {
+        actorError = message;
+      },
+      onLoadingActors: (loading) => {
+        loadingActors = loading;
+      },
+      onDevPersonaBusy: (busy) => {
+        devPersonaBusy = busy;
+      },
+      onDevFixturePersonas: (personas) => {
+        devFixturePersonas = personas;
+      },
+      refreshActors,
     });
-    replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
-    try {
-      const handshake = await coreClient.getHandshake();
-      const devActorModeEnabled = handshake.dev_actor_mode === true;
-      setDevActorMode(devActorModeEnabled);
-      if (devActorModeEnabled) {
-        await loadDevFixturePersonas(workspaceSlug);
-      }
-
-      if (devActorModeEnabled && !agent) {
-        try {
-          const res = await fetch(appPath("/auth/dev/default-persona"), {
-            headers: { [WORKSPACE_HEADER]: workspaceSlug },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.persona?.persona_id) {
-              devPersonaBusy = true;
-              try {
-                const sessionRes = await fetch(appPath("/auth/dev/session"), {
-                  method: "POST",
-                  headers: {
-                    "content-type": "application/json",
-                    [WORKSPACE_HEADER]: workspaceSlug,
-                  },
-                  body: JSON.stringify({
-                    persona_id: data.persona.persona_id,
-                  }),
-                });
-                if (sessionRes.ok) {
-                  const sessionAgent = await initializeAuthSession({
-                    fetchFn: globalThis.fetch.bind(globalThis),
-                    workspaceSlug,
-                    authDriver: "layout",
-                  });
-                  if (sessionAgent) {
-                    agent = sessionAgent;
-                    replacePrincipalRegistry([agent], workspaceSlug);
-                    chooseActor(agent.actor_id, localStorage, workspaceSlug);
-                  }
-                }
-              } finally {
-                devPersonaBusy = false;
-              }
-            }
-          }
-        } catch {
-          void 0;
-        }
-      }
-
-      // Always load the actor registry when a session exists so display names resolve.
-      // Hosted/prod often has dev_actor_mode false; skipping here left principals
-      // without registry entries and showed "Unknown actor" for signed-in users.
-      if (devActorModeEnabled || agent) {
-        const actors = await refreshActors(workspaceSlug);
-        reconcileDevActorSelection(workspaceSlug, agent, actors);
-      } else {
-        actorError = "";
-        loadingActors = false;
-        replaceActorRegistry([], workspaceSlug);
-      }
-    } catch {
-      setDevActorMode(false);
-      actorError = "";
-      loadingActors = false;
-      replaceActorRegistry([], workspaceSlug);
-    } finally {
-      setDevActorModeReady(true);
-    }
   }
 
   async function refreshActors(workspaceSlug = activeWorkspaceSlug) {
@@ -628,91 +458,15 @@
     }
   }
 
-  function actorRegistryHasActor(actorId, actors = []) {
-    const wanted = String(actorId ?? "").trim();
-    if (!wanted) {
-      return false;
-    }
-    return actors.some(
-      (actor) => String(actor?.id ?? actor?.actor_id ?? "").trim() === wanted,
-    );
-  }
-
-  function defaultHumanActorIdFromDevFixtures() {
-    return (
-      devFixturePersonas.find(
-        (persona) =>
-          String(persona?.principal_kind ?? "").toLowerCase() === "human" &&
-          persona?.default === true,
-      )?.actor_id ?? ""
-    );
-  }
-
-  function reconcileDevActorSelection(workspaceSlug, agent, actors) {
-    const authenticatedActorId = String(agent?.actor_id ?? "").trim();
-    if (actorRegistryHasActor(authenticatedActorId, actors)) {
-      chooseActor(authenticatedActorId, localStorage, workspaceSlug);
-      return;
-    }
-
-    const storedActorId = String(get(selectedActorId) ?? "").trim();
-    if (actorRegistryHasActor(storedActorId, actors)) {
-      return;
-    }
-
-    const defaultActorId = defaultHumanActorIdFromDevFixtures();
-    if (actorRegistryHasActor(defaultActorId, actors)) {
-      chooseActor(defaultActorId, localStorage, workspaceSlug);
-      return;
-    }
-
-    if (storedActorId) {
-      clearSelectedActor(localStorage, workspaceSlug);
-    }
-  }
-
-  function mergePrincipals(...principalLists) {
-    const seen = new Set();
-    const merged = [];
-
-    for (const principals of principalLists) {
-      for (const principal of principals ?? []) {
-        const agentId = String(principal?.agent_id ?? "").trim();
-        const actorId = String(principal?.actor_id ?? "").trim();
-        const username = String(principal?.username ?? "").trim();
-        const key = `${agentId}\n${actorId}\n${username}`;
-        if (!key.trim() || seen.has(key)) {
-          continue;
-        }
-        seen.add(key);
-        merged.push(principal);
-      }
-    }
-
-    return merged;
-  }
-
   async function refreshPrincipals(
     workspaceSlug = activeWorkspaceSlug,
     seedPrincipals = [],
   ) {
-    const seeded = mergePrincipals(seedPrincipals);
-    replacePrincipalRegistry(seeded, workspaceSlug);
-
-    if (seeded.length === 0) {
-      return;
-    }
-
-    try {
-      const principals = await listAllPrincipals(coreClient, { limit: 200 });
-
-      replacePrincipalRegistry(
-        mergePrincipals(principals, seeded),
-        workspaceSlug,
-      );
-    } catch {
-      replacePrincipalRegistry(seeded, workspaceSlug);
-    }
+    await refreshWorkspacePrincipals({
+      coreClient,
+      workspaceSlug,
+      seedPrincipals,
+    });
   }
 
   async function selectActor(actorId) {
