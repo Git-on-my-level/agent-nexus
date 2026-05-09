@@ -44,9 +44,23 @@ func SplitTypedRef(ref string) (string, string, error) {
 	return prefix, value, nil
 }
 
-func ValidateTypedRef(_ *Contract, ref string) error {
-	_, _, err := SplitTypedRef(ref)
-	return err
+func ValidateTypedRef(contract *Contract, ref string) error {
+	prefix, _, err := SplitTypedRef(ref)
+	if err != nil {
+		return err
+	}
+	if contract == nil {
+		return nil
+	}
+	if !contract.HasKnownTypedRefPrefix(prefix) {
+		allowed := make([]string, 0, len(contract.TypedRefPrefixes))
+		for knownPrefix := range contract.TypedRefPrefixes {
+			allowed = append(allowed, knownPrefix)
+		}
+		sort.Strings(allowed)
+		return fmt.Errorf("typed ref %q uses unknown prefix %q (allowed: %s)", ref, prefix, strings.Join(allowed, ", "))
+	}
+	return nil
 }
 
 func ValidateTypedRefs(contract *Contract, refs []string) error {

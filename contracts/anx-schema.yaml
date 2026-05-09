@@ -109,6 +109,7 @@ ref_format:
     All strings in `ref`, `refs`, `*_ref`, and `*_refs` fields MUST use typed
     prefixes so consumers can parse the target deterministically.
   prefixes:
+    "actor:<id>": "References an actor by durable actor id"
     "artifact:<handle>": "References an artifact by public handle"
     "event:<handle>": "References an event by public handle"
     "thread:<handle>": "References a backing thread by public handle"

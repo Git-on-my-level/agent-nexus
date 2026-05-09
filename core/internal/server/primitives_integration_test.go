@@ -38,7 +38,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 		"event":{
 			"type":"message_posted",
 			"thread_id":"thread-1",
-			"refs":["customprefix:abc"],
+			"refs":["url:https://example.test/event"],
 			"summary":"custom event",
 			"payload":{"x":1},
 			"provenance":{"sources":["inferred"]}
@@ -122,7 +122,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 	}
 
 	refs, ok := loadedEvent["event"]["refs"].([]any)
-	if !ok || len(refs) != 1 || refs[0] != "customprefix:abc" {
+	if !ok || len(refs) != 1 || refs[0] != "url:https://example.test/event" {
 		t.Fatalf("unexpected event refs: %#v", loadedEvent["event"]["refs"])
 	}
 
@@ -130,7 +130,7 @@ func TestPrimitivesCRUDRoundTrip(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"kind":"attachment",
-			"refs":["thread:thread-1","customprefix:abc"],
+			"refs":["thread:thread-1","url:https://example.test/artifact"],
 			"summary":"artifact summary"
 		},
 		"content":"hello artifact",
@@ -231,7 +231,7 @@ func TestNamedResourceAPIsUsePublicRefsAndHandles(t *testing.T) {
 			"owner_refs":[],
 			"document_refs":[],
 			"board_refs":[],
-			"related_refs":[],
+			"related_refs":["url:https://example.test/topic-context"],
 			"provenance":{"sources":["test:public-refs"]}
 		}
 	}`, http.StatusCreated)
@@ -1156,7 +1156,7 @@ func TestArtifactsListBySecondaryThreadRef(t *testing.T) {
 		"actor_id":"actor-1",
 		"artifact":{
 			"kind":"attachment",
-			"refs":["thread:thread-primary","thread:thread-secondary","customprefix:abc"],
+			"refs":["thread:thread-primary","thread:thread-secondary","url:https://example.test/artifact"],
 			"summary":"cross-thread artifact"
 		},
 		"content":"hello artifact",
@@ -1761,7 +1761,7 @@ func TestEventCreateRequestKeyReplaysSingleWrite(t *testing.T) {
 		"event":{
 			"type":"message_posted",
 			"thread_id":"thread-1",
-			"refs":["customprefix:abc"],
+			"refs":["url:https://example.test/event"],
 			"summary":"custom event",
 			"payload":{"x":1},
 			"provenance":{"sources":["inferred"]}
@@ -2198,6 +2198,64 @@ func TestInvalidTypedRefsRejectedForEventsAndArtifacts(t *testing.T) {
 		"content_type":"text"
 	}`, http.StatusBadRequest)
 	defer artifactResp.Body.Close()
+}
+
+func TestUnknownTypedRefPrefixesRejectedForResourceWrites(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
+
+	topicResp := postJSONExpectStatus(t, h.baseURL+"/topics", `{
+		"actor_id":"actor-1",
+		"topic":{
+			"title":"Bad Ref Topic",
+			"summary":"Topic summary",
+			"owner_refs":[],
+			"document_refs":[],
+			"board_refs":[],
+			"related_refs":["customprefix:topic"],
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusBadRequest)
+	assertErrorMessageContains(t, topicResp, "unknown prefix")
+
+	documentResp := postJSONExpectStatus(t, h.baseURL+"/docs", `{
+		"actor_id":"actor-1",
+		"document":{"title":"Bad Ref Document","summary":"Doc summary","refs":["customprefix:document"],"provenance":{"sources":["inferred"]}},
+		"content":"doc",
+		"content_type":"text",
+		"refs":["thread:thread-1"]
+	}`, http.StatusBadRequest)
+	assertErrorMessageContains(t, documentResp, "unknown prefix")
+
+	boardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Bad Ref Board","refs":["customprefix:board"]}
+	}`, http.StatusBadRequest)
+	assertErrorMessageContains(t, boardResp, "unknown prefix")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Card Parent Board","refs":["thread:thread-card-parent"]}
+	}`, http.StatusCreated)
+	var boardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&boardPayload); err != nil {
+		t.Fatalf("decode board create: %v", err)
+	}
+	createBoardResp.Body.Close()
+
+	cardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+url.PathEscape(asString(boardPayload.Board["id"]))+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(boardPayload.Board["updated_at"])+`",
+		"title":"Bad Ref Card",
+		"summary":"Card summary",
+		"related_refs":["customprefix:card"],
+		"column_key":"ready"
+	}`, http.StatusBadRequest)
+	assertErrorMessageContains(t, cardResp, "unknown prefix")
 }
 
 func TestCreateArtifactRejectsUnsafeArtifactIDs(t *testing.T) {

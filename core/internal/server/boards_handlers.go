@@ -589,6 +589,12 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			return
 		}
 	}
+	if opts.contract != nil && len(req.Refs) > 0 {
+		if err := schema.ValidateTypedRefs(opts.contract, req.Refs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
 	var hygiene markdownHygieneCollector
 	if req.Body != "" {
 		body := req.Body
@@ -768,6 +774,12 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 				return
 			}
 		}
+		if opts.contract != nil && len(m.Refs) > 0 {
+			if err := schema.ValidateTypedRefs(opts.contract, m.Refs); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", fmt.Sprintf("items[%d]: %s", i, err.Error()))
+				return
+			}
+		}
 		if m.Body != "" {
 			body := m.Body
 			if !hygiene.normalizeField(w, fmt.Sprintf("items[%d].card.summary", i), &body) {
@@ -882,6 +894,18 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 	patchInput, changedFields, ok := parseBoardCardPatchInput(w, req.Patch)
 	if !ok {
 		return
+	}
+	if opts.contract != nil && patchInput.ResolutionRefs != nil {
+		if err := schema.ValidateTypedRefs(opts.contract, *patchInput.ResolutionRefs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+	}
+	if opts.contract != nil && patchInput.Refs != nil {
+		if err := schema.ValidateTypedRefs(opts.contract, *patchInput.Refs); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 	}
 	var hygiene markdownHygieneCollector
 	if patchInput.Body != nil {
