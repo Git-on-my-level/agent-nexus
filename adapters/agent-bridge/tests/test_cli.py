@@ -136,6 +136,65 @@ def test_build_adapter_openclaw_uses_bundled_module(tmp_path: Path):
     assert adapter.adapter_raw["kind"] == "openclaw"
 
 
+@pytest.mark.parametrize("kind,expected_timeout", [
+    ("subprocess", 600),
+    ("hermes", 900),
+    ("openclaw", 900),
+])
+def test_build_adapter_subprocess_kinds_share_cwd_and_env_defaults(tmp_path: Path, kind: str, expected_timeout: int):
+    raw = {"kind": kind, "env": {"FOO": "bar"}}
+    if kind == "subprocess":
+        raw["command"] = ["python3", "-c", "pass"]
+    config = LoadedConfig(
+        anx=ANXConfig(base_url="https://anx.example", workspace_id="ws_main", workspace_name="Main"),
+        agent=AgentConfig(
+            handle="test-agent",
+            driver_kind=kind,
+            adapter_kind=kind,
+            state_dir=tmp_path / "state",
+        ),
+        adapter=AdapterConfig(raw=raw),
+        auth_state_path=tmp_path / "auth.json",
+        config_path=tmp_path / "bridge.toml",
+        config_dir=tmp_path,
+    )
+
+    adapter = build_adapter(config)
+
+    assert isinstance(adapter, SubprocessAdapter)
+    assert adapter.cwd == str(tmp_path)
+    assert adapter.extra_env == {"FOO": "bar"}
+    assert adapter.dispatch_timeout_seconds == expected_timeout
+    assert adapter.doctor_timeout_seconds == 60
+
+
+def test_build_adapter_resolves_relative_cwd_identically_across_kinds(tmp_path: Path):
+    subdir = tmp_path / "workspace"
+    subdir.mkdir()
+    results = {}
+    for kind in ("subprocess", "hermes", "openclaw"):
+        raw = {"kind": kind, "cwd": "workspace"}
+        if kind == "subprocess":
+            raw["command"] = ["python3", "-c", "pass"]
+        config = LoadedConfig(
+            anx=ANXConfig(base_url="https://anx.example", workspace_id="ws_main", workspace_name="Main"),
+            agent=AgentConfig(
+                handle="test-agent",
+                driver_kind=kind,
+                adapter_kind=kind,
+                state_dir=tmp_path / "state",
+            ),
+            adapter=AdapterConfig(raw=raw),
+            auth_state_path=tmp_path / "auth.json",
+            config_path=tmp_path / "bridge.toml",
+            config_dir=tmp_path,
+        )
+        adapter = build_adapter(config)
+        results[kind] = adapter.cwd
+
+    assert results["subprocess"] == results["hermes"] == results["openclaw"] == str(subdir)
+
+
 def test_adapter_contract_subcommand_is_available():
     parser = build_parser()
 

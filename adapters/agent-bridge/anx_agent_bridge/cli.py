@@ -97,6 +97,43 @@ def replace_toml_string(content: str, section: str, key: str, value: str) -> str
     raise ValueError(f"{Path('agent.toml')} is missing [{section}].{key}")
 
 
+def _resolve_adapter_cwd(config: LoadedConfig) -> str:
+    cwd = config.adapter.get_str("cwd", "")
+    if cwd:
+        cwd_path = Path(cwd).expanduser()
+        if not cwd_path.is_absolute():
+            cwd_path = (config.config_dir / cwd_path).resolve()
+        return str(cwd_path)
+    return str(config.config_dir)
+
+
+def _adapter_env(config: LoadedConfig) -> dict[str, str] | None:
+    env_raw = config.adapter.raw.get("env")
+    if isinstance(env_raw, dict):
+        return {str(k): str(v) for k, v in env_raw.items()}
+    return None
+
+
+def _build_subprocess_adapter(
+    config: LoadedConfig,
+    *,
+    command: list[str],
+    default_timeout: int = 600,
+    doctor_command: list[str] | None = None,
+) -> SubprocessAdapter:
+    return SubprocessAdapter(
+        command=command,
+        handle=config.agent.handle,
+        workspace_id=config.anx.workspace_id,
+        cwd=_resolve_adapter_cwd(config),
+        env=_adapter_env(config),
+        dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", default_timeout),
+        doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
+        doctor_command=doctor_command,
+        adapter_raw=dict(config.adapter.raw),
+    )
+
+
 def build_adapter(config: LoadedConfig):
     if config.agent is None:
         raise ValueError("bridge adapter requires [agent] in config")
@@ -107,33 +144,11 @@ def build_adapter(config: LoadedConfig):
         command = config.adapter.get_list("command")
         if not command:
             raise ValueError("subprocess adapter requires [adapter].command as a non-empty string array")
-        cwd = config.adapter.get_str("cwd", "")
-        if cwd:
-            cwd_path = Path(cwd).expanduser()
-            if not cwd_path.is_absolute():
-                cwd_path = (config.config_dir / cwd_path).resolve()
-            cwd = str(cwd_path)
-        else:
-            cwd = str(config.config_dir)
-        env_raw = config.adapter.raw.get("env")
-        env_str: dict[str, str] | None = None
-        if isinstance(env_raw, dict):
-            env_str = {str(k): str(v) for k, v in env_raw.items()}
         doctor_raw = config.adapter.raw.get("doctor_command")
         doctor_command: list[str] | None = None
         if isinstance(doctor_raw, list) and len(doctor_raw) > 0:
             doctor_command = [str(x) for x in doctor_raw]
-        return SubprocessAdapter(
-            command=command,
-            handle=config.agent.handle,
-            workspace_id=config.anx.workspace_id,
-            cwd=cwd,
-            env=env_str,
-            dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", 600),
-            doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
-            doctor_command=doctor_command,
-            adapter_raw=dict(config.adapter.raw),
-        )
+        return _build_subprocess_adapter(config, command=command, doctor_command=doctor_command)
     if kind == "python_plugin":
         mod = config.adapter.require_str("plugin_module")
         fac = config.adapter.require_str("plugin_factory")
@@ -141,59 +156,11 @@ def build_adapter(config: LoadedConfig):
     if kind == "deterministic_ack":
         return DeterministicAckAdapter()
     if kind == "hermes":
-        command = config.adapter.get_list("command")
-        if not command:
-            command = [sys.executable, "-m", "anx_agent_bridge.adapters.hermes_acp"]
-        cwd = config.adapter.get_str("cwd", "")
-        if cwd:
-            cwd_path = Path(cwd).expanduser()
-            if not cwd_path.is_absolute():
-                cwd_path = (config.config_dir / cwd_path).resolve()
-            cwd = str(cwd_path)
-        else:
-            cwd = str(config.config_dir)
-        env_raw = config.adapter.raw.get("env")
-        env_str: dict[str, str] | None = None
-        if isinstance(env_raw, dict):
-            env_str = {str(k): str(v) for k, v in env_raw.items()}
-        return SubprocessAdapter(
-            command=command,
-            handle=config.agent.handle,
-            workspace_id=config.anx.workspace_id,
-            cwd=cwd,
-            env=env_str,
-            dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", 900),
-            doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
-            doctor_command=None,
-            adapter_raw=dict(config.adapter.raw),
-        )
+        command = config.adapter.get_list("command") or [sys.executable, "-m", "anx_agent_bridge.adapters.hermes_acp"]
+        return _build_subprocess_adapter(config, command=command, default_timeout=900)
     if kind == "openclaw":
-        command = config.adapter.get_list("command")
-        if not command:
-            command = [sys.executable, "-m", "anx_agent_bridge.adapters.openclaw"]
-        cwd = config.adapter.get_str("cwd", "")
-        if cwd:
-            cwd_path = Path(cwd).expanduser()
-            if not cwd_path.is_absolute():
-                cwd_path = (config.config_dir / cwd_path).resolve()
-            cwd = str(cwd_path)
-        else:
-            cwd = str(config.config_dir)
-        env_raw = config.adapter.raw.get("env")
-        env_str: dict[str, str] | None = None
-        if isinstance(env_raw, dict):
-            env_str = {str(k): str(v) for k, v in env_raw.items()}
-        return SubprocessAdapter(
-            command=command,
-            handle=config.agent.handle,
-            workspace_id=config.anx.workspace_id,
-            cwd=cwd,
-            env=env_str,
-            dispatch_timeout_seconds=config.adapter.get_int("timeout_seconds", 900),
-            doctor_timeout_seconds=config.adapter.get_int("doctor_timeout_seconds", 60),
-            doctor_command=None,
-            adapter_raw=dict(config.adapter.raw),
-        )
+        command = config.adapter.get_list("command") or [sys.executable, "-m", "anx_agent_bridge.adapters.openclaw"]
+        return _build_subprocess_adapter(config, command=command, default_timeout=900)
     raise ValueError(
         f"Unsupported adapter kind: {kind!r}; use hermes, openclaw, subprocess, python_plugin, or deterministic_ack (tests only)"
     )
