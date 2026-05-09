@@ -893,6 +893,20 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	boardID := asString(createBoardPayload.Board["id"])
 	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
 
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+			"actor_id":"actor-1",
+			"if_board_updated_at":"`+boardUpdatedAt+`",
+			"title":"Member card `+resolution+`",
+			"related_refs":["thread:`+memberThreadID+`"],
+			"column_key":"done",
+			"resolution":"`+resolution+`",
+			"resolution_refs":["event:done-1"]
+		}`, http.StatusBadRequest)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "invalid_request")
+	}
+
 	resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+boardUpdatedAt+`",
@@ -1215,6 +1229,16 @@ func TestBoardCardPatchAllowsContractValidNoOpShapes(t *testing.T) {
 		t.Fatalf("expected noop patch to keep document_ref empty, got %#v", got)
 	}
 	cardToken = asString(noopPatchPayload.Card["updated_at"])
+
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		legacyResolutionResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
+			"actor_id":"actor-1",
+			"if_updated_at":"`+cardToken+`",
+			"patch":{"resolution":"`+resolution+`"}
+		}`, http.StatusBadRequest)
+		defer legacyResolutionResp.Body.Close()
+		assertErrorCode(t, legacyResolutionResp, "invalid_request")
+	}
 
 	staleNoopPatchResp := patchJSONExpectStatus(t, h.baseURL+"/cards/"+cardID, `{
 		"actor_id":"actor-1",
@@ -1556,6 +1580,18 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	cardID := asString(addPayload.Card["id"])
 	cardThreadID := asString(addPayload.Card["thread_id"])
 	moveBase := h.baseURL + "/cards/" + cardID + "/move"
+
+	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
+		legacyResolutionResp := postJSONExpectStatus(t, moveBase, `{
+			"actor_id":"actor-1",
+			"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
+			"column_key":"done",
+			"resolution":"`+resolution+`",
+			"resolution_refs":["event:card-completion-1"]
+		}`, http.StatusBadRequest)
+		defer legacyResolutionResp.Body.Close()
+		assertErrorCode(t, legacyResolutionResp, "invalid_request")
+	}
 
 	doneMoveResp := postJSONExpectStatus(t, moveBase, `{
 		"actor_id":"actor-1",

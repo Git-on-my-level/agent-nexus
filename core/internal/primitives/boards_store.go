@@ -1754,7 +1754,7 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 	if input.PinnedDocumentID != nil {
 		nextPinnedDocumentID = strings.TrimSpace(*input.PinnedDocumentID)
 	}
-	nextResolution := normalizeIncomingCardResolution(strings.TrimSpace(cardRow.Resolution.String))
+	nextResolution := canonicalizeStoredCardResolution(cardRow.Resolution.String)
 	if input.Resolution != nil {
 		nextResolution = normalizeIncomingCardResolution(strings.TrimSpace(*input.Resolution))
 	}
@@ -3049,7 +3049,7 @@ func BoardCardIsOpenWorkItem(columnKey, resolution string) bool {
 	if strings.TrimSpace(columnKey) != "done" {
 		return true
 	}
-	res := normalizeIncomingCardResolution(strings.TrimSpace(resolution))
+	res := canonicalizeStoredCardResolution(resolution)
 	return res != "done"
 }
 
@@ -4608,7 +4608,7 @@ func validateThreadID(threadID string) error {
 }
 
 func canonicalizeCardResolutionForAPI(raw string) any {
-	s := normalizeIncomingCardResolution(raw)
+	s := canonicalizeStoredCardResolution(raw)
 	if s == "" {
 		return nil
 	}
@@ -4620,7 +4620,7 @@ func canonicalizeCardResolutionForAPI(raw string) any {
 	}
 }
 
-func normalizeIncomingCardResolution(raw string) string {
+func canonicalizeStoredCardResolution(raw string) string {
 	s := strings.TrimSpace(raw)
 	switch s {
 	case "completed", "superseded":
@@ -4630,6 +4630,12 @@ func normalizeIncomingCardResolution(raw string) string {
 	default:
 		return s
 	}
+}
+
+// Incoming writes are contract-strict. Legacy aliases are handled only when
+// shaping already-persisted rows through canonicalizeStoredCardResolution.
+func normalizeIncomingCardResolution(raw string) string {
+	return strings.TrimSpace(raw)
 }
 
 func validateCardResolution(raw string, allowEmpty bool) error {
@@ -4647,7 +4653,7 @@ func validateCardResolution(raw string, allowEmpty bool) error {
 
 func resolveBoardCardMoveResolution(cardRow boardCardRow, columnKey string, input MoveBoardCardInput) (string, string, bool, error) {
 	columnKey = strings.TrimSpace(columnKey)
-	currentResolution := normalizeIncomingCardResolution(strings.TrimSpace(cardRow.Resolution.String))
+	currentResolution := canonicalizeStoredCardResolution(cardRow.Resolution.String)
 	effectiveResolution := input.Resolution
 	if effectiveResolution == nil && columnKey == "done" && input.ResolutionRefs != nil {
 		rr := uniqueSortedStrings(*input.ResolutionRefs)
