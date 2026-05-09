@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from anx_agent_bridge.bridge import AgentBridge
-from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig
+from anx_agent_bridge.config import AdapterConfig, AgentConfig, LoadedConfig, ANXConfig, WorkspaceConfig
 from anx_agent_bridge.models import WakePacket
 from anx_agent_bridge.anx_client import ANXClientError, ANXStreamDisconnected
 from anx_agent_bridge.util import generate_bridge_proof_keypair
@@ -159,18 +159,23 @@ class StubAuth:
         return StubAuthState()
 
 
-def build_bridge(events):
+def build_bridge(events, *, workspace_ids=None):
+    workspace_ids = workspace_ids or ["ws_main"]
     config = LoadedConfig(
-        anx=ANXConfig(base_url="http://anx.test", workspace_id="ws_main", workspace_name="Main"),
+        anx=ANXConfig(base_url="http://anx.test", workspace_id=workspace_ids[0], workspace_name="Main"),
         agent=AgentConfig(
             handle="hermes",
             driver_kind="custom",
             adapter_kind="subprocess",
             state_dir=Path("/tmp/anx-agent-bridge-test"),
-            workspace_bindings=["ws_main"],
+            workspace_bindings=workspace_ids,
         ),
         adapter=AdapterConfig(raw={}),
         auth_state_path=Path("/tmp/anx-agent-bridge-test-auth.json"),
+        workspaces=[
+            WorkspaceConfig(id=workspace_id, name=workspace_id, base_url="http://anx.test")
+            for workspace_id in workspace_ids
+        ],
     )
     state = StubState()
     client = StubClient(events)
@@ -592,6 +597,20 @@ def test_bridge_checkin_upserts_active_registration():
     assert checkin_payload["workspace_id"] == "ws_main"
     assert checkin_payload["workspace_ids"] == ["ws_main"]
     assert checkin_payload["proof_signature_b64"] != ""
+
+
+def test_bridge_checkin_advertises_same_core_workspace_ids():
+    bridge, _state, client = build_bridge([], workspace_ids=["ws_main", "ws_aux"])
+
+    bridge._publish_checkin()
+
+    reg_payload = client.registration_updates[0]["registration"]
+    checkin_payload = client.bridge_checkins[0]
+    assert bridge.config.anx.base_url == "http://anx.test"
+    assert reg_payload["bridge_workspace_ids"] == ["ws_main", "ws_aux"]
+    assert [item["workspace_id"] for item in reg_payload["workspace_bindings"]] == ["ws_main", "ws_aux"]
+    assert checkin_payload["workspace_id"] == "ws_main"
+    assert checkin_payload["workspace_ids"] == ["ws_main", "ws_aux"]
 
 
 def test_bridge_checkin_does_not_invoke_adapter_doctor():
