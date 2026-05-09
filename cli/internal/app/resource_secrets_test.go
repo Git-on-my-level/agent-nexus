@@ -221,6 +221,144 @@ func TestSecretCreateAndUpdateRequireExplicitStdin(t *testing.T) {
 	}
 }
 
+func TestSecretCommandMachineIdentities(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	tests := []struct {
+		name           string
+		args           []string
+		wantCommand    string
+		wantCommandID  string
+	}{
+		{
+			name:          "secret update config error",
+			args:          []string{"secret", "update", "KEY", "--from-stdin"},
+			wantCommand:   "secret update",
+			wantCommandID: "secrets.update",
+		},
+		{
+			name:          "secret exec config error",
+			args:          []string{"secret", "exec", "--secret", "KEY", "--", "env"},
+			wantCommand:   "secret exec",
+			wantCommandID: "secrets.reveal-batch",
+		},
+		{
+			name:          "secret get without reveal config error",
+			args:          []string{"secret", "get", "KEY"},
+			wantCommand:   "secret get",
+			wantCommandID: "secrets.get",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			raw := runCLIForTest(t, home, nil, strings.NewReader("val"), append([]string{"--json"}, tt.args...))
+			payload := assertEnvelopeError(t, raw)
+			if got := anyStringValue(payload["command"]); got != tt.wantCommand {
+				t.Fatalf("expected command %q, got %q", tt.wantCommand, got)
+			}
+			if got := anyStringValue(payload["command_id"]); got != tt.wantCommandID {
+				t.Fatalf("expected command_id %q, got %q", tt.wantCommandID, got)
+			}
+		})
+	}
+}
+
+func TestSecretGetRevealEnvelopeCommandID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/secrets":
+			_, _ = w.Write([]byte(`{"secrets":[{"id":"sec_1","name":"KEY"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/secrets/sec_1/reveal":
+			_, _ = w.Write([]byte(`{"name":"KEY","value":"secret-val"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"not found"}`))
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{"--json", "secret", "get", "--reveal", "KEY"})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "secret get --reveal" {
+		t.Fatalf("expected command %q, got %q", "secret get --reveal", got)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "secrets.reveal" {
+		t.Fatalf("expected command_id %q, got %q", "secrets.reveal", got)
+	}
+}
+
+func TestSecretGetRevealErrorEnvelopeCommandID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/secrets":
+			_, _ = w.Write([]byte(`{"secrets":[{"id":"sec_1","name":"KEY"}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/secrets/sec_1/reveal":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"auth_required","message":"token expired"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"not found"}`))
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, nil, []string{"--json", "secret", "get", "--reveal", "KEY"})
+	payload := assertEnvelopeError(t, raw)
+	if got := anyStringValue(payload["command"]); got != "secret get --reveal" {
+		t.Fatalf("expected command %q, got %q", "secret get --reveal", got)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "secrets.reveal" {
+		t.Fatalf("expected command_id %q, got %q", "secrets.reveal", got)
+	}
+}
+
+func TestSecretUpdateEnvelopeCommandID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/secrets":
+			_, _ = w.Write([]byte(`{"secrets":[{"id":"sec_1","name":"KEY"}]}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/secrets/sec_1":
+			_, _ = w.Write([]byte(`{"secret":{"id":"sec_1","name":"KEY"}}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, strings.NewReader("new-val\n"), []string{"--json", "secret", "update", "--from-stdin", "KEY"})
+	payload := assertEnvelopeOK(t, raw)
+	if got := anyStringValue(payload["command"]); got != "secret update" {
+		t.Fatalf("expected command %q, got %q", "secret update", got)
+	}
+	if got := anyStringValue(payload["command_id"]); got != "secrets.update" {
+		t.Fatalf("expected command_id %q, got %q", "secrets.update", got)
+	}
+}
+
 func TestSecretCreateAndUpdateFromStdin(t *testing.T) {
 	t.Parallel()
 

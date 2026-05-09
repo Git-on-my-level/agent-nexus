@@ -210,7 +210,7 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 
 	secretID, resolveErr := a.resolveSecretID(ctx, client, authCfg, nameOrID)
 	if resolveErr != nil {
-		return nil, "secret get", resolveErr
+		return nil, "secret get --reveal", resolveErr
 	}
 
 	callCtx, cancel := httpclient.WithTimeout(ctx, authCfg.Timeout)
@@ -221,10 +221,10 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 		Headers: generatedHeaders(authCfg),
 	})
 	if err != nil {
-		return nil, "secret get", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "reveal request failed", err)
+		return nil, "secret get --reveal", errnorm.Wrap(errnorm.KindNetwork, "request_failed", "reveal request failed", err)
 	}
 	if resp.StatusCode >= 400 {
-		return nil, "secret get", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		return nil, "secret get --reveal", errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
 	}
 	parsed := parseResponseBody(resp.Body)
 	value := ""
@@ -233,7 +233,7 @@ func (a *App) runSecretGet(ctx context.Context, args []string, cfg config.Resolv
 			value = v
 		}
 	}
-	return &commandResult{Text: value, Data: map[string]any{"status_code": resp.StatusCode, "body": parsed}}, "secret get", nil
+	return &commandResult{Text: value, Data: map[string]any{"status_code": resp.StatusCode, "body": parsed}}, "secret get --reveal", nil
 }
 
 func (a *App) runSecretUpdate(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
