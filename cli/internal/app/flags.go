@@ -121,6 +121,33 @@ func (t *trackedStrings) String() string {
 	return strings.Join(t.values, ",")
 }
 
+type runtimeCommandFlagSpec struct {
+	name  string
+	kind  preflightFlagKind
+	usage string
+}
+
+func runtimeFlagSpec(flags []runtimeCommandFlagSpec, name string) runtimeCommandFlagSpec {
+	for _, spec := range flags {
+		if spec.name == name {
+			return spec
+		}
+	}
+	panic("missing runtime flag spec: " + name)
+}
+
+func registerRuntimeStringFlag(fs *flag.FlagSet, target *trackedString, spec runtimeCommandFlagSpec) {
+	fs.Var(target, spec.name, spec.usage)
+}
+
+func registerRuntimeIntFlag(fs *flag.FlagSet, target *trackedInt, spec runtimeCommandFlagSpec) {
+	fs.Var(target, spec.name, spec.usage)
+}
+
+func registerRuntimeBoolFlag(fs *flag.FlagSet, target *bool, spec runtimeCommandFlagSpec) {
+	fs.BoolVar(target, spec.name, false, spec.usage)
+}
+
 type headerList []string
 
 func (h *headerList) String() string {

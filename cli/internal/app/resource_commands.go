@@ -33,6 +33,45 @@ var idPattern = regexp.MustCompile(`^[A-Za-z0-9._:@/-]+$`)
 const inboxAliasPrefix = "ibx_"
 const inboxAliasDigestLength = 12
 
+var (
+	threadsListRuntimeFlags = []runtimeCommandFlagSpec{
+		{name: "state", kind: preflightFlagString, usage: "Filter by lifecycle state (active, archived, trashed)"},
+		{name: "q", kind: preflightFlagString, usage: "Search by thread id or title"},
+		{name: "limit", kind: preflightFlagString, usage: "Limit the number of returned threads"},
+		{name: "cursor", kind: preflightFlagString, usage: "Pagination cursor from a previous list response"},
+		{name: "include-archived", kind: preflightFlagBool, usage: "Include archived threads"},
+		{name: "archived-only", kind: preflightFlagBool, usage: "Show only archived threads"},
+		{name: "include-trashed", kind: preflightFlagBool, usage: "Include trashed threads"},
+		{name: "trashed-only", kind: preflightFlagBool, usage: "Show only trashed threads"},
+	}
+	artifactsListRuntimeFlags = []runtimeCommandFlagSpec{
+		{name: "kind", kind: preflightFlagString, usage: "Filter by artifact kind"},
+		{name: "backing-scope", kind: preflightFlagString, usage: "Filter backing artifacts: all, standalone, or backing_only"},
+		{name: "thread-id", kind: preflightFlagString, usage: "Filter by thread id"},
+		{name: "ids", kind: preflightFlagString, usage: "Comma-separated artifact ids (batch lookup)"},
+		{name: "created-before", kind: preflightFlagString, usage: "Filter by created_at upper bound"},
+		{name: "created-after", kind: preflightFlagString, usage: "Filter by created_at lower bound"},
+		{name: "include-trashed", kind: preflightFlagBool, usage: "Include trashed artifacts"},
+		{name: "trashed-only", kind: preflightFlagBool, usage: "Show only trashed artifacts"},
+		{name: "include-archived", kind: preflightFlagBool, usage: "Include archived artifacts"},
+		{name: "archived-only", kind: preflightFlagBool, usage: "Show only archived artifacts"},
+	}
+	inboxGetRuntimeFlags = []runtimeCommandFlagSpec{
+		{name: "id", kind: preflightFlagString, usage: "Inbox item id or alias"},
+		{name: "inbox-id", kind: preflightFlagString, usage: "Alias for --id"},
+		{name: "inbox-item-id", kind: preflightFlagString, usage: "Inbox item id or alias"},
+		{name: "risk-horizon-days", kind: preflightFlagString, usage: "Derived inbox risk horizon days"},
+	}
+)
+
+func resourceRuntimePreflightSpecs() map[string]map[string]preflightFlagSpec {
+	return map[string]map[string]preflightFlagSpec{
+		"threads list":   preflightSpecsFromRuntimeFlags(threadsListRuntimeFlags),
+		"artifacts list": preflightSpecsFromRuntimeFlags(artifactsListRuntimeFlags),
+		"inbox get":      preflightSpecsFromRuntimeFlags(inboxGetRuntimeFlags),
+	}
+}
+
 type resourceIDLookupSpec struct {
 	idLabel        string
 	resource       string
@@ -608,14 +647,14 @@ func (a *App) runThreadsCommand(ctx context.Context, args []string, cfg config.R
 		var stateFlag, queryFlag, cursorFlag trackedString
 		var limitFlag trackedInt
 		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-		fs.Var(&stateFlag, "state", "Filter by lifecycle state (active, archived, trashed)")
-		fs.Var(&queryFlag, "q", "Search by thread id or title")
-		fs.Var(&limitFlag, "limit", "Limit the number of returned threads")
-		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
-		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived threads")
-		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived threads")
-		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed threads")
-		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed threads")
+		registerRuntimeStringFlag(fs, &stateFlag, runtimeFlagSpec(threadsListRuntimeFlags, "state"))
+		registerRuntimeStringFlag(fs, &queryFlag, runtimeFlagSpec(threadsListRuntimeFlags, "q"))
+		registerRuntimeIntFlag(fs, &limitFlag, runtimeFlagSpec(threadsListRuntimeFlags, "limit"))
+		registerRuntimeStringFlag(fs, &cursorFlag, runtimeFlagSpec(threadsListRuntimeFlags, "cursor"))
+		registerRuntimeBoolFlag(fs, &includeArchived, runtimeFlagSpec(threadsListRuntimeFlags, "include-archived"))
+		registerRuntimeBoolFlag(fs, &archivedOnly, runtimeFlagSpec(threadsListRuntimeFlags, "archived-only"))
+		registerRuntimeBoolFlag(fs, &includeTrashed, runtimeFlagSpec(threadsListRuntimeFlags, "include-trashed"))
+		registerRuntimeBoolFlag(fs, &trashedOnly, runtimeFlagSpec(threadsListRuntimeFlags, "trashed-only"))
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "threads list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1072,16 +1111,16 @@ func (a *App) runArtifactsCommand(ctx context.Context, args []string, cfg config
 		var trashedOnly bool
 		var includeArchived bool
 		var archivedOnly bool
-		fs.Var(&kindFlag, "kind", "Filter by artifact kind")
-		fs.Var(&backingScopeFlag, "backing-scope", "Filter backing artifacts: all, standalone, or backing_only")
-		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
-		fs.Var(&idsFlag, "ids", "Comma-separated artifact ids (batch lookup)")
-		fs.Var(&beforeFlag, "created-before", "Filter by created_at upper bound")
-		fs.Var(&afterFlag, "created-after", "Filter by created_at lower bound")
-		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed artifacts")
-		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed artifacts")
-		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived artifacts")
-		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived artifacts")
+		registerRuntimeStringFlag(fs, &kindFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "kind"))
+		registerRuntimeStringFlag(fs, &backingScopeFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "backing-scope"))
+		registerRuntimeStringFlag(fs, &threadIDFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "thread-id"))
+		registerRuntimeStringFlag(fs, &idsFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "ids"))
+		registerRuntimeStringFlag(fs, &beforeFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "created-before"))
+		registerRuntimeStringFlag(fs, &afterFlag, runtimeFlagSpec(artifactsListRuntimeFlags, "created-after"))
+		registerRuntimeBoolFlag(fs, &includeTrashed, runtimeFlagSpec(artifactsListRuntimeFlags, "include-trashed"))
+		registerRuntimeBoolFlag(fs, &trashedOnly, runtimeFlagSpec(artifactsListRuntimeFlags, "trashed-only"))
+		registerRuntimeBoolFlag(fs, &includeArchived, runtimeFlagSpec(artifactsListRuntimeFlags, "include-archived"))
+		registerRuntimeBoolFlag(fs, &archivedOnly, runtimeFlagSpec(artifactsListRuntimeFlags, "archived-only"))
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "artifacts list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -2340,10 +2379,10 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 	fs := newSilentFlagSet("inbox get")
 	var idFlag, inboxIDFlag, inboxItemIDFlag trackedString
 	var riskHorizonFlag trackedInt
-	fs.Var(&idFlag, "id", "Inbox item id or alias")
-	fs.Var(&inboxIDFlag, "inbox-id", "Alias for --id")
-	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id or alias")
-	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
+	registerRuntimeStringFlag(fs, &idFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "id"))
+	registerRuntimeStringFlag(fs, &inboxIDFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "inbox-id"))
+	registerRuntimeStringFlag(fs, &inboxItemIDFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "inbox-item-id"))
+	registerRuntimeIntFlag(fs, &riskHorizonFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "risk-horizon-days"))
 	if err := fs.Parse(args); err != nil {
 		return nil, "inbox get", errnorm.Usage("invalid_flags", err.Error())
 	}

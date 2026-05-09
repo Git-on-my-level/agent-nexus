@@ -4045,6 +4045,82 @@ func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
 	}
 }
 
+func TestPreConfigUsagePreflightAcceptsRuntimeParserFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		command string
+		flags   []runtimeCommandFlagSpec
+	}{
+		{command: "threads list", flags: threadsListRuntimeFlags},
+		{command: "artifacts list", flags: artifactsListRuntimeFlags},
+		{command: "inbox get", flags: inboxGetRuntimeFlags},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.command, func(t *testing.T) {
+			t.Parallel()
+			path := strings.Fields(tt.command)
+			for _, flag := range tt.flags {
+				args := append([]string{}, path...)
+				args = append(args, "--"+flag.name)
+				if flag.kind != preflightFlagBool {
+					args = append(args, "value")
+				}
+				command, err := preflightConfigIndependentUsage(args)
+				if err != nil {
+					t.Fatalf("%s should accept --%s from runtime parser specs before config resolution: %v", tt.command, flag.name, err)
+				}
+				if command != tt.command {
+					t.Fatalf("expected command %q for --%s, got %q", tt.command, flag.name, command)
+				}
+			}
+		})
+	}
+}
+
+func TestPreConfigUsagePreflightRejectsStaleManualResourceFlags(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	tests := []struct {
+		name    string
+		args    []string
+		command string
+		flag    string
+	}{
+		{name: "threads list stale topic-ref", args: []string{"threads", "list", "--topic-ref", "topic:launch"}, command: "threads list", flag: "topic-ref"},
+		{name: "threads list stale purpose", args: []string{"threads", "list", "--purpose", "coordination"}, command: "threads list", flag: "purpose"},
+		{name: "threads list stale with-counts", args: []string{"threads", "list", "--with-counts"}, command: "threads list", flag: "with-counts"},
+		{name: "artifacts list stale ref", args: []string{"artifacts", "list", "--ref", "topic:launch"}, command: "artifacts list", flag: "ref"},
+		{name: "artifacts list stale cursor", args: []string{"artifacts", "list", "--cursor", "abc"}, command: "artifacts list", flag: "cursor"},
+		{name: "inbox get stale full-id", args: []string{"inbox", "get", "--full-id"}, command: "inbox get", flag: "full-id"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			raw := runCLIForTest(t, home, nil, nil, append([]string{"--json"}, tt.args...))
+			payload := assertEnvelopeError(t, raw)
+			if got := anyStringValue(payload["command"]); got != tt.command {
+				t.Fatalf("expected command %q, got %#v", tt.command, payload)
+			}
+			errObj, _ := payload["error"].(map[string]any)
+			if got := anyStringValue(errObj["code"]); got != "invalid_flags" {
+				t.Fatalf("expected invalid_flags before config resolution, got %#v", payload)
+			}
+			if got := anyStringValue(errObj["message"]); !strings.Contains(got, tt.flag) {
+				t.Fatalf("expected message to contain %q, got %#v", tt.flag, payload)
+			}
+		})
+	}
+}
+
 func TestPreConfigUsagePreflightMirrorsGoFlagSpelling(t *testing.T) {
 	t.Parallel()
 

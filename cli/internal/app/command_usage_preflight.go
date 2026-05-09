@@ -297,6 +297,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	// Lowest precedence: lifecycle verbs derived from the resource registry.
 	// `manualPreflightFlagSpecs` and `localHelperTopics` may still override.
 	addLayer(derivedLifecyclePreflightSpecs())
+	addLayer(resourceRuntimePreflightSpecs())
 	for _, topic := range localHelperTopics {
 		flags := map[string]preflightFlagSpec{}
 		for _, flag := range topic.Flags {
@@ -311,6 +312,14 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	}
 	addLayer(manualPreflightFlagSpecs())
 	return specs
+}
+
+func preflightSpecsFromRuntimeFlags(flags []runtimeCommandFlagSpec) map[string]preflightFlagSpec {
+	out := map[string]preflightFlagSpec{}
+	for _, flag := range flags {
+		out[flag.name] = preflightFlagSpec{kind: flag.kind}
+	}
+	return out
 }
 
 func parseLocalHelperFlagSpec(raw string) (string, preflightFlagKind, bool) {
@@ -469,25 +478,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"limit":  valueFlag,
 			"cursor": valueFlag,
 		},
-		"threads list": {
-			"state":       valueFlag,
-			"topic-ref":   valueFlag,
-			"purpose":     valueFlag,
-			"q":           valueFlag,
-			"limit":       valueFlag,
-			"cursor":      valueFlag,
-			"full-id":     boolFlag,
-			"with-counts": boolFlag,
-		},
-		"artifacts list": merge(map[string]preflightFlagSpec{
-			"kind":    valueFlag,
-			"ref":     valueFlag,
-			"state":   valueFlag,
-			"q":       valueFlag,
-			"limit":   valueFlag,
-			"cursor":  valueFlag,
-			"full-id": boolFlag,
-		}, lifecycle),
 		"events get": {
 			"id":       valueFlag,
 			"event-id": valueFlag,
@@ -511,11 +501,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"thread-id": valueFlag,
 			"type":      valueFlag,
 			"full-id":   boolFlag,
-		},
-		"inbox get": {
-			"id":            valueFlag,
-			"inbox-item-id": valueFlag,
-			"full-id":       boolFlag,
 		},
 		"inbox respond": {
 			"from-file":     valueFlag,
@@ -602,7 +587,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"from-file":           valueFlag,
 			"dry-run":             boolFlag,
 		},
-		"cards reopen": {"card-id": valueFlag},
+		"cards reopen":      {"card-id": valueFlag},
 		"threads message":   {"thread": valueFlag, "thread-id": valueFlag},
 		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
 		"boards workspace":  {"board-id": valueFlag},
