@@ -312,9 +312,17 @@ func TestBoardsWorkspaceAndThreadWorkspaceMemberships(t *testing.T) {
 	if !containsAllStrings(boardIDs, []string{boardID, secondBoardID}) {
 		t.Fatalf("unexpected board membership board ids: %#v", boardIDs)
 	}
+	boardHandles := map[string]string{
+		boardID:       asString(createBoardPayload.Board["handle"]),
+		secondBoardID: asString(secondBoardPayload.Board["handle"]),
+	}
 	for _, membership := range memberThreadWorkspace.BoardMemberships.Items {
 		if !cardRelatedRefsContainThread(membership.Card, memberThreadID) {
 			t.Fatalf("expected board membership related_refs to include thread %q, got %#v", memberThreadID, membership.Card)
+		}
+		membershipBoardID := asString(membership.Board["id"])
+		if want := "board:" + boardHandles[membershipBoardID]; asString(membership.Card["board_ref"]) != want {
+			t.Fatalf("expected board membership card board_ref %q, got %#v", want, membership.Card["board_ref"])
 		}
 	}
 }
@@ -761,6 +769,7 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
 		"board":{
+			"id":"archive-board-internal-id",
 			"title":"Archive Board",
 			"refs":["thread:`+primaryThreadID+`"]
 		}
@@ -774,6 +783,10 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 		t.Fatalf("decode create board response: %v", err)
 	}
 	boardID := asString(createBoardPayload.Board["id"])
+	boardHandle := asString(createBoardPayload.Board["handle"])
+	if boardID == "" || boardHandle == "" || boardID == boardHandle {
+		t.Fatalf("expected divergent board id and handle, got id=%q handle=%q", boardID, boardHandle)
+	}
 	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
 
 	addCardResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
@@ -796,6 +809,9 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if cardID == "" {
 		t.Fatalf("expected card id in add response: %#v", addCardPayload.Card)
 	}
+	if want := "board:" + boardHandle; asString(addCardPayload.Card["board_ref"]) != want {
+		t.Fatalf("expected add card board_ref %q, got %#v", want, addCardPayload.Card["board_ref"])
+	}
 	afterAdd := asString(addCardPayload.Board["updated_at"])
 
 	archiveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardID+"/archive", `{
@@ -814,7 +830,7 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	if asString(archivePayload.Card["id"]) != cardID {
 		t.Fatalf("expected archived card id %q, got %#v", cardID, archivePayload.Card["id"])
 	}
-	if want := "board:" + boardID; asString(archivePayload.Card["board_ref"]) != want {
+	if want := "board:" + boardHandle; asString(archivePayload.Card["board_ref"]) != want {
 		t.Fatalf("expected archived board_ref %q, got %#v", want, archivePayload.Card["board_ref"])
 	}
 	if asString(archivePayload.Card["archived_at"]) == "" {

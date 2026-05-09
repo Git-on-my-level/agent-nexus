@@ -691,6 +691,7 @@ type boardRow struct {
 
 type boardCardRow struct {
 	BoardID              string
+	BoardHandle          sql.NullString
 	CardID               string
 	Handle               sql.NullString
 	ColumnKey            string
@@ -1360,16 +1361,17 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
 	filter.States = NormalizeListLifecycleStates(filter.States)
-	whereSQL := LifecycleStatesOrGroup("archived_at", "trashed_at", filter.States)
+	whereSQL := LifecycleStatesOrGroup("c.archived_at", "c.trashed_at", filter.States)
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT board_id, id, column_key, rank, title, summary, version, head_revision_id, head_revision_number, thread_id, parent_thread_id, due_at,
-		        definition_of_done_json, pinned_document_id, assignee, risk, resolution, resolution_refs_json, refs_json,
-		        created_at, created_by, updated_at, updated_by, provenance_json, archived_at, archived_by,
-		        trashed_at, trashed_by, trash_reason
-		   FROM cards
+		`SELECT c.board_id, b.handle, c.id, c.handle, c.column_key, c.rank, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
+		        c.definition_of_done_json, c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
+		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by,
+		        c.trashed_at, c.trashed_by, c.trash_reason
+		   FROM cards c
+		   LEFT JOIN boards b ON b.id = c.board_id
 		  WHERE `+whereSQL+`
-		  ORDER BY board_id ASC, `+boardColumnOrderSQL("column_key")+`, rank ASC, id ASC`,
+		  ORDER BY c.board_id ASC, `+boardColumnOrderSQL("c.column_key")+`, c.rank ASC, c.id ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query cards: %w", err)
@@ -1381,7 +1383,9 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		row := boardCardRow{}
 		if err := rows.Scan(
 			&row.BoardID,
+			&row.BoardHandle,
 			&row.CardID,
+			&row.Handle,
 			&row.ColumnKey,
 			&row.Rank,
 			&row.Title,
@@ -2856,7 +2860,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT b.id, b.title, b.archived_at, b.trashed_at, re.source_id, re.target_id, json_extract(re.metadata_json, '$.column_key'), c.title, c.resolution, c.parent_thread_id, c.pinned_document_id, c.due_at, c.updated_at
+		`SELECT b.id, b.title, b.handle, b.archived_at, b.trashed_at, re.source_id, re.target_id, json_extract(re.metadata_json, '$.column_key'), c.title, c.resolution, c.parent_thread_id, c.pinned_document_id, c.due_at, c.updated_at
 		   FROM ref_edges re
 		   JOIN boards b ON b.id = re.source_id
 		   JOIN cards c ON c.id = re.target_id
@@ -2878,6 +2882,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 		var (
 			boardID          string
 			title            string
+			boardHandle      sql.NullString
 			boardArchivedAt  sql.NullString
 			boardTrashedAt   sql.NullString
 			cardBoardID      string
@@ -2890,9 +2895,10 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 			dueAt            sql.NullString
 			updatedAt        string
 		)
-		if err := rows.Scan(&boardID, &title, &boardArchivedAt, &boardTrashedAt, &cardBoardID, &cardID, &columnKey, &cardTitle, &cardResolution, &parentThreadID, &pinnedDocumentID, &dueAt, &updatedAt); err != nil {
+		if err := rows.Scan(&boardID, &title, &boardHandle, &boardArchivedAt, &boardTrashedAt, &cardBoardID, &cardID, &columnKey, &cardTitle, &cardResolution, &parentThreadID, &pinnedDocumentID, &dueAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan board membership: %w", err)
 		}
+		publicBoardHandle := firstNonEmpty(strings.TrimSpace(boardHandle.String), cardBoardID)
 		out = append(out, BoardMembership{
 			Board: map[string]any{
 				"id":    boardID,
@@ -2901,7 +2907,7 @@ func (s *Store) ListBoardMembershipsByThread(ctx context.Context, threadID strin
 			},
 			Card: map[string]any{
 				"board_id":     cardBoardID,
-				"board_ref":    "board:" + strings.TrimSpace(cardBoardID),
+				"board_ref":    "board:" + publicBoardHandle,
 				"id":           cardID,
 				"thread_id":    nullableBoardString(parentThreadID.String),
 				"title":        cardTitle,
@@ -3153,13 +3159,14 @@ func (s *Store) loadBoardCardRowsByBoardIDs(ctx context.Context, boardIDs []stri
 
 	query := `SELECT *
 		FROM (
-			SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+			SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 			  FROM ref_edges re
+			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
@@ -3197,13 +3204,14 @@ func (s *Store) loadOrderedBoardCards(ctx context.Context, q queryRower, boardID
 
 	query := `SELECT *
 		FROM (
-			SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+			SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 			  FROM ref_edges re
+			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
@@ -3398,13 +3406,14 @@ func loadBoardCardsForColumn(ctx context.Context, db interface {
 }, boardID, columnKey string) ([]boardCardRow, error) {
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+		`SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 		        COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 		        COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 		   FROM ref_edges re
+		   LEFT JOIN boards b ON b.id = re.source_id
 		   JOIN cards c ON c.id = re.target_id
 		  WHERE re.source_type = 'board'
 		    AND re.edge_type = ?
@@ -3599,13 +3608,14 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 
 	cardQuery := `SELECT *
 		FROM (
-			SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+			SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 			  FROM ref_edges re
+			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
@@ -3628,13 +3638,14 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 
 	threadQuery := `SELECT *
 		FROM (
-			SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+			SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 			  FROM ref_edges re
+			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
@@ -3665,13 +3676,14 @@ func (s *Store) loadBoardCardByGlobalID(ctx context.Context, rower queryRower, c
 	}
 	query := `SELECT *
 		FROM (
-			SELECT re.source_id AS board_id, re.target_id AS card_id, c.handle AS card_handle,
+			SELECT re.source_id AS board_id, b.handle AS board_handle, re.target_id AS card_id, c.handle AS card_handle,
 			       COALESCE(json_extract(re.metadata_json, '$.column_key'), ?) AS column_key,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
 			  FROM ref_edges re
+			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
 			 WHERE re.source_type = 'board'
 			   AND re.edge_type = ?
@@ -3751,6 +3763,7 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }) (boardCardRo
 	row := boardCardRow{}
 	if err := scanner.Scan(
 		&row.BoardID,
+		&row.BoardHandle,
 		&row.CardID,
 		&row.Handle,
 		&row.ColumnKey,
@@ -4302,6 +4315,7 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 	}
 	headRevisionID := strings.TrimSpace(r.HeadRevisionID.String)
 	cardHandle := firstNonEmpty(strings.TrimSpace(r.Handle.String), r.CardID)
+	boardHandle := firstNonEmpty(strings.TrimSpace(r.BoardHandle.String), r.BoardID)
 	headRevisionRef := boardTypedRefOrNil("card_revision", headRevisionID)
 	if headRevisionID != "" && headRevisionNumber > 0 {
 		headRevisionRef = "card_revision:" + revisionHandle(cardHandle, headRevisionNumber)
@@ -4311,7 +4325,8 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"ref":                  "card:" + cardHandle,
 		"handle":               cardHandle,
 		"board_id":             r.BoardID,
-		"board_ref":            "board:" + strings.TrimSpace(r.BoardID),
+		"board_ref":            "board:" + boardHandle,
+		"board_handle":         boardHandle,
 		"thread_id":            nullableBoardString(threadID),
 		"column_key":           r.ColumnKey,
 		"rank":                 r.Rank,
