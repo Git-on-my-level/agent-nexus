@@ -212,14 +212,13 @@ class AgentBridge:
                 self.state.set_session(packet.session_key, result.native_session_id)
             except Exception:
                 LOGGER.exception("Wakeup %s: failed to persist native session id", packet.wakeup_id)
-        if not self._mark_wakeup_consumed(packet.wakeup_id):
-            self._completion_without_local_ack.add(packet.wakeup_id)
-
         try:
             response_text = result.response_text.strip()
             if response_text:
                 self._post_reply_message_with_retries(packet, response_text, result.native_session_id)
             self.client.complete_agent_wakeup(packet.wakeup_id, self.state.bridge_instance_id)
+            if not self._mark_wakeup_consumed(packet.wakeup_id):
+                self._completion_without_local_ack.add(packet.wakeup_id)
         except Exception as exc:
             LOGGER.exception("Wakeup %s writeback failed after adapter dispatch", wakeup_id)
             self._record_wakeup_failure_status(

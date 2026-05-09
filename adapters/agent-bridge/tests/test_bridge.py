@@ -279,28 +279,44 @@ def test_packet_event_refs_omits_empty_trigger_event_id():
     ]
 
 
-def test_handle_notification_marks_consumed_when_completion_fails():
+def test_handle_notification_retries_writeback_when_completion_fails():
     bridge, state, client = build_bridge([])
+    completion_attempts = {"count": 0}
 
     def fail_completion(*_args, **_kwargs):
-        raise RuntimeError("completion write failed")
+        completion_attempts["count"] += 1
+        if completion_attempts["count"] == 1:
+            raise RuntimeError("completion write failed")
+        return {
+            "notification": {
+                "wakeup_id": "wake-1",
+                "bridge_instance_id": "bridge-test",
+                "delivery_status": "completed",
+            }
+        }
 
     client.complete_agent_wakeup = fail_completion
+    notification = {
+        "wakeup_id": "wake-1",
+        "target_actor_id": "actor-hermes",
+        "thread_id": "thread-1",
+        "request_event_id": "evt-request",
+        "trigger_event_id": "evt-trigger",
+    }
 
-    bridge._handle_notification(
-        {
-            "wakeup_id": "wake-1",
-            "target_actor_id": "actor-hermes",
-            "thread_id": "thread-1",
-            "request_event_id": "evt-request",
-            "trigger_event_id": "evt-trigger",
-        }
-    )
+    bridge._handle_notification(notification)
 
     assert client.notification_reads == ["wake-1"]
-    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" not in state.handled_wakeup_ids()
     assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
     assert "completion write failed" in client.failed_wakeups[-1]["error"]
+
+    bridge._handle_notification(notification)
+
+    assert completion_attempts["count"] == 2
+    assert len(bridge.adapter.dispatch_calls) == 2
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert client.notification_reads == ["wake-1", "wake-1"]
 
 
 def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
@@ -338,7 +354,7 @@ def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):
     assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
 
 
-def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retries(monkeypatch):
+def test_handle_notification_does_not_mark_consumed_after_reply_post_exhausts_retries(monkeypatch):
     bridge, state, client = build_bridge([])
     original_create_event = client.create_event
     attempts = {"message": 0}
@@ -363,10 +379,10 @@ def test_handle_notification_does_not_redispatch_after_reply_post_exhausts_retri
     bridge._handle_notification(notification)
     bridge._handle_notification(notification)
 
-    assert attempts["message"] == 3
-    assert len(bridge.adapter.dispatch_calls) == 1
+    assert attempts["message"] == 6
+    assert len(bridge.adapter.dispatch_calls) == 2
     assert client.notification_reads == ["wake-1", "wake-1"]
-    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" not in state.handled_wakeup_ids()
     assert [entry["event"]["type"] for entry in client.created_events] == []
     assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
 
