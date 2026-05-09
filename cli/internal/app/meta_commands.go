@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -365,7 +366,7 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 	var targetFlag trackedString
 	var writeFile trackedString
 	var writeDir trackedString
-	fs.Var(&targetFlag, "target", "Skill target, for example cursor")
+	fs.Var(&targetFlag, "target", "Skill target, for example anx")
 	fs.Var(&writeFile, "write-file", "Write the rendered skill to this exact path")
 	fs.Var(&writeDir, "write-dir", "Write the rendered skill into this directory")
 	if err := fs.Parse(args); err != nil {
@@ -397,16 +398,17 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 		content         string
 		defaultFileName string
 	)
-	switch strings.ToLower(target) {
-	case "cursor":
-		content = renderCursorSkillMarkdown()
+	normalizedTarget := normalizeSkillTarget(target)
+	switch normalizedTarget {
+	case "anx":
+		content = renderOpinionatedANXSkillMarkdown()
 		defaultFileName = "SKILL.md"
 	default:
 		return nil, errnorm.Local("not_found", "unknown skill target")
 	}
 
 	data := map[string]any{
-		"target":       strings.ToLower(target),
+		"target":       normalizedTarget,
 		"content":      content,
 		"default_file": defaultFileName,
 		"source":       "bundled-agent-guide",
@@ -421,6 +423,81 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 		data["written_files"] = []string{writtenPath}
 	}
 	return &commandResult{Text: content, Data: data}, nil
+}
+
+func normalizeSkillTarget(target string) string {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "", "anx", "agent-nexus":
+		return "anx"
+	case "cursor":
+		return "anx"
+	default:
+		return strings.ToLower(strings.TrimSpace(target))
+	}
+}
+
+func (a *App) runInstallCommand(args []string) (*commandResult, string, error) {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return &commandResult{Text: installUsageText()}, "install", nil
+	}
+	switch strings.TrimSpace(args[0]) {
+	case "skill":
+		result, err := a.runInstallSkill(args[1:])
+		return result, "install skill", err
+	default:
+		return nil, "install", installSubcommandSpec.unknownError(args[0])
+	}
+}
+
+func (a *App) runInstallSkill(args []string) (*commandResult, error) {
+	if len(args) > 0 && isHelpToken(args[0]) {
+		return &commandResult{Text: installSkillUsageText()}, nil
+	}
+	fs := newSilentFlagSet("install skill")
+	var pathFlag trackedString
+	var writeFileFlag trackedString
+	var forceFlag trackedBool
+	fs.Var(&pathFlag, "path", "Destination file path")
+	fs.Var(&writeFileFlag, "write-file", "Compatibility spelling for --path")
+	fs.Var(&forceFlag, "force", "Overwrite an existing destination file")
+	if err := fs.Parse(args); err != nil {
+		return nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	path := firstNonEmpty(pathFlag.value, writeFileFlag.value)
+	if strings.TrimSpace(path) == "" && len(positionals) > 0 {
+		path = strings.TrimSpace(positionals[0])
+		positionals = positionals[1:]
+	}
+	if strings.TrimSpace(path) == "" {
+		return nil, errnorm.Usage("invalid_request", "`anx install skill` requires --path <file>")
+	}
+	if len(positionals) > 0 {
+		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx install skill`")
+	}
+	if _, err := os.Stat(strings.TrimSpace(path)); err == nil && !forceFlag.value {
+		return nil, errnorm.Usage("file_exists", "`anx install skill` refuses to overwrite an existing file; pass --force to replace it")
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "failed to inspect rendered skill destination", err)
+	}
+	content := renderOpinionatedANXSkillMarkdown()
+	writtenPath, err := writeRenderedFile(content, strings.TrimSpace(path), "", "SKILL.md")
+	if err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "failed to write rendered skill", err)
+	}
+	text := strings.Join([]string{
+		"Installed ANX agent skill.",
+		"Path: " + writtenPath,
+		"Next: read the installed skill, then run `anx workspace summary` before starting durable workspace work.",
+	}, "\n")
+	return &commandResult{Text: text, Data: map[string]any{
+		"path":          writtenPath,
+		"content":       content,
+		"written_files": []string{writtenPath},
+		"source":        "bundled-agent-guide",
+		"guide_topic":   "agent-guide",
+		"skill_name":    agentGuideSkillName,
+	}}, nil
 }
 
 func metaDocsUsageText() string {
@@ -468,17 +545,51 @@ Usage:
   anx meta skill <target> [--write-file <path> | --write-dir <dir>]
   anx meta skill --target <target> [--write-file <path> | --write-dir <dir>]
 
-Render a bundled editor-specific skill file from the canonical agent guide.
+Render the bundled opinionated ANX agent skill.
 
 Targets:
-  cursor                 Render a Cursor ` + "`SKILL.md`" + ` file for ` + "`anx`" + ` usage.
+  anx                    Render the generic opinionated ANX ` + "`SKILL.md`" + ` file.
+  cursor                 Compatibility alias for ` + "`anx`" + `.
 
 Options:
   --write-file <path>    Write the rendered skill to this exact path.
   --write-dir <dir>      Write the rendered skill into this directory using its default filename.
 
 Examples:
-  anx meta skill cursor
-  anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard
+  anx meta skill anx
+  anx meta skill anx --write-file ./SKILL.md
   anx meta skill --target cursor --write-file ./SKILL.md`)
+}
+
+func installUsageText() string {
+	return strings.TrimSpace(`Install local ANX helper artifacts
+
+Usage:
+  anx install skill --path <file>
+
+Subcommands:
+  skill   Install the bundled opinionated ANX agent skill to a file path.
+
+Examples:
+  anx install skill --path ./SKILL.md`)
+}
+
+func installSkillUsageText() string {
+	return strings.TrimSpace(`Install the bundled opinionated ANX agent skill
+
+Usage:
+  anx install skill --path <file>
+  anx install skill <file>
+  anx install skill --path <file> --force
+
+Writes a generic ` + "`SKILL.md`" + `-compatible Markdown file that teaches agents how to use ANX as the default durable tracker for topics, cards, docs, asks, and collaboration.
+
+Options:
+  --path <file>          Destination file path.
+  --write-file <file>    Compatibility spelling for --path.
+  --force                Overwrite an existing destination file.
+
+Examples:
+  anx install skill --path ./SKILL.md
+  anx install skill ~/.codex/skills/anx-opinionated-onboarding/SKILL.md`)
 }

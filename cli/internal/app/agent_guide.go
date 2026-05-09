@@ -7,9 +7,9 @@ import (
 	"strings"
 )
 
-const agentGuideSkillName = "anx-cli-onboard"
+const agentGuideSkillName = "anx-opinionated-onboarding"
 
-const agentGuideSkillDescription = "Use the `anx` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating ANX workflows."
+const agentGuideSkillDescription = "Use Agent Nexus as the default durable knowledge and coordination tracker: orient with `anx`, choose topics/cards/docs/boards correctly, collaborate through domain messages and asks, and keep workspace state current while doing work."
 
 type guideSection struct {
 	Title string
@@ -17,7 +17,7 @@ type guideSection struct {
 }
 
 func agentGuideIntro() string {
-	return "Use this guide when you need to operate `anx` well, not just get it running. Favor stable CLI patterns over environment-specific setup."
+	return "Use this guide when Agent Nexus (`anx`) is available. Treat ANX as the default durable tracker for work, knowledge, asks, and collaboration."
 }
 
 func agentGuideSections() []guideSection {
@@ -25,12 +25,26 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Operating posture",
 			Lines: []string{
-				"- Treat `anx` as the contract-aligned interface to an ANX core API.",
+				"- Treat `anx` as the contract-aligned interface to an ANX core API and as the default durable workspace memory.",
+				"- Proactively look for useful tracking opportunities: create or update Topics for work subjects, Cards for concrete tasks, Docs for durable knowledge, and domain messages for collaboration updates.",
+				"- Prefer updating existing objects over creating duplicates. Search/list first, then create only when the current workspace does not already have the right Topic, Card, Doc, or Board.",
 				"- Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.",
 				"- Prefer **default (non-JSON) output** for normal agent readbacks and orientation: concise text for direct consumption, usually fewer tokens than JSON envelopes.",
 				"- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, `jq`, or anything that parses the stable JSON envelope (including rich `error.details`).",
 				"- Prefer profiles and env vars over repeated flags.",
 				"- Prefer discovery from the CLI itself over memorizing exact subcommands.",
+			},
+		},
+		{
+			Title: "Default tracking loop",
+			Lines: []string{
+				"1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, Inbox items, and notifications.",
+				"2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.",
+				"3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.",
+				"4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.",
+				"5. Collaborate through `topics message/reply`, `docs message/reply`, and `cards message/reply` instead of raw `events create` for ordinary conversation.",
+				"6. Surface human attention with `anx human ask|review|escalate` when blocked, high consequence, or low confidence.",
+				"7. Close the loop by moving/resolving Cards and leaving evidence on the Topic/Card/Doc where future agents and humans will look.",
 			},
 		},
 		{
@@ -49,9 +63,9 @@ func agentGuideSections() []guideSection {
 				"",
 				"Heuristic:",
 				"- Use `events` for facts.",
-				"- Use `topics` for ongoing work, ownership, and operator coordination.",
-				"- Use `cards` for concrete tracked execution and delivery state.",
-				"- Use `docs` for narrative or reference material.",
+				"- Use `topics` for ongoing work, ownership, current conversation, and operator coordination.",
+				"- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.",
+				"- Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.",
 				"- Use `boards` for portfolio or workflow visibility.",
 				"- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.",
 				"- Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.",
@@ -66,6 +80,17 @@ func agentGuideSections() []guideSection {
 				"- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.",
 				"- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.",
 				"- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages doc:<handle>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).",
+			},
+		},
+		{
+			Title: "Asks and collaboration",
+			Lines: []string{
+				"- Ask a human with `anx human ask` when you need a decision, approval, missing context, credential, policy call, or product judgment before continuing.",
+				"- Use `anx human review` when the human should inspect a proposed change, document, plan, or result before it becomes authoritative.",
+				"- Use `anx human escalate` for high-risk, time-sensitive, security, data-loss, privacy, billing, or irreversible-impact situations.",
+				"- Include a recommended response and useful alternatives. The first response proposal should be the action you recommend.",
+				"- Ask another agent by posting a Topic/Card/Doc message that mentions `@handle` when the target is taggable. Use Cards when the ask is a trackable task, Docs when the ask is about durable knowledge, and Topics when the ask belongs to the broader work conversation.",
+				"- If your runtime can be programmatically prompted or resumed by a bridge, ask the human whether they want bridge setup after registration. If your runtime cannot be externally woken, explain that bridge setup is not useful for you and skip it.",
 			},
 		},
 		{
@@ -133,10 +158,11 @@ func agentGuideSections() []guideSection {
 				"",
 				"1. Set base URL.",
 				"2. Check onboarding state with `anx auth bootstrap status` before first registration.",
-				"3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.",
+				"3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>`. For later principals, obtain an invite with `anx auth invites create --kind agent`, then register with `anx auth register --username <username> --invite-token <token>`.",
 				"4. Confirm identity.",
 				"5. Run a cheap read command.",
-				"6. If this agent should be tag-addressable from thread messages, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic document lifecycle.",
+				"6. Install this opinionated skill into your agent environment with `anx install skill --path <path>` when the environment supports local agent instructions.",
+				"7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic lifecycle.",
 				"",
 				"When stuck:",
 				"",
@@ -192,24 +218,39 @@ func agentGuideText() string {
 func init() {
 	localHelperTopics = append(localHelperTopics, localHelperTopic{
 		Path:        "meta skill",
-		Summary:     "Render a bundled editor-specific skill file from the canonical ANX agent guide.",
+		Summary:     "Render the bundled opinionated ANX agent skill.",
 		JSONShape:   "`target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`",
-		Composition: "Pure local helper. Renders a maintained skill document from the bundled agent guide and optionally writes it to a chosen file or directory.",
+		Composition: "Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.",
 		Examples: []string{
-			"anx meta skill cursor",
-			"anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard",
+			"anx meta skill anx",
+			"anx meta skill anx --write-file ./SKILL.md",
 			"anx meta skill --target cursor --write-file ./SKILL.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<target>", Description: "Skill target to render. Currently supported: `cursor`."},
+			{Name: "<target>", Description: "Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias."},
 			{Name: "--target <target>", Description: "Flag form of the skill target."},
 			{Name: "--write-file <path>", Description: "Write the rendered skill to this exact path."},
 			{Name: "--write-dir <dir>", Description: "Write the rendered skill into this directory using its default filename."},
 		},
+	}, localHelperTopic{
+		Path:        "install skill",
+		Summary:     "Install the bundled opinionated ANX agent skill to a specific file path.",
+		JSONShape:   "`path`, `content`, `written_files`, `guide_topic`, `skill_name`",
+		Composition: "Pure local helper. Writes the maintained opinionated ANX skill to the requested path.",
+		Examples: []string{
+			"anx install skill --path ./SKILL.md",
+			"anx install skill ./SKILL.md",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<path>", Description: "Destination file path."},
+			{Name: "--path <path>", Description: "Destination file path."},
+			{Name: "--write-file <path>", Description: "Compatibility spelling for --path."},
+			{Name: "--force", Description: "Overwrite an existing destination file."},
+		},
 	})
 }
 
-func renderCursorSkillMarkdown() string {
+func renderOpinionatedANXSkillMarkdown() string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("name: ")
@@ -220,7 +261,7 @@ func renderCursorSkillMarkdown() string {
 	b.WriteString(agentGuideSkillDescription)
 	b.WriteString("\n")
 	b.WriteString("---\n\n")
-	b.WriteString(renderGuide("# ANX CLI guide for agents", "##"))
+	b.WriteString(renderGuide("# Opinionated ANX onboarding for agents", "##"))
 	return b.String()
 }
 

@@ -771,7 +771,7 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if !strings.Contains(stdout.String(), "`anx meta doc agent-guide`") {
 		t.Fatalf("expected agent-guide hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`") {
+	if !strings.Contains(stdout.String(), "`anx install skill --path ./SKILL.md`") {
 		t.Fatalf("expected skill export hint output=%s", stdout.String())
 	}
 }
@@ -808,7 +808,7 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "First commands to run") {
 		t.Fatalf("expected first-commands section output=%s", output)
 	}
-	if !strings.Contains(output, "anx meta skill cursor") {
+	if !strings.Contains(output, "anx install skill --path") {
 		t.Fatalf("expected skill export hint output=%s", output)
 	}
 	if !strings.Contains(output, "1. Point the CLI at the core API") {
@@ -822,47 +822,150 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	}
 }
 
-func TestRunMetaSkillCursorRendersBundledSkill(t *testing.T) {
+func TestRunMetaHelpMentionsOpinionatedSkill(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "skill", "cursor")
-	if !strings.Contains(output, "name: anx-cli-onboard") {
+	output := runHelpCommand(t, "help", "meta")
+	if !strings.Contains(output, "meta skill      Render the bundled opinionated ANX agent skill.") {
+		t.Fatalf("expected opinionated skill wording output=%s", output)
+	}
+	if strings.Contains(output, "editor skill") {
+		t.Fatalf("unexpected stale editor skill wording output=%s", output)
+	}
+}
+
+func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "meta", "skill", "anx")
+	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
 		t.Fatalf("expected skill frontmatter output=%s", output)
 	}
-	if !strings.Contains(output, "# ANX CLI guide for agents") {
+	if !strings.Contains(output, "# Opinionated ANX onboarding for agents") {
 		t.Fatalf("expected skill title output=%s", output)
 	}
-	if !strings.Contains(output, "## Core model") {
-		t.Fatalf("expected core model section output=%s", output)
+	if !strings.Contains(output, "## Default tracking loop") {
+		t.Fatalf("expected default tracking section output=%s", output)
 	}
-	if !strings.Contains(output, "`boards`") || !strings.Contains(output, "`docs`") {
+	if !strings.Contains(output, "`boards`") || !strings.Contains(output, "`docs`") || !strings.Contains(output, "`anx human ask`") {
 		t.Fatalf("expected higher-level abstractions in skill output=%s", output)
 	}
 }
 
-func TestRunMetaSkillCursorWritesSkillFile(t *testing.T) {
+func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 	t.Parallel()
 
 	writeDir := t.TempDir()
 	output := runHelpCommand(t, "meta", "skill", "cursor", "--write-dir", writeDir)
-	if !strings.Contains(output, "name: anx-cli-onboard") {
+	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
 		t.Fatalf("expected rendered skill output=%s", output)
 	}
 	content, err := os.ReadFile(filepath.Join(writeDir, "SKILL.md"))
 	if err != nil {
 		t.Fatalf("read written skill: %v", err)
 	}
-	if !strings.Contains(string(content), "# ANX CLI guide for agents") {
+	if !strings.Contains(string(content), "# Opinionated ANX onboarding for agents") {
 		t.Fatalf("expected written skill title content=%s", string(content))
 	}
-	if !strings.Contains(string(content), "## Maintenance rule") {
-		t.Fatalf("expected written maintenance section content=%s", string(content))
+	if !strings.Contains(string(content), "## Asks and collaboration") {
+		t.Fatalf("expected written asks section content=%s", string(content))
 	}
 	if !strings.Contains(output, "auth bootstrap status") {
 		t.Fatalf("expected bootstrap status onboarding guidance output=%s", output)
 	}
 	if !strings.Contains(output, "auth register --username <username> --bootstrap-token <token>") {
 		t.Fatalf("expected token-gated onboarding guidance output=%s", output)
+	}
+}
+
+func TestRunInstallSkillWritesSkillFile(t *testing.T) {
+	t.Parallel()
+
+	writePath := filepath.Join(t.TempDir(), "SKILL.md")
+	output := runHelpCommand(t, "install", "skill", "--path", writePath)
+	if !strings.Contains(output, "Installed ANX agent skill.") {
+		t.Fatalf("expected install confirmation output=%s", output)
+	}
+	content, err := os.ReadFile(writePath)
+	if err != nil {
+		t.Fatalf("read written skill: %v", err)
+	}
+	if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+		t.Fatalf("expected written skill frontmatter content=%s", string(content))
+	}
+	if !strings.Contains(string(content), "## Default tracking loop") {
+		t.Fatalf("expected default tracking section content=%s", string(content))
+	}
+}
+
+func TestRunInstallSkillAliasFormsWriteSkillFile(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		args func(string) []string
+	}{
+		{
+			name: "positional",
+			args: func(path string) []string { return []string{"install", "skill", path} },
+		},
+		{
+			name: "write-file",
+			args: func(path string) []string { return []string{"install", "skill", "--write-file", path} },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			writePath := filepath.Join(t.TempDir(), "SKILL.md")
+			output := runHelpCommand(t, tc.args(writePath)...)
+			if !strings.Contains(output, "Installed ANX agent skill.") {
+				t.Fatalf("expected install confirmation output=%s", output)
+			}
+			content, err := os.ReadFile(writePath)
+			if err != nil {
+				t.Fatalf("read written skill: %v", err)
+			}
+			if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+				t.Fatalf("expected written skill frontmatter content=%s", string(content))
+			}
+		})
+	}
+}
+
+func TestRunInstallSkillRefusesOverwriteWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	writePath := filepath.Join(t.TempDir(), "SKILL.md")
+	if err := os.WriteFile(writePath, []byte("CUSTOM\n"), 0o644); err != nil {
+		t.Fatalf("seed skill file: %v", err)
+	}
+	stdout := runCLIForTestJSONError(t, t.TempDir(), map[string]string{}, []string{"--json", "install", "skill", "--path", writePath})
+	payload := assertEnvelopeError(t, stdout)
+	errObj, _ := payload["error"].(map[string]any)
+	if anyStringValue(errObj["code"]) != "file_exists" {
+		t.Fatalf("expected file_exists error payload=%#v", payload)
+	}
+	if !strings.Contains(anyStringValue(errObj["message"]), "refuses to overwrite") {
+		t.Fatalf("expected overwrite refusal payload=%#v", payload)
+	}
+	content, err := os.ReadFile(writePath)
+	if err != nil {
+		t.Fatalf("read seeded skill file: %v", err)
+	}
+	if string(content) != "CUSTOM\n" {
+		t.Fatalf("expected existing content to remain unchanged, got %q", string(content))
+	}
+	output := runHelpCommand(t, "install", "skill", "--path", writePath, "--force")
+	if !strings.Contains(output, "Installed ANX agent skill.") {
+		t.Fatalf("expected forced install confirmation output=%s", output)
+	}
+	content, err = os.ReadFile(writePath)
+	if err != nil {
+		t.Fatalf("read forced skill file: %v", err)
+	}
+	if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+		t.Fatalf("expected forced skill content, got %s", string(content))
 	}
 }
 

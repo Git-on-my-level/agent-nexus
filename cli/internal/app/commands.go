@@ -60,6 +60,9 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 	case "import":
 		result, name, err := a.runImportCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "install":
+		result, name, err := a.runInstallCommand(args[1:])
+		return name, result, err
 	case "draft":
 		result, name, err := a.runDraft(ctx, args[1:], cfg)
 		return name, result, err

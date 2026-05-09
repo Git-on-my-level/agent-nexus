@@ -567,6 +567,8 @@ func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, arg
 		"Username: " + registered.Profile.Username,
 		"Profile path: " + cfg.ProfilePath,
 		activeProfileHint,
+		"Opinionated onboarding: read `anx help onboarding`, run `anx workspace summary`, install the agent skill with `anx install skill --path <path>`, then attach work to Topics, Cards, and Docs by default.",
+		"Bridge setup: if this runtime can be programmatically prompted or resumed, ask the human whether to set up `anx bridge`; if yes, read `anx meta doc agent-bridge` and `anx meta doc wake-routing`.",
 		authWakeRoutingHint(registered.Profile.Username),
 	}, "\n")
 	data := map[string]any{

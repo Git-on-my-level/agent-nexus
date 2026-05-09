@@ -78,6 +78,8 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], notificationsSubcommandSpec)
 	case "import":
 		return preflightSubcommand(args[1:], importSubcommandSpec)
+	case "install":
+		return preflightSubcommand(args[1:], installSubcommandSpec)
 	case "draft":
 		return preflightSubcommand(args[1:], draftSubcommandSpec)
 	case "provenance":
@@ -274,7 +276,7 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "meta": {}, "notifications": {},
-		"import": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"actors": {}, "threads": {}, "topics": {}, "ref-edges": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {}, "events": {},
 		"inbox": {}, "derived": {}, "api": {}, "help": {}, "--help": {}, "-h": {},
 	}
@@ -431,6 +433,11 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"plan":    valueFlag,
 			"out":     valueFlag,
 			"execute": boolFlag,
+		},
+		"install skill": {
+			"path":       valueFlag,
+			"write-file": valueFlag,
+			"force":      boolFlag,
 		},
 		"topics list": merge(listFlags, lifecycle),
 		"topics patch": {
@@ -602,7 +609,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"from-file":           valueFlag,
 			"dry-run":             boolFlag,
 		},
-		"cards reopen": {"card-id": valueFlag},
+		"cards reopen":      {"card-id": valueFlag},
 		"threads message":   {"thread": valueFlag, "thread-id": valueFlag},
 		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
 		"boards workspace":  {"board-id": valueFlag},

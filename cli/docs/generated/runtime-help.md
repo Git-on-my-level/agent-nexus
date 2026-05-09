@@ -153,7 +153,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
 - `docs reply` (local-helper): Reply to an existing Document message.
-- `meta skill` (local-helper): Render a bundled editor-specific skill file from the canonical ANX agent guide.
+- `meta skill` (local-helper): Render the bundled opinionated ANX agent skill.
+- `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
 - `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into the bridge agent home auth state.
 - `bridge init-config` (local-helper): Write a bridge runtime config plus an agent home with wake subscriptions.
@@ -177,18 +178,27 @@ Offline quick-start mental model and first command flow.
 ```text
 Onboarding: first steps (agents / automation)
 
-This CLI is for agent principals. For the full operating model, read `anx meta doc agent-guide`.
+This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read `anx meta doc agent-guide`.
 
 1. Point the CLI at the core API with `--base-url` or `ANX_BASE_URL`.
 2. Choose a profile name and pass it with `--agent` (or `ANX_AGENT`) for registration and first checks below.
 3. Run `anx doctor`, then `anx auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
 4. Register the agent profile:
    - If bootstrap is available: `anx auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (`auth invites create --kind agent` from an already-authorized principal on that workspace), then `anx auth register --username <username> --invite-token <token>`.
+   - If bootstrap is closed: obtain a one-time invite (`anx auth invites create --kind agent` from an already-authorized principal on that workspace), then `anx auth register --username <username> --invite-token <token>`.
 5. On a machine where `~/.config` persists, set the active profile once: `anx config use <agent>` (same as `anx auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `anx config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with `anx auth whoami`, run a cheap read (`topics list`), then mutate deliberately.
-7. Use `anx meta skill cursor` to export a bundled Cursor skill from the shipped guide if desired.
-8. Read `anx meta doc wake-routing` if this agent should be wakeable via thread-message `@handle` mentions.
+6. Confirm with `anx auth whoami`, run `anx workspace summary`, then attach work to the right Topic/Card/Doc before mutating.
+7. Install the opinionated ANX agent skill into the local agent instruction path when available: `anx install skill --path <path>`.
+8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with `@handle` mentions?" If yes, read `anx meta doc agent-bridge` and `anx meta doc wake-routing`. If this runtime cannot be externally woken, skip bridge setup and say why.
+
+Default behavior after onboarding
+
+- Start non-trivial work with `anx workspace summary` and inspect likely related Topics, Cards, Docs, Inbox items, and notifications.
+- Use Topics for current work conversation and coordination.
+- Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
+- Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
+- Use Topic/Doc/Card messages and replies for collaboration; use raw `events create` only for unusual contract-level records.
+- Use `anx human ask|review|escalate` when blocked, high consequence, or low confidence.
 
 First commands to run
 
@@ -198,12 +208,15 @@ First commands to run
   anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
   anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
   anx --agent <agent> auth whoami
+  anx --agent <agent> workspace summary
   anx --agent <agent> topics list
   anx --agent <agent> inbox stream --max-events 1
+  anx install skill --path ./SKILL.md
 
 Next step
 
   anx meta doc agent-guide
+  anx install skill --path ./SKILL.md
   anx meta doc wake-routing
 ```
 
@@ -294,16 +307,29 @@ Prescriptive agent guide for choosing ANX primitives, operating safely, and auto
 ```text
 Agent guide
 
-Use this guide when you need to operate `anx` well, not just get it running. Favor stable CLI patterns over environment-specific setup.
+Use this guide when Agent Nexus (`anx`) is available. Treat ANX as the default durable tracker for work, knowledge, asks, and collaboration.
 
 Operating posture
 
-- Treat `anx` as the contract-aligned interface to an ANX core API.
+- Treat `anx` as the contract-aligned interface to an ANX core API and as the default durable workspace memory.
+- Proactively look for useful tracking opportunities: create or update Topics for work subjects, Cards for concrete tasks, Docs for durable knowledge, and domain messages for collaboration updates.
+- Prefer updating existing objects over creating duplicates. Search/list first, then create only when the current workspace does not already have the right Topic, Card, Doc, or Board.
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
 - Prefer **default (non-JSON) output** for normal agent readbacks and orientation: concise text for direct consumption, usually fewer tokens than JSON envelopes.
 - Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, `jq`, or anything that parses the stable JSON envelope (including rich `error.details`).
 - Prefer profiles and env vars over repeated flags.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
+
+
+Default tracking loop
+
+1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, Inbox items, and notifications.
+2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.
+3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.
+4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.
+5. Collaborate through `topics message/reply`, `docs message/reply`, and `cards message/reply` instead of raw `events create` for ordinary conversation.
+6. Surface human attention with `anx human ask|review|escalate` when blocked, high consequence, or low confidence.
+7. Close the loop by moving/resolving Cards and leaving evidence on the Topic/Card/Doc where future agents and humans will look.
 
 
 Core model
@@ -321,9 +347,9 @@ Core model
 
 Heuristic:
 - Use `events` for facts.
-- Use `topics` for ongoing work, ownership, and operator coordination.
-- Use `cards` for concrete tracked execution and delivery state.
-- Use `docs` for narrative or reference material.
+- Use `topics` for ongoing work, ownership, current conversation, and operator coordination.
+- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.
+- Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
 - Use `boards` for portfolio or workflow visibility.
 - Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
 - Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
@@ -337,6 +363,16 @@ Higher-level concepts
 - `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
 - `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
 - Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages doc:<handle>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
+
+
+Asks and collaboration
+
+- Ask a human with `anx human ask` when you need a decision, approval, missing context, credential, policy call, or product judgment before continuing.
+- Use `anx human review` when the human should inspect a proposed change, document, plan, or result before it becomes authoritative.
+- Use `anx human escalate` for high-risk, time-sensitive, security, data-loss, privacy, billing, or irreversible-impact situations.
+- Include a recommended response and useful alternatives. The first response proposal should be the action you recommend.
+- Ask another agent by posting a Topic/Card/Doc message that mentions `@handle` when the target is taggable. Use Cards when the ask is a trackable task, Docs when the ask is about durable knowledge, and Topics when the ask belongs to the broader work conversation.
+- If your runtime can be programmatically prompted or resumed by a bridge, ask the human whether they want bridge setup after registration. If your runtime cannot be externally woken, explain that bridge setup is not useful for you and skip it.
 
 
 Standard workflow
@@ -398,10 +434,11 @@ When starting in a new environment:
 
 1. Set base URL.
 2. Check onboarding state with `anx auth bootstrap status` before first registration.
-3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>` or later principals with `--invite-token <token>`.
+3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>`. For later principals, obtain an invite with `anx auth invites create --kind agent`, then register with `anx auth register --username <username> --invite-token <token>`.
 4. Confirm identity.
 5. Run a cheap read command.
-6. If this agent should be tag-addressable from thread messages, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic document lifecycle.
+6. Install this opinionated skill into your agent environment with `anx install skill --path <path>` when the environment supports local agent instructions.
+7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic lifecycle.
 
 When stuck:
 
@@ -1715,7 +1752,7 @@ Core commands:
 Reference commands:
   meta docs       Print the bundled runtime help reference.
   meta doc        Print one bundled runtime help topic.
-  meta skill      Export a bundled editor skill file.
+  meta skill      Render the bundled opinionated ANX agent skill.
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
 ```
@@ -5583,22 +5620,22 @@ Global flags:
 
 ## `meta skill`
 
-Render a bundled editor-specific skill file from the canonical ANX agent guide.
+Render the bundled opinionated ANX agent skill.
 
 ```text
 Local Help: meta skill
 
 - Kind: `local helper`
-- Summary: Render a bundled editor-specific skill file from the canonical ANX agent guide.
-- Composition: Pure local helper. Renders a maintained skill document from the bundled agent guide and optionally writes it to a chosen file or directory.
+- Summary: Render the bundled opinionated ANX agent skill.
+- Composition: Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.
 - JSON body: `target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`
 - Examples:
-  - `anx meta skill cursor`
-  - `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`
+  - `anx meta skill anx`
+  - `anx meta skill anx --write-file ./SKILL.md`
   - `anx meta skill --target cursor --write-file ./SKILL.md`
 
 Flags:
-  <target>                     Skill target to render. Currently supported: `cursor`.
+  <target>                     Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias.
   --target <target>            Flag form of the skill target.
   --write-file <path>          Write the rendered skill to this exact path.
   --write-dir <dir>            Write the rendered skill into this directory using its default filename.
@@ -5608,6 +5645,30 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx meta skill ... ; anx --json meta skill ... ; anx meta skill ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `install skill`
+
+Install the bundled opinionated ANX agent skill to a specific file path.
+
+```text
+Install the bundled opinionated ANX agent skill
+
+Usage:
+  anx install skill --path <file>
+  anx install skill <file>
+  anx install skill --path <file> --force
+
+Writes a generic `SKILL.md`-compatible Markdown file that teaches agents how to use ANX as the default durable tracker for topics, cards, docs, asks, and collaboration.
+
+Options:
+  --path <file>          Destination file path.
+  --write-file <file>    Compatibility spelling for --path.
+  --force                Overwrite an existing destination file.
+
+Examples:
+  anx install skill --path ./SKILL.md
+  anx install skill ~/.codex/skills/anx-opinionated-onboarding/SKILL.md
 ```
 
 ## `bridge install`

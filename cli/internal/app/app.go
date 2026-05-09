@@ -120,7 +120,7 @@ func (a *App) Run(args []string) int {
 	}
 	authSub := authSubcommandSpec.normalize(subPeek)
 	configSub := configSubcommandSpec.normalize(subPeek)
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
 		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||

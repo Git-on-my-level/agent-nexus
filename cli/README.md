@@ -43,7 +43,7 @@ API shape and errors: `../contracts/anx-openapi.yaml` (`/secrets`). Core enforce
 - **`secret update`** rotates the encrypted value (human-only; same auth rules as create/delete). Use `--from-stdin` for non-interactive scripts.
 
 Generated command/concept docs are under `docs/generated/`.
-The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Editor-specific agent skill exports are available with `anx meta skill <target>`, for example `anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard`. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.
+The shipped runtime reference is available from the binary with `anx meta docs` / `anx meta doc <topic>`, including the bundled `agent-guide` topic. Install the opinionated ANX agent skill with `anx install skill --path <path>`; `anx meta skill anx` renders the same skill to stdout. The checked-in runtime-help artifact is regenerated with `go run ./cmd/anx-docs-gen`.
 
 Default text output uses payload-first summaries and is the preferred mode for normal agent orientation. Resource output leads with public typed refs such as `card:<handle>` and JSON envelopes expose `ref` and `handle` as the primary identity fields. Commands pass typed refs and bare handles through to core for resolution. Use `--json` for code, scripts, CI, or `jq`, and use `--verbose` / `--headers` when debugging response framing.
 

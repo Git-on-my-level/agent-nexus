@@ -126,13 +126,19 @@ var actorsSubcommandSpec = subcommandSpec{
 var metaSubcommandSpec = subcommandSpec{
 	command:  "meta",
 	valid:    []string{"health", "livez", "readyz", "version", "handshake", "ops", "commands", "command", "concepts", "concept", "docs", "doc", "skill"},
-	examples: []string{"anx meta health", "anx meta livez", "anx meta readyz", "anx meta commands", "anx meta command --command-id threads.list", "anx meta docs", "anx meta doc agent-guide", "anx meta skill cursor --write-dir ~/.cursor/skills/anx-cli-onboard"},
+	examples: []string{"anx meta health", "anx meta livez", "anx meta readyz", "anx meta commands", "anx meta command --command-id threads.list", "anx meta docs", "anx meta doc agent-guide", "anx meta skill anx --write-file ./SKILL.md"},
 }
 
 var metaOpsSubcommandSpec = subcommandSpec{
 	command:  "meta ops",
 	valid:    []string{"health"},
 	examples: []string{"anx meta ops health"},
+}
+
+var installSubcommandSpec = subcommandSpec{
+	command:  "install",
+	valid:    []string{"skill"},
+	examples: []string{"anx install skill --path ./SKILL.md"},
 }
 
 var draftSubcommandSpec = subcommandSpec{
