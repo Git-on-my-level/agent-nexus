@@ -21,6 +21,7 @@ class StubState:
         self.bridge_signing_public_key_spki_b64 = public_key_b64
         self.bridge_signing_private_key_pkcs8_b64 = private_key_b64
         self._handled = set()
+        self._completion_pending = set()
         self._sessions = {}
 
     def handled_wakeup_ids(self):
@@ -28,6 +29,15 @@ class StubState:
 
     def mark_wakeup_handled(self, wakeup_id: str):
         self._handled.add(wakeup_id)
+
+    def completion_pending_wakeup_ids(self):
+        return self._completion_pending
+
+    def mark_wakeup_completion_pending(self, wakeup_id: str):
+        self._completion_pending.add(wakeup_id)
+
+    def clear_wakeup_completion_pending(self, wakeup_id: str):
+        self._completion_pending.discard(wakeup_id)
 
     def session_map(self):
         return dict(self._sessions)
@@ -286,7 +296,7 @@ def test_packet_event_refs_omits_empty_trigger_event_id():
     ]
 
 
-def test_handle_notification_retries_writeback_when_completion_fails():
+def test_handle_notification_retries_completion_without_redispatch_after_reply_post():
     bridge, state, client = build_bridge([])
     completion_attempts = {"count": 0}
 
@@ -314,16 +324,21 @@ def test_handle_notification_retries_writeback_when_completion_fails():
     bridge._handle_notification(notification)
 
     assert client.notification_reads == ["wake-1"]
-    assert "wake-1" not in state.handled_wakeup_ids()
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" in state.completion_pending_wakeup_ids()
     assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
     assert "completion write failed" in client.failed_wakeups[-1]["error"]
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert [entry["event"]["type"] for entry in client.created_events] == ["message_posted"]
 
     bridge._handle_notification(notification)
 
     assert completion_attempts["count"] == 2
-    assert len(bridge.adapter.dispatch_calls) == 2
+    assert len(bridge.adapter.dispatch_calls) == 1
     assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" not in state.completion_pending_wakeup_ids()
     assert client.notification_reads == ["wake-1", "wake-1"]
+    assert [entry["event"]["type"] for entry in client.created_events] == ["message_posted"]
 
 
 def test_handle_notification_retries_reply_post_without_redispatch(monkeypatch):

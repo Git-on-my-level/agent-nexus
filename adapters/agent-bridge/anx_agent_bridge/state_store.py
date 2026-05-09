@@ -79,6 +79,19 @@ class JSONStateStore:
         handled.add(wakeup_id)
         self.set("handled_wakeup_ids", handled.to_list())
 
+    def completion_pending_wakeup_ids(self) -> SlidingSet:
+        return SlidingSet(self.get("completion_pending_wakeup_ids", []), limit=5000)
+
+    def mark_wakeup_completion_pending(self, wakeup_id: str) -> None:
+        pending = self.completion_pending_wakeup_ids()
+        pending.add(wakeup_id)
+        self.set("completion_pending_wakeup_ids", pending.to_list())
+
+    def clear_wakeup_completion_pending(self, wakeup_id: str) -> None:
+        pending = self.completion_pending_wakeup_ids()
+        pending.values = [value for value in pending.values if value != wakeup_id]
+        self.set("completion_pending_wakeup_ids", pending.to_list())
+
     def session_map(self) -> dict[str, str]:
         raw = self.get("session_map", {})
         if not isinstance(raw, dict):

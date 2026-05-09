@@ -150,6 +150,21 @@ class AgentBridge:
                         )
                 return
             if wakeup_id in self.state.handled_wakeup_ids():
+                if wakeup_id in self.state.completion_pending_wakeup_ids():
+                    try:
+                        self.client.complete_agent_wakeup(wakeup_id, self.state.bridge_instance_id)
+                        self.state.clear_wakeup_completion_pending(wakeup_id)
+                    except Exception as exc:
+                        LOGGER.exception("Wakeup %s completion retry failed", wakeup_id)
+                        self._record_wakeup_failure_status(
+                            None,
+                            wakeup_id,
+                            target_actor_id,
+                            thread_id,
+                            request_event_id,
+                            exc,
+                        )
+                        return
                 if notification_status != "read":
                     self._mark_notification_read(wakeup_id)
                 return
@@ -212,12 +227,23 @@ class AgentBridge:
                 self.state.set_session(packet.session_key, result.native_session_id)
             except Exception:
                 LOGGER.exception("Wakeup %s: failed to persist native session id", packet.wakeup_id)
+        reply_posted = False
+        marked_handled = False
         try:
             response_text = result.response_text.strip()
             if response_text:
                 self._post_reply_message_with_retries(packet, response_text, result.native_session_id)
+                reply_posted = True
+            if reply_posted:
+                marked_handled = self._mark_wakeup_consumed(packet.wakeup_id)
+                if marked_handled:
+                    self.state.mark_wakeup_completion_pending(packet.wakeup_id)
+                else:
+                    self._completion_without_local_ack.add(packet.wakeup_id)
             self.client.complete_agent_wakeup(packet.wakeup_id, self.state.bridge_instance_id)
-            if not self._mark_wakeup_consumed(packet.wakeup_id):
+            if marked_handled:
+                self.state.clear_wakeup_completion_pending(packet.wakeup_id)
+            if not reply_posted and not self._mark_wakeup_consumed(packet.wakeup_id):
                 self._completion_without_local_ack.add(packet.wakeup_id)
         except Exception as exc:
             LOGGER.exception("Wakeup %s writeback failed after adapter dispatch", wakeup_id)
