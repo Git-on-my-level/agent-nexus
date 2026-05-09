@@ -1,4 +1,4 @@
-# anx-ui v0.2.3 Spec Compliance
+# anx-ui v0.6.0 Spec Compliance
 
 Last updated: 2026-04-05
 

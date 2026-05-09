@@ -26,7 +26,7 @@ Each endpoint is classified with an `x-anx-surface` extension indicating its rol
 ### Version
 
 - `GET /version`
-  - Response: `{ "schema_version": "0.2.3" }`
+  - Response: `{ "schema_version": "0.6.0" }`
 
 ### Actors
 
