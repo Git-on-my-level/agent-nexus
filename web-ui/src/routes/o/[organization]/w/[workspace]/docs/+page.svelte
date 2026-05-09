@@ -18,7 +18,7 @@
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
-  import { closeConfirmModal, emptyConfirmModal } from "$lib/confirmModal.js";
+  import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
   import {
@@ -48,13 +48,11 @@
     const st = docFiltersApplied.states ?? ["active"];
     return !(st.length === 1 && String(st[0]) === "active");
   });
-  let archiveBusyId = $state("");
-  /** @type {{ open: boolean, action: string, entityId: string, bulkIds: string[] | null }} */
-  let confirmModal = $state(emptyConfirmModal());
-  let trashBusyId = $state("");
-  let bulkBusy = $state(false);
+  let lifecycle = $state();
 
-  const docSel = createWorkspaceListSelection({ bulkBusy: () => bulkBusy });
+  const docSel = createWorkspaceListSelection({
+    bulkBusy: () => lifecycle?.bulkBusy ?? false,
+  });
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -103,13 +101,28 @@
     documents.filter((d) => docSel.selectedIds.has(d.id)),
   );
 
-  let bulkCanArchive = $derived(
-    selectedDocs.some((d) => !isDocArchived(d) && !isDocTrashed(d)),
-  );
-  let bulkCanUnarchive = $derived(
-    selectedDocs.some((d) => isDocArchived(d) && !isDocTrashed(d)),
-  );
-  let bulkCanTrash = $derived(selectedDocs.some((d) => !isDocTrashed(d)));
+  lifecycle = createWorkspaceResourceLifecycleController({
+    resourceSingular: "document",
+    resourcePlural: "documents",
+    selectedItems: () => selectedDocs,
+    idFor: (doc) => doc?.id,
+    isArchived: isDocArchived,
+    isTrashed: isDocTrashed,
+    actions: {
+      archive: (id) => coreClient.archiveDocument(id, {}),
+      unarchive: (id) => coreClient.unarchiveDocument(id, {}),
+      trash: (id) => coreClient.trashDocument(id, {}),
+    },
+    reload: () => loadDocuments(),
+    clearSelection: () => clearDocSelection(),
+    setError: (message) => {
+      error = message;
+    },
+  });
+
+  let bulkCanArchive = $derived(lifecycle.canArchive());
+  let bulkCanUnarchive = $derived(lifecycle.canUnarchive());
+  let bulkCanTrash = $derived(lifecycle.canTrash());
 
   function selectAllVisibleDocs() {
     docSel.selectAllFromVisibleIds(documents.map((d) => d.id).filter(Boolean));
@@ -289,153 +302,9 @@
     return typeof t === "string" ? t.trim() !== "" : Boolean(t);
   }
 
-  function idsForBulkArchive() {
-    return selectedDocs
-      .filter((d) => !isDocArchived(d) && !isDocTrashed(d))
-      .map((d) => d.id);
-  }
-
-  function idsForBulkUnarchive() {
-    return selectedDocs
-      .filter((d) => isDocArchived(d) && !isDocTrashed(d))
-      .map((d) => d.id);
-  }
-
-  function idsForBulkTrash() {
-    return selectedDocs.filter((d) => !isDocTrashed(d)).map((d) => d.id);
-  }
-
-  async function archiveDocument(docId) {
-    const id = String(docId ?? "").trim();
-    if (!id || archiveBusyId || bulkBusy) return;
-    archiveBusyId = id;
-    error = "";
-    try {
-      await coreClient.archiveDocument(id, {});
-      await loadDocuments();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      archiveBusyId = "";
-    }
-  }
-
-  async function trashDocument(docId) {
-    const id = String(docId ?? "").trim();
-    if (!id || trashBusyId || bulkBusy) return;
-    trashBusyId = id;
-    error = "";
-    try {
-      await coreClient.trashDocument(id, {});
-      confirmModal = emptyConfirmModal();
-      await loadDocuments();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      trashBusyId = "";
-    }
-  }
-
-  async function bulkArchiveDocuments(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.archiveDocument(id, {});
-      }
-      clearDocSelection();
-      confirmModal = emptyConfirmModal();
-      await loadDocuments();
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkUnarchiveDocuments(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.unarchiveDocument(id, {});
-      }
-      clearDocSelection();
-      await loadDocuments();
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkTrashDocuments(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.trashDocument(id, {});
-      }
-      clearDocSelection();
-      confirmModal = emptyConfirmModal();
-      await loadDocuments();
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  function handleConfirm() {
-    const bulkIds = confirmModal.bulkIds;
-    const id = confirmModal.entityId;
-    const action = confirmModal.action;
-    confirmModal = emptyConfirmModal();
-    if (bulkIds && bulkIds.length > 0) {
-      if (action === "archive") void bulkArchiveDocuments(bulkIds);
-      else if (action === "trash") void bulkTrashDocuments(bulkIds);
-      return;
-    }
-    if (action === "archive") void archiveDocument(id);
-    else if (action === "trash") void trashDocument(id);
-  }
-
-  let confirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
-  let confirmIsBulk = $derived(confirmBulkCount > 0);
-
-  let confirmModalTitle = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return confirmIsBulk
-        ? `Move ${confirmBulkCount} documents to trash`
-        : "Move to trash";
-    }
-    return confirmIsBulk
-      ? `Archive ${confirmBulkCount} documents`
-      : "Archive document";
-  });
-
-  let confirmModalMessage = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return confirmIsBulk
-        ? `These documents (${confirmBulkCount}) will be moved to trash. You can restore them later.`
-        : "This document will be moved to trash. You can restore it later.";
-    }
-    return confirmIsBulk
-      ? `These documents (${confirmBulkCount}) will be hidden from default views. You can unarchive them later.`
-      : "This document will be hidden from default views. You can unarchive it later.";
-  });
-
-  let confirmModalBusy = $derived(
-    confirmModal.action === "trash"
-      ? Boolean(trashBusyId) || (confirmIsBulk && bulkBusy)
-      : Boolean(archiveBusyId) || (confirmIsBulk && bulkBusy),
-  );
+  let confirmModalTitle = $derived(lifecycle.confirmTitle());
+  let confirmModalMessage = $derived(lifecycle.confirmMessage());
+  let confirmModalBusy = $derived(lifecycle.confirmBusy());
 </script>
 
 <WorkspacePageShell>
@@ -791,34 +660,25 @@
     {#if docSel.selectMode}
       <WorkspaceListBulkToolbar
         {allVisibleSelected}
-        busy={bulkBusy}
+        busy={lifecycle.bulkBusy}
         canArchive={bulkCanArchive}
         canTrash={bulkCanTrash}
         canUnarchive={bulkCanUnarchive}
         onArchive={() => {
-          const ids = idsForBulkArchive();
+          const ids = lifecycle.idsForArchive();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "archive",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("archive", ids);
         }}
         onClear={clearDocSelection}
         onDeselectAll={clearDocSelection}
         onSelectAll={selectAllVisibleDocs}
         onTrash={() => {
-          const ids = idsForBulkTrash();
+          const ids = lifecycle.idsForTrash();
           if (!ids.length) return;
-          confirmModal = {
-            open: true,
-            action: "trash",
-            entityId: "",
-            bulkIds: ids,
-          };
+          lifecycle.openBulkConfirm("trash", ids);
         }}
-        onUnarchive={() => void bulkUnarchiveDocuments(idsForBulkUnarchive())}
+        onUnarchive={() =>
+          void lifecycle.runBulk("unarchive", lifecycle.idsForUnarchive())}
         selectionChromeActive={true}
         selectedCount={docSel.selectedIds.size}
       />
@@ -833,13 +693,15 @@
   {/if}
 
   <ConfirmModal
-    open={confirmModal.open}
+    open={lifecycle.confirmModal.open}
     title={confirmModalTitle}
     message={confirmModalMessage}
-    confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-    variant={confirmModal.action === "trash" ? "danger" : "warning"}
+    confirmLabel={lifecycle.confirmModal.action === "trash"
+      ? "Trash"
+      : "Archive"}
+    variant={lifecycle.confirmModal.action === "trash" ? "danger" : "warning"}
     busy={confirmModalBusy}
-    onconfirm={handleConfirm}
-    oncancel={() => (confirmModal = closeConfirmModal(confirmModal))}
+    onconfirm={() => lifecycle.handleConfirm()}
+    oncancel={() => lifecycle.closeConfirm()}
   />
 </WorkspacePageShell>

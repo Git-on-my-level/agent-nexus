@@ -31,7 +31,7 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
-  import { emptyConfirmModal } from "$lib/confirmModal.js";
+  import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { resourceRouteSegment } from "$lib/resourceIdentity.js";
 
@@ -39,12 +39,11 @@
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
-  let confirmModal = $state(emptyConfirmModal());
-  let bulkBusy = $state(false);
+  let lifecycle = $state();
   let activeArtifactListLoadToken = 0;
 
   const artifactSel = createWorkspaceListSelection({
-    bulkBusy: () => bulkBusy,
+    bulkBusy: () => lifecycle?.bulkBusy ?? false,
   });
   let filtersOpen = $state(false);
 
@@ -230,19 +229,31 @@
     artifacts.length > 0 &&
       artifacts.every((a) => artifactSel.selectedIds.has(a.id)),
   );
-  let bulkArtifactsCanArchive = $derived(
-    selectedArtifacts.some(
-      (a) => !isArtifactArchived(a) && !isArtifactTrashed(a),
-    ),
-  );
-  let bulkArtifactsCanUnarchive = $derived(
-    selectedArtifacts.some(
-      (a) => isArtifactArchived(a) && !isArtifactTrashed(a),
-    ),
-  );
-  let bulkArtifactsCanTrash = $derived(
-    selectedArtifacts.some((a) => !isArtifactTrashed(a)),
-  );
+  lifecycle = createWorkspaceResourceLifecycleController({
+    resourceSingular: "artifact",
+    resourcePlural: "artifacts",
+    selectedItems: () => selectedArtifacts,
+    idFor: (artifact) => artifact?.id,
+    isArchived: isArtifactArchived,
+    isTrashed: isArtifactTrashed,
+    actions: {
+      archive: (id) => coreClient.archiveArtifact(id, {}),
+      unarchive: (id) => coreClient.unarchiveArtifact(id, {}),
+      trash: (id) => coreClient.trashArtifact(id, {}),
+    },
+    reload: () =>
+      loadArtifactsFromState(
+        parseArtifactListSearchParams($page.url.searchParams),
+      ),
+    clearSelection: () => clearArtifactSelection(),
+    setError: (message) => {
+      error = message;
+    },
+  });
+
+  let bulkArtifactsCanArchive = $derived(lifecycle.canArchive());
+  let bulkArtifactsCanUnarchive = $derived(lifecycle.canUnarchive());
+  let bulkArtifactsCanTrash = $derived(lifecycle.canTrash());
 
   function selectAllVisibleArtifacts() {
     artifactSel.selectAllFromVisibleIds(
@@ -271,119 +282,9 @@
     );
   }
 
-  async function bulkArchiveArtifacts(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.archiveArtifact(id, {});
-      }
-      clearArtifactSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-      const parsed = parseArtifactListSearchParams($page.url.searchParams);
-      await loadArtifactsFromState(parsed);
-    } catch (e) {
-      error = `Archive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkUnarchiveArtifacts(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.unarchiveArtifact(id, {});
-      }
-      clearArtifactSelection();
-      const parsed = parseArtifactListSearchParams($page.url.searchParams);
-      await loadArtifactsFromState(parsed);
-    } catch (e) {
-      error = `Unarchive failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  async function bulkTrashArtifacts(ids) {
-    const list = ids.filter(Boolean);
-    if (!list.length || bulkBusy) return;
-    bulkBusy = true;
-    error = "";
-    try {
-      for (const id of list) {
-        await coreClient.trashArtifact(id, {});
-      }
-      clearArtifactSelection();
-      confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-      const parsed = parseArtifactListSearchParams($page.url.searchParams);
-      await loadArtifactsFromState(parsed);
-    } catch (e) {
-      error = `Trash failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      bulkBusy = false;
-    }
-  }
-
-  function idsForBulkArtifactArchive() {
-    return selectedArtifacts
-      .filter((a) => !isArtifactArchived(a) && !isArtifactTrashed(a))
-      .map((a) => a.id);
-  }
-
-  function idsForBulkArtifactUnarchive() {
-    return selectedArtifacts
-      .filter((a) => isArtifactArchived(a) && !isArtifactTrashed(a))
-      .map((a) => a.id);
-  }
-
-  function idsForBulkArtifactTrash() {
-    return selectedArtifacts
-      .filter((a) => !isArtifactTrashed(a))
-      .map((a) => a.id);
-  }
-
-  function handleConfirm() {
-    const bulkIds = confirmModal.bulkIds;
-    const action = confirmModal.action;
-    confirmModal = { open: false, action: "", entityId: "", bulkIds: null };
-    if (bulkIds && bulkIds.length > 0) {
-      if (action === "archive") void bulkArchiveArtifacts(bulkIds);
-      else if (action === "trash") void bulkTrashArtifacts(bulkIds);
-    }
-  }
-
-  let artifactConfirmBulkCount = $derived(confirmModal.bulkIds?.length ?? 0);
-  let artifactConfirmIsBulk = $derived(artifactConfirmBulkCount > 0);
-
-  let artifactConfirmModalTitle = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return artifactConfirmIsBulk
-        ? `Move ${artifactConfirmBulkCount} artifacts to trash`
-        : "Move to trash";
-    }
-    return artifactConfirmIsBulk
-      ? `Archive ${artifactConfirmBulkCount} artifacts`
-      : "Archive artifact";
-  });
-
-  let artifactConfirmModalMessage = $derived.by(() => {
-    if (confirmModal.action === "trash") {
-      return artifactConfirmIsBulk
-        ? `These artifacts (${artifactConfirmBulkCount}) will be moved to trash. You can restore them later.`
-        : "This artifact will be moved to trash. You can restore it later.";
-    }
-    return artifactConfirmIsBulk
-      ? `These artifacts (${artifactConfirmBulkCount}) will be hidden from default views. You can unarchive them later.`
-      : "This artifact will be hidden from default views. You can unarchive it later.";
-  });
-
-  let artifactConfirmModalBusy = $derived(artifactConfirmIsBulk && bulkBusy);
+  let artifactConfirmModalTitle = $derived(lifecycle.confirmTitle());
+  let artifactConfirmModalMessage = $derived(lifecycle.confirmMessage());
+  let artifactConfirmModalBusy = $derived(lifecycle.confirmBusy());
 
   function updateDateFilter(field, value) {
     dateInputs = { ...dateInputs, [field]: value };
@@ -550,35 +451,25 @@
   {#if artifactSel.selectMode}
     <WorkspaceListBulkToolbar
       allVisibleSelected={allArtifactsVisibleSelected}
-      busy={bulkBusy}
+      busy={lifecycle.bulkBusy}
       canArchive={bulkArtifactsCanArchive}
       canTrash={bulkArtifactsCanTrash}
       canUnarchive={bulkArtifactsCanUnarchive}
       onArchive={() => {
-        const ids = idsForBulkArtifactArchive();
+        const ids = lifecycle.idsForArchive();
         if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "archive",
-          entityId: "",
-          bulkIds: ids,
-        };
+        lifecycle.openBulkConfirm("archive", ids);
       }}
       onClear={clearArtifactSelection}
       onDeselectAll={clearArtifactSelection}
       onSelectAll={selectAllVisibleArtifacts}
       onTrash={() => {
-        const ids = idsForBulkArtifactTrash();
+        const ids = lifecycle.idsForTrash();
         if (!ids.length) return;
-        confirmModal = {
-          open: true,
-          action: "trash",
-          entityId: "",
-          bulkIds: ids,
-        };
+        lifecycle.openBulkConfirm("trash", ids);
       }}
       onUnarchive={() =>
-        void bulkUnarchiveArtifacts(idsForBulkArtifactUnarchive())}
+        void lifecycle.runBulk("unarchive", lifecycle.idsForUnarchive())}
       selectionChromeActive={true}
       selectedCount={artifactSel.selectedIds.size}
     />
@@ -797,18 +688,12 @@
 {/if}
 
 <ConfirmModal
-  open={confirmModal.open}
+  open={lifecycle.confirmModal.open}
   title={artifactConfirmModalTitle}
   message={artifactConfirmModalMessage}
-  confirmLabel={confirmModal.action === "trash" ? "Trash" : "Archive"}
-  variant={confirmModal.action === "trash" ? "danger" : "warning"}
+  confirmLabel={lifecycle.confirmModal.action === "trash" ? "Trash" : "Archive"}
+  variant={lifecycle.confirmModal.action === "trash" ? "danger" : "warning"}
   busy={artifactConfirmModalBusy}
-  onconfirm={handleConfirm}
-  oncancel={() =>
-    (confirmModal = {
-      open: false,
-      action: "",
-      entityId: "",
-      bulkIds: null,
-    })}
+  onconfirm={() => lifecycle.handleConfirm()}
+  oncancel={() => lifecycle.closeConfirm()}
 />

@@ -36,6 +36,10 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
   import {
+    createWorkspaceBulkActionController,
+    createWorkspaceTrashResourceActions,
+  } from "$lib/workspaceResourceLifecycle.svelte.js";
+  import {
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
@@ -47,17 +51,16 @@
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
 
-  let bulkTrashBusy = $state(false);
   let restoreBulkOpen = $state(false);
-  let restoreBulkBusy = $state(false);
+  let trashActions = $state();
+  let restoreBulkController = $state();
 
   const trashSel = createWorkspaceListSelection({
     bulkBusy: () =>
-      bulkTrashBusy ||
+      (restoreBulkController?.busy ?? false) ||
       Boolean(busyItemId) ||
       purgeModalBusy ||
-      purgeAllBusy ||
-      restoreBulkBusy,
+      purgeAllBusy,
   });
 
   /** @param {string} pathname */
@@ -244,24 +247,21 @@
 
   /** @param {TrashEntityType} type */
   async function purgeOneEntity(type, id) {
-    const body = defaultActorBody();
-    switch (type) {
-      case "artifacts":
-        await coreClient.purgeArtifact(id, body);
-        break;
-      case "documents":
-        await coreClient.purgeDocument(id, body);
-        break;
-      case "boards":
-        await coreClient.purgeBoard(id, body);
-        break;
-      case "cards":
-        await coreClient.purgeCard(id, body);
-        break;
-      default:
-        throw new Error("Unsupported purge type");
-    }
+    await trashActions.purge(type, id);
   }
+
+  trashActions = createWorkspaceTrashResourceActions({
+    coreClient,
+    actorBody: defaultActorBody,
+  });
+
+  restoreBulkController = createWorkspaceBulkActionController({
+    reload: () => loadTrash(),
+    clearSelection: () => trashSel.exitSelectionMode(),
+    setError: (message) => {
+      error = message;
+    },
+  });
 
   $effect(() => {
     const raw = String($page.url.searchParams.get("tab") ?? "").trim();
@@ -413,7 +413,7 @@
     if (!ids.length || purgeModalBusy) return;
     purgeModalBusy = true;
     const multi = ids.length > 1;
-    if (multi) bulkTrashBusy = true;
+    if (multi) restoreBulkOpen = false;
     if (!multi) busyItemId = itemBusyKey(rawType, ids[0]);
     error = "";
     try {
@@ -427,7 +427,6 @@
       error = `Permanent delete failed: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       purgeModalBusy = false;
-      bulkTrashBusy = false;
       busyItemId = "";
     }
   }
@@ -547,41 +546,13 @@
     const ids = selectedTrashEntities
       .map((it) => String(it?.id ?? "").trim())
       .filter(Boolean);
-    if (!ids.length || restoreBulkBusy) return;
-    restoreBulkBusy = true;
-    bulkTrashBusy = true;
-    error = "";
-    try {
-      for (const id of ids) {
-        switch (t) {
-          case "artifacts":
-            await coreClient.restoreArtifact(id, {});
-            break;
-          case "documents":
-            await coreClient.restoreDocument(id, {});
-            break;
-          case "topics":
-            await coreClient.restoreTopic(id, {});
-            break;
-          case "boards":
-            await coreClient.restoreBoard(id, {});
-            break;
-          case "cards":
-            await coreClient.restoreCard(id, {});
-            break;
-          default:
-            break;
-        }
-      }
-      restoreBulkOpen = false;
-      trashSel.exitSelectionMode();
-      await loadTrash();
-    } catch (e) {
-      error = `Restore failed: ${e instanceof Error ? e.message : String(e)}`;
-    } finally {
-      restoreBulkBusy = false;
-      bulkTrashBusy = false;
-    }
+    if (!ids.length || restoreBulkController.busy) return;
+    await restoreBulkController.run(ids, (id) => trashActions.restore(t, id), {
+      errorPrefix: "Restore failed",
+      afterSuccess: () => {
+        restoreBulkOpen = false;
+      },
+    });
   }
 
   function requestBulkPurge() {
@@ -622,8 +593,7 @@
         disabled={Boolean(busyItemId) ||
           purgeAllBusy ||
           purgeModalBusy ||
-          bulkTrashBusy ||
-          restoreBulkBusy}
+          restoreBulkController.busy}
         onclick={() => trashSel.toggleSelectMode()}
       >
         {trashSel.selectMode ? "Done" : "Select"}
@@ -681,10 +651,7 @@
   <WorkspaceListBulkToolbar
     selectionChromeActive={true}
     selectedCount={trashSel.selectedIds.size}
-    busy={bulkTrashBusy ||
-      restoreBulkBusy ||
-      Boolean(busyItemId) ||
-      purgeModalBusy}
+    busy={restoreBulkController.busy || Boolean(busyItemId) || purgeModalBusy}
     canRestore={trashBulkRestoreEligible}
     canTrash={trashBulkPurgeEligible}
     onRestore={() => requestBulkRestore()}
@@ -1438,7 +1405,7 @@
   message={restoreBulkConfirmMessage}
   confirmLabel="Restore"
   variant="warning"
-  busy={restoreBulkBusy}
+  busy={restoreBulkController.busy}
   onconfirm={() => void confirmBulkRestore()}
   oncancel={() => {
     restoreBulkOpen = false;
