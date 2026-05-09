@@ -1,6 +1,11 @@
 package app
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -154,5 +159,118 @@ func TestSecretPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing
 				t.Fatalf("expected message to contain %q, got %#v", tt.messagePart, payload)
 			}
 		})
+	}
+}
+
+func TestSecretCreateAndUpdateRequireExplicitStdin(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	tests := []struct {
+		name    string
+		args    []string
+		command string
+	}{
+		{
+			name:    "create",
+			args:    []string{"--json", "secret", "create", "OPENAI_API_KEY"},
+			command: "secret create",
+		},
+		{
+			name:    "update",
+			args:    []string{"--json", "secret", "update", "OPENAI_API_KEY"},
+			command: "secret update",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+			cli := New()
+			cli.Stdout = stdout
+			cli.Stderr = stderr
+			cli.Stdin = strings.NewReader("secret-value")
+			cli.StdinIsTTY = func() bool { return false }
+			cli.UserHomeDir = func() (string, error) { return home, nil }
+			cli.ReadFile = os.ReadFile
+			cli.Getenv = func(string) string { return "" }
+
+			exitCode := cli.Run(tt.args)
+			if exitCode != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
+			}
+			if strings.Contains(stderr.String(), "Enter ") || strings.Contains(stdout.String(), "Enter ") {
+				t.Fatalf("secret command emitted prompt text: stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+			payload := assertEnvelopeError(t, stdout.String())
+			if got := anyStringValue(payload["command"]); got != tt.command {
+				t.Fatalf("expected command %q, got %#v", tt.command, payload)
+			}
+			errObj, _ := payload["error"].(map[string]any)
+			if got := anyStringValue(errObj["code"]); got != "invalid_request" {
+				t.Fatalf("expected invalid_request, got %#v", payload)
+			}
+			if got := anyStringValue(errObj["message"]); !strings.Contains(got, "--from-stdin") {
+				t.Fatalf("expected --from-stdin guidance, got %#v", payload)
+			}
+		})
+	}
+}
+
+func TestSecretCreateAndUpdateFromStdin(t *testing.T) {
+	t.Parallel()
+
+	var createBody map[string]any
+	var updateBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/secrets":
+			if err := json.NewDecoder(r.Body).Decode(&createBody); err != nil {
+				t.Fatalf("decode create body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"secret":{"id":"sec_1","name":"OPENAI_API_KEY"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/secrets":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"secrets":[{"id":"sec_1","name":"OPENAI_API_KEY"}]}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/secrets/sec_1":
+			if err := json.NewDecoder(r.Body).Decode(&updateBody); err != nil {
+				t.Fatalf("decode update body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"secret":{"id":"sec_1","name":"OPENAI_API_KEY"}}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+	raw := runCLIForTest(t, home, nil, strings.NewReader("create-secret\n"), []string{
+		"--json", "secret", "create", "--from-stdin", "--description", "API key", "OPENAI_API_KEY",
+	})
+	assertEnvelopeOK(t, raw)
+	if got := anyStringValue(createBody["value"]); got != "create-secret" {
+		t.Fatalf("expected create value from stdin, got %#v", createBody)
+	}
+	if got := anyStringValue(createBody["description"]); got != "API key" {
+		t.Fatalf("expected create description, got %#v", createBody)
+	}
+
+	raw = runCLIForTest(t, home, nil, strings.NewReader("update-secret\r\n"), []string{
+		"--json", "secret", "update", "--from-stdin", "--description", "updated", "OPENAI_API_KEY",
+	})
+	assertEnvelopeOK(t, raw)
+	if got := anyStringValue(updateBody["value"]); got != "update-secret" {
+		t.Fatalf("expected update value from stdin, got %#v", updateBody)
+	}
+	if got := anyStringValue(updateBody["description"]); got != "updated" {
+		t.Fatalf("expected update description, got %#v", updateBody)
 	}
 }

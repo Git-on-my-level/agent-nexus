@@ -114,12 +114,7 @@ func (a *App) runSecretCreate(ctx context.Context, args []string, cfg config.Res
 		}
 		value = strings.TrimRight(string(data), "\n\r")
 	} else {
-		fmt.Fprint(a.Stderr, "Enter secret value: ")
-		data, err := io.ReadAll(a.Stdin)
-		if err != nil {
-			return nil, "secret create", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read value", err)
-		}
-		value = strings.TrimRight(string(data), "\n\r")
+		return nil, "secret create", errnorm.Usage("invalid_request", "secret value must be provided with --from-stdin")
 	}
 	if value == "" {
 		return nil, "secret create", errnorm.Usage("invalid_request", "secret value must not be empty")
@@ -267,12 +262,7 @@ func (a *App) runSecretUpdate(ctx context.Context, args []string, cfg config.Res
 		}
 		value = strings.TrimRight(string(data), "\n\r")
 	} else {
-		fmt.Fprint(a.Stderr, "Enter new secret value: ")
-		data, err := io.ReadAll(a.Stdin)
-		if err != nil {
-			return nil, "secret update", errnorm.Wrap(errnorm.KindLocal, "stdin_read_failed", "failed to read value", err)
-		}
-		value = strings.TrimRight(string(data), "\n\r")
+		return nil, "secret update", errnorm.Usage("invalid_request", "secret value must be provided with --from-stdin")
 	}
 	if value == "" {
 		return nil, "secret update", errnorm.Usage("invalid_request", "secret value must not be empty")
