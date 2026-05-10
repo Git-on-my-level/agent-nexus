@@ -63,12 +63,12 @@ type Field struct {
 }
 
 type Policy struct {
-	SchemaVersion                int                    `yaml:"schema_version"`
-	SourceCommands               string                 `yaml:"source_commands"`
-	PolicyIntent                 string                 `yaml:"policy_intent"`
-	ValidClassifications         []string               `yaml:"valid_classifications"`
-	HostedChatGPTDefaultCommands []string               `yaml:"hosted_chatgpt_default_commands"`
-	Commands                     map[string]PolicyEntry `yaml:"commands"`
+	SchemaVersion         int                    `yaml:"schema_version"`
+	SourceCommands        string                 `yaml:"source_commands"`
+	PolicyIntent          string                 `yaml:"policy_intent"`
+	ValidClassifications  []string               `yaml:"valid_classifications"`
+	HostedDefaultCommands []string               `yaml:"hosted_default_commands"`
+	Commands              map[string]PolicyEntry `yaml:"commands"`
 }
 
 type PolicyEntry struct {
@@ -82,8 +82,9 @@ type BuildOptions struct {
 }
 
 type Catalog struct {
-	toolsByName map[string]Tool
-	tools       []Tool
+	toolsByName    map[string]Tool
+	knownToolNames map[string]bool
+	tools          []Tool
 }
 
 type Tool struct {
@@ -135,6 +136,7 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 	}
 
 	seenCommands := map[string]bool{}
+	knownToolNames := map[string]bool{}
 	toolsByName := map[string]Tool{}
 	tools := make([]Tool, 0, len(registry.Commands))
 
@@ -146,6 +148,11 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 			return nil, fmt.Errorf("duplicate command_id %q", command.CommandID)
 		}
 		seenCommands[command.CommandID] = true
+		name := ToolName(command.CommandID)
+		if knownToolNames[name] {
+			return nil, fmt.Errorf("tool name collision %q", name)
+		}
+		knownToolNames[name] = true
 
 		entry, ok := policy.Commands[command.CommandID]
 		if !ok {
@@ -161,7 +168,6 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 			continue
 		}
 
-		name := ToolName(command.CommandID)
 		if existing, ok := toolsByName[name]; ok {
 			return nil, fmt.Errorf("tool name collision %q for %s and %s", name, existing.Metadata.CommandID, command.CommandID)
 		}
@@ -195,16 +201,16 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 		return tools[i].Name < tools[j].Name
 	})
 
-	return &Catalog{toolsByName: toolsByName, tools: tools}, nil
+	return &Catalog{toolsByName: toolsByName, knownToolNames: knownToolNames, tools: tools}, nil
 }
 
 func DefaultAllowedClassifications() map[string]bool {
 	return copyBoolMap(defaultAllowedClassifications)
 }
 
-func HostedChatGPTDefaultCommandIDs(policy Policy) map[string]bool {
-	out := make(map[string]bool, len(policy.HostedChatGPTDefaultCommands))
-	for _, commandID := range policy.HostedChatGPTDefaultCommands {
+func HostedDefaultCommandIDs(policy Policy) map[string]bool {
+	out := make(map[string]bool, len(policy.HostedDefaultCommands))
+	for _, commandID := range policy.HostedDefaultCommands {
 		commandID = strings.TrimSpace(commandID)
 		if commandID != "" {
 			out[commandID] = true
@@ -233,6 +239,10 @@ func (c *Catalog) Tools() []Tool {
 func (c *Catalog) Lookup(name string) (Tool, bool) {
 	tool, ok := c.toolsByName[name]
 	return tool, ok
+}
+
+func (c *Catalog) KnowsToolName(name string) bool {
+	return c.knownToolNames[name]
 }
 
 func toolDescription(command Command) string {

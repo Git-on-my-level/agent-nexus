@@ -179,7 +179,13 @@ func (s *Server) handleToolsCall(ctx context.Context, req request) ([]byte, erro
 
 	tool, ok := s.catalog.Lookup(params.Name)
 	if !ok {
-		return marshalResponse(response{JSONRPC: jsonRPCVersion, ID: req.ID, Error: rpcError(ErrInvalidParams, "tool_not_allowed", "tool not found or not allowed", map[string]any{"tool": params.Name})})
+		dataCode := "tool_not_found"
+		message := "tool not found"
+		if s.catalog.KnowsToolName(params.Name) {
+			dataCode = "tool_not_allowed"
+			message = "tool not allowed"
+		}
+		return marshalResponse(response{JSONRPC: jsonRPCVersion, ID: req.ID, Error: rpcError(ErrInvalidParams, dataCode, message, map[string]any{"tool": params.Name})})
 	}
 	if params.Arguments == nil {
 		params.Arguments = map[string]any{}

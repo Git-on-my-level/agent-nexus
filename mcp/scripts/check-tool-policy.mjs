@@ -35,9 +35,9 @@ function unquote(value) {
 
 function parsePolicy(text) {
   const commands = new Map();
-  const hostedChatGPTDefaultCommands = [];
+  const hostedDefaultCommands = [];
   let inCommands = false;
-  let inHostedChatGPTDefaultCommands = false;
+  let inHostedDefaultCommands = false;
   let currentID = "";
 
   for (const rawLine of text.split(/\r?\n/)) {
@@ -47,22 +47,22 @@ function parsePolicy(text) {
     }
     if (line === "commands:") {
       inCommands = true;
-      inHostedChatGPTDefaultCommands = false;
+      inHostedDefaultCommands = false;
       continue;
     }
-    if (line === "hosted_chatgpt_default_commands:") {
-      inHostedChatGPTDefaultCommands = true;
+    if (line === "hosted_default_commands:") {
+      inHostedDefaultCommands = true;
       inCommands = false;
       currentID = "";
       continue;
     }
-    if (inHostedChatGPTDefaultCommands) {
+    if (inHostedDefaultCommands) {
       const itemMatch = line.match(/^  -\s+(.+)$/);
       if (itemMatch) {
-        hostedChatGPTDefaultCommands.push(unquote(itemMatch[1]));
+        hostedDefaultCommands.push(unquote(itemMatch[1]));
         continue;
       }
-      inHostedChatGPTDefaultCommands = false;
+      inHostedDefaultCommands = false;
     }
     if (!inCommands) {
       continue;
@@ -87,7 +87,7 @@ function parsePolicy(text) {
     throw new Error(`unsupported policy YAML line: ${rawLine}`);
   }
 
-  return { commands, hostedChatGPTDefaultCommands };
+  return { commands, hostedDefaultCommands };
 }
 
 function commandGroup(command) {
@@ -115,7 +115,7 @@ function isStandaloneExposed(classification) {
   return classification === "exposed_read" || classification === "exposed_write" || classification === "adapted";
 }
 
-function buildReport(metadata, policy, hostedChatGPTDefaultSet) {
+function buildReport(metadata, policy, hostedDefaultSet) {
   const commands = metadata.commands.map((command) => ({
     ...command,
     group: commandGroup(command),
@@ -136,8 +136,8 @@ function buildReport(metadata, policy, hostedChatGPTDefaultSet) {
       "exposed_read + exposed_write + adapted",
     ],
     [
-      "hosted ChatGPT default",
-      String(commands.filter((command) => hostedChatGPTDefaultSet.has(command.command_id)).length),
+      "hosted default",
+      String(commands.filter((command) => hostedDefaultSet.has(command.command_id)).length),
       "explicit read-only private-app allowlist",
     ],
     [
@@ -199,7 +199,7 @@ function main() {
   const metadata = JSON.parse(fs.readFileSync(commandsPath, "utf8"));
   const parsedPolicy = parsePolicy(fs.readFileSync(policyPath, "utf8"));
   const policy = parsedPolicy.commands;
-  const hostedChatGPTDefaultSet = new Set(parsedPolicy.hostedChatGPTDefaultCommands);
+  const hostedDefaultSet = new Set(parsedPolicy.hostedDefaultCommands);
   const errors = [];
 
   if (!Array.isArray(metadata.commands)) {
@@ -230,14 +230,14 @@ function main() {
       errors.push(`policy entry ${policyID} is not in generated command metadata`);
     }
   }
-  for (const commandID of hostedChatGPTDefaultSet) {
+  for (const commandID of hostedDefaultSet) {
     if (!metadataIDs.has(commandID)) {
-      errors.push(`hosted ChatGPT default command ${commandID} is not in generated command metadata`);
+      errors.push(`hosted default command ${commandID} is not in generated command metadata`);
       continue;
     }
     const entry = policy.get(commandID);
     if (!entry || entry.classification !== "exposed_read") {
-      errors.push(`hosted ChatGPT default command ${commandID} must be classified exposed_read`);
+      errors.push(`hosted default command ${commandID} must be classified exposed_read`);
     }
   }
 
@@ -248,7 +248,7 @@ function main() {
     process.exit(1);
   }
 
-  const report = buildReport(metadata, policy, hostedChatGPTDefaultSet);
+  const report = buildReport(metadata, policy, hostedDefaultSet);
   if (writeReport) {
     fs.writeFileSync(reportPath, report);
   } else if (fs.existsSync(reportPath) && fs.readFileSync(reportPath, "utf8") !== report) {

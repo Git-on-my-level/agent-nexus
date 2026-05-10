@@ -97,6 +97,17 @@ func TestToolsCallRejectsUnknownToolAndArguments(t *testing.T) {
 
 	resp = handleJSON(t, server, map[string]any{
 		"jsonrpc": "2.0",
+		"id":      30,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "anx_not_a_real_command",
+			"arguments": map[string]any{},
+		},
+	})
+	assertErrorCode(t, resp, "tool_not_found")
+
+	resp = handleJSON(t, server, map[string]any{
+		"jsonrpc": "2.0",
 		"id":      4,
 		"method":  "tools/call",
 		"params": map[string]any{

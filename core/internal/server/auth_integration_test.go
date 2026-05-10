@@ -1776,6 +1776,13 @@ func TestWorkspaceManagedAgentGrantTokenExchangeAndValidation(t *testing.T) {
 		if firstPayload.Agent.AgentID != secondPayload.Agent.AgentID || firstPayload.Agent.ActorID != secondPayload.Agent.ActorID {
 			t.Fatalf("expected stable slot principal reuse, first=%#v second=%#v", firstPayload.Agent, secondPayload.Agent)
 		}
+		var actorDisplayName string
+		if err := env.workspace.DB().QueryRowContext(context.Background(), `SELECT display_name FROM actors WHERE id = ?`, firstPayload.Agent.ActorID).Scan(&actorDisplayName); err != nil {
+			t.Fatalf("load managed actor display_name: %v", err)
+		}
+		if actorDisplayName != "New Name" {
+			t.Fatalf("managed grant visible actor name must prefer latest slot_name, got %q", actorDisplayName)
+		}
 	})
 
 	t.Run("validation failures return unauthorized", func(t *testing.T) {

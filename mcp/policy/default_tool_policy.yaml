@@ -12,7 +12,7 @@ valid_classifications:
   - unsupported_bootstrap_auth
   - unsupported_shell_shaped
   - unsupported_other
-hosted_chatgpt_default_commands:
+hosted_default_commands:
   - "agent.notifications.list"
   - "agents.me.get"
   - "artifacts.get"

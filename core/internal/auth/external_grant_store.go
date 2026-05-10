@@ -166,7 +166,7 @@ func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, id
 		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace managed agent grant transaction: %w", err)
 	}
 
-	displayName := pickExternalGrantDisplayName(identity.DisplayName, identity.SlotName, username)
+	displayName := pickExternalGrantDisplayName(identity.SlotName, identity.DisplayName, username)
 	metadata := map[string]any{
 		"external_issuer":        issuer,
 		"external_subject":       strings.TrimSpace(identity.Subject),
