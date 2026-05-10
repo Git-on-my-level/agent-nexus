@@ -1,0 +1,387 @@
+schema_version: 1
+source_commands: "contracts/gen/meta/commands.json"
+policy_intent: "MCP v1 command accounting; exposure is explicit and separate from command existence."
+valid_classifications:
+  - exposed_read
+  - exposed_write
+  - gated_admin
+  - gated_sensitive
+  - adapted
+  - unsupported_interactive
+  - unsupported_streaming
+  - unsupported_bootstrap_auth
+  - unsupported_shell_shaped
+  - unsupported_other
+commands:
+  "actors.create":
+    classification: unsupported_bootstrap_auth
+    reason: "dev-only actor registration is not an MCP auth path"
+  "actors.list":
+    classification: gated_admin
+    reason: "actor inventory is auth-administrative"
+  "agent.notification-receipts.stream":
+    classification: unsupported_streaming
+    reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "agent.notifications.dismiss":
+    classification: exposed_write
+    reason: "ordinary authenticated agent notification state write"
+  "agent.notifications.list":
+    classification: exposed_read
+    reason: "bounded authenticated agent notification projection"
+  "agent.notifications.read":
+    classification: exposed_write
+    reason: "ordinary authenticated agent notification state write"
+  "agents.me.get":
+    classification: exposed_read
+    reason: "authenticated caller self-inspection"
+  "agents.me.keys.rotate":
+    classification: gated_sensitive
+    reason: "agent key rotation changes credential material"
+  "agents.me.patch":
+    classification: gated_admin
+    reason: "agent profile mutation changes principal metadata"
+  "agents.me.revoke":
+    classification: gated_sensitive
+    reason: "revocation disables credentials"
+  "artifacts.archive":
+    classification: exposed_write
+    reason: "ordinary reversible artifact lifecycle write"
+  "artifacts.attachments.create":
+    classification: unsupported_shell_shaped
+    reason: "multipart binary upload needs a dedicated MCP content adapter"
+  "artifacts.content":
+    classification: exposed_read
+    reason: "artifact content read; executor must bound and redact output"
+  "artifacts.create":
+    classification: exposed_write
+    reason: "ordinary artifact creation through workspace API"
+  "artifacts.get":
+    classification: exposed_read
+    reason: "artifact metadata read"
+  "artifacts.list":
+    classification: exposed_read
+    reason: "artifact inventory read"
+  "artifacts.purge":
+    classification: gated_sensitive
+    reason: "permanent deletion is destructive"
+  "artifacts.restore":
+    classification: exposed_write
+    reason: "ordinary reversible artifact lifecycle write"
+  "artifacts.trash":
+    classification: exposed_write
+    reason: "ordinary reversible artifact lifecycle write"
+  "artifacts.unarchive":
+    classification: exposed_write
+    reason: "ordinary reversible artifact lifecycle write"
+  "auth.agents.register":
+    classification: unsupported_bootstrap_auth
+    reason: "agent registration is an auth bootstrap flow"
+  "auth.audit.list":
+    classification: gated_admin
+    reason: "auth audit inventory is administrative"
+  "auth.bootstrap.status":
+    classification: unsupported_bootstrap_auth
+    reason: "bootstrap status is part of registration ceremony"
+  "auth.invites.create":
+    classification: gated_admin
+    reason: "invite issuance is administrative"
+  "auth.invites.list":
+    classification: gated_admin
+    reason: "invite inventory is administrative"
+  "auth.invites.revoke":
+    classification: gated_admin
+    reason: "invite revocation is administrative"
+  "auth.passkey.dev.login":
+    classification: unsupported_bootstrap_auth
+    reason: "dev-only passkey bypass is not an MCP auth path"
+  "auth.passkey.dev.register":
+    classification: unsupported_bootstrap_auth
+    reason: "dev-only passkey bypass is not an MCP auth path"
+  "auth.passkey.login.options":
+    classification: unsupported_interactive
+    reason: "WebAuthn ceremony requires interactive browser mediation"
+  "auth.passkey.login.verify":
+    classification: unsupported_interactive
+    reason: "WebAuthn ceremony requires interactive browser mediation"
+  "auth.passkey.register.options":
+    classification: unsupported_interactive
+    reason: "WebAuthn ceremony requires interactive browser mediation"
+  "auth.passkey.register.verify":
+    classification: unsupported_interactive
+    reason: "WebAuthn ceremony requires interactive browser mediation"
+  "auth.principals.list":
+    classification: gated_admin
+    reason: "principal inventory is administrative"
+  "auth.principals.revoke":
+    classification: gated_admin
+    reason: "principal revocation is administrative and disabling"
+  "auth.token":
+    classification: unsupported_bootstrap_auth
+    reason: "raw token exchange is not exposed as an MCP tool"
+  "boards.archive":
+    classification: exposed_write
+    reason: "ordinary reversible board lifecycle write"
+  "boards.cards.batch_add":
+    classification: exposed_write
+    reason: "ordinary board card creation"
+  "boards.cards.create":
+    classification: exposed_write
+    reason: "ordinary board card creation"
+  "boards.cards.get":
+    classification: exposed_read
+    reason: "board-scoped card read"
+  "boards.cards.list":
+    classification: exposed_read
+    reason: "board card inventory read"
+  "boards.create":
+    classification: exposed_write
+    reason: "ordinary board creation"
+  "boards.get":
+    classification: exposed_read
+    reason: "board read"
+  "boards.list":
+    classification: exposed_read
+    reason: "board inventory read"
+  "boards.patch":
+    classification: exposed_write
+    reason: "ordinary board update with concurrency controls"
+  "boards.purge":
+    classification: gated_sensitive
+    reason: "permanent deletion is destructive"
+  "boards.restore":
+    classification: exposed_write
+    reason: "ordinary reversible board lifecycle write"
+  "boards.trash":
+    classification: exposed_write
+    reason: "ordinary reversible board lifecycle write"
+  "boards.unarchive":
+    classification: exposed_write
+    reason: "ordinary reversible board lifecycle write"
+  "boards.workspace":
+    classification: exposed_read
+    reason: "bounded board workspace projection"
+  "cards.archive":
+    classification: exposed_write
+    reason: "ordinary reversible card lifecycle write"
+  "cards.create":
+    classification: exposed_write
+    reason: "ordinary card creation"
+  "cards.get":
+    classification: exposed_read
+    reason: "card read"
+  "cards.list":
+    classification: exposed_read
+    reason: "card inventory read"
+  "cards.move":
+    classification: exposed_write
+    reason: "ordinary card board-position write"
+  "cards.patch":
+    classification: exposed_write
+    reason: "ordinary card update with concurrency controls"
+  "cards.purge":
+    classification: gated_sensitive
+    reason: "permanent deletion is destructive"
+  "cards.restore":
+    classification: exposed_write
+    reason: "ordinary reversible card lifecycle write"
+  "cards.revisions.create":
+    classification: exposed_write
+    reason: "ordinary card revision creation"
+  "cards.revisions.get":
+    classification: exposed_read
+    reason: "card revision read"
+  "cards.revisions.list":
+    classification: exposed_read
+    reason: "card revision inventory read"
+  "cards.timeline":
+    classification: exposed_read
+    reason: "bounded card timeline projection"
+  "cards.trash":
+    classification: exposed_write
+    reason: "ordinary reversible card lifecycle write"
+  "derived.rebuild":
+    classification: gated_admin
+    reason: "projection rebuild is maintenance/ops"
+  "docs.archive":
+    classification: exposed_write
+    reason: "ordinary reversible document lifecycle write"
+  "docs.create":
+    classification: exposed_write
+    reason: "ordinary document creation"
+  "docs.get":
+    classification: exposed_read
+    reason: "document read"
+  "docs.list":
+    classification: exposed_read
+    reason: "document inventory read"
+  "docs.patch":
+    classification: exposed_write
+    reason: "ordinary document update with concurrency controls"
+  "docs.purge":
+    classification: gated_sensitive
+    reason: "permanent deletion is destructive"
+  "docs.restore":
+    classification: exposed_write
+    reason: "ordinary reversible document lifecycle write"
+  "docs.revisions.create":
+    classification: exposed_write
+    reason: "ordinary document revision creation"
+  "docs.revisions.get":
+    classification: exposed_read
+    reason: "document revision read"
+  "docs.revisions.list":
+    classification: exposed_read
+    reason: "document revision inventory read"
+  "docs.trash":
+    classification: exposed_write
+    reason: "ordinary reversible document lifecycle write"
+  "docs.unarchive":
+    classification: exposed_write
+    reason: "ordinary reversible document lifecycle write"
+  "events.archive":
+    classification: exposed_write
+    reason: "ordinary reversible event lifecycle write"
+  "events.create":
+    classification: exposed_write
+    reason: "ordinary event creation"
+  "events.get":
+    classification: exposed_read
+    reason: "event read"
+  "events.list":
+    classification: exposed_read
+    reason: "bounded event inventory read"
+  "events.restore":
+    classification: exposed_write
+    reason: "ordinary reversible event lifecycle write"
+  "events.stream":
+    classification: unsupported_streaming
+    reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "events.trash":
+    classification: exposed_write
+    reason: "ordinary reversible event lifecycle write"
+  "events.unarchive":
+    classification: exposed_write
+    reason: "ordinary reversible event lifecycle write"
+  "home.read":
+    classification: exposed_write
+    reason: "ordinary home read-marker write"
+  "home.unread":
+    classification: exposed_read
+    reason: "home unread projection"
+  "inbox.get":
+    classification: exposed_read
+    reason: "inbox item read"
+  "inbox.list":
+    classification: exposed_read
+    reason: "bounded inbox inventory read"
+  "inbox.respond":
+    classification: unsupported_interactive
+    reason: "human response submission requires human judgment"
+  "inbox.stream":
+    classification: unsupported_streaming
+    reason: "SSE stream needs a bounded read adapter before MCP exposure"
+  "meta.commands.get":
+    classification: exposed_read
+    reason: "command metadata read"
+  "meta.commands.list":
+    classification: exposed_read
+    reason: "command metadata inventory read"
+  "meta.concepts.get":
+    classification: exposed_read
+    reason: "concept metadata read"
+  "meta.concepts.list":
+    classification: exposed_read
+    reason: "concept metadata inventory read"
+  "meta.handshake":
+    classification: exposed_read
+    reason: "workspace capability metadata read"
+  "meta.health":
+    classification: exposed_read
+    reason: "health diagnostic read"
+  "meta.livez":
+    classification: exposed_read
+    reason: "liveness diagnostic read"
+  "meta.readyz":
+    classification: exposed_read
+    reason: "readiness diagnostic read"
+  "meta.version":
+    classification: exposed_read
+    reason: "version metadata read"
+  "ops.blob.usage.rebuild":
+    classification: gated_admin
+    reason: "blob usage rebuild is maintenance/ops"
+  "ops.health":
+    classification: gated_admin
+    reason: "ops health can expose operational diagnostics"
+  "ops.usage.summary":
+    classification: gated_admin
+    reason: "unversioned usage summary is ops/quota telemetry"
+  "ref_edges.list":
+    classification: exposed_read
+    reason: "reference edge inventory read"
+  "secrets.create":
+    classification: gated_sensitive
+    reason: "secret payload write is sensitive"
+  "secrets.delete":
+    classification: gated_sensitive
+    reason: "secret deletion is destructive"
+  "secrets.list":
+    classification: gated_admin
+    reason: "secret inventory is administrative"
+  "secrets.reveal":
+    classification: gated_sensitive
+    reason: "secret value reveal is sensitive"
+  "secrets.reveal-batch":
+    classification: gated_sensitive
+    reason: "secret value reveal is sensitive"
+  "secrets.update":
+    classification: gated_sensitive
+    reason: "secret payload write is sensitive"
+  "threads.context":
+    classification: exposed_read
+    reason: "bounded thread context projection"
+  "threads.inspect":
+    classification: exposed_read
+    reason: "thread diagnostic read"
+  "threads.list":
+    classification: exposed_read
+    reason: "thread inventory read"
+  "threads.timeline":
+    classification: exposed_read
+    reason: "bounded thread timeline projection"
+  "threads.workspace":
+    classification: exposed_read
+    reason: "bounded thread workspace projection"
+  "topics.archive":
+    classification: exposed_write
+    reason: "ordinary reversible topic lifecycle write"
+  "topics.create":
+    classification: exposed_write
+    reason: "ordinary topic creation"
+  "topics.get":
+    classification: exposed_read
+    reason: "topic read"
+  "topics.list":
+    classification: exposed_read
+    reason: "topic inventory read"
+  "topics.patch":
+    classification: exposed_write
+    reason: "ordinary topic update with concurrency controls"
+  "topics.restore":
+    classification: exposed_write
+    reason: "ordinary reversible topic lifecycle write"
+  "topics.timeline":
+    classification: exposed_read
+    reason: "bounded topic timeline projection"
+  "topics.trash":
+    classification: exposed_write
+    reason: "ordinary reversible topic lifecycle write"
+  "topics.unarchive":
+    classification: exposed_write
+    reason: "ordinary reversible topic lifecycle write"
+  "topics.workspace":
+    classification: exposed_read
+    reason: "bounded topic workspace projection"
+  "usage.summary.v1":
+    classification: gated_admin
+    reason: "versioned usage summary is quota/billing telemetry"
