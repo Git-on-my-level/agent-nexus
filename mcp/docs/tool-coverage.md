@@ -43,6 +43,16 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | unsupported_shell_shaped | 1 |
 | unsupported_streaming | 3 |
 
+## Counts by Surface
+
+| Surface | Commands | Rule |
+| --- | --- | --- |
+| standalone default | 84 | exposed_read + exposed_write + adapted |
+| hosted ChatGPT default | 42 | explicit read-only private-app allowlist |
+| gated | 25 | requires explicit admin/sensitive policy scope |
+| adapted | 0 | provider compatibility adapters |
+| unsupported | 15 | not represented as direct MCP tools in v1 |
+
 ## Command Inventory
 
 | Command | Group | Method | Path | Classification | Reason |

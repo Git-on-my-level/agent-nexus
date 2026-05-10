@@ -91,6 +91,24 @@ func TestBuildCatalogAllowsGatedWithExplicitPolicy(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogCanFilterHostedChatGPTDefaultCommands(t *testing.T) {
+	policy := fixturePolicy()
+	policy.HostedChatGPTDefaultCommands = []string{"cards.get"}
+	cat, err := Build(fixtureRegistry(), policy, BuildOptions{
+		AllowedClassifications: DefaultAllowedClassifications(),
+		AllowedCommandIDs:      HostedChatGPTDefaultCommandIDs(policy),
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, ok := cat.Lookup("anx_cards_get"); !ok {
+		t.Fatal("expected hosted default cards.get tool")
+	}
+	if _, ok := cat.Lookup("anx_docs_revisions_create"); ok {
+		t.Fatal("hosted default command filter should hide standalone write tools")
+	}
+}
+
 func TestBuildCatalogDetectsToolNameCollision(t *testing.T) {
 	registry := CommandRegistry{Commands: []Command{
 		{CommandID: "cards.get", Method: "GET", Path: "/cards/{card_id}"},
@@ -176,6 +194,28 @@ func TestBuildCatalogFromGeneratedMetadataAndDefaultPolicy(t *testing.T) {
 	}
 	if got := len(cat.Tools()); got == 0 || got >= len(registry.Commands) {
 		t.Fatalf("default catalog size = %d, registry size = %d", got, len(registry.Commands))
+	}
+
+	hostedCat, err := Build(registry, policy, BuildOptions{
+		AllowedClassifications: DefaultAllowedClassifications(),
+		AllowedCommandIDs:      HostedChatGPTDefaultCommandIDs(policy),
+	})
+	if err != nil {
+		t.Fatalf("Build(hosted default) error = %v", err)
+	}
+	if _, ok := hostedCat.Lookup("anx_cards_get"); !ok {
+		t.Fatal("expected hosted default read tool")
+	}
+	for _, name := range []string{
+		"anx_cards_create",
+		"anx_artifacts_content",
+		"anx_auth_principals_list",
+		"anx_secrets_reveal_batch",
+		"anx_usage_summary_v1",
+	} {
+		if _, ok := hostedCat.Lookup(name); ok {
+			t.Fatalf("hosted ChatGPT default should hide %s", name)
+		}
 	}
 }
 

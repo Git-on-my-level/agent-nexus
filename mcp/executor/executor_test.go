@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -108,6 +111,176 @@ func TestWorkspaceExecutorExecutesPatch(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CallTool() error = %v", err)
+	}
+}
+
+func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
+	tests := []struct {
+		name          string
+		commandID     string
+		arguments     map[string]any
+		wantMethod    string
+		wantPath      string
+		wantQuery     map[string]string
+		wantBodyField map[string]any
+	}{
+		{
+			name:       "actors admin read",
+			commandID:  "actors.list",
+			wantMethod: http.MethodGet,
+			wantPath:   "/actors",
+			wantQuery:  map[string]string{"limit": "50"},
+		},
+		{
+			name:       "agent notifications read",
+			commandID:  "agent.notifications.list",
+			wantMethod: http.MethodGet,
+			wantPath:   "/agent-notifications",
+		},
+		{
+			name:       "agent notifications write",
+			commandID:  "agent.notifications.read",
+			arguments:  map[string]any{"body": map[string]any{"notification_ids": []any{"note-1"}}},
+			wantMethod: http.MethodPost,
+			wantPath:   "/agent-notifications/read",
+		},
+		{
+			name:       "agents me read",
+			commandID:  "agents.me.get",
+			wantMethod: http.MethodGet,
+			wantPath:   "/agents/me",
+		},
+		{
+			name:          "agents me update",
+			commandID:     "agents.me.patch",
+			arguments:     map[string]any{"body": map[string]any{"display_name": "Researcher"}},
+			wantMethod:    http.MethodPatch,
+			wantPath:      "/agents/me",
+			wantBodyField: map[string]any{"display_name": "Researcher"},
+		},
+		{
+			name:       "artifacts read",
+			commandID:  "artifacts.get",
+			arguments:  map[string]any{"path": map[string]any{"artifact_id": "artifact-1"}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/artifacts/artifact-1",
+		},
+		{
+			name:          "board cards write",
+			commandID:     "boards.cards.create",
+			arguments:     map[string]any{"path": map[string]any{"board_id": "board-1"}, "body": map[string]any{"card.title": "Do it"}},
+			wantMethod:    http.MethodPost,
+			wantPath:      "/boards/board-1/cards",
+			wantBodyField: map[string]any{"card.title": "Do it"},
+		},
+		{
+			name:          "card revisions write",
+			commandID:     "cards.revisions.create",
+			arguments:     map[string]any{"path": map[string]any{"card_id": "card-1"}, "body": map[string]any{"revision.summary": "Updated", "revision.title": "Card v2", "if_base_revision": "rev-1"}},
+			wantMethod:    http.MethodPost,
+			wantPath:      "/cards/card-1/revisions",
+			wantBodyField: map[string]any{"revision.summary": "Updated"},
+		},
+		{
+			name:          "doc revisions write",
+			commandID:     "docs.revisions.create",
+			arguments:     map[string]any{"path": map[string]any{"document_id": "doc-1"}, "body": map[string]any{"content": "body", "content_type": "text", "if_base_revision": "rev-1"}},
+			wantMethod:    http.MethodPost,
+			wantPath:      "/docs/doc-1/revisions",
+			wantBodyField: map[string]any{"content_type": "text"},
+		},
+		{
+			name:          "events bounded write",
+			commandID:     "events.create",
+			arguments:     map[string]any{"body": map[string]any{"event.actor_id": "actor-1", "event.provenance.sources": []any{}, "event.refs": []any{}, "event.summary": "noted", "event.type": "custom"}},
+			wantMethod:    http.MethodPost,
+			wantPath:      "/events",
+			wantBodyField: map[string]any{"event.type": "custom"},
+		},
+		{
+			name:       "events bounded read",
+			commandID:  "events.list",
+			wantMethod: http.MethodGet,
+			wantPath:   "/events",
+			wantQuery:  map[string]string{"limit": "50"},
+		},
+		{
+			name:       "inbox read",
+			commandID:  "inbox.get",
+			arguments:  map[string]any{"path": map[string]any{"inbox_id": "inbox-1"}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/inbox/inbox-1",
+		},
+		{
+			name:       "meta read",
+			commandID:  "meta.commands.get",
+			arguments:  map[string]any{"path": map[string]any{"command_id": "cards.get"}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/meta/commands/cards.get",
+		},
+		{
+			name:       "topics timeline",
+			commandID:  "topics.timeline",
+			arguments:  map[string]any{"path": map[string]any{"topic_id": "topic-1"}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/topics/topic-1/timeline",
+			wantQuery:  map[string]string{"limit": "50"},
+		},
+		{
+			name:       "threads projection read",
+			commandID:  "threads.context",
+			arguments:  map[string]any{"path": map[string]any{"thread_id": "thread-1"}},
+			wantMethod: http.MethodGet,
+			wantPath:   "/threads/thread-1/context",
+		},
+		{
+			name:       "usage admin summary",
+			commandID:  "usage.summary.v1",
+			wantMethod: http.MethodGet,
+			wantPath:   "/v1/usage/summary",
+		},
+	}
+
+	cat := generatedTestCatalog(t, map[string]bool{
+		catalog.ClassificationExposedRead:  true,
+		catalog.ClassificationExposedWrite: true,
+		catalog.ClassificationGatedAdmin:   true,
+	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != tt.wantMethod || r.URL.Path != tt.wantPath {
+					t.Fatalf("unexpected request %s %s, want %s %s", r.Method, r.URL.String(), tt.wantMethod, tt.wantPath)
+				}
+				for key, want := range tt.wantQuery {
+					if got := r.URL.Query().Get(key); got != want {
+						t.Fatalf("query %s = %q, want %q", key, got, want)
+					}
+				}
+				if len(tt.wantBodyField) > 0 {
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Fatalf("decode body: %v", err)
+					}
+					for key, want := range tt.wantBodyField {
+						if got := body[key]; got != want {
+							t.Fatalf("body.%s = %#v, want %#v; body=%#v", key, got, want, body)
+						}
+					}
+				}
+				writeJSON(t, w, http.StatusOK, map[string]any{"ok": true})
+			}))
+			defer server.Close()
+
+			tool, ok := cat.Lookup(catalog.ToolName(tt.commandID))
+			if !ok {
+				t.Fatalf("missing generated test tool %s", tt.commandID)
+			}
+			exec := NewWorkspaceExecutor(server.URL, Options{})
+			if _, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: tt.arguments}); err != nil {
+				t.Fatalf("CallTool() error = %v", err)
+			}
+		})
 	}
 }
 
@@ -322,6 +495,38 @@ func testCatalog(t *testing.T) *catalog.Catalog {
 			"boards.create.required": {Classification: catalog.ClassificationExposedWrite},
 		},
 	}, catalog.BuildOptions{})
+	if err != nil {
+		t.Fatalf("catalog.Build() error = %v", err)
+	}
+	return cat
+}
+
+func generatedTestCatalog(t *testing.T, allowed map[string]bool) *catalog.Catalog {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	mcpRoot := filepath.Dir(filepath.Dir(file))
+	commandsFile, err := os.Open(filepath.Join(mcpRoot, "..", "contracts", "gen", "meta", "commands.json"))
+	if err != nil {
+		t.Fatalf("open commands metadata: %v", err)
+	}
+	defer commandsFile.Close()
+	registry, err := catalog.LoadCommandRegistry(commandsFile)
+	if err != nil {
+		t.Fatalf("LoadCommandRegistry() error = %v", err)
+	}
+	policyFile, err := os.Open(filepath.Join(mcpRoot, "policy", "default_tool_policy.yaml"))
+	if err != nil {
+		t.Fatalf("open default policy: %v", err)
+	}
+	defer policyFile.Close()
+	policy, err := catalog.LoadPolicy(policyFile)
+	if err != nil {
+		t.Fatalf("LoadPolicy() error = %v", err)
+	}
+	cat, err := catalog.Build(registry, policy, catalog.BuildOptions{AllowedClassifications: allowed})
 	if err != nil {
 		t.Fatalf("catalog.Build() error = %v", err)
 	}

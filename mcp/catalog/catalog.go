@@ -63,11 +63,12 @@ type Field struct {
 }
 
 type Policy struct {
-	SchemaVersion        int                    `yaml:"schema_version"`
-	SourceCommands       string                 `yaml:"source_commands"`
-	PolicyIntent         string                 `yaml:"policy_intent"`
-	ValidClassifications []string               `yaml:"valid_classifications"`
-	Commands             map[string]PolicyEntry `yaml:"commands"`
+	SchemaVersion                int                    `yaml:"schema_version"`
+	SourceCommands               string                 `yaml:"source_commands"`
+	PolicyIntent                 string                 `yaml:"policy_intent"`
+	ValidClassifications         []string               `yaml:"valid_classifications"`
+	HostedChatGPTDefaultCommands []string               `yaml:"hosted_chatgpt_default_commands"`
+	Commands                     map[string]PolicyEntry `yaml:"commands"`
 }
 
 type PolicyEntry struct {
@@ -77,6 +78,7 @@ type PolicyEntry struct {
 
 type BuildOptions struct {
 	AllowedClassifications map[string]bool
+	AllowedCommandIDs      map[string]bool
 }
 
 type Catalog struct {
@@ -155,6 +157,9 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 		if !allowed[entry.Classification] {
 			continue
 		}
+		if opts.AllowedCommandIDs != nil && !opts.AllowedCommandIDs[command.CommandID] {
+			continue
+		}
 
 		name := ToolName(command.CommandID)
 		if existing, ok := toolsByName[name]; ok {
@@ -191,6 +196,21 @@ func Build(registry CommandRegistry, policy Policy, opts BuildOptions) (*Catalog
 	})
 
 	return &Catalog{toolsByName: toolsByName, tools: tools}, nil
+}
+
+func DefaultAllowedClassifications() map[string]bool {
+	return copyBoolMap(defaultAllowedClassifications)
+}
+
+func HostedChatGPTDefaultCommandIDs(policy Policy) map[string]bool {
+	out := make(map[string]bool, len(policy.HostedChatGPTDefaultCommands))
+	for _, commandID := range policy.HostedChatGPTDefaultCommands {
+		commandID = strings.TrimSpace(commandID)
+		if commandID != "" {
+			out[commandID] = true
+		}
+	}
+	return out
 }
 
 func ToolName(commandID string) string {
@@ -369,4 +389,12 @@ func riskClass(classification string) string {
 		}
 		return "unknown"
 	}
+}
+
+func copyBoolMap(in map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }

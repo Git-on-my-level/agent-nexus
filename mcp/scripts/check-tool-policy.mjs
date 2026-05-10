@@ -35,7 +35,9 @@ function unquote(value) {
 
 function parsePolicy(text) {
   const commands = new Map();
+  const hostedChatGPTDefaultCommands = [];
   let inCommands = false;
+  let inHostedChatGPTDefaultCommands = false;
   let currentID = "";
 
   for (const rawLine of text.split(/\r?\n/)) {
@@ -45,7 +47,22 @@ function parsePolicy(text) {
     }
     if (line === "commands:") {
       inCommands = true;
+      inHostedChatGPTDefaultCommands = false;
       continue;
+    }
+    if (line === "hosted_chatgpt_default_commands:") {
+      inHostedChatGPTDefaultCommands = true;
+      inCommands = false;
+      currentID = "";
+      continue;
+    }
+    if (inHostedChatGPTDefaultCommands) {
+      const itemMatch = line.match(/^  -\s+(.+)$/);
+      if (itemMatch) {
+        hostedChatGPTDefaultCommands.push(unquote(itemMatch[1]));
+        continue;
+      }
+      inHostedChatGPTDefaultCommands = false;
     }
     if (!inCommands) {
       continue;
@@ -70,7 +87,7 @@ function parsePolicy(text) {
     throw new Error(`unsupported policy YAML line: ${rawLine}`);
   }
 
-  return commands;
+  return { commands, hostedChatGPTDefaultCommands };
 }
 
 function commandGroup(command) {
@@ -94,7 +111,11 @@ function markdownTable(headers, rows) {
   ].join("\n");
 }
 
-function buildReport(metadata, policy) {
+function isStandaloneExposed(classification) {
+  return classification === "exposed_read" || classification === "exposed_write" || classification === "adapted";
+}
+
+function buildReport(metadata, policy, hostedChatGPTDefaultSet) {
   const commands = metadata.commands.map((command) => ({
     ...command,
     group: commandGroup(command),
@@ -108,6 +129,33 @@ function buildReport(metadata, policy) {
   const classificationRows = countBy(commands, (command) => command.policy.classification).map(
     ([classification, count]) => [classification, String(count)],
   );
+  const surfaceRows = [
+    [
+      "standalone default",
+      String(commands.filter((command) => isStandaloneExposed(command.policy.classification)).length),
+      "exposed_read + exposed_write + adapted",
+    ],
+    [
+      "hosted ChatGPT default",
+      String(commands.filter((command) => hostedChatGPTDefaultSet.has(command.command_id)).length),
+      "explicit read-only private-app allowlist",
+    ],
+    [
+      "gated",
+      String(commands.filter((command) => command.policy.classification.startsWith("gated_")).length),
+      "requires explicit admin/sensitive policy scope",
+    ],
+    [
+      "adapted",
+      String(commands.filter((command) => command.policy.classification === "adapted").length),
+      "provider compatibility adapters",
+    ],
+    [
+      "unsupported",
+      String(commands.filter((command) => command.policy.classification.startsWith("unsupported_")).length),
+      "not represented as direct MCP tools in v1",
+    ],
+  ];
   const commandRows = commands
     .slice()
     .sort((a, b) => a.command_id.localeCompare(b.command_id))
@@ -136,6 +184,10 @@ ${markdownTable(["Group", "Commands"], groupRows)}
 
 ${markdownTable(["Classification", "Commands"], classificationRows)}
 
+## Counts by Surface
+
+${markdownTable(["Surface", "Commands", "Rule"], surfaceRows)}
+
 ## Command Inventory
 
 ${markdownTable(["Command", "Group", "Method", "Path", "Classification", "Reason"], commandRows)}
@@ -145,7 +197,9 @@ ${markdownTable(["Command", "Group", "Method", "Path", "Classification", "Reason
 function main() {
   const writeReport = process.argv.includes("--write-report");
   const metadata = JSON.parse(fs.readFileSync(commandsPath, "utf8"));
-  const policy = parsePolicy(fs.readFileSync(policyPath, "utf8"));
+  const parsedPolicy = parsePolicy(fs.readFileSync(policyPath, "utf8"));
+  const policy = parsedPolicy.commands;
+  const hostedChatGPTDefaultSet = new Set(parsedPolicy.hostedChatGPTDefaultCommands);
   const errors = [];
 
   if (!Array.isArray(metadata.commands)) {
@@ -176,6 +230,16 @@ function main() {
       errors.push(`policy entry ${policyID} is not in generated command metadata`);
     }
   }
+  for (const commandID of hostedChatGPTDefaultSet) {
+    if (!metadataIDs.has(commandID)) {
+      errors.push(`hosted ChatGPT default command ${commandID} is not in generated command metadata`);
+      continue;
+    }
+    const entry = policy.get(commandID);
+    if (!entry || entry.classification !== "exposed_read") {
+      errors.push(`hosted ChatGPT default command ${commandID} must be classified exposed_read`);
+    }
+  }
 
   if (errors.length > 0) {
     for (const error of errors) {
@@ -184,7 +248,7 @@ function main() {
     process.exit(1);
   }
 
-  const report = buildReport(metadata, policy);
+  const report = buildReport(metadata, policy, hostedChatGPTDefaultSet);
   if (writeReport) {
     fs.writeFileSync(reportPath, report);
   } else if (fs.existsSync(reportPath) && fs.readFileSync(reportPath, "utf8") !== report) {
