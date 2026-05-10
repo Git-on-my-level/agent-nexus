@@ -36,15 +36,16 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
-	bootstrapToken              string
-	enableDevActorMode          bool
-	allowPasskeyDevBypass       bool
-	allowDevRegisterLinkedActor bool
-	allowUnauthenticatedWrites  bool
-	webAuthnConfig              WebAuthnConfig
-	workspaceID                 string
-	workspaceHumanGrantVerifier auth.WorkspaceHumanGrantIdentityVerifier
-	accountStatusChecker        auth.AccountStatusChecker
+	bootstrapToken                string
+	enableDevActorMode            bool
+	allowPasskeyDevBypass         bool
+	allowDevRegisterLinkedActor   bool
+	allowUnauthenticatedWrites    bool
+	webAuthnConfig                WebAuthnConfig
+	workspaceID                   string
+	workspaceHumanGrantVerifier   auth.WorkspaceHumanGrantIdentityVerifier
+	workspaceManagedGrantVerifier auth.WorkspaceManagedAgentGrantIdentityVerifier
+	accountStatusChecker          auth.AccountStatusChecker
 	// wrapActorRegistry, if set, replaces the default *actors.Store passed to WithActorRegistry
 	// (use for tests that inject failures from ActorRegistry.Exists).
 	wrapActorRegistry func(base *actors.Store) ActorRegistry
@@ -108,6 +109,8 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
 		WithWorkspaceHumanGrantVerifier(options.workspaceHumanGrantVerifier),
+		WithWorkspaceManagedAgentGrantVerifier(options.workspaceManagedGrantVerifier),
+		WithWorkspaceGrantRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1000, AuthBurst: 1000}),
 		WithPasskeySessionStore(passkeySessionStore),
 		WithHealthCheck(workspace.Ping),
 		WithPrimitiveStore(primitiveStore),
@@ -1656,6 +1659,195 @@ func TestWorkspaceHumanGrantReplayBlockedAfterPostConsumptionFailure(t *testing.
 	assertErrorCode(t, second, "invalid_token")
 }
 
+func TestWorkspaceManagedAgentGrantTokenExchangeAndValidation(t *testing.T) {
+	t.Parallel()
+
+	const workspaceID = "ws_managed_grant"
+	fixture := newWorkspaceHumanGrantTestFixture(t, workspaceID, "anx-core")
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{
+		workspaceID:                   workspaceID,
+		workspaceManagedGrantVerifier: fixture.managedVerifier,
+	})
+	serverURL := env.server.URL
+
+	exchangeGrant := func(assertion string, expectedStatus int) *http.Response {
+		return postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+			"grant_type": auth.TokenGrantTypeWorkspaceManagedAgent,
+			"assertion":  assertion,
+		}, "", expectedStatus)
+	}
+
+	t.Run("valid grant issues managed agent principal and human-only routes reject it", func(t *testing.T) {
+		assertion := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			Subject:              "grant-subject-valid",
+			JTI:                  "jti-managed-valid-1",
+			OrganizationID:       "org_1",
+			SlotID:               "slot_researcher",
+			SlotName:             "Researcher",
+			Provider:             "provider-alpha",
+			ProviderConnectionID: "conn_1",
+			OwnerAccountID:       "acct_owner",
+			ExternalSubject:      "provider-user-1",
+		})
+
+		resp := exchangeGrant(assertion, http.StatusOK)
+		defer resp.Body.Close()
+		var payload struct {
+			Agent struct {
+				AgentID       string  `json:"agent_id"`
+				ActorID       string  `json:"actor_id"`
+				PrincipalKind *string `json:"principal_kind"`
+				AuthMethod    *string `json:"auth_method"`
+			} `json:"agent"`
+			Tokens auth.TokenBundle `json:"tokens"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode workspace managed grant response: %v", err)
+		}
+		if payload.Agent.AgentID == "" || payload.Agent.ActorID == "" {
+			t.Fatalf("expected managed grant principal identifiers, got %#v", payload.Agent)
+		}
+		if payload.Agent.PrincipalKind == nil || *payload.Agent.PrincipalKind != string(auth.PrincipalKindAgent) {
+			t.Fatalf("expected principal_kind=agent, got %#v", payload.Agent)
+		}
+		if payload.Agent.AuthMethod == nil || *payload.Agent.AuthMethod != auth.AuthMethodManagedGrant {
+			t.Fatalf("expected auth_method=managed_grant, got %#v", payload.Agent)
+		}
+		if payload.Tokens.AccessToken == "" || payload.Tokens.RefreshToken == "" {
+			t.Fatalf("expected access+refresh tokens, got %#v", payload.Tokens)
+		}
+
+		secretResp := postJSONExpectStatusWithAuth(t, serverURL+"/secrets", map[string]any{
+			"name":  "managed-agent-secret",
+			"value": "must-not-write",
+		}, payload.Tokens.AccessToken, http.StatusForbidden)
+		defer secretResp.Body.Close()
+		assertErrorCode(t, secretResp, "human_only")
+	})
+
+	t.Run("slot rename reuses stable principal keyed by slot id", func(t *testing.T) {
+		firstAssertion := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			Subject:              "grant-subject-rename-a",
+			JTI:                  "jti-managed-rename-a",
+			OrganizationID:       "org_1",
+			SlotID:               "slot_stable",
+			SlotName:             "Old Name",
+			DisplayName:          "Old Display",
+			Provider:             "provider-alpha",
+			ProviderConnectionID: "conn_2",
+			OwnerAccountID:       "acct_owner",
+		})
+		firstResp := exchangeGrant(firstAssertion, http.StatusOK)
+		var firstPayload struct {
+			Agent struct {
+				AgentID string `json:"agent_id"`
+				ActorID string `json:"actor_id"`
+			} `json:"agent"`
+		}
+		if err := json.NewDecoder(firstResp.Body).Decode(&firstPayload); err != nil {
+			firstResp.Body.Close()
+			t.Fatalf("decode first managed grant response: %v", err)
+		}
+		firstResp.Body.Close()
+
+		secondAssertion := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			Subject:              "grant-subject-rename-b",
+			JTI:                  "jti-managed-rename-b",
+			OrganizationID:       "org_1",
+			SlotID:               "slot_stable",
+			SlotName:             "New Name",
+			DisplayName:          "New Display",
+			Provider:             "provider-alpha",
+			ProviderConnectionID: "conn_2",
+			OwnerAccountID:       "acct_owner",
+		})
+		secondResp := exchangeGrant(secondAssertion, http.StatusOK)
+		var secondPayload struct {
+			Agent struct {
+				AgentID string `json:"agent_id"`
+				ActorID string `json:"actor_id"`
+			} `json:"agent"`
+		}
+		if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+			secondResp.Body.Close()
+			t.Fatalf("decode second managed grant response: %v", err)
+		}
+		secondResp.Body.Close()
+		if firstPayload.Agent.AgentID != secondPayload.Agent.AgentID || firstPayload.Agent.ActorID != secondPayload.Agent.ActorID {
+			t.Fatalf("expected stable slot principal reuse, first=%#v second=%#v", firstPayload.Agent, secondPayload.Agent)
+		}
+	})
+
+	t.Run("validation failures return unauthorized", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			options workspaceManagedGrantTokenOptions
+		}{
+			{name: "wrong audience", options: workspaceManagedGrantTokenOptions{JTI: "jti-managed-wrong-aud", Audience: "wrong"}},
+			{name: "wrong workspace", options: workspaceManagedGrantTokenOptions{JTI: "jti-managed-wrong-ws", WorkspaceID: "ws_other", Scope: "workspace:ws_other"}},
+			{name: "wrong grant type", options: workspaceManagedGrantTokenOptions{JTI: "jti-managed-wrong-type", GrantType: auth.GrantTypeWorkspaceHuman}},
+			{name: "wrong scope", options: workspaceManagedGrantTokenOptions{JTI: "jti-managed-wrong-scope", Scope: "workspace:other"}},
+			{name: "expired", options: workspaceManagedGrantTokenOptions{JTI: "jti-managed-expired", Now: time.Now().UTC().Add(-10 * time.Minute), TTL: time.Minute}},
+			{name: "missing jti", options: workspaceManagedGrantTokenOptions{OmitJTI: true}},
+		}
+		for _, tt := range cases {
+			t.Run(tt.name, func(t *testing.T) {
+				resp := exchangeGrant(fixture.signManagedAgentGrantAssertion(t, tt.options), http.StatusUnauthorized)
+				defer resp.Body.Close()
+				assertErrorCode(t, resp, "invalid_token")
+			})
+		}
+	})
+
+	t.Run("replay jti returns unauthorized on second use", func(t *testing.T) {
+		assertion := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			JTI: "jti-managed-replay",
+		})
+
+		first := exchangeGrant(assertion, http.StatusOK)
+		first.Body.Close()
+
+		second := exchangeGrant(assertion, http.StatusUnauthorized)
+		defer second.Body.Close()
+		assertErrorCode(t, second, "invalid_token")
+	})
+
+	t.Run("revoked managed principal cannot receive tokens", func(t *testing.T) {
+		seed := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			JTI:    "jti-managed-revoked-seed",
+			SlotID: "slot_revoked",
+		})
+		seedResp := exchangeGrant(seed, http.StatusOK)
+		var seedPayload struct {
+			Agent struct {
+				AgentID string `json:"agent_id"`
+			} `json:"agent"`
+		}
+		if err := json.NewDecoder(seedResp.Body).Decode(&seedPayload); err != nil {
+			seedResp.Body.Close()
+			t.Fatalf("decode seed managed grant response: %v", err)
+		}
+		seedResp.Body.Close()
+		nowText := time.Now().UTC().Format(time.RFC3339Nano)
+		if _, err := env.workspace.DB().Exec(
+			`UPDATE agents SET revoked_at = ?, updated_at = ? WHERE id = ?`,
+			nowText,
+			nowText,
+			seedPayload.Agent.AgentID,
+		); err != nil {
+			t.Fatalf("revoke managed grant principal: %v", err)
+		}
+
+		assertion := fixture.signManagedAgentGrantAssertion(t, workspaceManagedGrantTokenOptions{
+			JTI:    "jti-managed-revoked-new",
+			SlotID: "slot_revoked",
+		})
+		resp := exchangeGrant(assertion, http.StatusForbidden)
+		defer resp.Body.Close()
+		assertErrorCode(t, resp, "agent_revoked")
+	})
+}
+
 func TestExplicitDevModeKeepsLegacyActorFlowAndAnonymousWorkspaceAccess(t *testing.T) {
 	t.Parallel()
 
@@ -2068,6 +2260,7 @@ type workspaceHumanGrantTestFixture struct {
 	primaryPrivateKey   ed25519.PrivateKey
 	secondaryPrivateKey ed25519.PrivateKey
 	verifier            auth.WorkspaceHumanGrantIdentityVerifier
+	managedVerifier     auth.WorkspaceManagedAgentGrantIdentityVerifier
 	jwksHits            atomic.Int64
 	jwksServer          *httptest.Server
 	jwksStateMu         sync.Mutex
@@ -2088,6 +2281,29 @@ type workspaceHumanGrantTokenOptions struct {
 	Email       string
 	DisplayName string
 	OmitExp     bool
+}
+
+type workspaceManagedGrantTokenOptions struct {
+	Subject              string
+	JTI                  string
+	Audience             string
+	WorkspaceID          string
+	OrganizationID       string
+	SlotID               string
+	SlotName             string
+	DisplayName          string
+	Provider             string
+	ProviderConnectionID string
+	OwnerAccountID       string
+	ExternalSubject      string
+	Scope                string
+	GrantType            string
+	KID                  string
+	SigningKey           ed25519.PrivateKey
+	Now                  time.Time
+	TTL                  time.Duration
+	OmitExp              bool
+	OmitJTI              bool
 }
 
 func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audience string) *workspaceHumanGrantTestFixture {
@@ -2159,6 +2375,16 @@ func newWorkspaceHumanGrantTestFixture(t *testing.T, workspaceID string, audienc
 		t.Fatalf("new workspace grant verifier: %v", err)
 	}
 	fixture.verifier = verifier
+	managedVerifier, err := auth.NewWorkspaceManagedAgentGrantVerifier(auth.WorkspaceManagedAgentGrantVerifierConfig{
+		Issuer:      fixture.issuer,
+		Audience:    fixture.audience,
+		WorkspaceID: fixture.workspaceID,
+		Resolver:    resolver,
+	})
+	if err != nil {
+		t.Fatalf("new workspace managed grant verifier: %v", err)
+	}
+	fixture.managedVerifier = managedVerifier
 	return fixture
 }
 
@@ -2229,6 +2455,107 @@ func (f *workspaceHumanGrantTestFixture) signGrantAssertion(t *testing.T, option
 	signed, err := token.SignedString(signingKey)
 	if err != nil {
 		t.Fatalf("sign workspace human grant token: %v", err)
+	}
+	return signed
+}
+
+func (f *workspaceHumanGrantTestFixture) signManagedAgentGrantAssertion(t *testing.T, options workspaceManagedGrantTokenOptions) string {
+	t.Helper()
+
+	now := options.Now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	ttl := options.TTL
+	if ttl <= 0 {
+		ttl = auth.DefaultWorkspaceHumanGrantTTL
+	}
+	subject := strings.TrimSpace(options.Subject)
+	if subject == "" {
+		subject = "managed-grant-subject"
+	}
+	jti := strings.TrimSpace(options.JTI)
+	if jti == "" && !options.OmitJTI {
+		jti = fmt.Sprintf("jti-managed-%d", now.UnixNano())
+	}
+	audience := strings.TrimSpace(options.Audience)
+	if audience == "" {
+		audience = f.audience
+	}
+	workspaceID := strings.TrimSpace(options.WorkspaceID)
+	if workspaceID == "" {
+		workspaceID = f.workspaceID
+	}
+	organizationID := strings.TrimSpace(options.OrganizationID)
+	if organizationID == "" {
+		organizationID = "org_default"
+	}
+	slotID := strings.TrimSpace(options.SlotID)
+	if slotID == "" {
+		slotID = "slot_default"
+	}
+	slotName := strings.TrimSpace(options.SlotName)
+	if slotName == "" {
+		slotName = "Managed Agent"
+	}
+	provider := strings.TrimSpace(options.Provider)
+	if provider == "" {
+		provider = "provider-alpha"
+	}
+	providerConnectionID := strings.TrimSpace(options.ProviderConnectionID)
+	if providerConnectionID == "" {
+		providerConnectionID = "conn_default"
+	}
+	ownerAccountID := strings.TrimSpace(options.OwnerAccountID)
+	if ownerAccountID == "" {
+		ownerAccountID = "acct_default"
+	}
+	scope := strings.TrimSpace(options.Scope)
+	if scope == "" {
+		scope = "workspace:" + workspaceID
+	}
+	grantType := strings.TrimSpace(options.GrantType)
+	if grantType == "" {
+		grantType = auth.GrantTypeWorkspaceManagedAgent
+	}
+	kid := strings.TrimSpace(options.KID)
+	if kid == "" {
+		kid = f.primaryKID
+	}
+	signingKey := options.SigningKey
+	if len(signingKey) == 0 {
+		signingKey = f.primaryPrivateKey
+	}
+
+	claims := auth.WorkspaceManagedAgentGrantClaims{
+		WorkspaceID:          workspaceID,
+		OrganizationID:       organizationID,
+		SlotID:               slotID,
+		SlotName:             slotName,
+		DisplayName:          strings.TrimSpace(options.DisplayName),
+		Provider:             provider,
+		ProviderConnectionID: providerConnectionID,
+		OwnerAccountID:       ownerAccountID,
+		ExternalSubject:      strings.TrimSpace(options.ExternalSubject),
+		Scope:                scope,
+		GrantType:            grantType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    f.issuer,
+			Subject:   subject,
+			Audience:  jwt.ClaimStrings{audience},
+			ID:        jti,
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now.Add(-time.Minute)),
+		},
+	}
+	if !options.OmitExp {
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(ttl))
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	token.Header["kid"] = kid
+	signed, err := token.SignedString(signingKey)
+	if err != nil {
+		t.Fatalf("sign workspace managed agent grant token: %v", err)
 	}
 	return signed
 }

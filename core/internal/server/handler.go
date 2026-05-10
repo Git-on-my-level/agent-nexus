@@ -163,6 +163,7 @@ type handlerOptions struct {
 	actorRegistry                  ActorRegistry
 	authStore                      *auth.Store
 	workspaceHumanGrantVerifier    auth.WorkspaceHumanGrantIdentityVerifier
+	workspaceManagedGrantVerifier  auth.WorkspaceManagedAgentGrantIdentityVerifier
 	passkeySessionStore            *auth.PasskeySessionStore
 	primitiveStore                 PrimitiveStore
 	contract                       *schema.Contract
@@ -238,6 +239,12 @@ func WithAuthStore(authStore *auth.Store) HandlerOption {
 func WithWorkspaceHumanGrantVerifier(verifier auth.WorkspaceHumanGrantIdentityVerifier) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.workspaceHumanGrantVerifier = verifier
+	}
+}
+
+func WithWorkspaceManagedAgentGrantVerifier(verifier auth.WorkspaceManagedAgentGrantIdentityVerifier) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceManagedGrantVerifier = verifier
 	}
 }
 
@@ -393,6 +400,12 @@ func WithRequestBodyLimits(limits RequestBodyLimits) HandlerOption {
 func WithRouteRateLimits(limits RouteRateLimits) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.routeRateLimits = limits
+	}
+}
+
+func WithWorkspaceGrantRateLimits(limits RouteRateLimits) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(limits.normalize())
 	}
 }
 
@@ -585,7 +598,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
 	opts.routeRateLimits = opts.routeRateLimits.normalize()
 	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
-	if opts.workspaceHumanGrantVerifier != nil && opts.workspaceHumanGrantRateLimiter == nil {
+	if (opts.workspaceHumanGrantVerifier != nil || opts.workspaceManagedGrantVerifier != nil) && opts.workspaceHumanGrantRateLimiter == nil {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
 			AuthRequestsPerMinute:  10,
 			AuthBurst:              10,

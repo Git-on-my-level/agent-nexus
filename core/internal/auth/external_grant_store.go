@@ -56,9 +56,9 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 		`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET
-		 	display_name = excluded.display_name,
-		 	tags_json = excluded.tags_json,
-		 	metadata_json = excluded.metadata_json`,
+			display_name = excluded.display_name,
+			tags_json = excluded.tags_json,
+			metadata_json = excluded.metadata_json`,
 		actorID,
 		actorDisplayName,
 		`["agent","human","external_grant"]`,
@@ -88,8 +88,8 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
 		 VALUES (?, ?, ?, ?, ?, NULL, ?)
 		 ON CONFLICT(id) DO UPDATE SET
-		 	updated_at = excluded.updated_at,
-		 	metadata_json = excluded.metadata_json`,
+			updated_at = excluded.updated_at,
+			metadata_json = excluded.metadata_json`,
 		agentID,
 		username,
 		actorID,
@@ -136,6 +136,137 @@ func (s *Store) IssueTokenFromWorkspaceHumanGrant(ctx context.Context, identity 
 	return agent, tokens, nil
 }
 
+func (s *Store) IssueTokenFromWorkspaceManagedAgentGrant(ctx context.Context, identity WorkspaceManagedAgentGrantIdentity) (Agent, TokenBundle, error) {
+	if s == nil || s.db == nil {
+		return Agent{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
+	}
+
+	issuer := strings.TrimSpace(identity.Issuer)
+	workspaceID := strings.TrimSpace(identity.WorkspaceID)
+	organizationID := strings.TrimSpace(identity.OrganizationID)
+	slotID := strings.TrimSpace(identity.SlotID)
+	jti := strings.TrimSpace(identity.JTI)
+	if issuer == "" || workspaceID == "" || organizationID == "" || slotID == "" || jti == "" {
+		return Agent{}, TokenBundle{}, fmt.Errorf("%w: workspace managed agent grant issuer, workspace_id, organization_id, slot_id, and jti are required", ErrInvalidRequest)
+	}
+
+	agentID, actorID, username := stableManagedGrantPrincipalIDs(issuer, workspaceID, organizationID, slotID)
+	now := time.Now().UTC()
+	nowText := now.Format(time.RFC3339Nano)
+
+	if err := consumeWorkspaceGrantJTI(ctx, s.db, jti, nowText); err != nil {
+		if err == ErrExternalGrantReplay {
+			return Agent{}, TokenBundle{}, ErrExternalGrantReplay
+		}
+		return Agent{}, TokenBundle{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Agent{}, TokenBundle{}, fmt.Errorf("begin workspace managed agent grant transaction: %w", err)
+	}
+
+	displayName := pickExternalGrantDisplayName(identity.DisplayName, identity.SlotName, username)
+	metadata := map[string]any{
+		"external_issuer":        issuer,
+		"external_subject":       strings.TrimSpace(identity.Subject),
+		"workspace_id":           workspaceID,
+		"organization_id":        organizationID,
+		"slot_id":                slotID,
+		"slot_name":              strings.TrimSpace(identity.SlotName),
+		"display_name":           strings.TrimSpace(identity.DisplayName),
+		"provider":               strings.TrimSpace(identity.Provider),
+		"provider_connection_id": strings.TrimSpace(identity.ProviderConnectionID),
+		"owner_account_id":       strings.TrimSpace(identity.OwnerAccountID),
+		"provider_subject":       strings.TrimSpace(identity.ExternalSubject),
+	}
+	actorMetadataJSON, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodManagedGrant, metadata)
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, fmt.Errorf("encode managed grant actor metadata: %w", err)
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		"INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json) "+
+			"VALUES (?, ?, ?, ?, ?) "+
+			"ON CONFLICT(id) DO UPDATE SET "+
+			"display_name = excluded.display_name, "+
+			"tags_json = excluded.tags_json, "+
+			"metadata_json = excluded.metadata_json",
+		actorID,
+		displayName,
+		`["agent","managed_grant"]`,
+		nowText,
+		actorMetadataJSON,
+	); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, fmt.Errorf("upsert managed grant actor: %w", err)
+	}
+
+	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodManagedGrant, metadata)
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, fmt.Errorf("encode managed grant agent metadata: %w", err)
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		"INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json) "+
+			"VALUES (?, ?, ?, ?, ?, NULL, ?) "+
+			"ON CONFLICT(id) DO UPDATE SET "+
+			"updated_at = excluded.updated_at, "+
+			"metadata_json = excluded.metadata_json",
+		agentID,
+		username,
+		actorID,
+		nowText,
+		nowText,
+		agentMetadataJSON,
+	); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, fmt.Errorf("upsert managed grant agent: %w", err)
+	}
+
+	var revokedAt sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT revoked_at FROM agents WHERE id = ?`, agentID).Scan(&revokedAt); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, fmt.Errorf("load managed grant principal: %w", err)
+	}
+	if revokedAt.Valid {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, ErrAgentRevoked
+	}
+
+	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return Agent{}, TokenBundle{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Agent{}, TokenBundle{}, fmt.Errorf("commit workspace managed agent grant transaction: %w", err)
+	}
+
+	agent, err := s.GetAgent(ctx, agentID)
+	if err != nil {
+		return Agent{}, TokenBundle{}, err
+	}
+	return agent, tokens, nil
+}
+
 func (s *Store) PurgeConsumedGrantJTIs(ctx context.Context, retention time.Duration) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, fmt.Errorf("auth store database is not initialized")
@@ -160,6 +291,10 @@ func (s *Store) PurgeConsumedGrantJTIs(ctx context.Context, retention time.Durat
 }
 
 func consumeWorkspaceHumanGrantJTI(ctx context.Context, db *sql.DB, jti string, consumedAt string) error {
+	return consumeWorkspaceGrantJTI(ctx, db, jti, consumedAt)
+}
+
+func consumeWorkspaceGrantJTI(ctx context.Context, db *sql.DB, jti string, consumedAt string) error {
 	result, err := db.ExecContext(
 		ctx,
 		`INSERT INTO consumed_grant_jtis(jti, consumed_at)
@@ -189,6 +324,16 @@ func stableExternalGrantPrincipalIDs(issuer string, subject string) (string, str
 		usernameSuffix = usernameSuffix[:54]
 	}
 	return "agent_ext_" + hexDigest, "actor_ext_" + hexDigest, "external." + usernameSuffix
+}
+
+func stableManagedGrantPrincipalIDs(issuer string, workspaceID string, organizationID string, slotID string) (string, string, string) {
+	digest := sha256.Sum256([]byte(strings.TrimSpace(issuer) + "\n" + strings.TrimSpace(workspaceID) + "\n" + strings.TrimSpace(organizationID) + "\n" + strings.TrimSpace(slotID)))
+	hexDigest := hex.EncodeToString(digest[:])
+	usernameSuffix := hexDigest
+	if len(usernameSuffix) > 54 {
+		usernameSuffix = usernameSuffix[:54]
+	}
+	return "agent_managed_" + hexDigest, "actor_managed_" + hexDigest, "managed." + usernameSuffix
 }
 
 func pickExternalGrantDisplayName(displayName string, email string, fallback string) string {

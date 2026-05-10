@@ -10,6 +10,7 @@ const (
 	AuthMethodPublicKey     = "public_key"
 	AuthMethodPasskey       = "passkey"
 	AuthMethodExternalGrant = "external_grant"
+	AuthMethodManagedGrant  = "managed_grant"
 )
 
 func principalKindExpr(agentAlias string) string {

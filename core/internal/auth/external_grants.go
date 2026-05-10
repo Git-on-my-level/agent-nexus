@@ -24,8 +24,10 @@ const (
 	HumanAuthModeWorkspaceLocal = "workspace_local"
 	HumanAuthModeExternalGrant  = "external_grant"
 
-	GrantTypeWorkspaceHuman      = "workspace_human"
-	TokenGrantTypeWorkspaceHuman = "workspace_human_grant"
+	GrantTypeWorkspaceHuman             = "workspace_human"
+	TokenGrantTypeWorkspaceHuman        = "workspace_human_grant"
+	GrantTypeWorkspaceManagedAgent      = "workspace_managed_agent"
+	TokenGrantTypeWorkspaceManagedAgent = "workspace_managed_agent_grant"
 
 	DefaultWorkspaceHumanGrantTTL                = 5 * time.Minute
 	DefaultWorkspaceHumanGrantLeeway             = 2 * time.Minute
@@ -40,12 +42,31 @@ type WorkspaceHumanGrantIdentityVerifier interface {
 	Verify(ctx context.Context, assertion string) (WorkspaceHumanGrantIdentity, error)
 }
 
+type WorkspaceManagedAgentGrantIdentityVerifier interface {
+	Verify(ctx context.Context, assertion string) (WorkspaceManagedAgentGrantIdentity, error)
+}
+
 type WorkspaceHumanGrantClaims struct {
 	WorkspaceID string `json:"workspace_id"`
 	Email       string `json:"email,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
 	Scope       string `json:"scope,omitempty"`
 	GrantType   string `json:"grant_type,omitempty"`
+	jwt.RegisteredClaims
+}
+
+type WorkspaceManagedAgentGrantClaims struct {
+	WorkspaceID          string `json:"workspace_id"`
+	OrganizationID       string `json:"organization_id"`
+	SlotID               string `json:"slot_id"`
+	SlotName             string `json:"slot_name,omitempty"`
+	DisplayName          string `json:"display_name,omitempty"`
+	Provider             string `json:"provider"`
+	ProviderConnectionID string `json:"provider_connection_id"`
+	OwnerAccountID       string `json:"owner_account_id"`
+	ExternalSubject      string `json:"external_subject,omitempty"`
+	Scope                string `json:"scope,omitempty"`
+	GrantType            string `json:"grant_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -62,6 +83,25 @@ type WorkspaceHumanGrantIdentity struct {
 	ExpiresAt   string
 }
 
+type WorkspaceManagedAgentGrantIdentity struct {
+	Issuer               string
+	Subject              string
+	Audience             string
+	WorkspaceID          string
+	OrganizationID       string
+	SlotID               string
+	SlotName             string
+	DisplayName          string
+	Provider             string
+	ProviderConnectionID string
+	OwnerAccountID       string
+	ExternalSubject      string
+	Scope                string
+	GrantType            string
+	JTI                  string
+	ExpiresAt            string
+}
+
 type WorkspaceHumanGrantVerifierConfig struct {
 	Issuer      string
 	Audience    string
@@ -71,7 +111,25 @@ type WorkspaceHumanGrantVerifierConfig struct {
 	Resolver    *WorkspaceHumanGrantJWKResolver
 }
 
+type WorkspaceManagedAgentGrantVerifierConfig struct {
+	Issuer      string
+	Audience    string
+	WorkspaceID string
+	Leeway      time.Duration
+	Now         func() time.Time
+	Resolver    *WorkspaceHumanGrantJWKResolver
+}
+
 type WorkspaceHumanGrantVerifier struct {
+	issuer      string
+	audience    string
+	workspaceID string
+	leeway      time.Duration
+	now         func() time.Time
+	resolver    *WorkspaceHumanGrantJWKResolver
+}
+
+type WorkspaceManagedAgentGrantVerifier struct {
 	issuer      string
 	audience    string
 	workspaceID string
@@ -217,6 +275,37 @@ func NewWorkspaceHumanGrantVerifier(config WorkspaceHumanGrantVerifierConfig) (*
 	}, nil
 }
 
+func NewWorkspaceManagedAgentGrantVerifier(config WorkspaceManagedAgentGrantVerifierConfig) (*WorkspaceManagedAgentGrantVerifier, error) {
+	if strings.TrimSpace(config.Issuer) == "" {
+		return nil, fmt.Errorf("issuer is required")
+	}
+	if strings.TrimSpace(config.Audience) == "" {
+		return nil, fmt.Errorf("audience is required")
+	}
+	if strings.TrimSpace(config.WorkspaceID) == "" {
+		return nil, fmt.Errorf("workspace_id is required")
+	}
+	if config.Resolver == nil {
+		return nil, fmt.Errorf("resolver is required")
+	}
+	leeway := config.Leeway
+	if leeway <= 0 {
+		leeway = DefaultWorkspaceHumanGrantLeeway
+	}
+	nowFn := config.Now
+	if nowFn == nil {
+		nowFn = func() time.Time { return time.Now().UTC() }
+	}
+	return &WorkspaceManagedAgentGrantVerifier{
+		issuer:      strings.TrimSpace(config.Issuer),
+		audience:    strings.TrimSpace(config.Audience),
+		workspaceID: strings.TrimSpace(config.WorkspaceID),
+		leeway:      leeway,
+		now:         nowFn,
+		resolver:    config.Resolver,
+	}, nil
+}
+
 func (v *WorkspaceHumanGrantVerifier) Verify(ctx context.Context, assertion string) (WorkspaceHumanGrantIdentity, error) {
 	if v == nil {
 		return WorkspaceHumanGrantIdentity{}, fmt.Errorf("%w: verifier is not configured", ErrExternalGrantUnavailable)
@@ -289,6 +378,102 @@ func (v *WorkspaceHumanGrantVerifier) Verify(ctx context.Context, assertion stri
 		GrantType:   strings.TrimSpace(claims.GrantType),
 		JTI:         strings.TrimSpace(claims.ID),
 		ExpiresAt:   expiresAt,
+	}, nil
+}
+
+func (v *WorkspaceManagedAgentGrantVerifier) Verify(ctx context.Context, assertion string) (WorkspaceManagedAgentGrantIdentity, error) {
+	if v == nil {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: verifier is not configured", ErrExternalGrantUnavailable)
+	}
+	assertion = strings.TrimSpace(assertion)
+	if assertion == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: assertion is required", ErrExternalGrantInvalid)
+	}
+
+	claims := WorkspaceManagedAgentGrantClaims{}
+	token, err := jwt.ParseWithClaims(
+		assertion,
+		&claims,
+		func(token *jwt.Token) (any, error) {
+			if token == nil || token.Method == nil || token.Method.Alg() != jwt.SigningMethodEdDSA.Alg() {
+				return nil, fmt.Errorf("%w: unexpected signing method", ErrExternalGrantInvalid)
+			}
+			kid, _ := token.Header["kid"].(string)
+			key, resolveErr := v.resolver.Resolve(ctx, strings.TrimSpace(kid))
+			if resolveErr != nil {
+				return nil, resolveErr
+			}
+			return key, nil
+		},
+		jwt.WithAudience(v.audience),
+		jwt.WithIssuer(v.issuer),
+		jwt.WithLeeway(v.leeway),
+		jwt.WithTimeFunc(v.now),
+	)
+	if err != nil {
+		if errors.Is(err, ErrExternalGrantUnavailable) {
+			return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: verify workspace managed agent grant: %v", ErrExternalGrantUnavailable, err)
+		}
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: verify workspace managed agent grant: %v", ErrExternalGrantInvalid, err)
+	}
+	if token == nil || !token.Valid {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: workspace managed agent grant is invalid", ErrExternalGrantInvalid)
+	}
+	if claims.ExpiresAt == nil {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: exp is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.Subject) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: subject is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.ID) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: jti is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.WorkspaceID) != v.workspaceID {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: workspace_id is invalid", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.OrganizationID) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: organization_id is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.SlotID) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: slot_id is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.Provider) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: provider is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.ProviderConnectionID) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: provider_connection_id is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.OwnerAccountID) == "" {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: owner_account_id is required", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.Scope) != "workspace:"+v.workspaceID {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: scope is invalid", ErrExternalGrantInvalid)
+	}
+	if strings.TrimSpace(claims.GrantType) != GrantTypeWorkspaceManagedAgent {
+		return WorkspaceManagedAgentGrantIdentity{}, fmt.Errorf("%w: grant_type is invalid", ErrExternalGrantInvalid)
+	}
+
+	expiresAt := ""
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.Time.UTC().Format(time.RFC3339Nano)
+	}
+	return WorkspaceManagedAgentGrantIdentity{
+		Issuer:               strings.TrimSpace(claims.Issuer),
+		Subject:              strings.TrimSpace(claims.Subject),
+		Audience:             v.audience,
+		WorkspaceID:          strings.TrimSpace(claims.WorkspaceID),
+		OrganizationID:       strings.TrimSpace(claims.OrganizationID),
+		SlotID:               strings.TrimSpace(claims.SlotID),
+		SlotName:             strings.TrimSpace(claims.SlotName),
+		DisplayName:          strings.TrimSpace(claims.DisplayName),
+		Provider:             strings.TrimSpace(claims.Provider),
+		ProviderConnectionID: strings.TrimSpace(claims.ProviderConnectionID),
+		OwnerAccountID:       strings.TrimSpace(claims.OwnerAccountID),
+		ExternalSubject:      strings.TrimSpace(claims.ExternalSubject),
+		Scope:                strings.TrimSpace(claims.Scope),
+		GrantType:            strings.TrimSpace(claims.GrantType),
+		JTI:                  strings.TrimSpace(claims.ID),
+		ExpiresAt:            expiresAt,
 	}, nil
 }
 

@@ -161,8 +161,52 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			"tokens": issuedTokens,
 		})
 		return
+	case auth.TokenGrantTypeWorkspaceManagedAgent:
+		if opts.workspaceManagedGrantVerifier == nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "grant_type workspace_managed_agent_grant is not enabled")
+			return
+		}
+		if opts.workspaceHumanGrantRateLimiter != nil {
+			scope := "anonymous"
+			if host := requestClientHost(r); host != "" {
+				scope = "addr:" + host
+			}
+			if allowed, retryAfter := opts.workspaceHumanGrantRateLimiter.allow("auth", scope, time.Now().UTC()); !allowed {
+				writeRateLimitedError(w, auth.TokenGrantTypeWorkspaceManagedAgent, retryAfter)
+				return
+			}
+		}
+		identity, verifyErr := opts.workspaceManagedGrantVerifier.Verify(r.Context(), req.Assertion)
+		if verifyErr != nil {
+			switch {
+			case errors.Is(verifyErr, auth.ErrExternalGrantUnavailable):
+				writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "workspace managed-agent grant verification is temporarily unavailable")
+			default:
+				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace managed-agent grant assertion could not be validated")
+			}
+			return
+		}
+		agent, issuedTokens, exchangeErr := opts.authStore.IssueTokenFromWorkspaceManagedAgentGrant(r.Context(), identity)
+		if exchangeErr != nil {
+			switch {
+			case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
+				writeError(w, http.StatusUnauthorized, "invalid_token", "workspace managed-agent grant assertion has already been consumed")
+			case errors.Is(exchangeErr, auth.ErrAgentRevoked):
+				writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
+			case errors.Is(exchangeErr, auth.ErrInvalidRequest):
+				writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(exchangeErr))
+			default:
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to issue token")
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"agent":  agent,
+			"tokens": issuedTokens,
+		})
+		return
 	default:
-		writeError(w, http.StatusBadRequest, "invalid_request", "grant_type must be refresh_token, assertion, or workspace_human_grant")
+		writeError(w, http.StatusBadRequest, "invalid_request", "grant_type must be refresh_token, assertion, workspace_human_grant, or workspace_managed_agent_grant")
 		return
 	}
 
