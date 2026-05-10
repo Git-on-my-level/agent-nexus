@@ -11,6 +11,9 @@ cd mcp
 go build -o anx-mcp ./cmd/anx-mcp
 ```
 
+Full standalone setup, local-client smoke, and unsupported/gated tool notes live
+in [`docs/standalone.md`](docs/standalone.md).
+
 ## Configuration
 
 `anx-mcp` intentionally uses only workspace-local configuration. It contains no
@@ -58,3 +61,9 @@ ANX_ACCESS_TOKEN="$TOKEN" \
 
 The stdio transport is newline-delimited JSON-RPC. stdout is reserved for MCP
 messages; logs and startup diagnostics are written to stderr.
+
+Run the automated local smoke against an active workspace profile:
+
+```bash
+ANX_MCP_SMOKE_PROFILE=leo ./scripts/standalone-smoke.mjs
+```
