@@ -84,3 +84,45 @@ func TestWorkspaceReadOnlyGateBlocksBusinessMutation(t *testing.T) {
 		t.Fatalf("expected access_mode detail at payload root, payload=%#v", payload)
 	}
 }
+
+func TestWorkspaceReadOnlyGateBlocksPrincipalGrowthButAllowsAuthAccess(t *testing.T) {
+	t.Parallel()
+	opts := handlerOptions{
+		workspaceAccessMode: WorkspaceAccessModeReadOnly,
+	}
+
+	for _, tc := range []struct {
+		name     string
+		mutation routeMutationPolicy
+		wantOK   bool
+	}{
+		{name: "principal growth", mutation: routeMutationPrincipalGrowth, wantOK: false},
+		{name: "auth access", mutation: routeMutationAuthAccessCeremony, wantOK: true},
+		{name: "auth admin", mutation: routeMutationAuthCeremony, wantOK: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			ok := enforceWorkspaceWriteAccess(rr, opts, routeAccessRequirement{
+				bucket:    routeAccessPublicAuthCeremony,
+				mutation:  tc.mutation,
+				supported: true,
+			})
+			if ok != tc.wantOK {
+				t.Fatalf("expected ok=%v, got %v", tc.wantOK, ok)
+			}
+			if !tc.wantOK {
+				if rr.Code != http.StatusLocked {
+					t.Fatalf("expected 423 Locked, got %d", rr.Code)
+				}
+				var payload map[string]any
+				if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+					t.Fatalf("decode body: %v", err)
+				}
+				errObj, _ := payload["error"].(map[string]any)
+				if errObj == nil || errObj["code"] != "workspace_read_only" {
+					t.Fatalf("expected workspace_read_only error, payload=%#v", payload)
+				}
+			}
+		})
+	}
+}

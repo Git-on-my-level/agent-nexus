@@ -426,6 +426,8 @@ const (
 	routeMutationBusiness            routeMutationPolicy = "business"
 	routeMutationRecovery            routeMutationPolicy = "recovery"
 	routeMutationAuthCeremony        routeMutationPolicy = "auth_ceremony"
+	routeMutationAuthAccessCeremony  routeMutationPolicy = "auth_access_ceremony"
+	routeMutationPrincipalGrowth     routeMutationPolicy = "principal_growth"
 	routeMutationInternalMaintenance routeMutationPolicy = "internal_maintenance"
 )
 
@@ -821,7 +823,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	registerRoute("/auth/agents/register", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/agents/register", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationPrincipalGrowth, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -842,7 +844,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		case http.MethodGet:
 			return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, mutation: routeMutationNone, supported: true}
 		case http.MethodPost:
-			return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, mutation: routeMutationAuthCeremony, supported: true}
+			return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, mutation: routeMutationPrincipalGrowth, supported: true}
 		default:
 			return routeAccessRequirement{}
 		}
@@ -929,7 +931,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeInvite(w, r, opts, inviteID)
 	})
 
-	registerRoute("/auth/token", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/token", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -937,7 +939,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleIssueAuthToken(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/register/options", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/register/options", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationPrincipalGrowth, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -945,7 +947,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyRegisterOptions(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/register/verify", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/register/verify", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationPrincipalGrowth, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -953,7 +955,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyRegisterVerify(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/login/options", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/login/options", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -961,7 +963,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyLoginOptions(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/login/verify", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/login/verify", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -969,7 +971,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyLoginVerify(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/dev/register", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/dev/register", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationPrincipalGrowth, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -977,7 +979,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handlePasskeyDevRegister(w, r, opts)
 	})
 
-	registerRoute("/auth/passkey/dev/login", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/auth/passkey/dev/login", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return

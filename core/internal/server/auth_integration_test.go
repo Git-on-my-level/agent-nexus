@@ -43,6 +43,7 @@ type authIntegrationOptions struct {
 	allowUnauthenticatedWrites    bool
 	webAuthnConfig                WebAuthnConfig
 	workspaceID                   string
+	workspaceAccessMode           string
 	workspaceHumanGrantVerifier   auth.WorkspaceHumanGrantIdentityVerifier
 	workspaceManagedGrantVerifier auth.WorkspaceManagedAgentGrantIdentityVerifier
 	accountStatusChecker          auth.AccountStatusChecker
@@ -117,6 +118,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithSchemaContract(contract),
 		WithWebAuthnConfig(options.webAuthnConfig),
 		WithWorkspaceID(workspaceID),
+		WithWorkspaceAccessMode(options.workspaceAccessMode),
 		WithEnableDevActorMode(options.enableDevActorMode),
 		WithAllowPasskeyDevBypass(options.allowPasskeyDevBypass),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
@@ -137,6 +139,31 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		server:              server,
 		primitiveStore:      primitiveStore,
 	}
+}
+
+func newReadOnlyAuthIntegrationServer(t *testing.T, env authIntegrationEnv) *httptest.Server {
+	t.Helper()
+
+	contractPath := filepath.Join("..", "..", "..", "contracts", "anx-schema.yaml")
+	contract, err := schema.Load(contractPath)
+	if err != nil {
+		t.Fatalf("load schema contract: %v", err)
+	}
+
+	handler := NewHandler(
+		"0.2.2",
+		WithActorRegistry(env.registry),
+		WithAuthStore(env.authStore),
+		WithPasskeySessionStore(env.passkeySessionStore),
+		WithHealthCheck(env.workspace.Ping),
+		WithPrimitiveStore(env.primitiveStore),
+		WithSchemaContract(contract),
+		WithWorkspaceID("ws_main"),
+		WithWorkspaceAccessMode(WorkspaceAccessModeReadOnly),
+	)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server
 }
 
 func authTestMinimalTopic(title string) map[string]any {
@@ -599,6 +626,132 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 	}
 	if !matched {
 		t.Fatalf("expected invite %q in list %#v", asString(invite["id"]), invites)
+	}
+}
+
+func TestReadOnlyWorkspaceBlocksPrincipalGrowthButAllowsTokenCeremonies(t *testing.T) {
+	t.Parallel()
+
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	serverURL := env.server.URL
+
+	adminPublicKey, adminPrivateKey := generateKeyPair(t)
+	adminResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
+		"username":        "readonly.admin",
+		"public_key":      adminPublicKey,
+		"bootstrap_token": testBootstrapToken,
+	}, "", http.StatusCreated)
+	defer adminResp.Body.Close()
+
+	var adminPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
+		Key struct {
+			KeyID string `json:"key_id"`
+		} `json:"key"`
+		Tokens struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(adminResp.Body).Decode(&adminPayload); err != nil {
+		t.Fatalf("decode admin register response: %v", err)
+	}
+
+	invite, inviteToken := createInvite(t, serverURL, adminPayload.Tokens.AccessToken, map[string]any{
+		"kind": "agent",
+	})
+	readOnlyURL := newReadOnlyAuthIntegrationServer(t, env).URL
+
+	for _, tc := range []struct {
+		name    string
+		path    string
+		payload map[string]any
+		token   string
+	}{
+		{
+			name: "bootstrap agent registration",
+			path: "/auth/agents/register",
+			payload: map[string]any{
+				"username":        "readonly.bootstrap.blocked",
+				"public_key":      mustGeneratePublicKey(t),
+				"bootstrap_token": testBootstrapToken,
+			},
+		},
+		{
+			name: "invite agent registration",
+			path: "/auth/agents/register",
+			payload: map[string]any{
+				"username":     "readonly.invite.blocked",
+				"public_key":   mustGeneratePublicKey(t),
+				"invite_token": inviteToken,
+			},
+		},
+		{
+			name: "invite creation",
+			path: "/auth/invites",
+			payload: map[string]any{
+				"kind": "agent",
+			},
+			token: adminPayload.Tokens.AccessToken,
+		},
+		{
+			name: "passkey registration options",
+			path: "/auth/passkey/register/options",
+			payload: map[string]any{
+				"display_name":    "Readonly Human",
+				"bootstrap_token": testBootstrapToken,
+			},
+		},
+		{
+			name: "dev passkey registration",
+			path: "/auth/passkey/dev/register",
+			payload: map[string]any{
+				"display_name":    "Readonly Dev Human",
+				"bootstrap_token": testBootstrapToken,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := postJSONExpectStatusWithAuth(t, readOnlyURL+tc.path, tc.payload, tc.token, http.StatusLocked)
+			defer resp.Body.Close()
+			assertErrorCode(t, resp, "workspace_read_only")
+		})
+	}
+
+	refreshResp := postJSONExpectStatusWithAuth(t, readOnlyURL+"/auth/token", map[string]any{
+		"grant_type":    "refresh_token",
+		"refresh_token": adminPayload.Tokens.RefreshToken,
+	}, "", http.StatusOK)
+	defer refreshResp.Body.Close()
+	var refreshPayload struct {
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(refreshResp.Body).Decode(&refreshPayload); err != nil {
+		t.Fatalf("decode read-only refresh response: %v", err)
+	}
+	if refreshPayload.Tokens.AccessToken == "" {
+		t.Fatal("expected read-only refresh to issue an access token")
+	}
+
+	assertionSignedAt := time.Now().UTC().Format(time.RFC3339)
+	assertionResp := postJSONExpectStatusWithAuth(t, readOnlyURL+"/auth/token", map[string]any{
+		"grant_type": "assertion",
+		"agent_id":   adminPayload.Agent.AgentID,
+		"key_id":     adminPayload.Key.KeyID,
+		"signed_at":  assertionSignedAt,
+		"signature":  signAssertion(t, adminPrivateKey, adminPayload.Agent.AgentID, adminPayload.Key.KeyID, assertionSignedAt),
+	}, "", http.StatusOK)
+	defer assertionResp.Body.Close()
+
+	invites := listInvites(t, serverURL, adminPayload.Tokens.AccessToken)
+	for _, listed := range invites {
+		if asString(listed["id"]) == asString(invite["id"]) && asString(listed["consumed_at"]) != "" {
+			t.Fatalf("read-only invite registration consumed invite: %#v", listed)
+		}
 	}
 }
 

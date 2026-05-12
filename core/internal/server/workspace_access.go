@@ -78,7 +78,7 @@ func enrichRouteMutationPolicy(r *http.Request, req routeAccessRequirement) rout
 		if isReadOnlyRequest(method) {
 			req.mutation = routeMutationNone
 		} else {
-			req.mutation = routeMutationAuthCeremony
+			req.mutation = routeMutationAuthAccessCeremony
 		}
 	default:
 		req.mutation = routeMutationNone
@@ -93,7 +93,7 @@ func enforceWorkspaceWriteAccess(w http.ResponseWriter, opts handlerOptions, req
 	if !requirement.supported {
 		return true
 	}
-	if requirement.mutation != routeMutationBusiness {
+	if requirement.mutation != routeMutationBusiness && requirement.mutation != routeMutationPrincipalGrowth {
 		return true
 	}
 	writeDetailedError(w, http.StatusLocked, "workspace_read_only",
