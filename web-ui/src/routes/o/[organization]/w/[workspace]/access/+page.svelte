@@ -84,6 +84,10 @@
 
   let canManageAccess = $derived(Boolean($authenticatedAgent));
   let authenticatedAgentId = $derived($authenticatedAgent?.agent_id ?? "");
+  let hostedMode = $derived(
+    data?.outOfWorkspaceMode === "hosted" ||
+      $page.data?.shellCapabilities?.mode === "hosted",
+  );
 
   let pendingInvites = $derived(
     invites.filter((i) => !i.revoked_at && !i.consumed_at),
@@ -584,6 +588,12 @@
   }
 
   $effect(() => {
+    if (hostedMode && newInviteKind !== "agent") {
+      newInviteKind = "agent";
+    }
+  });
+
+  $effect(() => {
     if (newInviteKind !== "agent" && newInviteKind !== "any") {
       return;
     }
@@ -877,11 +887,15 @@
                 id="invite-kind"
               >
                 <option value="agent">Agent</option>
-                <option value="human">Human</option>
-                <option value="any">Any</option>
+                {#if !hostedMode}
+                  <option value="human">Human</option>
+                  <option value="any">Any</option>
+                {/if}
               </select>
               <p class="mt-1 text-micro text-fg-muted">
-                {newInviteKind === "human"
+                {hostedMode
+                  ? "Workspace invites are for CLI agents. Invite teammates from the hosted organization team page."
+                  : newInviteKind === "human"
                   ? "Invites a human to join via passkey."
                   : newInviteKind === "any"
                     ? "Recipient chooses agent or human at registration."
@@ -949,6 +963,16 @@
             </Button>
           </div>
         </form>
+        {#if hostedMode}
+          <p class="mt-3 border-t border-line pt-3 text-micro text-fg-muted">
+            To invite a person, use
+            <a
+              class="font-medium text-accent-text hover:text-accent-text"
+              href="/hosted/organizations"
+              >hosted team management</a
+            >. Human workspace invites are hidden in hosted mode.
+          </p>
+        {/if}
       </div>
     </section>
 

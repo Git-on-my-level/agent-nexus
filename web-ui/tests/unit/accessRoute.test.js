@@ -41,6 +41,7 @@ describe("access route", () => {
       coreBaseUrl: "http://127.0.0.1:8002",
       workspaceId: "ws-scalingforever",
       registrationBaseUrl: "http://127.0.0.1:8002",
+      outOfWorkspaceMode: "local",
     });
   });
 
@@ -68,6 +69,7 @@ describe("access route", () => {
       coreBaseUrl: "http://127.0.0.1:8002",
       workspaceId: "ws-scalingforever",
       registrationBaseUrl: "http://127.0.0.1:8002",
+      outOfWorkspaceMode: "local",
     });
   });
 
@@ -95,6 +97,7 @@ describe("access route", () => {
       coreBaseUrl: "http://127.0.0.1:8002",
       workspaceId: "ws-scalingforever",
       registrationBaseUrl: "http://127.0.0.1:8002",
+      outOfWorkspaceMode: "local",
     });
   });
 
@@ -123,6 +126,7 @@ describe("access route", () => {
       workspaceId: "ws-scalingforever",
       registrationBaseUrl:
         "https://m2-internal.tail7e1eb.ts.net/anx/o/local/w/scalingforever",
+      outOfWorkspaceMode: "local",
     });
   });
 });

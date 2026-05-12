@@ -117,7 +117,11 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		}
 	}
 
-	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
+	agentMetadata := map[string]any{}
+	if claim.Mode == OnboardingModeBootstrap {
+		agentMetadata["auth_admin"] = true
+	}
+	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, agentMetadata)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -142,7 +146,7 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 		return Agent{}, TokenBundle{}, fmt.Errorf("insert passkey agent: %w", err)
 	}
 
-	actorMetadataValue, err := actorMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, nil)
+	actorMetadataValue, err := actorMetadataJSON(PrincipalKindHuman, AuthMethodPasskey, agentMetadata)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -204,6 +208,7 @@ func (s *Store) RegisterPasskeyAgent(ctx context.Context, input RegisterPasskeyA
 			"principal_kind":  "human",
 			"auth_method":     AuthMethodPasskey,
 			"onboarding_mode": string(claim.Mode),
+			"auth_admin":      claim.Mode == OnboardingModeBootstrap,
 		},
 	}); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {

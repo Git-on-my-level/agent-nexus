@@ -1,4 +1,5 @@
 import { normalizeBaseUrl } from "$lib/config";
+import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
 import { resolveWorkspaceInRoute } from "$lib/server/workspaceResolver";
 import { workspacePath } from "$lib/workspacePaths";
 
@@ -77,6 +78,7 @@ function resolveRegistrationBaseUrl(event, resolved) {
 }
 
 export async function load(event) {
+  const provider = event.locals?.outOfWorkspace ?? getOutOfWorkspaceProvider();
   const resolved = await resolveWorkspaceInRoute({
     event,
     organizationSlug: event.params.organization,
@@ -87,5 +89,6 @@ export async function load(event) {
     workspaceId:
       resolved.workspace?.workspaceId ?? resolved.workspace?.id ?? "",
     registrationBaseUrl: resolveRegistrationBaseUrl(event, resolved),
+    outOfWorkspaceMode: provider.mode,
   };
 }

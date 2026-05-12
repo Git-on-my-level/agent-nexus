@@ -431,7 +431,7 @@ func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handl
 }
 
 func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	principal, ok := requireAuthAdminPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -502,6 +502,25 @@ func requireAuthenticatedPrincipal(w http.ResponseWriter, r *http.Request, opts 
 		return nil, false
 	}
 	return principal, true
+}
+
+func requireAuthAdminPrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return nil, false
+	}
+	if !isAuthAdminPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "auth_admin_required", "auth administration requires a human or auth-admin principal")
+		return nil, false
+	}
+	return principal, true
+}
+
+func isAuthAdminPrincipal(principal *auth.Principal) bool {
+	if principal == nil {
+		return false
+	}
+	return principal.AuthAdmin || isHumanPrincipal(principal)
 }
 
 func resolveOptionalPrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {

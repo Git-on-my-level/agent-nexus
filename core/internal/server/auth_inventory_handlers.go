@@ -22,7 +22,7 @@ func enrichAuthPrincipalSummary(item auth.AuthPrincipalSummary, workspaceID stri
 }
 
 func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+	if _, ok := requireAuthAdminPrincipal(w, r, opts); !ok {
 		return
 	}
 
@@ -65,7 +65,7 @@ func handleListAuthPrincipals(w http.ResponseWriter, r *http.Request, opts handl
 }
 
 func handleListAuthAudit(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+	if _, ok := requireAuthAdminPrincipal(w, r, opts); !ok {
 		return
 	}
 

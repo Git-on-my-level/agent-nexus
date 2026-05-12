@@ -494,6 +494,9 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 	defer firstResp.Body.Close()
 
 	var firstPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
 		Tokens struct {
 			AccessToken string `json:"access_token"`
 		} `json:"tokens"`
@@ -533,7 +536,46 @@ func TestBootstrapAndInviteGatedRegistrationFlow(t *testing.T) {
 		"public_key":   mustGeneratePublicKey(t),
 		"invite_token": inviteToken,
 	}, "", http.StatusCreated)
+	var secondPayload struct {
+		Agent struct {
+			AgentID string `json:"agent_id"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	if err := json.NewDecoder(secondResp.Body).Decode(&secondPayload); err != nil {
+		t.Fatalf("decode second register response: %v", err)
+	}
 	secondResp.Body.Close()
+
+	agentHumanInviteResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", map[string]any{
+		"kind": "human",
+	}, secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentHumanInviteResp.Body.Close()
+	assertErrorCode(t, agentHumanInviteResp, "auth_admin_required")
+
+	agentAnyInviteResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", map[string]any{
+		"kind": "any",
+	}, secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentAnyInviteResp.Body.Close()
+	assertErrorCode(t, agentAnyInviteResp, "auth_admin_required")
+
+	agentListInvitesResp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentListInvitesResp.Body.Close()
+	assertErrorCode(t, agentListInvitesResp, "auth_admin_required")
+
+	agentListPrincipalsResp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/principals", secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentListPrincipalsResp.Body.Close()
+	assertErrorCode(t, agentListPrincipalsResp, "auth_admin_required")
+
+	agentListAuditResp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/audit", secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentListAuditResp.Body.Close()
+	assertErrorCode(t, agentListAuditResp, "auth_admin_required")
+
+	agentRevokePeerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/principals/"+firstPayload.Agent.AgentID+"/revoke", map[string]any{}, secondPayload.Tokens.AccessToken, http.StatusForbidden)
+	defer agentRevokePeerResp.Body.Close()
+	assertErrorCode(t, agentRevokePeerResp, "auth_admin_required")
 
 	invites := listInvites(t, serverURL, firstPayload.Tokens.AccessToken)
 	if len(invites) == 0 {

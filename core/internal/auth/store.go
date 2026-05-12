@@ -73,6 +73,7 @@ type Principal struct {
 	Username      string
 	PrincipalKind string
 	AuthMethod    string
+	AuthAdmin     bool
 }
 
 type RevocationMode string
@@ -295,7 +296,11 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		}
 	}
 
-	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
+	agentMetadata := map[string]any{}
+	if claim.Mode == OnboardingModeBootstrap {
+		agentMetadata["auth_admin"] = true
+	}
+	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, agentMetadata)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -324,7 +329,7 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 	}
 
 	if strings.TrimSpace(existingActorID) == "" {
-		actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, nil)
+		actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, agentMetadata)
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
@@ -378,6 +383,7 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 			"principal_kind":  "agent",
 			"auth_method":     AuthMethodPublicKey,
 			"onboarding_mode": string(claim.Mode),
+			"auth_admin":      claim.Mode == OnboardingModeBootstrap,
 		},
 	}); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -718,18 +724,21 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		actorID       string
 		principalKind string
 		authMethod    string
+		authAdmin     bool
 		agentRevoked  sql.NullString
 		expiresAtRaw  string
 		tokenRevoked  sql.NullString
 	)
 	err := s.db.QueryRowContext(
 		ctx,
-		fmt.Sprintf(`SELECT a.id, a.username, a.actor_id, %s, %s, a.revoked_at, t.expires_at, t.revoked_at
+		fmt.Sprintf(`SELECT a.id, a.username, a.actor_id, %s, %s,
+		        COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0),
+		        a.revoked_at, t.expires_at, t.revoked_at
 		 FROM auth_access_tokens t
 		 JOIN agents a ON a.id = t.agent_id
 		 WHERE t.token_hash = ?`, principalKindExpr("a"), authMethodExpr("a")),
 		hashToken(accessToken),
-	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &agentRevoked, &expiresAtRaw, &tokenRevoked)
+	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &authAdmin, &agentRevoked, &expiresAtRaw, &tokenRevoked)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Principal{}, ErrInvalidToken
@@ -759,6 +768,7 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		Username:      username,
 		PrincipalKind: strings.TrimSpace(principalKind),
 		AuthMethod:    strings.TrimSpace(authMethod),
+		AuthAdmin:     authAdmin,
 	}, nil
 }
 

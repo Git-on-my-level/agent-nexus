@@ -28,7 +28,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	principal, ok := requireAuthAdminPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -75,7 +75,7 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, opts handlerOpti
 }
 
 func handleListInvites(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+	if _, ok := requireAuthAdminPrincipal(w, r, opts); !ok {
 		return
 	}
 
@@ -89,7 +89,7 @@ func handleListInvites(w http.ResponseWriter, r *http.Request, opts handlerOptio
 }
 
 func handleRevokeInvite(w http.ResponseWriter, r *http.Request, opts handlerOptions, inviteID string) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	principal, ok := requireAuthAdminPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
