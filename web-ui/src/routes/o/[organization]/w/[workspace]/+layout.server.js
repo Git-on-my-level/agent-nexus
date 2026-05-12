@@ -183,7 +183,7 @@ export async function load(event) {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      secure: isSecureCookieRequest(event),
+      secure: !dev || isSecureCookieRequest(event),
       maxAge: 60 * 60 * 24 * 180,
     },
   );

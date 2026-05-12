@@ -121,7 +121,19 @@ export function normalizeHostedLaunchFinishURL(finishURL) {
     return "";
   }
   if (/^https?:\/\//i.test(normalized)) {
-    return normalized;
+    const currentOrigin =
+      typeof window !== "undefined" ? window.location.origin : "";
+    try {
+      const parsed = new URL(normalized);
+      if (currentOrigin && parsed.origin === currentOrigin) {
+        return normalizeHostedLaunchFinishURL(
+          `${parsed.pathname}${parsed.search}${parsed.hash}`,
+        );
+      }
+    } catch {
+      return "";
+    }
+    return "";
   }
   // CP currently returns relative finish_url paths; route them through the
   // same-origin hosted API proxy so browser navigation reaches control-plane.

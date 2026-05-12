@@ -1110,6 +1110,36 @@ func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string)
 
 	_, err = tx.ExecContext(
 		ctx,
+		`UPDATE auth_refresh_sessions
+		 SET revoked_at = COALESCE(revoked_at, ?)
+		 WHERE agent_id = ? AND revoked_at IS NULL`,
+		nowText,
+		agentID,
+	)
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return AgentKey{}, fmt.Errorf("revoke sessions during key rotation: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE auth_access_tokens
+		 SET revoked_at = COALESCE(revoked_at, ?)
+		 WHERE agent_id = ? AND revoked_at IS NULL`,
+		nowText,
+		agentID,
+	)
+	if err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return AgentKey{}, fmt.Errorf("revoke access tokens during key rotation: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
 		`UPDATE agents SET updated_at = ? WHERE id = ?`,
 		nowText,
 		agentID,

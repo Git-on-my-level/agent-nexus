@@ -343,6 +343,17 @@ func TestAgentAuthLifecycleAndActorCompatibility(t *testing.T) {
 		t.Fatal("expected rotated key id")
 	}
 
+	rotatedOldRefreshResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
+		"grant_type":    "refresh_token",
+		"refresh_token": assertionPayload.Tokens.RefreshToken,
+	}, "", http.StatusUnauthorized)
+	defer rotatedOldRefreshResp.Body.Close()
+	assertErrorCode(t, rotatedOldRefreshResp, "invalid_token")
+
+	rotatedOldMeResp := getJSONExpectStatusWithAuth(t, serverURL+"/agents/me", assertionPayload.Tokens.AccessToken, http.StatusUnauthorized)
+	defer rotatedOldMeResp.Body.Close()
+	assertErrorCode(t, rotatedOldMeResp, "invalid_token")
+
 	oldSignedAt := time.Now().UTC().Format(time.RFC3339)
 	oldAssertionResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/token", map[string]any{
 		"grant_type": "assertion",

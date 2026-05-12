@@ -6,16 +6,25 @@
   import { page } from "$app/stores";
 
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
+  import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
+
+  function sanitizeHostedStartNext(value) {
+    const path = sanitizeHostedReturnPath(value, "/hosted/dashboard");
+    if (path === "/hosted" || path.startsWith("/hosted/")) {
+      return path;
+    }
+    return "/hosted/dashboard";
+  }
 
   onMount(async () => {
     if (!browser) return;
-    const continuation = String(
+    const continuation = sanitizeHostedStartNext(
       $page.url.searchParams.get("next") ?? "",
-    ).trim();
+    );
     try {
       const res = await hostedCpFetch("account/me");
       if (res.ok) {
-        await goto(continuation || "/hosted/dashboard");
+        await goto(continuation);
         return;
       }
     } catch {

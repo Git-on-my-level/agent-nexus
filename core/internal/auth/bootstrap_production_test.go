@@ -45,8 +45,14 @@ func TestValidateBootstrapTokenForNonDevDeploy(t *testing.T) {
 	if err := ValidateBootstrapTokenForNonDevDeploy(""); err != nil {
 		t.Fatalf("empty: %v", err)
 	}
-	if err := ValidateBootstrapTokenForNonDevDeploy("real-secret-token"); err != nil {
+	if err := ValidateBootstrapTokenForNonDevDeploy("real-secret-token-with-at-least-32-characters"); err != nil {
 		t.Fatalf("real token: %v", err)
+	}
+	if err := ValidateBootstrapTokenForNonDevDeploy("real-secret-token"); err == nil {
+		t.Fatal("expected error for short token in production")
+	}
+	if err := ValidateBootstrapTokenForNonDevDeploy("bootstrap-token"); err == nil {
+		t.Fatal("expected error for known weak token in production")
 	}
 	if err := ValidateBootstrapTokenForNonDevDeploy(BootstrapTokenPlaceholder); err == nil {
 		t.Fatal("expected error for placeholder in production")

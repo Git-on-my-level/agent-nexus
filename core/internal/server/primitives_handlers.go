@@ -80,10 +80,16 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	typeValue, ok := req.Event["type"].(string)
-	if !ok || strings.TrimSpace(typeValue) == "" {
+	typeValue = strings.TrimSpace(typeValue)
+	if !ok || typeValue == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "event.type is required")
 		return
 	}
+	if isGenericAppendProtectedEventType(typeValue) {
+		writeError(w, http.StatusForbidden, "protected_event_type", typeValue+" must be created through its dedicated handler")
+		return
+	}
+	req.Event["type"] = typeValue
 
 	if err := schema.ValidateEnum(opts.contract, "event_type", typeValue); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -165,6 +171,15 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	writeJSON(w, status, payload)
+}
+
+func isGenericAppendProtectedEventType(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case humanAttentionRespondedEventType:
+		return true
+	default:
+		return false
+	}
 }
 
 func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions, eventID string) {

@@ -76,8 +76,8 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 			"payload":{"inbox_item_id":"inbox-1","kind":"ask","response_text":"Approved.","responding_actor_id":"actor-1"},
 			"provenance":{"sources":["inferred"]}
 		}
-	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, humanAttentionRespondedTopicOnlyResp, "inbox:<id>")
+	}`, http.StatusForbidden)
+	assertEventErrorMessageContains(t, humanAttentionRespondedTopicOnlyResp, "dedicated handler")
 
 	humanAttentionRespondedThreadOnlyResp := postJSONExpectStatus(t, h.baseURL+"/events", `{
 		"actor_id":"actor-1",
@@ -89,8 +89,8 @@ func TestEventReferenceConventionsRejectMissingRequiredRefs(t *testing.T) {
 			"payload":{"inbox_item_id":"inbox-1","kind":"ask","response_text":"Approved.","responding_actor_id":"actor-1"},
 			"provenance":{"sources":["inferred"]}
 		}
-	}`, http.StatusBadRequest)
-	assertEventErrorMessageContains(t, humanAttentionRespondedThreadOnlyResp, "inbox:<id>")
+	}`, http.StatusForbidden)
+	assertEventErrorMessageContains(t, humanAttentionRespondedThreadOnlyResp, "dedicated handler")
 }
 
 func TestEventReferenceConventionsRejectMissingRequiredPayloadFields(t *testing.T) {

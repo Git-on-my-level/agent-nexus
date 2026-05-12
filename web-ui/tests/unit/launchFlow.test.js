@@ -69,7 +69,7 @@ describe("launchFlow helpers", () => {
       normalizeHostedLaunchFinishURL(
         "https://control.example.test/workspaces/ws/launch-finish?lid=1",
       ),
-    ).toBe("https://control.example.test/workspaces/ws/launch-finish?lid=1");
+    ).toBe("");
     expect(
       normalizeHostedLaunchFinishURL(
         "/hosted/api/workspaces/ws/launch-finish?lid=1",

@@ -370,6 +370,50 @@ func TestWorkspaceExecutorRedactsSensitiveResults(t *testing.T) {
 	}
 }
 
+func TestWorkspaceExecutorRedactsSecretRevealValueResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/secrets/reveal-batch" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"secrets": []any{
+				map[string]any{"name": "db_password", "value": "batch-secret"},
+			},
+			"metadata": map[string]any{"value": "metadata-secret"},
+		})
+	}))
+	defer server.Close()
+
+	allowed := catalog.DefaultAllowedClassifications()
+	allowed[catalog.ClassificationGatedSensitive] = true
+	cat := generatedTestCatalog(t, allowed)
+	exec := NewWorkspaceExecutor(server.URL, Options{})
+	mcp := protocol.NewServer(cat, exec, protocol.Options{})
+	raw, err := mcp.Handle(context.Background(), mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "anx_secrets_reveal_batch",
+			"arguments": map[string]any{
+				"body": map[string]any{"names": []any{"db_password"}},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	text := string(raw)
+	for _, leaked := range []string{"batch-secret", "metadata-secret"} {
+		if strings.Contains(text, leaked) {
+			t.Fatalf("MCP response leaked %q: %s", leaked, text)
+		}
+	}
+	if !strings.Contains(text, "[REDACTED]") {
+		t.Fatalf("MCP response did not include redaction marker: %s", text)
+	}
+}
+
 func TestWorkspaceExecutorShapesUpstreamErrors(t *testing.T) {
 	statuses := map[int]string{
 		http.StatusBadRequest:          "invalid_arguments",
