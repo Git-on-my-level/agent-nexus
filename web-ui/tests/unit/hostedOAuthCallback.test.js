@@ -106,6 +106,15 @@ describe("hosted oauth callback page", () => {
       code: "abc",
       state: "state_1",
       redirect_uri: `${currentPage.url.origin}/hosted/oauth/google/callback`,
+      continuation_token: JSON.stringify({
+        mode: "signup",
+        next: "",
+        organizationSlug: "",
+        workspaceSlug: "",
+        workspaceId: "",
+        returnPath: "/",
+        inviteToken: "inv_signup_123",
+      }),
       invite_token: "inv_signup_123",
     });
     await waitFor(() => {
@@ -191,5 +200,18 @@ describe("hosted oauth callback page", () => {
         inviteToken: "inv_signup_123",
       }),
     );
+  });
+
+  it("fails closed when browser continuation state is missing", async () => {
+    const { container } = render(HostedOAuthCallbackPage);
+
+    await waitFor(() => {
+      const alert = container.querySelector("[role='alert']");
+      expect(alert?.textContent).toContain(
+        "OAuth sign-in continuation is missing or expired.",
+      );
+    });
+    expect(hostedCpFetch).not.toHaveBeenCalled();
+    expect(persistHostedCpAccessToken).not.toHaveBeenCalled();
   });
 });

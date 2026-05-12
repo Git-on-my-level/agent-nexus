@@ -12,6 +12,7 @@ import {
   createHostedLaunchSession,
   deriveHostedOAuthRedirectURI,
   friendlyHostedOAuthProviderError,
+  hostedOAuthContinuationToken,
   normalizeHostedOAuthMode,
   readHostedOAuthError,
   readHostedOAuthContinuation,
@@ -87,6 +88,30 @@ describe("hosted oauth flow helpers", () => {
     });
     clearHostedOAuthContinuation("oauth_state_1");
     expect(readHostedOAuthContinuation("oauth_state_1")).toBeNull();
+  });
+
+  it("serializes continuation into a canonical server-bound token", () => {
+    expect(
+      hostedOAuthContinuationToken({
+        mode: "signup",
+        next: "/hosted/dashboard",
+        organizationSlug: "david-zhang",
+        workspaceSlug: "acme",
+        workspaceId: "ws_123",
+        returnPath: "/threads/1",
+        inviteToken: "inv_123",
+      }),
+    ).toBe(
+      JSON.stringify({
+        mode: "signup",
+        next: "/hosted/dashboard",
+        organizationSlug: "david-zhang",
+        workspaceSlug: "acme",
+        workspaceId: "ws_123",
+        returnPath: "/threads/1",
+        inviteToken: "inv_123",
+      }),
+    );
   });
 
   it("derives the canonical callback URL from browser location", () => {
@@ -185,7 +210,17 @@ describe("hosted oauth flow helpers", () => {
 
     expect(cpFetch).toHaveBeenCalledWith("account/oauth/github/start", {
       method: "POST",
-      body: "{}",
+      body: JSON.stringify({
+        continuation_token: JSON.stringify({
+          mode: "signup",
+          next: "",
+          organizationSlug: "",
+          workspaceSlug: "acme",
+          workspaceId: "ws_123",
+          returnPath: "/threads/1",
+          inviteToken: "inv_123",
+        }),
+      }),
     });
     expect(readHostedOAuthContinuation("state_2")).toEqual({
       mode: "signup",

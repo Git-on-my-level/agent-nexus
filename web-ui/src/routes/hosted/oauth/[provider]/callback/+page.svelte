@@ -20,6 +20,7 @@
     readHostedOAuthError,
     readHostedOAuthContinuation,
     resolveHostedPostAuthPath,
+    hostedOAuthContinuationToken,
   } from "$lib/hosted/oauthFlow.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
   import { loadHostedSession } from "$lib/hosted/session.js";
@@ -122,6 +123,14 @@
       busy = false;
       return;
     }
+    if (!continuation) {
+      message =
+        mode === "signup"
+          ? "OAuth signup continuation is missing or expired."
+          : "OAuth sign-in continuation is missing or expired.";
+      busy = false;
+      return;
+    }
 
     const redirectURI = deriveHostedOAuthRedirectURI(provider, window.location);
     if (!redirectURI) {
@@ -137,6 +146,7 @@
           code,
           state,
           redirect_uri: redirectURI,
+          continuation_token: hostedOAuthContinuationToken(continuation),
           invite_token: continuation?.inviteToken || undefined,
         }),
       });

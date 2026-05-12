@@ -272,6 +272,10 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       if (contentType) {
         headers.set("content-type", contentType);
       }
+      const cookie = event.request.headers.get("cookie");
+      if (cookie && cleanedSubpath.startsWith("account/oauth/")) {
+        headers.set("cookie", cookie);
+      }
 
       /** @type {RequestInit} */
       const init = { method, headers };
@@ -289,6 +293,7 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       const outHeaders = new Headers(response.headers);
       outHeaders.delete("content-encoding");
       outHeaders.delete("transfer-encoding");
+      rewriteHostedOAuthSetCookiePaths(outHeaders);
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -311,4 +316,18 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       };
     },
   };
+}
+
+function rewriteHostedOAuthSetCookiePaths(headers) {
+  const setCookie = headers.get("set-cookie");
+  if (!setCookie || !setCookie.includes("anx_oauth_txn=")) {
+    return;
+  }
+  headers.set(
+    "set-cookie",
+    setCookie.replaceAll(
+      "Path=/account/oauth/",
+      "Path=/hosted/api/account/oauth/",
+    ),
+  );
 }

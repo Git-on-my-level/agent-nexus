@@ -68,6 +68,21 @@ export function buildHostedOAuthContinuation(urlLike, options = {}) {
   };
 }
 
+export function hostedOAuthContinuationToken(continuation) {
+  if (!continuation || typeof continuation !== "object") {
+    return "";
+  }
+  return JSON.stringify({
+    mode: normalizeHostedOAuthMode(continuation.mode),
+    next: normalizeHostedNextPath(continuation.next),
+    organizationSlug: String(continuation.organizationSlug ?? "").trim(),
+    workspaceSlug: String(continuation.workspaceSlug ?? "").trim(),
+    workspaceId: String(continuation.workspaceId ?? "").trim(),
+    returnPath: sanitizeHostedReturnPath(continuation.returnPath, "/"),
+    inviteToken: String(continuation.inviteToken ?? "").trim(),
+  });
+}
+
 function readHostedOAuthStorage() {
   if (!browser) {
     return {};
@@ -253,9 +268,15 @@ export async function startHostedOAuthFlow({
     throw new Error("Unsupported OAuth provider.");
   }
 
+  const continuation = buildHostedOAuthContinuation(pageUrl, {
+    mode,
+    inviteToken,
+  });
   const start = await cpFetch(`account/oauth/${normalizedProvider}/start`, {
     method: "POST",
-    body: "{}",
+    body: JSON.stringify({
+      continuation_token: hostedOAuthContinuationToken(continuation),
+    }),
   });
   if (!start.ok) {
     throw new Error(await readHostedOAuthError(start));
@@ -269,13 +290,7 @@ export async function startHostedOAuthFlow({
     throw new Error("Unexpected response from control plane.");
   }
 
-  storeHostedOAuthContinuation(
-    state,
-    buildHostedOAuthContinuation(pageUrl, {
-      mode,
-      inviteToken,
-    }),
-  );
+  storeHostedOAuthContinuation(state, continuation);
 
   return {
     authorizationURL,
