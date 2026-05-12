@@ -10,6 +10,8 @@ test("CSP header is present on document navigation requests", async ({
 
   expect(csp).toContain("default-src 'self'");
   expect(csp).toContain("script-src");
+  expect(csp).toContain("img-src 'self' blob: data:");
+  expect(csp).not.toContain("img-src 'self' blob: data: https:");
   expect(csp).toContain("object-src 'none'");
   expect(csp).toContain("frame-ancestors 'none'");
 
@@ -47,6 +49,42 @@ test("CSP header blocks inline script execution", async ({ page }) => {
   );
 
   expect(cspViolations.length).toBe(0);
+});
+
+test("CSP blocks arbitrary remote image loads", async ({ page }) => {
+  let remoteImageFetches = 0;
+  const failedRemoteImages = [];
+
+  await page.route("https://attacker.example/**", async (route) => {
+    remoteImageFetches += 1;
+    await route.fulfill({
+      status: 204,
+      body: "",
+    });
+  });
+
+  page.on("requestfailed", (request) => {
+    if (
+      request.url().startsWith("https://attacker.example/pixel") &&
+      request.resourceType() === "image"
+    ) {
+      failedRemoteImages.push(request.url());
+    }
+  });
+
+  await page.goto("/");
+  await page.evaluate(() => {
+    const image = document.createElement("img");
+    image.alt = "x";
+    image.src = "https://attacker.example/pixel?id=csp-test";
+    document.body.appendChild(image);
+  });
+  await page.waitForTimeout(250);
+
+  expect(remoteImageFetches).toBe(0);
+  expect(failedRemoteImages).toEqual([
+    "https://attacker.example/pixel?id=csp-test",
+  ]);
 });
 
 test("security headers are set on all document responses", async ({ page }) => {

@@ -645,6 +645,7 @@ describe("hooks proxy retry", () => {
     envState.ANX_UI_CSP_SCRIPT_SRC_EXTRA =
       "https://static.cloudflareinsights.com 'sha256-examplehash='";
     envState.ANX_UI_CSP_CONNECT_SRC_EXTRA = "https://cloudflareinsights.com";
+    envState.ANX_UI_CSP_IMG_SRC_EXTRA = "https://images.example.test";
     envState.ANX_UI_CSP_MANIFEST_SRC_EXTRA =
       "https://scalingforever.cloudflareaccess.com";
 
@@ -677,9 +678,40 @@ describe("hooks proxy retry", () => {
       "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
     );
     expect(csp).toContain(
+      "img-src 'self' blob: data: https://images.example.test",
+    );
+    expect(csp).toContain(
       "manifest-src 'self' https://scalingforever.cloudflareaccess.com",
     );
     expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
+  });
+
+  it("does not allow arbitrary remote image origins in the default CSP", async () => {
+    const response = await handle({
+      event: {
+        url: new URL("https://anx.example.test/docs/doc-1"),
+        request: new Request("https://anx.example.test/docs/doc-1", {
+          method: "GET",
+          headers: {
+            accept: "text/html",
+          },
+        }),
+      },
+      resolve: vi.fn(
+        () =>
+          new Response("<!doctype html><html><body>ok</body></html>", {
+            status: 200,
+            headers: {
+              "content-type": "text/html",
+            },
+          }),
+      ),
+    });
+
+    const csp = response.headers.get("Content-Security-Policy");
+    expect(csp).toContain("img-src 'self' blob: data:");
+    expect(csp).not.toContain("img-src 'self' blob: data: https:");
+    expect(csp).not.toContain("https://attacker.example");
   });
 
   it("bypasses proxy for nested workspace auth callback posts", async () => {

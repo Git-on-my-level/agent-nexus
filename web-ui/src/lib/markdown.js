@@ -53,6 +53,9 @@ const ALLOWED_ATTRS = [
   "align",
 ];
 
+const LOCAL_IMAGE_SRC_RE = /^(?:\/(?!\/)|\.{0,2}\/|[^:/?#]+(?:[/?#]|$))/;
+const NON_NETWORK_IMAGE_SRC_RE = /^(?:data:image\/|blob:)/i;
+
 const purifyConfig = {
   ALLOWED_TAGS,
   ALLOWED_ATTR: ALLOWED_ATTRS,
@@ -67,9 +70,25 @@ const purifyConfig = {
     "onfocus",
     "onblur",
   ],
+  ADD_DATA_URI_TAGS: ["img"],
   ALLOWED_URI_REGEXP:
     /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
+
+function isAllowedMarkdownImageSrc(value) {
+  const src = String(value ?? "").trim();
+  if (!src) return false;
+  return NON_NETWORK_IMAGE_SRC_RE.test(src) || LOCAL_IMAGE_SRC_RE.test(src);
+}
+
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node?.nodeName !== "IMG") return;
+
+  const src = node.getAttribute("src");
+  if (!isAllowedMarkdownImageSrc(src)) {
+    node.remove();
+  }
+});
 
 function sanitizeHtml(html) {
   const sanitized = DOMPurify.sanitize(html, purifyConfig);
