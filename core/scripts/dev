@@ -11,6 +11,7 @@ SCHEMA_PATH="${SCHEMA_PATH:-$ROOT_DIR/../contracts/anx-schema.yaml}"
 
 # Match integration-test dev stack: mock seed + legacy actor registration use
 # unauthenticated reads/writes against loopback. Production uses run-prod / explicit flags.
+export ANX_HOSTED_DEV_MODE="${ANX_HOSTED_DEV_MODE:-1}"
 export ANX_ENABLE_DEV_ACTOR_MODE="${ANX_ENABLE_DEV_ACTOR_MODE:-1}"
 export ANX_ALLOW_UNAUTHENTICATED_WRITES="${ANX_ALLOW_UNAUTHENTICATED_WRITES:-1}"
 

@@ -171,6 +171,15 @@ func main() {
 	}
 	workspaceAccessMode = normalizedWorkspaceAccessMode
 
+	addr := listenAddress
+	if addr == "" {
+		addr = net.JoinHostPort(host, strconv.Itoa(port))
+	}
+	if err := validateDevAuthBypassConfig(addr, enableDevActorMode, allowUnauthenticatedWrites); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	if err := auth.ValidateBootstrapTokenForNonDevDeploy(bootstrapToken); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
@@ -222,10 +231,6 @@ func main() {
 	}
 	if streamPollInterval <= 0 {
 		streamPollInterval = time.Second
-	}
-	addr := listenAddress
-	if addr == "" {
-		addr = net.JoinHostPort(host, strconv.Itoa(port))
 	}
 	if strings.TrimSpace(coreBaseURL) == "" {
 		coreBaseURL = defaultCoreBaseURL(addr)
@@ -756,6 +761,36 @@ func envBool(name string, fallback bool) bool {
 		os.Exit(1)
 	}
 	return parsed
+}
+
+func validateDevAuthBypassConfig(addr string, enableDevActorMode bool, allowUnauthenticatedWrites bool) error {
+	if !enableDevActorMode && !allowUnauthenticatedWrites {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv("ANX_HOSTED_DEV_MODE")) != "1" {
+		return fmt.Errorf("ANX_ENABLE_DEV_ACTOR_MODE and ANX_ALLOW_UNAUTHENTICATED_WRITES are local-only bypasses; set ANX_HOSTED_DEV_MODE=1 and bind anx-core to loopback for deliberate local development")
+	}
+	if !isLoopbackListenAddress(addr) {
+		return fmt.Errorf("ANX_ENABLE_DEV_ACTOR_MODE and ANX_ALLOW_UNAUTHENTICATED_WRITES require a loopback listen address; got %q", addr)
+	}
+	return nil
+}
+
+func isLoopbackListenAddress(addr string) bool {
+	addr = strings.TrimSpace(addr)
+	if addr == "" || strings.Contains(addr, "://") {
+		return false
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func defaultCoreBaseURL(addr string) string {
