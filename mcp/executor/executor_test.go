@@ -414,6 +414,80 @@ func TestWorkspaceExecutorRedactsSecretRevealValueResults(t *testing.T) {
 	}
 }
 
+func TestWorkspaceExecutorRejectsStreamingResponseOverCap(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		for i := 0; i < 32; i++ {
+			if _, err := w.Write([]byte(`{"token":"SENSITIVE-STREAM-PAYLOAD"}`)); err != nil {
+				return
+			}
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	exec := NewWorkspaceExecutor(server.URL, Options{MaxResponseBytes: 64})
+	_, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{
+		Tool:      testTool(t, "cards.get"),
+		Arguments: map[string]any{"path": map[string]any{"card_id": "card-1"}},
+	})
+	if err == nil {
+		t.Fatal("expected oversized response error")
+	}
+	var toolErr protocol.ToolError
+	if !asToolError(err, &toolErr) {
+		t.Fatalf("error type = %T, want protocol.ToolError", err)
+	}
+	if toolErr.Code != "workspace_response_too_large" {
+		t.Fatalf("code = %q, want workspace_response_too_large", toolErr.Code)
+	}
+	if strings.Contains(err.Error(), "SENSITIVE-STREAM-PAYLOAD") {
+		t.Fatalf("oversized response content leaked into error: %v", err)
+	}
+}
+
+func TestWorkspaceExecutorOversizedResponseDoesNotLeakThroughMCP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		for i := 0; i < 32; i++ {
+			if _, err := w.Write([]byte(`{"access_token":"OVERSIZED-SECRET-TOKEN"}`)); err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+
+	cat := testCatalog(t)
+	exec := NewWorkspaceExecutor(server.URL, Options{MaxResponseBytesByCommand: map[string]int64{"cards.get": 64}})
+	mcp := protocol.NewServer(cat, exec, protocol.Options{})
+	raw, err := mcp.Handle(context.Background(), mustJSON(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "anx_cards_get",
+			"arguments": map[string]any{"path": map[string]any{"card_id": "card-1"}},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("Handle() error = %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "workspace_response_too_large") {
+		t.Fatalf("MCP response missing stable oversized error: %s", text)
+	}
+	if strings.Contains(text, "OVERSIZED-SECRET-TOKEN") || strings.Contains(text, "access_token") {
+		t.Fatalf("MCP response leaked oversized payload: %s", text)
+	}
+	if strings.Contains(text, "structuredContent") || strings.Contains(text, `"content"`) {
+		t.Fatalf("MCP oversized error included tool result content: %s", text)
+	}
+}
+
 func TestWorkspaceExecutorShapesUpstreamErrors(t *testing.T) {
 	statuses := map[int]string{
 		http.StatusBadRequest:          "invalid_arguments",

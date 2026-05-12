@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1462,10 +1463,13 @@ var commandIndex = func() map[string]CommandSpec {
 }()
 
 type RequestOptions struct {
-	Query   map[string][]string
-	Headers map[string]string
-	Body    any
+	Query            map[string][]string
+	Headers          map[string]string
+	Body             any
+	MaxResponseBytes int64
 }
+
+var ErrResponseTooLarge = errors.New("workspace response exceeds max_response_bytes")
 
 type Client struct {
 	BaseURL    string
@@ -1537,10 +1541,17 @@ func (c *Client) Invoke(ctx context.Context, commandID string, pathParams map[st
 	if err != nil {
 		return nil, nil, fmt.Errorf("perform request: %w", err)
 	}
-	bodyBytes, readErr := io.ReadAll(resp.Body)
+	reader := resp.Body
+	if opts.MaxResponseBytes > 0 {
+		reader = io.NopCloser(io.LimitReader(resp.Body, opts.MaxResponseBytes+1))
+	}
+	bodyBytes, readErr := io.ReadAll(reader)
 	_ = resp.Body.Close()
 	if readErr != nil {
 		return resp, nil, fmt.Errorf("read response: %w", readErr)
+	}
+	if opts.MaxResponseBytes > 0 && int64(len(bodyBytes)) > opts.MaxResponseBytes {
+		return resp, nil, ErrResponseTooLarge
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		return resp, bodyBytes, fmt.Errorf("request failed: status=%d body=%s", resp.StatusCode, string(bodyBytes))

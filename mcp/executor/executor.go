@@ -19,10 +19,13 @@ import (
 )
 
 const (
-	defaultRequestTimeout = 30 * time.Second
-	defaultListLimit      = 50
-	defaultMaxListLimit   = 100
-	defaultMaxRequestBody = 1 << 20
+	defaultRequestTimeout       = 30 * time.Second
+	defaultListLimit            = 50
+	defaultMaxListLimit         = 100
+	defaultMaxRequestBody       = 1 << 20
+	defaultMaxResponse          = 4 << 20
+	defaultMaxListResponse      = 1 << 20
+	defaultMaxLargeReadResponse = 512 << 10
 )
 
 type AuthContext struct {
@@ -31,23 +34,27 @@ type AuthContext struct {
 }
 
 type Options struct {
-	HTTPClient        *http.Client
-	Auth              AuthContext
-	DefaultListLimit  int
-	MaxListLimit      int
-	MaxRequestBytes   int64
-	RequestTimeout    time.Duration
-	AdditionalHeaders map[string]string
+	HTTPClient                *http.Client
+	Auth                      AuthContext
+	DefaultListLimit          int
+	MaxListLimit              int
+	MaxRequestBytes           int64
+	MaxResponseBytes          int64
+	MaxResponseBytesByCommand map[string]int64
+	RequestTimeout            time.Duration
+	AdditionalHeaders         map[string]string
 }
 
 type WorkspaceExecutor struct {
-	client           *contracts.Client
-	auth             AuthContext
-	defaultListLimit int
-	maxListLimit     int
-	maxRequestBytes  int64
-	requestTimeout   time.Duration
-	headers          map[string]string
+	client                    *contracts.Client
+	auth                      AuthContext
+	defaultListLimit          int
+	maxListLimit              int
+	maxRequestBytes           int64
+	maxResponseBytes          int64
+	maxResponseBytesByCommand map[string]int64
+	requestTimeout            time.Duration
+	headers                   map[string]string
 }
 
 func NewWorkspaceExecutor(baseURL string, opts Options) *WorkspaceExecutor {
@@ -67,18 +74,24 @@ func NewWorkspaceExecutor(baseURL string, opts Options) *WorkspaceExecutor {
 	if maxRequestBytes <= 0 {
 		maxRequestBytes = defaultMaxRequestBody
 	}
+	maxResponseBytes := opts.MaxResponseBytes
+	if maxResponseBytes <= 0 {
+		maxResponseBytes = defaultMaxResponse
+	}
 	timeout := opts.RequestTimeout
 	if timeout <= 0 {
 		timeout = defaultRequestTimeout
 	}
 	return &WorkspaceExecutor{
-		client:           contracts.New(baseURL, httpClient),
-		auth:             opts.Auth,
-		defaultListLimit: defaultLimit,
-		maxListLimit:     maxLimit,
-		maxRequestBytes:  maxRequestBytes,
-		requestTimeout:   timeout,
-		headers:          opts.AdditionalHeaders,
+		client:                    contracts.New(baseURL, httpClient),
+		auth:                      opts.Auth,
+		defaultListLimit:          defaultLimit,
+		maxListLimit:              maxLimit,
+		maxRequestBytes:           maxRequestBytes,
+		maxResponseBytes:          maxResponseBytes,
+		maxResponseBytesByCommand: copyInt64Map(opts.MaxResponseBytesByCommand),
+		requestTimeout:            timeout,
+		headers:                   opts.AdditionalHeaders,
 	}
 }
 
@@ -109,10 +122,14 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 	}
 
 	resp, responseBody, err := e.client.Invoke(ctx, req.Tool.Metadata.CommandID, arguments.Path, contracts.RequestOptions{
-		Query:   query,
-		Headers: headers,
-		Body:    body,
+		Query:            query,
+		Headers:          headers,
+		Body:             body,
+		MaxResponseBytes: e.responseByteCap(req.Tool),
 	})
+	if errors.Is(err, contracts.ErrResponseTooLarge) {
+		return protocol.ToolCallResult{}, toolError("workspace_response_too_large", "workspace response exceeded the MCP response size limit", protocol.ErrInternal)
+	}
 	if err != nil && resp == nil {
 		return protocol.ToolCallResult{}, toolError("workspace_error", "workspace request failed", protocol.ErrInternal)
 	}
@@ -381,6 +398,29 @@ func (e *WorkspaceExecutor) requestHeaders(idempotencyKey string) map[string]str
 	return headers
 }
 
+func (e *WorkspaceExecutor) responseByteCap(tool catalog.Tool) int64 {
+	if e == nil {
+		return defaultMaxResponse
+	}
+	commandID := strings.TrimSpace(tool.Metadata.CommandID)
+	if cap, ok := e.maxResponseBytesByCommand[commandID]; ok && cap > 0 {
+		return cap
+	}
+	if isLargeReadLike(tool) {
+		if e.maxResponseBytes > 0 && e.maxResponseBytes < defaultMaxLargeReadResponse {
+			return e.maxResponseBytes
+		}
+		return defaultMaxLargeReadResponse
+	}
+	if isListLike(tool) {
+		if e.maxResponseBytes > 0 && e.maxResponseBytes < defaultMaxListResponse {
+			return e.maxResponseBytes
+		}
+		return defaultMaxListResponse
+	}
+	return e.maxResponseBytes
+}
+
 func withIdempotencyKey(body any, key string) (any, error) {
 	if key == "" {
 		return body, nil
@@ -609,6 +649,26 @@ func isListLike(tool catalog.Tool) bool {
 		return true
 	}
 	return false
+}
+
+func isLargeReadLike(tool catalog.Tool) bool {
+	commandID := strings.ToLower(strings.TrimSpace(tool.Metadata.CommandID))
+	path := strings.ToLower(strings.TrimSpace(tool.Metadata.Path))
+	if commandID == "artifacts.content" {
+		return true
+	}
+	return strings.Contains(path, "/logs") || strings.Contains(path, "/content")
+}
+
+func copyInt64Map(in map[string]int64) map[string]int64 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func integerValue(value any) (int, error) {
