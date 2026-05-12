@@ -896,10 +896,10 @@
                 {hostedMode
                   ? "Workspace invites are for CLI agents. Invite teammates from the hosted organization team page."
                   : newInviteKind === "human"
-                  ? "Invites a human to join via passkey."
-                  : newInviteKind === "any"
-                    ? "Recipient chooses agent or human at registration."
-                    : "Invites a CLI agent to register and join wake routing."}
+                    ? "Invites a human to join via passkey."
+                    : newInviteKind === "any"
+                      ? "Recipient chooses agent or human at registration."
+                      : "Invites a CLI agent to register and join wake routing."}
               </p>
             </div>
             {#if newInviteKind === "agent" || newInviteKind === "any"}
@@ -968,8 +968,7 @@
             To invite a person, use
             <a
               class="font-medium text-accent-text hover:text-accent-text"
-              href="/hosted/organizations"
-              >hosted team management</a
+              href="/hosted/organizations">hosted team management</a
             >. Human workspace invites are hidden in hosted mode.
           </p>
         {/if}
