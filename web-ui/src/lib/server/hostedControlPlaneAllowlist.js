@@ -14,6 +14,7 @@ export function allowHostedControlPlanePath(subpath) {
     p === "organizations" ||
     p.startsWith("organizations/") ||
     p.startsWith("billing/") ||
+    p === "mcp/oauth/browser/authorize" ||
     p === "workspaces" ||
     p.startsWith("workspaces/") ||
     p === "provisioning" ||
