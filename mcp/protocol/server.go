@@ -182,11 +182,15 @@ func (s *Server) handleToolsList(req request) ([]byte, error) {
 	page := tools[start:end]
 	descriptors := make([]map[string]any, 0, len(page))
 	for _, tool := range page {
-		descriptors = append(descriptors, map[string]any{
+		desc := map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
 			"inputSchema": tool.InputSchema,
-		})
+		}
+		if tool.OutputSchema != nil {
+			desc["outputSchema"] = tool.OutputSchema
+		}
+		descriptors = append(descriptors, desc)
 	}
 
 	result := map[string]any{"tools": descriptors}
