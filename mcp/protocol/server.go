@@ -187,7 +187,7 @@ func (s *Server) handleToolsList(req request) ([]byte, error) {
 			"description": tool.Description,
 			"inputSchema": tool.InputSchema,
 		}
-		if tool.OutputSchema != nil {
+		if len(tool.OutputSchema) > 0 {
 			desc["outputSchema"] = tool.OutputSchema
 		}
 		descriptors = append(descriptors, desc)

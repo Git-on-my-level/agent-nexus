@@ -43,6 +43,8 @@ func Serve(ctx context.Context, server *protocol.Server, stdin io.Reader, stdout
 			logger.Printf("mcp request failed: %v", err)
 			continue
 		}
+		// JSON-RPC notifications (no `id`) return no response; skip writing so stdout
+		// stays strict newline-delimited JSON without blank frames.
 		if len(response) == 0 {
 			continue
 		}
