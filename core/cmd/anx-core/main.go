@@ -246,6 +246,7 @@ func main() {
 	}
 	workspaceHumanGrantReplayRetention := auth.DefaultWorkspaceHumanGrantTTL + workspaceHumanGrantLeeway
 	var workspaceHumanGrantVerifier auth.WorkspaceHumanGrantIdentityVerifier
+	var workspaceManagedGrantVerifier auth.WorkspaceManagedAgentGrantIdentityVerifier
 	if strings.TrimSpace(workspaceHumanGrantIssuer) != "" || strings.TrimSpace(workspaceHumanGrantAudience) != "" {
 		if strings.TrimSpace(workspaceHumanGrantIssuer) == "" || strings.TrimSpace(workspaceHumanGrantAudience) == "" {
 			fmt.Fprintln(os.Stderr, "both ANX_WORKSPACE_HUMAN_GRANT_ISSUER and ANX_WORKSPACE_HUMAN_GRANT_AUDIENCE are required to enable external workspace grants")
@@ -272,6 +273,17 @@ func main() {
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to initialize workspace human grant verifier: %v\n", err)
+			os.Exit(1)
+		}
+		workspaceManagedGrantVerifier, err = auth.NewWorkspaceManagedAgentGrantVerifier(auth.WorkspaceManagedAgentGrantVerifierConfig{
+			Issuer:      workspaceHumanGrantIssuer,
+			Audience:    workspaceHumanGrantAudience,
+			WorkspaceID: workspaceID,
+			Leeway:      workspaceHumanGrantLeeway,
+			Resolver:    jwksResolver,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize workspace managed-agent grant verifier: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -425,6 +437,7 @@ func main() {
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
+		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithSchemaContract(contract),

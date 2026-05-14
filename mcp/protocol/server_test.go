@@ -152,6 +152,17 @@ func TestMethodNotFoundAndParseError(t *testing.T) {
 	assertErrorCode(t, parsed, "parse_error")
 }
 
+func TestInitializedNotificationReturnsNoResponse(t *testing.T) {
+	server := NewServer(testCatalog(t), executorFunc(nil), Options{})
+	raw, err := server.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
+	if err != nil {
+		t.Fatalf("Handle() transport error = %v", err)
+	}
+	if len(raw) != 0 {
+		t.Fatalf("notification response = %s, want empty response", raw)
+	}
+}
+
 type executorFunc func(context.Context, ToolCallRequest) (ToolCallResult, error)
 
 func (f executorFunc) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallResult, error) {
