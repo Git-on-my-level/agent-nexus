@@ -43,6 +43,9 @@ func Serve(ctx context.Context, server *protocol.Server, stdin io.Reader, stdout
 			logger.Printf("mcp request failed: %v", err)
 			continue
 		}
+		if len(response) == 0 {
+			continue
+		}
 		if _, err := writer.Write(response); err != nil {
 			return fmt.Errorf("write response: %w", err)
 		}
