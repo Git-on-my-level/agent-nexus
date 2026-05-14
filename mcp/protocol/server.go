@@ -73,6 +73,9 @@ func (s *Server) Handle(ctx context.Context, input []byte) ([]byte, error) {
 	if req.JSONRPC != jsonRPCVersion || req.Method == "" {
 		return marshalResponse(response{JSONRPC: jsonRPCVersion, ID: req.ID, Error: rpcError(ErrInvalidRequest, "invalid_request", "invalid JSON-RPC request", nil)})
 	}
+	if req.isNotification() {
+		return nil, nil
+	}
 
 	switch req.Method {
 	case "initialize":
@@ -94,13 +97,33 @@ func (s *Server) Handle(ctx context.Context, input []byte) ([]byte, error) {
 type request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      any             `json:"id,omitempty"`
+	HasID   bool            `json:"-"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
+func (r *request) UnmarshalJSON(input []byte) error {
+	type requestAlias request
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(input, &raw); err != nil {
+		return err
+	}
+	var decoded requestAlias
+	if err := json.Unmarshal(input, &decoded); err != nil {
+		return err
+	}
+	*r = request(decoded)
+	_, r.HasID = raw["id"]
+	return nil
+}
+
+func (r request) isNotification() bool {
+	return !r.HasID
+}
+
 type response struct {
 	JSONRPC string     `json:"jsonrpc"`
-	ID      any        `json:"id,omitempty"`
+	ID      any        `json:"id"`
 	Result  any        `json:"result,omitempty"`
 	Error   *rpcErrorT `json:"error,omitempty"`
 }

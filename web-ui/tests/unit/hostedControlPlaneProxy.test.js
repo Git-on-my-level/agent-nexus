@@ -26,6 +26,14 @@ describe("allowHostedControlPlanePath", () => {
     ).toBe(true);
   });
 
+  it("allows hosted MCP browser authorization only", () => {
+    expect(allowHostedControlPlanePath("mcp/oauth/browser/authorize")).toBe(
+      true,
+    );
+    expect(allowHostedControlPlanePath("mcp/oauth/token")).toBe(false);
+    expect(allowHostedControlPlanePath("mcp")).toBe(false);
+  });
+
   it("rejects traversal and unrelated paths", () => {
     expect(allowHostedControlPlanePath("organizations/../billing")).toBe(false);
     expect(allowHostedControlPlanePath("unrelated/api")).toBe(false);

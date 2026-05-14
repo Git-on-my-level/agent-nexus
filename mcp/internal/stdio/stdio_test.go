@@ -51,6 +51,19 @@ func TestServeWritesOnlyJSONRPCToStdout(t *testing.T) {
 	}
 }
 
+func TestServeSkipsNotificationResponses(t *testing.T) {
+	server := protocol.NewServer(nil, nil, protocol.Options{})
+	var stdout bytes.Buffer
+	input := `{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n"
+
+	if err := Serve(context.Background(), server, strings.NewReader(input), &stdout, Options{}); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("notification wrote stdout: %q", stdout.String())
+	}
+}
+
 func TestServeLogsTransportErrorsToStderrOnly(t *testing.T) {
 	server := protocol.NewServer(nil, nil, protocol.Options{})
 	var stdout bytes.Buffer
