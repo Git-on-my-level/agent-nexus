@@ -896,6 +896,9 @@ start_core_server() {
   fi
 
   (
+    if [[ "$dev_actor_mode" == "true" || "$allow_unauthenticated_writes" == "true" ]]; then
+      export ANX_HOSTED_DEV_MODE=1
+    fi
     export ANX_ENABLE_DEV_ACTOR_MODE="$dev_actor_mode"
     export ANX_ALLOW_UNAUTHENTICATED_WRITES="$allow_unauthenticated_writes"
     export ANX_ALLOW_LOOPBACK_VERIFICATION_READS="$allow_loopback_verification_reads"

@@ -152,14 +152,30 @@ func TestMethodNotFoundAndParseError(t *testing.T) {
 	assertErrorCode(t, parsed, "parse_error")
 }
 
-func TestInitializedNotificationReturnsNoResponse(t *testing.T) {
+func TestNotificationsDoNotReturnJSONRPCError(t *testing.T) {
 	server := NewServer(testCatalog(t), executorFunc(nil), Options{})
-	raw, err := server.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
-	if err != nil {
-		t.Fatalf("Handle() transport error = %v", err)
+	for _, input := range []string{
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","method":"tools/list"}`,
+	} {
+		raw, err := server.Handle(context.Background(), []byte(input))
+		if err != nil {
+			t.Fatalf("Handle() transport error = %v", err)
+		}
+		if len(raw) != 0 {
+			t.Fatalf("notification response = %s, want no response", raw)
+		}
 	}
-	if len(raw) != 0 {
-		t.Fatalf("notification response = %s, want empty response", raw)
+}
+
+func TestNullIDIsReturnedAsNull(t *testing.T) {
+	server := NewServer(testCatalog(t), executorFunc(nil), Options{})
+	resp := handleJSON(t, server, map[string]any{"jsonrpc": "2.0", "id": nil, "method": "resources/list"})
+	if _, ok := resp["id"]; !ok {
+		t.Fatalf("response omitted id for null-id request: %#v", resp)
+	}
+	if resp["id"] != nil {
+		t.Fatalf("response id = %#v, want null", resp["id"])
 	}
 }
 
