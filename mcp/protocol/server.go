@@ -80,6 +80,11 @@ func (s *Server) Handle(ctx context.Context, input []byte) ([]byte, error) {
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(req)
+	case "notifications/initialized":
+		// JSON-RPC notifications do not have responses. ChatGPT sends this after
+		// initialize; accepting it keeps the HTTP transport compatible while leaving
+		// unknown request methods strict below.
+		return nil, nil
 	case "tools/list":
 		return s.handleToolsList(req)
 	case "tools/call":
@@ -175,8 +180,20 @@ func (s *Server) handleToolsList(req request) ([]byte, error) {
 		end = len(tools)
 	}
 	page := tools[start:end]
+	descriptors := make([]map[string]any, 0, len(page))
+	for _, tool := range page {
+		desc := map[string]any{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"inputSchema": tool.InputSchema,
+		}
+		if len(tool.OutputSchema) > 0 {
+			desc["outputSchema"] = tool.OutputSchema
+		}
+		descriptors = append(descriptors, desc)
+	}
 
-	result := map[string]any{"tools": page}
+	result := map[string]any{"tools": descriptors}
 	if end < len(tools) {
 		result["nextCursor"] = strconv.Itoa(end)
 	}

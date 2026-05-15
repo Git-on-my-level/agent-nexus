@@ -23,6 +23,24 @@ func TestInitialize(t *testing.T) {
 	}
 }
 
+func TestToolsListIncludesOutputSchema(t *testing.T) {
+	server := NewServer(testCatalog(t), executorFunc(nil), Options{})
+	resp := handleJSON(t, server, map[string]any{"jsonrpc": "2.0", "id": "list-schema", "method": "tools/list"})
+	result := resp["result"].(map[string]any)
+	tools := result["tools"].([]any)
+	if len(tools) == 0 {
+		t.Fatal("expected at least one tool")
+	}
+	first := tools[0].(map[string]any)
+	out, ok := first["outputSchema"].(map[string]any)
+	if !ok || out["type"] != "object" {
+		t.Fatalf("missing or invalid outputSchema on tools/list entry: %#v", first["outputSchema"])
+	}
+	if _, ok := first["inputSchema"].(map[string]any); !ok {
+		t.Fatalf("missing inputSchema: %#v", first)
+	}
+}
+
 func TestToolsListPagination(t *testing.T) {
 	server := NewServer(testCatalog(t), executorFunc(nil), Options{})
 	resp := handleJSON(t, server, map[string]any{"jsonrpc": "2.0", "id": "list-1", "method": "tools/list", "params": map[string]any{"limit": 1}})
