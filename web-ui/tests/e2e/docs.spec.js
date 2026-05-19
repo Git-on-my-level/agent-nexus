@@ -547,6 +547,16 @@ test("documents list redirects through the default workspace and loads revision 
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
 
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Docs Revision Tester" }],
+      }),
+    });
+  });
+
   await page.route(/\/threads(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -746,7 +756,8 @@ test("documents list redirects through the default workspace and loads revision 
     page.getByRole("heading", { name: "Product Constitution", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Revision history" }).first().click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Revision history" }).click();
   await expect(page.getByText("Current version")).toBeVisible();
   await page.getByRole("button", { name: /Version 2/ }).click();
   await expect(
@@ -768,9 +779,12 @@ test("documents list redirects through the default workspace and loads revision 
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Revision history" }).first().click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Revision history" }),
+  ).toHaveCount(0);
   await expect(page.getByText("Version 3", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Version 1", { exact: true })).toBeVisible();
 });
 
 test("doc with thread — compact viewport uses bottom dock, not side rail", async ({
@@ -810,6 +824,16 @@ test("doc with thread — compact viewport uses bottom dock, not side rail", asy
     window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Docs Compact Tester" }],
+      }),
+    });
+  });
 
   await page.route(/\/threads(\?.*)?$/, async (route) => {
     await route.fulfill({

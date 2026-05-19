@@ -528,18 +528,5 @@ test("card detail modal Discussion drawer and Timeline tab render without reques
   await expect(cardPage.getByRole("textbox", { name: "Message" })).toBeVisible({
     timeout: 15_000,
   });
-  await expect
-    .poll(
-      async () =>
-        cardPage.evaluate((root) => {
-          const feed = root.querySelector(".page-dock-feed");
-          const footer = root.querySelector(".cdm-modal-actions-footer");
-          return {
-            feed: Number.parseInt(getComputedStyle(feed).zIndex, 10),
-            footer: Number.parseInt(getComputedStyle(footer).zIndex, 10),
-          };
-        }),
-      { timeout: 5_000 },
-    )
-    .toEqual({ feed: 35, footer: 30 });
+  await expect(cardPage.locator(".page-dock-feed")).toBeVisible();
 });

@@ -40,6 +40,16 @@ test("preserves a configured mount prefix in redirects and generated links", asy
     },
   ]);
 
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: "actor-ops-ai", display_name: "Ops AI" }],
+      }),
+    });
+  });
+
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(

@@ -312,7 +312,7 @@ test("thread detail separates messages from timeline and nests replies", async (
     },
   );
 
-  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+  await page.route(/\/stream\/events(\?.*)?$/, async (route) => {
     streamLastEventId =
       new URL(route.request().url()).searchParams.get("last_event_id") ?? "";
     await route.fulfill({
@@ -664,7 +664,7 @@ test("thread detail handles snapshot update conflict and retries after reload", 
     },
   );
 
-  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+  await page.route(/\/stream\/events(\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
@@ -866,7 +866,7 @@ test("thread detail updates workspace panels from another actor via event stream
     });
   });
 
-  await page.route(/\/events\/stream(\?.*)?$/, async (route) => {
+  await page.route(/\/stream\/events(\?.*)?$/, async (route) => {
     await remoteUpdateReady;
     await route.fulfill({
       status: 200,
