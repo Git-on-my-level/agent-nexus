@@ -75,6 +75,167 @@ const overview = {
   },
 };
 
+const organization = {
+  id: "org_alpha",
+  slug: "alpha",
+  display_name: "Alpha Ops",
+  status: "active",
+  access_mode: "read_write",
+  plan_tier: "starter",
+  plan_resolution: {
+    effective_plan_tier: "team",
+    source: "operator",
+    quota: { storage_bytes: 104857600, workspace_count: 3 },
+  },
+  billing: {
+    billing_status: "active",
+    stripe_subscription_status: "trialing",
+  },
+  usage: {
+    storage_bytes: 20 * 1024 * 1024,
+    db_bytes: 5 * 1024 * 1024,
+    blob_bytes: 15 * 1024 * 1024,
+    artifact_count: 1200,
+    document_count: 88,
+    event_count: 9000,
+    agent_count: 16,
+    workspace_count: 2,
+  },
+  member_counts: { owner: 1, admin: 1 },
+  workspace_counts: { total: 2, by_status: { ready: 2 } },
+  recent_audit_events: [
+    {
+      id: "audit_org",
+      event_type: "quota_enforcement_applied",
+      occurred_at: "2026-05-20T01:00:00Z",
+    },
+  ],
+  recent_provisioning_jobs: [],
+  recent_backup_runs: [],
+  last_usage_aggregation_at: "2026-05-20T01:30:00Z",
+  created_at: "2026-05-19T00:00:00Z",
+  updated_at: "2026-05-20T01:30:00Z",
+};
+
+const workspace = {
+  id: "ws_alpha",
+  organization_id: "org_alpha",
+  organization_slug: "alpha",
+  slug: "alpha-main",
+  display_name: "Alpha Main",
+  status: "ready",
+  access_mode: "read_write",
+  restriction_reason: "",
+  host_id: "host_1",
+  host_label: "packed-a",
+  listen_port: 18100,
+  container_id_short: "abcdef123456",
+  runtime_image_tag: "anx-core:test",
+  runtime_power_state: "running",
+  heartbeat_freshness: "fresh",
+  heartbeat_age_seconds: 12,
+  heartbeat_version: "0.10.5",
+  heartbeat_build: "build-a",
+  last_activity_at: "2026-05-20T01:45:00Z",
+  active_stream_count: 2,
+  last_successful_backup_at: "2026-05-20T00:30:00Z",
+  usage: organization.usage,
+  health_summary: { database: "ok" },
+  recent_jobs: [],
+  recent_backup_runs: [],
+  recent_audit_events: [],
+  created_at: "2026-05-19T00:00:00Z",
+  updated_at: "2026-05-20T01:30:00Z",
+};
+
+const account = {
+  id: "acct_alpha",
+  email: "operator@example.com",
+  display_name: "Operator Example",
+  status: "active",
+  created_at: "2026-05-19T00:00:00Z",
+  last_login_at: "2026-05-20T01:45:00Z",
+  oauth_providers: ["google", "github"],
+  active_session_count: 1,
+  organization_memberships: [
+    {
+      organization_id: "org_alpha",
+      organization_slug: "alpha",
+      role: "owner",
+      status: "active",
+      created_at: "2026-05-19T00:00:00Z",
+    },
+  ],
+  recent_audit_events: [
+    {
+      id: "audit_account",
+      event_type: "workspace_session_exchanged",
+      organization_id: "org_alpha",
+      occurred_at: "2026-05-20T01:10:00Z",
+    },
+  ],
+};
+
+async function installAdminAnalyticsRoutes(page) {
+  await page.route("**/hosted/api/admin/analytics/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path.endsWith("/organizations/org_alpha")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ organization }),
+      });
+      return;
+    }
+    if (path.endsWith("/workspaces/ws_alpha")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ workspace }),
+      });
+      return;
+    }
+    if (path.endsWith("/accounts/acct_alpha")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ account }),
+      });
+      return;
+    }
+    if (path.endsWith("/organizations")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ organizations: [organization] }),
+      });
+      return;
+    }
+    if (path.endsWith("/workspaces")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ workspaces: [workspace] }),
+      });
+      return;
+    }
+    if (path.endsWith("/accounts")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ accounts: [account] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ overview }),
+    });
+  });
+}
+
 test.describe("hosted admin overview", () => {
   test("renders read-only overview from the admin analytics API", async ({
     page,
@@ -141,5 +302,42 @@ test.describe("hosted admin overview", () => {
     await expect(page.getByRole("alert")).toContainText(
       "valid admin token is required",
     );
+  });
+
+  test("renders org workspace and account drilldowns with redacted fields", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("anx_admin_token", "admin-secret");
+      window.localStorage.setItem("anx_admin_actor", "ops@example.com");
+    });
+    await installAdminAnalyticsRoutes(page);
+
+    await page.goto("/hosted/admin/organizations");
+    await expect(
+      page.getByRole("heading", { name: "Organizations" }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Alpha Ops/ })).toBeVisible();
+
+    await page.goto("/hosted/admin/organizations/org_alpha");
+    await expect(
+      page.getByRole("heading", { name: "Alpha Ops" }),
+    ).toBeVisible();
+    await expect(page.getByText("Quota envelope")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Alpha Main/ })).toBeVisible();
+
+    await page.goto("/hosted/admin/workspaces/ws_alpha");
+    await expect(
+      page.getByRole("heading", { name: "Alpha Main" }),
+    ).toBeVisible();
+    await expect(page.getByText("abcdef123456")).toBeVisible();
+    await expect(page.getByText("database")).toBeVisible();
+
+    await page.goto("/hosted/admin/accounts/acct_alpha");
+    await expect(
+      page.getByRole("heading", { name: "Operator Example" }),
+    ).toBeVisible();
+    await expect(page.getByText("Provider subject identifiers")).toBeVisible();
+    await expect(page.getByText("google-sub-secret")).toHaveCount(0);
   });
 });

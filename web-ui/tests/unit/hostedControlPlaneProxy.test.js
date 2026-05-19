@@ -12,6 +12,21 @@ describe("allowHostedControlPlanePath", () => {
     expect(allowHostedControlPlanePath("account/sessions/current")).toBe(true);
     expect(allowHostedControlPlanePath("admin/whoami")).toBe(true);
     expect(allowHostedControlPlanePath("admin/analytics/overview")).toBe(true);
+    expect(allowHostedControlPlanePath("admin/analytics/organizations")).toBe(
+      true,
+    );
+    expect(
+      allowHostedControlPlanePath("admin/analytics/organizations/org_1"),
+    ).toBe(true);
+    expect(allowHostedControlPlanePath("admin/analytics/workspaces/ws_1")).toBe(
+      true,
+    );
+    expect(allowHostedControlPlanePath("admin/analytics/accounts/acct_1")).toBe(
+      true,
+    );
+    expect(allowHostedControlPlanePath("admin/analytics/audit-events")).toBe(
+      true,
+    );
     expect(allowHostedControlPlanePath("organizations")).toBe(true);
     expect(allowHostedControlPlanePath("organizations/org_1")).toBe(true);
     expect(allowHostedControlPlanePath("workspaces")).toBe(true);

@@ -11,6 +11,7 @@ const COUNT_LABELS = {
   older: "Older",
   pending: "Pending",
   provisioning: "Provisioning",
+  quota: "Quota",
   read_only: "Read only",
   read_write: "Read/write",
   ready: "Ready",
@@ -158,4 +159,74 @@ export function detailHref(kind, id) {
   if (kind === "workspace") return `/hosted/admin/workspaces/${clean}`;
   if (kind === "account") return `/hosted/admin/accounts/${clean}`;
   return "/hosted/admin";
+}
+
+export function formatListValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "Any";
+  return countLabel(raw);
+}
+
+export function sortRows(rows = [], key, direction = "desc") {
+  const dir = direction === "asc" ? 1 : -1;
+  const sorted = [...(rows ?? [])];
+  sorted.sort(
+    (a, b) =>
+      compareAdminValues(valueAtPath(a, key), valueAtPath(b, key)) * dir,
+  );
+  return sorted;
+}
+
+export function valueAtPath(row, path) {
+  return String(path ?? "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((value, part) => (value == null ? undefined : value[part]), row);
+}
+
+export function compareAdminValues(a, b) {
+  const an = Number(a ?? Number.NaN);
+  const bn = Number(b ?? Number.NaN);
+  if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+  return String(a ?? "").localeCompare(String(b ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+export function usagePressure(row = {}) {
+  const quota = row.quota ?? row.plan_resolution?.quota ?? {};
+  const usage = row.usage ?? row;
+  const storageLimit = Number(
+    quota.storage_bytes ??
+      quota.storage_limit_bytes ??
+      quota.max_storage_bytes ??
+      quota.storageBytes ??
+      0,
+  );
+  const storage = Number(usage.storage_bytes ?? usage.storageBytes ?? 0);
+  if (storageLimit > 0 && storage >= storageLimit * 0.9) return "high";
+  if (storageLimit > 0 && storage >= storageLimit * 0.75) return "medium";
+  if (
+    String(row.access_mode ?? "").toLowerCase() === "read_only" ||
+    String(row.restriction_reason ?? "").toLowerCase() === "quota"
+  ) {
+    return "high";
+  }
+  return "normal";
+}
+
+export function backupFreshness(workspace = {}, now = Date.now()) {
+  const raw = workspace.last_successful_backup_at ?? workspace.lastBackupAt;
+  if (!raw) return "unknown";
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return "unknown";
+  return now - t > 36 * 60 * 60 * 1000 ? "stale" : "fresh";
+}
+
+export function providerLabels(account = {}) {
+  return (account.oauth_providers ?? [])
+    .map((p) => countLabel(p))
+    .filter(Boolean)
+    .join(", ");
 }

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  backupFreshness,
   countRows,
   formatAgeSeconds,
+  providerLabels,
+  sortRows,
   telemetryLabel,
   usageMetricCards,
+  usagePressure,
 } from "../../src/lib/hosted/adminOverview.js";
 
 describe("admin overview helpers", () => {
@@ -41,5 +45,44 @@ describe("admin overview helpers", () => {
     });
     expect(cards[1].value).toBe("1,234");
     expect(cards[3].value).toBe("3");
+  });
+
+  it("derives drilldown usage pressure without exposing raw internals", () => {
+    expect(
+      usagePressure({
+        usage: { storage_bytes: 95 },
+        plan_resolution: { quota: { storage_bytes: 100 } },
+      }),
+    ).toBe("high");
+    expect(usagePressure({ access_mode: "read_only" })).toBe("high");
+    expect(usagePressure({ usage: { storage_bytes: 10 } })).toBe("normal");
+  });
+
+  it("sorts nested metric columns and labels providers", () => {
+    expect(
+      sortRows(
+        [
+          { id: "a", usage: { storage_bytes: 2 } },
+          { id: "b", usage: { storage_bytes: 10 } },
+        ],
+        "usage.storage_bytes",
+        "desc",
+      ).map((row) => row.id),
+    ).toEqual(["b", "a"]);
+    expect(providerLabels({ oauth_providers: ["google", "github"] })).toBe(
+      "google, github",
+    );
+  });
+
+  it("keeps backup freshness explicit for drilldown filters", () => {
+    expect(
+      backupFreshness(
+        { last_successful_backup_at: "2026-05-20T00:00:00Z" },
+        Date.parse("2026-05-20T12:00:00Z"),
+      ),
+    ).toBe("fresh");
+    expect(backupFreshness({}, Date.parse("2026-05-20T12:00:00Z"))).toBe(
+      "unknown",
+    );
   });
 });
