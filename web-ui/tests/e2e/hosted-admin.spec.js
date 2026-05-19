@@ -241,10 +241,43 @@ const account = {
   ],
 };
 
+const auditEvents = [
+  {
+    id: "audit_1",
+    event_type: "billing_webhook_failed",
+    organization_id: "org_alpha",
+    workspace_id: "",
+    actor_account_id: "acct_alpha",
+    target_type: "organization",
+    target_id: "org_alpha",
+    occurred_at: "2026-05-20T01:59:00Z",
+    metadata: { delivery_status: "failed" },
+  },
+  {
+    id: "audit_2",
+    event_type: "workspace_session_exchanged",
+    organization_id: "org_alpha",
+    workspace_id: "ws_alpha",
+    actor_account_id: "acct_alpha",
+    target_type: "workspace",
+    target_id: "ws_alpha",
+    occurred_at: "2026-05-20T01:45:00Z",
+    metadata: {},
+  },
+];
+
 async function installAdminAnalyticsRoutes(page) {
   await page.route("**/hosted/api/admin/analytics/**", async (route) => {
     const url = new URL(route.request().url());
-    const path = url.pathname;
+    const path = url.pathname.replace(/\/$/, "");
+    if (path.endsWith("/audit-events")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ events: auditEvents, next_cursor: "" }),
+      });
+      return;
+    }
     if (path.endsWith("/organizations/org_alpha")) {
       await route.fulfill({
         status: 200,
@@ -331,6 +364,13 @@ test.describe("hosted admin overview", () => {
         });
       },
     );
+    await page.route("**/hosted/api/admin/analytics/hosts", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ hosts: [host] }),
+      });
+    });
 
     await page.goto("/hosted/admin");
 
@@ -344,6 +384,12 @@ test.describe("hosted admin overview", () => {
     ).toBeVisible();
     await expect(page.getByRole("link", { name: /Alpha Ops/ })).toBeVisible();
     await expect(page.getByText("Billing webhook failed")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Host resources" }),
+    ).toBeVisible();
+    await expect(page.getByText("CPU load")).toBeVisible();
+    await expect(page.getByText("Memory")).toBeVisible();
+    await expect(page.getByText("60%")).toBeVisible();
     await expect(page.getByText("Unknown telemetry").first()).toBeVisible();
   });
 
@@ -412,6 +458,19 @@ test.describe("hosted admin overview", () => {
     ).toBeVisible();
     await expect(page.getByText("Provider subject identifiers")).toBeVisible();
     await expect(page.getByText("google-sub-secret")).toHaveCount(0);
+
+    await page.goto("/hosted/admin/audit-events");
+    await expect(
+      page.getByRole("heading", { name: "Audit events", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Billing webhook failed" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Session exchanged" }),
+    ).toBeVisible();
+    await expect(page.getByText("delivery_status")).toBeVisible();
+    await expect(page.getByText("invite_token")).toHaveCount(0);
   });
 
   test("renders infra host live view and empty telemetry warning", async ({

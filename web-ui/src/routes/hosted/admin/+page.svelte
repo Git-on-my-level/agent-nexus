@@ -6,6 +6,7 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import StatusPill from "$lib/hosted/StatusPill.svelte";
+  import { telemetryResourceCards } from "$lib/hosted/adminInfra.js";
   import {
     countRows,
     detailHref,
@@ -23,6 +24,7 @@
   let token = $state("");
   let actor = $state("");
   let overview = $state(null);
+  let hosts = $state([]);
   let loading = $state(false);
   let error = $state("");
   let unauthorized = $state(false);
@@ -32,6 +34,9 @@
   const usageCards = $derived(usageMetricCards(overview?.usage_totals ?? {}));
   const health = $derived(overview?.heartbeat_health ?? {});
   const recentOps = $derived(overview?.recent_operations ?? {});
+  const liveHosts = $derived(
+    (hosts ?? []).filter((host) => host?.latest_snapshot),
+  );
 
   onMount(() => {
     token = localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
@@ -82,11 +87,24 @@
       if (!overview) {
         throw new Error("Admin analytics response was empty.");
       }
+      await loadHostSummary(headers);
     } catch (e) {
       overview = null;
+      hosts = [];
       error = e instanceof Error ? e.message : "Admin analytics did not load.";
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadHostSummary(headers) {
+    hosts = [];
+    try {
+      const res = await hostedCpFetch("admin/analytics/hosts", { headers });
+      if (!res.ok) return;
+      hosts = (await res.json()).hosts ?? [];
+    } catch {
+      hosts = [];
     }
   }
 
@@ -242,6 +260,62 @@
         {@render MetricCard(card)}
       {/each}
     </section>
+
+    {#if liveHosts.length}
+      <section class="rounded-md border border-line bg-bg-soft">
+        <div
+          class="flex items-center justify-between border-b border-line px-4 py-3"
+        >
+          <div>
+            <h2 class="text-heading text-fg">Host resources</h2>
+            <p class="mt-1 text-micro text-fg-subtle">
+              Current signed packed-host telemetry.
+            </p>
+          </div>
+          <a class="text-micro text-accent-text" href="/hosted/admin/infra">
+            Infra
+          </a>
+        </div>
+        <div class="grid gap-3 p-4 lg:grid-cols-2">
+          {#each liveHosts.slice(0, 4) as host (host.id)}
+            <div class="rounded-md border border-line bg-bg p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="truncate text-meta font-semibold text-fg">
+                    {host.label || host.id}
+                  </h3>
+                  <p
+                    class="mt-0.5 truncate font-mono text-micro text-fg-subtle"
+                  >
+                    {host.id}
+                  </p>
+                </div>
+                <StatusPill
+                  status={host.telemetry_freshness}
+                  label={telemetryLabel(
+                    host.telemetry_freshness,
+                    host.telemetry_age_seconds,
+                  )}
+                />
+              </div>
+              <div class="mt-3 grid gap-2 sm:grid-cols-4">
+                {#each telemetryResourceCards(host) as card (card.key)}
+                  <div class="rounded border border-line bg-bg-soft px-2 py-1">
+                    <p class="text-fg-subtle">{card.label}</p>
+                    <p class="mt-0.5 font-semibold text-fg">{card.value}</p>
+                    {#if card.subvalue}
+                      <p class="mt-0.5 truncate text-fg-subtle">
+                        {card.subvalue}
+                      </p>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <section class="grid gap-3 xl:grid-cols-3">
       <div class="rounded-md border border-line bg-bg-soft p-4">
