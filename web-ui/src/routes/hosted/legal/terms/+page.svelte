@@ -66,7 +66,8 @@
 
   <h2>7. Contact</h2>
   <p>
-    Questions: <a href="mailto:support@agentnexus.com">support@agentnexus.com</a
+    Questions: <a href="mailto:david@scalingforever.com"
+      >david@scalingforever.com</a
     > (or the support link shown in the app).
   </p>
   <p class="text-micro text-fg-subtle">

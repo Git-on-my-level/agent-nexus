@@ -402,18 +402,6 @@
         >
         <a
           class="transition-colors hover:text-fg inline-block py-1"
-          href="https://status.agentnexus.com"
-          rel="noreferrer"
-          target="_blank"
-        >
-          <span
-            class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-ok-text align-middle"
-            aria-hidden="true"
-          ></span>
-          Status
-        </a>
-        <a
-          class="transition-colors hover:text-fg inline-block py-1"
           href={supportHref}
           {...supportExternal ? { target: "_blank", rel: "noreferrer" } : {}}
           >Support</a

@@ -19,7 +19,9 @@ describe("HostedSessionErrorPanel", () => {
 
     expect(screen.getByText(/Control plane timeout/)).toBeTruthy();
     const support = screen.getByRole("link", { name: /contact support/i });
-    expect(support.getAttribute("href")).toBe("mailto:support@agentnexus.com");
+    expect(support.getAttribute("href")).toBe(
+      "mailto:david@scalingforever.com",
+    );
 
     const retry = screen.getByRole("button", { name: /Retry/i });
     retry.click();

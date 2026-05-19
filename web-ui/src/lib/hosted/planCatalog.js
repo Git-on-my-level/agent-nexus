@@ -6,7 +6,7 @@
 
 /** Enterprise "Talk to sales" CTA href. */
 export const ENTERPRISE_SALES_HREF =
-  "mailto:sales@scalingforever.com?subject=Enterprise%20plan%20inquiry";
+  "mailto:david@scalingforever.com?subject=Enterprise%20plan%20inquiry";
 
 /**
  * Short label for org badges — matches control plane displayNameForPlanTier.

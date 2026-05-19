@@ -13,9 +13,9 @@
 <LegalPageShell title="Agent Nexus — public beta privacy">
   <p>
     This notice describes how we handle information in the
-    <strong>public beta</strong> of the hosted Agent Nexus (ANX) service. It is plain
-    language, not a full privacy policy or DPA. Add formal documents before a paid
-    or enterprise launch and have them reviewed by counsel.
+    <strong>open beta</strong> of the hosted Agent Nexus (ANX) service. Agent Nexus
+    is a pre-release product, and final privacy policy language is subject to change
+    as the service matures.
   </p>
 
   <h2>What we collect</h2>
@@ -50,8 +50,8 @@
     Retention and automated export are <strong>not</strong> fully built out in
     this beta. To <strong>request account or data deletion</strong>, or to
     discuss export, email
-    <a href="mailto:support@agentnexus.com?subject=Data%20deletion%20request"
-      >support@agentnexus.com</a
+    <a href="mailto:david@scalingforever.com?subject=Data%20deletion%20request"
+      >david@scalingforever.com</a
     >
     with subject
     <span class="font-mono text-[11px]">Data deletion request</span>
@@ -79,7 +79,7 @@
     <li>
       <strong>Rights:</strong> If applicable law gives you access, correction,
       or deletion rights, contact
-      <a href="mailto:support@agentnexus.com">support@agentnexus.com</a>.
+      <a href="mailto:david@scalingforever.com">david@scalingforever.com</a>.
     </li>
   </ul>
 
@@ -97,7 +97,7 @@
 
   <h2>Contact</h2>
   <p>
-    <a href="mailto:support@agentnexus.com">support@agentnexus.com</a> (or the support
-    address shown in the product).
+    <a href="mailto:david@scalingforever.com">david@scalingforever.com</a> (or the
+    support address shown in the product).
   </p>
 </LegalPageShell>

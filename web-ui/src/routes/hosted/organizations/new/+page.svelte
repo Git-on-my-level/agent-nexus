@@ -115,7 +115,7 @@
       >
         <span
           class="flex items-center border-r border-line bg-bg-soft px-2.5 font-mono text-mono text-fg-subtle"
-          >agentnexus.com /</span
+          >hosted /</span
         >
         <input
           type="text"

@@ -18,7 +18,7 @@ describe("planCatalog", () => {
   });
 
   it("ENTERPRISE_SALES_HREF points at scalingforever.com", () => {
-    expect(ENTERPRISE_SALES_HREF).toMatch(/^mailto:sales@scalingforever\.com/);
+    expect(ENTERPRISE_SALES_HREF).toMatch(/^mailto:david@scalingforever\.com/);
   });
 
   it("PLAN_CARDS have stable tier ids and no per-seat price suffixes", () => {

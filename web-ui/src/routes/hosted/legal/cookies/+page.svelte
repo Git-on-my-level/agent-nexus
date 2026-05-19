@@ -54,7 +54,7 @@
 
   <h2>Contact</h2>
   <p>
-    <a href="mailto:support@agentnexus.com">support@agentnexus.com</a>
+    <a href="mailto:david@scalingforever.com">david@scalingforever.com</a>
   </p>
   <p class="text-micro text-fg-subtle">
     Canonical copy:
