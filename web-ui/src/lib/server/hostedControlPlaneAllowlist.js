@@ -11,6 +11,8 @@ export function allowHostedControlPlanePath(subpath) {
   }
   return (
     p.startsWith("account/") ||
+    p === "admin/whoami" ||
+    p === "admin/analytics/overview" ||
     p === "organizations" ||
     p.startsWith("organizations/") ||
     p.startsWith("billing/") ||

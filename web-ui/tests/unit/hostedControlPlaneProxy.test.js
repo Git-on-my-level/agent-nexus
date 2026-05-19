@@ -10,6 +10,8 @@ describe("allowHostedControlPlanePath", () => {
       true,
     );
     expect(allowHostedControlPlanePath("account/sessions/current")).toBe(true);
+    expect(allowHostedControlPlanePath("admin/whoami")).toBe(true);
+    expect(allowHostedControlPlanePath("admin/analytics/overview")).toBe(true);
     expect(allowHostedControlPlanePath("organizations")).toBe(true);
     expect(allowHostedControlPlanePath("organizations/org_1")).toBe(true);
     expect(allowHostedControlPlanePath("workspaces")).toBe(true);
@@ -32,6 +34,9 @@ describe("allowHostedControlPlanePath", () => {
     );
     expect(allowHostedControlPlanePath("mcp/oauth/token")).toBe(false);
     expect(allowHostedControlPlanePath("mcp")).toBe(false);
+    expect(allowHostedControlPlanePath("admin/organizations/plan/apply")).toBe(
+      false,
+    );
   });
 
   it("rejects traversal and unrelated paths", () => {

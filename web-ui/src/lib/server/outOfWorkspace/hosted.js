@@ -272,6 +272,16 @@ export function createHostedProvider({ controlPlaneBaseUrl, env }) {
       if (contentType) {
         headers.set("content-type", contentType);
       }
+      if (cleanedSubpath.startsWith("admin/")) {
+        const adminToken = event.request.headers.get("x-anx-admin-token");
+        const adminActor = event.request.headers.get("x-anx-admin-actor");
+        if (adminToken) {
+          headers.set("x-anx-admin-token", adminToken);
+        }
+        if (adminActor) {
+          headers.set("x-anx-admin-actor", adminActor);
+        }
+      }
       const cookie = event.request.headers.get("cookie");
       if (cookie && cleanedSubpath.startsWith("account/oauth/")) {
         headers.set("cookie", cookie);

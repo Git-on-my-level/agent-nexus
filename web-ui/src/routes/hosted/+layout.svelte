@@ -34,6 +34,7 @@
     "/hosted/oauth",
     "/hosted/billing/return",
     "/hosted/legal",
+    "/hosted/admin",
   ];
 
   let menuOpen = $state(false);
