@@ -148,6 +148,71 @@ const workspace = {
   updated_at: "2026-05-20T01:30:00Z",
 };
 
+const staleWorkspace = {
+  ...workspace,
+  id: "ws_beta",
+  slug: "beta-main",
+  display_name: "Beta Main",
+  status: "ready",
+  heartbeat_freshness: "stale",
+  heartbeat_age_seconds: 900,
+  runtime_power_state: "unknown",
+  container_id_short: "",
+  last_successful_backup_at: null,
+};
+
+const host = {
+  id: "host_1",
+  label: "packed-a",
+  workspace_root: "/var/lib/anx/workspaces",
+  docker_root: "/var/lib/docker",
+  drain_mode: false,
+  placement_available: true,
+  capacity_workspace_slots: 20,
+  allocated_workspace_slots: 2,
+  capacity_port_slots: 100,
+  allocated_port_slots: 2,
+  telemetry_freshness: "fresh",
+  telemetry_age_seconds: 15,
+  collector_version: "anx-host-collector/test",
+  latest_snapshot: {
+    payload: {
+      collector_version: "anx-host-collector/test",
+      cpu: { load1: 1.25, load5: 0.75, load15: 0.4, cores: 4 },
+      memory: {
+        total_bytes: 100 * 1024 * 1024,
+        used_bytes: 60 * 1024 * 1024,
+        free_bytes: 40 * 1024 * 1024,
+      },
+      workspace_root_disk: {
+        path: "/var/lib/anx/workspaces",
+        bytes: {
+          total_bytes: 200 * 1024 * 1024,
+          used_bytes: 100 * 1024 * 1024,
+          free_bytes: 100 * 1024 * 1024,
+        },
+        inodes: { total: 1000, used: 250, free: 750 },
+      },
+      docker_root_disk: {
+        path: "/var/lib/docker",
+        bytes: {
+          total_bytes: 300 * 1024 * 1024,
+          used_bytes: 150 * 1024 * 1024,
+          free_bytes: 150 * 1024 * 1024,
+        },
+        inodes: { total: 2000, used: 300, free: 1700 },
+      },
+      docker: {
+        available: true,
+        version: "25.0.0",
+        container_counts: { running: 2, exited: 1 },
+        orphan_containers: 1,
+        orphan_networks: 0,
+      },
+    },
+  },
+};
+
 const account = {
   id: "acct_alpha",
   email: "operator@example.com",
@@ -212,11 +277,19 @@ async function installAdminAnalyticsRoutes(page) {
       });
       return;
     }
+    if (path.endsWith("/hosts")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ hosts: [host] }),
+      });
+      return;
+    }
     if (path.endsWith("/workspaces")) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ workspaces: [workspace] }),
+        body: JSON.stringify({ workspaces: [workspace, staleWorkspace] }),
       });
       return;
     }
@@ -315,7 +388,7 @@ test.describe("hosted admin overview", () => {
 
     await page.goto("/hosted/admin/organizations");
     await expect(
-      page.getByRole("heading", { name: "Organizations" }),
+      page.getByRole("heading", { name: "Organizations", exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: /Alpha Ops/ })).toBeVisible();
 
@@ -339,5 +412,39 @@ test.describe("hosted admin overview", () => {
     ).toBeVisible();
     await expect(page.getByText("Provider subject identifiers")).toBeVisible();
     await expect(page.getByText("google-sub-secret")).toHaveCount(0);
+  });
+
+  test("renders infra host live view and empty telemetry warning", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("anx_admin_token", "admin-secret");
+      window.localStorage.setItem("anx_admin_actor", "ops@example.com");
+    });
+    await installAdminAnalyticsRoutes(page);
+
+    await page.goto("/hosted/admin/infra");
+
+    await expect(
+      page.getByRole("heading", { name: "Infra live view" }),
+    ).toBeVisible();
+    await expect(page.getByText("packed-a").first()).toBeVisible();
+    await expect(page.getByText("CPU load")).toBeVisible();
+    await expect(page.getByText("Docker health")).toBeVisible();
+    await expect(page.getByText("Orphan containers")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Alpha Main/ })).toBeVisible();
+    await expect(page.getByText("Stale (15m)").first()).toBeVisible();
+
+    await page.route("**/hosted/api/admin/analytics/hosts", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ hosts: [] }),
+      });
+    });
+    await page.goto("/hosted/admin/infra");
+    await expect(
+      page.getByText("Live resource telemetry is not wired."),
+    ).toBeVisible();
   });
 });

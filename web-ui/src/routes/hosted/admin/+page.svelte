@@ -293,9 +293,9 @@
       <div class="rounded-md border border-line bg-bg-soft p-4">
         <div class="mb-3 flex items-center justify-between">
           <h2 class="text-heading text-fg">Workspaces</h2>
-          <span class="text-micro text-fg-subtle">
-            {formatNumber(overview.workspaces?.total)} total
-          </span>
+          <a class="text-micro text-accent-text" href="/hosted/admin/infra">
+            Infra
+          </a>
         </div>
         <div class="grid gap-3 sm:grid-cols-2">
           {@render RollupGroup({
