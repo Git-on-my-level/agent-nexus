@@ -744,7 +744,9 @@
         </p>
       </div>
       <div>
-        <p class="text-micro uppercase tracking-wide text-fg-subtle">Headroom</p>
+        <p class="text-micro uppercase tracking-wide text-fg-subtle">
+          Headroom
+        </p>
         <p class="mt-0.5 text-fg">
           ≈ {formatNumber(host.headroom_workspaces)} workspaces
           {#if host.headroom_driver && host.placement_available}
