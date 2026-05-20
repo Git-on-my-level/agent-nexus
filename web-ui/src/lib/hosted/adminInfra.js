@@ -173,3 +173,30 @@ function formatLoad(value) {
   if (!Number.isFinite(n)) return "Unknown";
   return n.toFixed(2);
 }
+
+export function saturationTone(pct) {
+  if (pct == null) return "bg-bg text-fg-subtle";
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return "bg-bg text-fg-subtle";
+  if (n >= 85) return "bg-danger-soft text-danger-text";
+  if (n >= 65) return "bg-warn-soft text-warn-text";
+  return "bg-ok-soft text-ok-text";
+}
+
+const SATURATION_DRIVER_LABELS = {
+  cpu: "CPU",
+  memory: "Memory",
+  workspace_disk: "Workspace disk",
+  docker_disk: "Docker disk",
+  inodes: "Inodes",
+  slots: "Slot count",
+  disk: "Workspace disk",
+  slots_used: "Slot count",
+  telemetry: "Telemetry missing",
+  drained: "Draining",
+};
+
+export function saturationDriverLabel(driver) {
+  if (!driver) return "—";
+  return SATURATION_DRIVER_LABELS[driver] ?? driver;
+}

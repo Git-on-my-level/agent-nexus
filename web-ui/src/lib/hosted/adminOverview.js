@@ -144,12 +144,35 @@ export function formatDateTime(value) {
   if (!raw) return "Unknown";
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return new Intl.DateTimeFormat("en-US", {
+  const formatted = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
+  return `${formatted} (local)`;
+}
+
+export function opsWindowMs(window) {
+  switch (String(window ?? "").trim()) {
+    case "1h":
+      return 60 * 60 * 1000;
+    case "6h":
+      return 6 * 60 * 60 * 1000;
+    case "7d":
+      return 7 * 24 * 60 * 60 * 1000;
+    case "24h":
+    default:
+      return 24 * 60 * 60 * 1000;
+  }
+}
+
+export function isWithinOpsWindow(isoTimestamp, window, now = Date.now()) {
+  const raw = String(isoTimestamp ?? "").trim();
+  if (!raw) return false;
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return false;
+  return now - t <= opsWindowMs(window);
 }
 
 export function detailHref(kind, id) {
@@ -222,6 +245,45 @@ export function backupFreshness(workspace = {}, now = Date.now()) {
   const t = Date.parse(raw);
   if (!Number.isFinite(t)) return "unknown";
   return now - t > 36 * 60 * 60 * 1000 ? "stale" : "fresh";
+}
+
+export function formatDuration(seconds) {
+  if (seconds == null) return "—";
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n < 60) return `${Math.round(n)}s`;
+  if (n < 3600) {
+    const m = Math.floor(n / 60);
+    const s = Math.round(n % 60);
+    return s ? `${m}m ${s}s` : `${m}m`;
+  }
+  if (n < 86400) {
+    const h = Math.floor(n / 3600);
+    const m = Math.round((n % 3600) / 60);
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  const d = Math.floor(n / 86400);
+  const h = Math.round((n % 86400) / 3600);
+  return h ? `${d}d ${h}h` : `${d}d`;
+}
+
+export function formatRate(value) {
+  if (value == null) return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+export function quotaPressureRatio(row = {}) {
+  const planLimit = Number(
+    row.plan_resolution?.entitlement?.included_storage_bytes ??
+      row.plan?.included_storage_bytes ??
+      row.quota?.storage_bytes ??
+      0,
+  );
+  const used = Number(row.usage?.storage_bytes ?? row.storage_bytes ?? 0);
+  if (!Number.isFinite(planLimit) || planLimit <= 0) return null;
+  return Math.max(0, used / planLimit);
 }
 
 export function providerLabels(account = {}) {
