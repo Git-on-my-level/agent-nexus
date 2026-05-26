@@ -16,7 +16,7 @@ function shellArg(value) {
   return `'${raw.replaceAll("'", "'\\''")}'`;
 }
 
-export function buildRegistrationMessage(
+function normalizeRegistrationArgs(
   token,
   baseUrl,
   agentName = "",
@@ -27,17 +27,49 @@ export function buildRegistrationMessage(
     String(baseUrl ?? "").trim() || "<ANX_CORE_BASE_URL>";
   const normalizedAgentName = String(agentName ?? "").trim();
   const normalizedUsername = String(username ?? "").trim();
-  const agentNameArg = normalizedAgentName
-    ? shellArg(normalizedAgentName)
-    : "'<agent-name>'";
+  const effectiveAgentName = normalizedAgentName || normalizedUsername;
+  const agentNameArg = effectiveAgentName
+    ? shellArg(effectiveAgentName)
+    : "'<username>'";
   const usernameArg = normalizedUsername
     ? shellArg(normalizedUsername)
     : "'<username>'";
 
+  return {
+    normalizedToken,
+    normalizedBaseUrl,
+    normalizedUsername,
+    agentNameArg,
+    usernameArg,
+  };
+}
+
+export function buildRegistrationCommand(
+  token,
+  baseUrl,
+  agentName = "",
+  username = "",
+) {
+  const { normalizedToken, normalizedBaseUrl, agentNameArg, usernameArg } =
+    normalizeRegistrationArgs(token, baseUrl, agentName, username);
+
+  return `anx --base-url ${normalizedBaseUrl} --agent ${agentNameArg} auth register --username ${usernameArg} --invite-token ${normalizedToken}`;
+}
+
+export function buildRegistrationMessage(
+  token,
+  baseUrl,
+  agentName = "",
+  username = "",
+) {
+  const { normalizedUsername } = normalizeRegistrationArgs(
+    token,
+    baseUrl,
+    agentName,
+    username,
+  );
+
   const missingLabels = [];
-  if (!normalizedAgentName) {
-    missingLabels.push("agent profile name");
-  }
   if (!normalizedUsername) {
     missingLabels.push("username");
   }
@@ -55,7 +87,7 @@ export function buildRegistrationMessage(
   if (missingLabels.length > 0) {
     lines.push(
       `Replace the placeholder ${missingLabels.length === 1 ? "value" : "values"} for ${joinWithAnd(missingLabels)} before running the command.`,
-      "The CLI requires --username; it will not choose one automatically. The --agent value is the local profile name stored on that machine.",
+      "The CLI requires --username; it will not choose one automatically. When --agent is not provided separately, use the same value as the workspace username.",
       "",
       "Run the following command:",
     );
@@ -65,7 +97,7 @@ export function buildRegistrationMessage(
 
   lines.push(
     "",
-    `  anx --base-url ${normalizedBaseUrl} --agent ${agentNameArg} auth register --username ${usernameArg} --invite-token ${normalizedToken}`,
+    `  ${buildRegistrationCommand(token, baseUrl, agentName, username)}`,
     "",
     "This invite token is single-use.",
   );

@@ -64,6 +64,7 @@
       items.push(
         { href: `${base}/team`, label: "Team" },
         { href: `${base}/billing`, label: "Billing & Usage" },
+        { href: `${base}/settings`, label: "Settings" },
       );
     } else {
       items.push({ href: "/hosted/organizations", label: "Organizations" });

@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/svelte";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
@@ -44,6 +50,7 @@ const coreClientMock = vi.hoisted(() => ({
   listPrincipals: vi.fn(),
   listInvites: vi.fn(),
   listAuthAudit: vi.fn(),
+  createInvite: vi.fn(),
 }));
 
 vi.mock("$app/stores", () => ({
@@ -74,6 +81,13 @@ describe("access page", () => {
     });
     coreClientMock.listInvites.mockResolvedValue({ invites: [] });
     coreClientMock.listAuthAudit.mockResolvedValue({ events: [] });
+    coreClientMock.createInvite.mockResolvedValue({ token: "oinv_123" });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   afterEach(() => {
@@ -102,6 +116,76 @@ describe("access page", () => {
     expect(screen.getByRole("option", { name: "Agent" })).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Human" })).toBeNull();
     expect(screen.queryByRole("option", { name: "Any" })).toBeNull();
+    expect(screen.queryByLabelText(/Agent profile name/i)).toBeNull();
+    expect(screen.getByLabelText(/Agent username/i)).toBeTruthy();
     expect(screen.getByText(/hosted team management/i)).toBeTruthy();
+  });
+
+  it("requires an agent username before creating a hosted invite", async () => {
+    render(AccessPage, {
+      props: {
+        data: {
+          outOfWorkspaceMode: "hosted",
+          workspaceId: "ws-main",
+          registrationBaseUrl: "https://core.example.com",
+        },
+      },
+    });
+
+    await waitFor(() => {
+      expect(coreClientMock.listInvites).toHaveBeenCalled();
+    });
+
+    const submitButton = screen.getByRole("button", {
+      name: "Create invite",
+    });
+    await fireEvent.submit(submitButton.closest("form"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Agent username is required for hosted agent invites.",
+        ),
+      ).toBeTruthy();
+    });
+    expect(coreClientMock.createInvite).not.toHaveBeenCalled();
+  });
+
+  it("copies hosted invite commands with the username as the default agent profile", async () => {
+    render(AccessPage, {
+      props: {
+        data: {
+          outOfWorkspaceMode: "hosted",
+          workspaceId: "ws-main",
+          registrationBaseUrl: "https://core.example.com",
+        },
+      },
+    });
+
+    await waitFor(() => {
+      expect(coreClientMock.listInvites).toHaveBeenCalled();
+    });
+
+    await fireEvent.input(screen.getByLabelText(/Agent username/i), {
+      target: { value: "claude-code" },
+    });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Create invite" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Invite created successfully")).toBeTruthy();
+    });
+
+    expect(screen.getByRole("button", { name: "Copy token" })).toBeTruthy();
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy CLI command" }),
+    );
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "anx --base-url https://core.example.com --agent claude-code auth register --username claude-code --invite-token oinv_123",
+      ),
+    );
   });
 });

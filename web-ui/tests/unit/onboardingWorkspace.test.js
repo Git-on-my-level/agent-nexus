@@ -158,7 +158,12 @@ describe("Onboarding workspace page — form submission", () => {
   it("POSTs to workspaces endpoint and navigates to workspace inbox", async () => {
     hostedCpFetch.mockResolvedValue(emptyWorkspaceList);
 
-    const mockWs = { id: "ws1", slug: "main", display_name: "Main" };
+    const mockWs = {
+      id: "ws1",
+      slug: "main",
+      display_name: "Main",
+      status: "ready",
+    };
     hostedCpFetch.mockImplementation((path, init) => {
       if (init?.method === "POST") {
         return Promise.resolve({
@@ -239,6 +244,81 @@ describe("Onboarding workspace page — form submission", () => {
 
     const input = container.querySelector("input[type='text']");
     expect(input.value).toBe("Main");
+  });
+
+  it("mentions the active organization when workspace quota is exceeded", async () => {
+    hostedCpFetch.mockImplementation((path, init) => {
+      if (init?.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          statusText: "Unprocessable Entity",
+          json: async () => ({
+            error: {
+              code: "quota_exceeded",
+              message: "workspace quota has been reached for this organization",
+            },
+          }),
+        });
+      }
+      return Promise.resolve(emptyWorkspaceList);
+    });
+
+    const { container } = render(OnboardingWorkspacePage);
+
+    await waitFor(() => {
+      const input = container.querySelector("input[type='text']");
+      expect(input).toBeTruthy();
+    });
+
+    const form = container.querySelector("form");
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
+
+    await waitFor(() => {
+      const alert = container.querySelector("[role='alert']");
+      expect(alert).toBeTruthy();
+      expect(alert.textContent).toContain("Workspace limit reached for Acme");
+    });
+  });
+
+  it("navigates to dashboard provisioning state for new non-ready workspaces", async () => {
+    hostedCpFetch.mockImplementation((path, init) => {
+      if (init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            workspace: {
+              id: "ws1",
+              slug: "main",
+              display_name: "Main",
+              status: "provisioning",
+            },
+          }),
+        });
+      }
+      return Promise.resolve(emptyWorkspaceList);
+    });
+
+    const { container } = render(OnboardingWorkspacePage);
+
+    await waitFor(() => {
+      const input = container.querySelector("input[type='text']");
+      expect(input).toBeTruthy();
+    });
+
+    const form = container.querySelector("form");
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
+
+    await waitFor(() => {
+      expect(mockGoto).toHaveBeenCalledWith(
+        "/hosted/dashboard?organization_id=org1&created_workspace_id=ws1&created_workspace=Main",
+        { replaceState: true },
+      );
+    });
   });
 
   it("validates empty workspace name", async () => {

@@ -6,7 +6,15 @@
 
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import {
+    hostedSession,
+    loadHostedSession,
+    setActiveOrg,
+  } from "$lib/hosted/session.js";
+  import {
+    readHostedCreateError,
+    workspaceCreateRedirectHref,
+  } from "$lib/hosted/workspaceCreation.js";
 
   let displayName = $state("");
   let slug = $state("");
@@ -21,6 +29,9 @@
   const orgs = $derived(session.organizations);
   const activeOrg = $derived(
     orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
+  );
+  const activeOrgLabel = $derived(
+    activeOrg?.display_name || activeOrg?.slug || "the active organization",
   );
 
   function slugify(input) {
@@ -48,15 +59,6 @@
       await loadHostedSession();
     }
   });
-
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
 
   async function submit() {
     message = "";
@@ -92,10 +94,20 @@
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        message = await readError(res);
+        message = await readHostedCreateError(res, activeOrg);
         return;
       }
-      await goto("/hosted/dashboard");
+      const createBody = await res.json();
+      const workspace = createBody.workspace ?? createBody;
+      if (!workspace?.id) {
+        message = "Workspace created but no id was returned.";
+        return;
+      }
+      setActiveOrg(String(activeOrg.id));
+      await loadHostedSession();
+      await goto(workspaceCreateRedirectHref(activeOrg, workspace), {
+        replaceState: true,
+      });
     } catch (e) {
       message = e instanceof Error ? e.message : "Failed to create workspace.";
     } finally {
@@ -129,6 +141,16 @@
       submit();
     }}
   >
+    <div class="rounded-md border border-line bg-panel px-3 py-2">
+      <p class="text-micro uppercase text-fg-subtle">Creating in</p>
+      <p class="mt-0.5 truncate text-body text-fg">{activeOrgLabel}</p>
+      {#if activeOrg?.slug}
+        <p class="mt-0.5 truncate font-mono text-mono text-fg-subtle">
+          {activeOrg.slug}
+        </p>
+      {/if}
+    </div>
+
     <label class="block text-micro text-fg-muted">
       Workspace name
       <input

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRegistrationMessage } from "../../src/lib/inviteRegistrationMessage.js";
+import {
+  buildRegistrationCommand,
+  buildRegistrationMessage,
+} from "../../src/lib/inviteRegistrationMessage.js";
 
 describe("inviteRegistrationMessage", () => {
   it("fills in agent name and username when provided", () => {
@@ -26,6 +29,27 @@ describe("inviteRegistrationMessage", () => {
     expect(message).not.toContain("replace any placeholder values");
   });
 
+  it("defaults the CLI agent profile from the username", () => {
+    const command = buildRegistrationCommand(
+      "oinv_123",
+      "https://core.example.com",
+      "",
+      "hermes.prod",
+    );
+
+    expect(command).toBe(
+      "anx --base-url https://core.example.com --agent hermes.prod auth register --username hermes.prod --invite-token oinv_123",
+    );
+
+    const message = buildRegistrationMessage(
+      "oinv_123",
+      "https://core.example.com",
+      "",
+      "hermes.prod",
+    );
+    expect(message).not.toContain("agent profile name");
+  });
+
   it("quotes CLI values that need shell escaping", () => {
     const message = buildRegistrationMessage(
       "oinv_123",
@@ -39,7 +63,7 @@ describe("inviteRegistrationMessage", () => {
     );
   });
 
-  it("tells the agent to replace required placeholder values when names are missing", () => {
+  it("tells the agent to replace required placeholder values when username is missing", () => {
     const message = buildRegistrationMessage(
       "oinv_123",
       "https://core.example.com",
@@ -48,12 +72,12 @@ describe("inviteRegistrationMessage", () => {
     );
 
     expect(message).toContain(
-      "Replace the placeholder values for agent profile name and username before running the command.",
+      "Replace the placeholder value for username before running the command.",
     );
     expect(message).toContain(
       "The CLI requires --username; it will not choose one automatically.",
     );
-    expect(message).toContain("--agent '<agent-name>'");
+    expect(message).toContain("--agent '<username>'");
     expect(message).toContain("--username '<username>'");
   });
 });

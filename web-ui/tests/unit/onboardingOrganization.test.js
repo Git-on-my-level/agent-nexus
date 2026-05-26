@@ -59,6 +59,19 @@ vi.mock("$lib/hosted/session.js", () => {
       return get(store);
     }),
     setActiveOrg: vi.fn(),
+    upsertHostedOrganization: vi.fn((org) => {
+      store.set({
+        phase: "authed",
+        account: {
+          id: "u1",
+          email: "jane@example.com",
+          display_name: "Jane Doe",
+        },
+        organizations: [org],
+        activeOrgId: String(org.id),
+        error: "",
+      });
+    }),
   };
 });
 
@@ -201,7 +214,9 @@ describe("Onboarding organization page — form submission", () => {
 
     await waitFor(() => {
       expect(setActiveOrg).toHaveBeenCalledWith("new-org");
-      expect(mockGoto).toHaveBeenCalledWith("/hosted/onboarding/workspace");
+      expect(mockGoto).toHaveBeenCalledWith("/hosted/onboarding/workspace", {
+        replaceState: true,
+      });
     });
   });
 

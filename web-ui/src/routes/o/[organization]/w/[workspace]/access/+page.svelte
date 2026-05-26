@@ -12,7 +12,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { suggestAgentUsername } from "$lib/agentInviteIdentity.js";
-  import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
+  import { buildRegistrationCommand } from "$lib/inviteRegistrationMessage";
   import { buildWakeRegistrationMessage } from "$lib/wakeRegistrationMessage.js";
   import { enrichPrincipalsWithWakeRouting as loadPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
   import {
@@ -53,10 +53,9 @@
   let createdInviteAgentName = $state("");
   let createdInviteUsername = $state("");
   let messageCopied = $state(false);
+  let tokenCopied = $state(false);
   let tokenDismissed = $state(false);
-  let createdInviteCommandHasPlaceholders = $derived(
-    !createdInviteAgentName || !createdInviteUsername,
-  );
+  let createdInviteCommandHasPlaceholders = $derived(!createdInviteUsername);
 
   let revokingInviteId = $state("");
   let revokeInviteConfirm = $state({ open: false, id: "" });
@@ -240,16 +239,25 @@
     createdToken = "";
     createdInviteKind = "";
     messageCopied = false;
+    tokenCopied = false;
     tokenDismissed = false;
 
     try {
+      if (
+        hostedMode &&
+        (newInviteKind === "agent" || newInviteKind === "any") &&
+        !newInviteUsername.trim()
+      ) {
+        inviteError = "Agent username is required for hosted agent invites.";
+        return;
+      }
       const payload = {
         kind: newInviteKind,
       };
       const result = await coreClient.createInvite(payload);
       createdToken = result.token ?? "";
       createdInviteKind = newInviteKind;
-      createdInviteAgentName = newInviteAgentName.trim();
+      createdInviteAgentName = hostedMode ? "" : newInviteAgentName.trim();
       createdInviteUsername = newInviteUsername.trim();
       newInviteAgentName = "";
       newInviteUsername = "";
@@ -357,11 +365,21 @@
     }
   }
 
-  async function copyRegistrationMessage() {
+  async function copyInviteToken() {
+    if (!createdToken) return;
+    try {
+      await navigator.clipboard.writeText(createdToken);
+      tokenCopied = true;
+    } catch {
+      tokenCopied = false;
+    }
+  }
+
+  async function copyRegistrationCommand() {
     if (!createdToken) return;
     try {
       await navigator.clipboard.writeText(
-        buildRegistrationMessage(
+        buildRegistrationCommand(
           createdToken,
           data.registrationBaseUrl,
           createdInviteAgentName,
@@ -735,8 +753,8 @@
               token to select and copy.
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
                 {createdInviteCommandHasPlaceholders
-                  ? "For a CLI command template, use the button below."
-                  : "For a ready-to-paste CLI command, use the button below."}
+                  ? "The CLI command will include a username placeholder."
+                  : "The CLI command uses the agent username for --username and --agent."}
               {/if}
             </p>
             <div
@@ -761,18 +779,37 @@
               >
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <Button
-                variant="ghost"
-                size="compact"
-                onclick={copyRegistrationMessage}
-              >
-                {messageCopied ? "Copied" : "Copy registration message"}
-              </Button>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onclick={copyInviteToken}
+                >
+                  {tokenCopied ? "Token copied" : "Copy token"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onclick={copyRegistrationCommand}
+                >
+                  {messageCopied ? "CLI command copied" : "Copy CLI command"}
+                </Button>
+              </div>
               <p class="mt-1.5 text-micro text-fg-muted">
                 {createdInviteCommandHasPlaceholders
                   ? "Copies a command template with instructions for your agent to finish before registering."
-                  : "Copies a ready-to-paste command with instructions for your agent to register."}
+                  : "Copies a ready-to-paste command for your agent to register."}
               </p>
+            {:else}
+              <div class="mt-2">
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onclick={copyInviteToken}
+                >
+                  {tokenCopied ? "Token copied" : "Copy token"}
+                </Button>
+              </div>
             {/if}
           </div>
           <button
@@ -902,7 +939,7 @@
                       : "Invites a CLI agent to register and join wake routing."}
               </p>
             </div>
-            {#if newInviteKind === "agent" || newInviteKind === "any"}
+            {#if (newInviteKind === "agent" || newInviteKind === "any") && !hostedMode}
               <div class="flex flex-col">
                 <label
                   class="mb-1 block text-micro font-medium text-fg-muted"
@@ -926,14 +963,17 @@
                   Local CLI profile name for <code>--agent</code>.
                 </p>
               </div>
+            {/if}
+            {#if newInviteKind === "agent" || newInviteKind === "any"}
               <div class="flex flex-col">
                 <label
                   class="mb-1 block text-micro font-medium text-fg-muted"
                   for="invite-username"
                 >
-                  @handle / username <span class="font-normal opacity-70"
-                    >(optional)</span
-                  >
+                  Agent username
+                  {#if !hostedMode}
+                    <span class="font-normal opacity-70">(optional)</span>
+                  {/if}
                 </label>
                 <input
                   value={newInviteUsername}
@@ -944,10 +984,12 @@
                   class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
                   id="invite-username"
                   placeholder="e.g. claude-code"
+                  required={hostedMode}
                   type="text"
                 />
                 <p class="mt-1 text-micro text-fg-muted">
-                  Workspace handle for <code>@mentions</code> and wake routing.
+                  Used as this agent's <code>@handle</code> for mentions and wake
+                  routing in this workspace.
                 </p>
               </div>
             {/if}

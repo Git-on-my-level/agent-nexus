@@ -9,7 +9,10 @@
   import Button from "$lib/components/Button.svelte";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
-  import { workspacePath } from "$lib/workspacePaths.js";
+  import {
+    readHostedCreateError,
+    workspaceCreateRedirectHref,
+  } from "$lib/hosted/workspaceCreation.js";
 
   let workspaceName = $state("Main");
   let busy = $state(false);
@@ -144,15 +147,6 @@
     if (inputEl) inputEl.focus();
   });
 
-  async function readError(res) {
-    try {
-      const j = await res.json();
-      return j?.error?.message || j?.error?.code || res.statusText;
-    } catch {
-      return res.statusText;
-    }
-  }
-
   async function submit() {
     message = "";
     const trimmed = workspaceName.trim();
@@ -179,22 +173,17 @@
         }),
       });
       if (!res.ok) {
-        message = await readError(res);
+        message = await readHostedCreateError(res, activeOrg);
         return;
       }
       const body = await res.json();
       const ws = body.workspace ?? body;
-      const slug = ws?.slug;
-      const orgSlug = ws?.organization_slug ?? activeOrg?.slug;
-      if (!slug) {
-        message = "Workspace created but no slug was returned.";
+      if (!ws?.id) {
+        message = "Workspace created but no id was returned.";
         return;
       }
-      if (!orgSlug) {
-        message = "Workspace created but no organization slug was returned.";
-        return;
-      }
-      await goto(workspacePath(orgSlug, slug, "/inbox"), {
+      await loadHostedSession();
+      await goto(workspaceCreateRedirectHref(activeOrg, ws), {
         replaceState: true,
       });
     } catch (e) {

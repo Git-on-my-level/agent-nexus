@@ -25,7 +25,9 @@
 
   function openOrg(org) {
     setActiveOrg(String(org.id));
-    void goto(`/hosted/organizations/${encodeURIComponent(org.id)}`);
+    const inactive = org.status && org.status !== "active";
+    const suffix = inactive ? "/settings" : "";
+    void goto(`/hosted/organizations/${encodeURIComponent(org.id)}${suffix}`);
   }
 
   async function load() {
@@ -128,6 +130,13 @@
                 <span class="truncate text-subtitle text-fg"
                   >{org.display_name || org.slug}</span
                 >
+                {#if org.status && org.status !== "active"}
+                  <span
+                    class="rounded bg-danger-soft px-1.5 py-0.5 text-micro text-danger-text"
+                  >
+                    Deactivated
+                  </span>
+                {/if}
                 <span
                   class="rounded px-1.5 py-0.5 text-micro {planBadgeClasses(
                     org.plan_tier,

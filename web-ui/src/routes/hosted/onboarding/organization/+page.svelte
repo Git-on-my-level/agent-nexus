@@ -12,6 +12,7 @@
     hostedSession,
     loadHostedSession,
     setActiveOrg,
+    upsertHostedOrganization,
   } from "$lib/hosted/session.js";
 
   let orgName = $state("");
@@ -144,9 +145,10 @@
         message = "Organization created but no id was returned.";
         return;
       }
+      upsertHostedOrganization(org, { active: true });
       await loadHostedSession();
       setActiveOrg(String(org.id));
-      await goto("/hosted/onboarding/workspace");
+      await goto("/hosted/onboarding/workspace", { replaceState: true });
     } catch (e) {
       message =
         e instanceof Error ? e.message : "Failed to create organization.";

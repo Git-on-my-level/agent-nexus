@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
 
   import { browser } from "$app/environment";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
@@ -18,7 +20,11 @@
   } from "$lib/hosted/fetchState.js";
   import { normalizeHostedLaunchFinishURL } from "$lib/hosted/launchFlow.js";
   import { planBadgeClasses, planLabel } from "$lib/hosted/planCatalog.js";
-  import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import {
+    hostedSession,
+    loadHostedSession,
+    setActiveOrg,
+  } from "$lib/hosted/session.js";
   import { pct, storageMetric } from "$lib/hosted/usageStats.js";
 
   /** @type {any[]} */
@@ -32,8 +38,20 @@
   let retrying = $state(false);
   let message = $state("");
   let launchingWorkspaceId = $state("");
+  let createdWorkspaceNotice = $state(null);
+  let consumedCreateParamKey = $state("");
 
   const session = $derived($hostedSession);
+  const routeUrl = $derived($page.url);
+  const requestedOrgId = $derived(
+    String(routeUrl.searchParams.get("organization_id") ?? "").trim(),
+  );
+  const createdWorkspaceId = $derived(
+    String(routeUrl.searchParams.get("created_workspace_id") ?? "").trim(),
+  );
+  const createdWorkspaceLabel = $derived(
+    String(routeUrl.searchParams.get("created_workspace") ?? "").trim(),
+  );
   const orgs = $derived(session.organizations);
   const activeOrg = $derived(
     orgs.find((o) => String(o.id) === session.activeOrgId) ?? null,
@@ -108,9 +126,49 @@
 
   $effect(() => {
     if (!browser) return;
+    if (session.phase !== "authed" || !requestedOrgId) return;
+    if (orgs.some((org) => String(org.id) === requestedOrgId)) {
+      setActiveOrg(requestedOrgId);
+    }
+  });
+
+  $effect(() => {
+    if (!browser) return;
     if (session.phase !== "authed") return;
     void loadWorkspaces(session.activeOrgId);
     void loadUsage(session.activeOrgId);
+  });
+
+  $effect(() => {
+    if (!browser || !createdWorkspaceId) return;
+    const createParamKey = [
+      requestedOrgId,
+      createdWorkspaceId,
+      createdWorkspaceLabel,
+    ].join("::");
+    if (createParamKey === consumedCreateParamKey) return;
+    createdWorkspaceNotice = {
+      id: createdWorkspaceId,
+      label: createdWorkspaceLabel,
+    };
+    consumedCreateParamKey = createParamKey;
+  });
+
+  $effect(() => {
+    if (!browser || !consumedCreateParamKey || loadingWorkspaces || wsError) {
+      return;
+    }
+    if (
+      routeUrl.searchParams.has("created_workspace_id") ||
+      routeUrl.searchParams.has("created_workspace") ||
+      routeUrl.searchParams.has("organization_id")
+    ) {
+      void goto("/hosted/dashboard", {
+        replaceState: true,
+        noScroll: true,
+        keepFocus: true,
+      });
+    }
   });
 
   async function openWorkspaceLaunch(workspace) {
@@ -165,6 +223,13 @@
     if (p >= 90) return "bg-danger";
     if (p >= 75) return "bg-warn";
     return "bg-accent-solid";
+  }
+
+  function workspaceById(workspaceId) {
+    return (
+      workspaces.find((ws) => String(ws?.id ?? "") === String(workspaceId)) ??
+      null
+    );
   }
 </script>
 
@@ -229,6 +294,34 @@
       {message} If this persists, use the Support link in the footer or retry after
       a few minutes.
     </p>
+  {/if}
+
+  {#if createdWorkspaceNotice && !loadingWorkspaces && !wsError}
+    {@const createdWorkspace = workspaceById(createdWorkspaceNotice.id)}
+    <div
+      class="rounded-md border border-line bg-panel px-4 py-3 text-body text-fg"
+    >
+      <p class="text-subtitle text-fg">
+        {createdWorkspace?.display_name ||
+          createdWorkspaceNotice.label ||
+          "Workspace"}{" "}
+        created
+      </p>
+      <p class="mt-1 text-meta text-fg-muted">
+        {#if createdWorkspace}
+          {#if String(createdWorkspace.status ?? "").toLowerCase() === "ready"}
+            It is ready to open in {activeOrg?.display_name || activeOrg?.slug}.
+          {:else}
+            It is listed below as {createdWorkspace.status || "provisioning"}.
+            Agent Nexus will show the Open action once setup finishes.
+          {/if}
+        {:else}
+          Refreshing the workspace list for
+          {activeOrg?.display_name || activeOrg?.slug || "this organization"}.
+          Use Retry if it does not appear after a moment.
+        {/if}
+      </p>
+    </div>
   {/if}
 
   {#if session.phase === "loading" || session.phase === "idle"}

@@ -210,6 +210,35 @@ export function setActiveOrg(orgId) {
   writeActiveOrgToStorage(id);
 }
 
+/** Merge a freshly-created organization into the session before navigation. */
+export function upsertHostedOrganization(org, options = {}) {
+  const id = String(org?.id ?? "").trim();
+  if (!id) return;
+  const active = options?.active !== false;
+  hostedSession.update((s) => {
+    const nextOrganizations = [...s.organizations];
+    const existingIndex = nextOrganizations.findIndex(
+      (o) => String(o.id) === id,
+    );
+    if (existingIndex >= 0) {
+      nextOrganizations[existingIndex] = {
+        ...nextOrganizations[existingIndex],
+        ...org,
+      };
+    } else {
+      nextOrganizations.push(org);
+    }
+    return {
+      ...s,
+      organizations: nextOrganizations,
+      activeOrgId: active ? id : s.activeOrgId,
+    };
+  });
+  if (active) {
+    writeActiveOrgToStorage(id);
+  }
+}
+
 /** Sign out — clears server session cookie + local token + store. */
 export async function signOutHostedSession() {
   try {
