@@ -2,6 +2,8 @@ module agent-nexus-core
 
 go 1.23.0
 
+toolchain go1.24.13
+
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.21
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.25
