@@ -451,9 +451,9 @@ fi
 
 run_cli_json "$TMP_DIR/board-get.json" boards get "$BOARD_ID"
 
-printf '{"card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-a"]}}}\n' \
-  "$BOARD_TOPIC_A_ID" "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" \
-  | run_cli_json "$TMP_DIR/board-card-a-add.json" boards cards create "$BOARD_ID"
+printf '{"board_id":"%s","card":{"title":"Smoke board card A","summary":"smoke card A","column_key":"backlog","topic_ref":"topic:%s","document_ref":"document:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-a"]}}}\n' \
+  "$BOARD_ID" "$BOARD_TOPIC_A_ID" "$CARD_DOC_ID" "$BOARD_TOPIC_A_ID" \
+  | run_cli_json "$TMP_DIR/board-card-a-add.json" cards create
 BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_A_ID" ]]; then
   BOARD_CARD_A_ID="$(json_get "$TMP_DIR/board-card-a-add.json" 'data.body.card.id' || true)"
@@ -482,9 +482,9 @@ fi
 # Legacy `anx receipts` / `anx reviews` commands were removed; packet convenience
 # flows are not exposed as standalone CLI commands in the current registry.
 
-printf '{"card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-b"]}}}\n' \
-  "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
-  | run_cli_json "$TMP_DIR/board-card-b-add.json" boards cards create "$BOARD_ID"
+printf '{"board_id":"%s","card":{"title":"Smoke board card B","summary":"smoke card B","column_key":"backlog","after_card_id":"%s","topic_ref":"topic:%s","assignee_refs":[],"risk":"low","resolution_refs":[],"related_refs":["topic:%s"],"provenance":{"sources":["event:smoke-card-b"]}}}\n' \
+  "$BOARD_ID" "$BOARD_CARD_A_ID" "$BOARD_TOPIC_B_ID" "$BOARD_TOPIC_B_ID" \
+  | run_cli_json "$TMP_DIR/board-card-b-add.json" cards create
 BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.card.id' || true)"
 if [[ -z "$BOARD_CARD_B_ID" ]]; then
   BOARD_CARD_B_ID="$(json_get "$TMP_DIR/board-card-b-add.json" 'data.body.card.id' || true)"
