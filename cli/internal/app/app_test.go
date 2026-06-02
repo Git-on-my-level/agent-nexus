@@ -9,8 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"agent-nexus-cli/internal/profile"
 )
 
 func TestRunVersionJSON(t *testing.T) {
@@ -432,6 +435,99 @@ func TestRunDoctorJSON(t *testing.T) {
 	if len(payload.Data.Checks) < 4 {
 		t.Fatalf("expected 4 checks, got %d", len(payload.Data.Checks))
 	}
+}
+
+func TestRunDoctorRefreshesProfileBeforePublicWakeProofChecks(t *testing.T) {
+	t.Parallel()
+
+	var woke atomic.Bool
+	var tokenCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/auth/token":
+			tokenCalls.Add(1)
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode token body: %v", err)
+			}
+			if body["grant_type"] != "refresh_token" || body["refresh_token"] != "refresh-token" {
+				t.Fatalf("unexpected token body: %#v", body)
+			}
+			woke.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"tokens":{"access_token":"fresh-access","refresh_token":"fresh-refresh","token_type":"Bearer","expires_in":3600}}`))
+		case "/readyz":
+			if !woke.Load() {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":{"code":"wake_proof_required","message":"validated workspace wake proof is required"}}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/meta/handshake":
+			if !woke.Load() {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":{"code":"wake_proof_required","message":"validated workspace wake proof is required"}}`))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	if err := profile.Save(profile.ProfilePath(home, "sleepy"), profile.Profile{
+		Agent:                "sleepy",
+		BaseURL:              server.URL,
+		AccessToken:          "expired-access",
+		RefreshToken:         "refresh-token",
+		TokenType:            "Bearer",
+		AccessTokenExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+		AgentID:              "agent_sleepy",
+		KeyID:                "key_sleepy",
+	}); err != nil {
+		t.Fatalf("save profile: %v", err)
+	}
+
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "sleepy", "doctor"})
+	payload := assertEnvelopeOK(t, raw)
+	data, _ := payload["data"].(map[string]any)
+	checks, _ := data["checks"].([]any)
+	if tokenCalls.Load() != 1 {
+		t.Fatalf("expected doctor to refresh via /auth/token once, got %d calls; output=%s", tokenCalls.Load(), raw)
+	}
+	if !doctorCheckMessageContains(checks, "auth_recovery", "/auth/token") {
+		t.Fatalf("expected auth_recovery check to mention /auth/token, checks=%#v", checks)
+	}
+	if !doctorCheckOK(checks, "core_health") || !doctorCheckOK(checks, "core_handshake") {
+		t.Fatalf("expected public checks to pass after auth recovery, checks=%#v", checks)
+	}
+}
+
+func doctorCheckOK(checks []any, name string) bool {
+	for _, raw := range checks {
+		check, _ := raw.(map[string]any)
+		if anyStringValue(check["name"]) == name {
+			ok, _ := check["ok"].(bool)
+			return ok
+		}
+	}
+	return false
+}
+
+func doctorCheckMessageContains(checks []any, name string, needle string) bool {
+	for _, raw := range checks {
+		check, _ := raw.(map[string]any)
+		if anyStringValue(check["name"]) == name {
+			return strings.Contains(anyStringValue(check["message"]), needle)
+		}
+	}
+	return false
 }
 
 func TestRunAPICallJSONWithStdinBody(t *testing.T) {

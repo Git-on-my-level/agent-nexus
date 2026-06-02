@@ -195,6 +195,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"unknown_actor_id":              {Recoverable: true, Hint: "Register/select a valid actor id before issuing writes."},
 	"unknown_command":               {Recoverable: true, Hint: "Run `anx help` to list available commands."},
 	"username_taken":                {Recoverable: true, Hint: "Choose a different username and retry."},
+	"wake_proof_required":           {Recoverable: true, Hint: "Hosted workspace wake requires a recoverable auth token exchange or a control-plane session. Run `anx auth token-status`, then `anx auth whoami` or `anx auth rotate` for this profile."},
 	"internal_error":                {Recoverable: false, Hint: "Retry once; if it persists, escalate with logs and request details."},
 	"schema_unavailable":            {Recoverable: false, Hint: "Core schema subsystem is unavailable; retry later or escalate to operator."},
 	"primitives_unavailable":        {Recoverable: false, Hint: "Core storage subsystem is unavailable; retry later or escalate to operator."},

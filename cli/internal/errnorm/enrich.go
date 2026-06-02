@@ -535,6 +535,9 @@ func enrichKeyMismatch(httpStatus int, msg string) (string, map[string]any) {
 }
 
 func enrichAuth(code string, httpStatus int, msg string) (string, map[string]any) {
+	if code == "wake_proof_required" {
+		return wakeProofRequiredHintRecovery(httpStatus)
+	}
 	if code == "invalid_token" || code == "auth_required" {
 		return authHintRecovery(httpStatus)
 	}
@@ -543,6 +546,21 @@ func enrichAuth(code string, httpStatus int, msg string) (string, map[string]any
 		return authHintRecovery(httpStatus)
 	}
 	return "", nil
+}
+
+func wakeProofRequiredHintRecovery(httpStatus int) (string, map[string]any) {
+	hint := "The hosted workspace is asleep and this route cannot wake it directly. If this agent has a local profile, run `anx auth token-status`, then `anx auth whoami` to refresh via `/auth/token`; if the key is stale, run `anx auth rotate`. If token recovery fails with `invalid_token`, `key_mismatch`, or `agent_revoked`, use the hosted dashboard or an auth-admin invite to re-register."
+	return hint, map[string]any{
+		"kind":             "hosted_wake_recovery",
+		"status":           httpStatus,
+		"check_cli":        "anx auth token-status",
+		"refresh_cli":      "anx auth whoami",
+		"rotate_cli":       "anx auth rotate",
+		"re_register_cli":  "anx auth register",
+		"recovery_route":   "/auth/token",
+		"blocked_route":    "current request",
+		"operator_surface": "hosted dashboard or auth-admin invite",
+	}
 }
 
 func authHintRecovery(httpStatus int) (string, map[string]any) {

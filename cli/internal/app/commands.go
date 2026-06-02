@@ -206,6 +206,37 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 		return true, "base url parsed", nil
 	})
 
+	addCheck("auth_recovery", func() (bool, string, error) {
+		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
+		defer cancel()
+		_, err := authcli.New(cfg).EnsureAccessToken(callCtx)
+		if err == nil {
+			return true, "local auth profile has usable access token material or refreshed via /auth/token", nil
+		}
+		normalized := errnorm.Normalize(err)
+		if normalized == nil {
+			return false, "", err
+		}
+		switch strings.TrimSpace(normalized.Code) {
+		case "profile_not_found":
+			return true, "no local auth profile; auth recovery is unavailable until registration", nil
+		case "profile_invalid":
+			return false, "profile is missing agent_id/key_id; re-register or select the correct --agent profile", nil
+		case "key_load_failed", "key_invalid":
+			return false, "profile key material is missing or invalid; restore the private key, rotate if you still have a valid token, or re-register", nil
+		case "invalid_token":
+			return false, "auth recovery reached /auth/token but local refresh/assertion material is invalid; run `anx auth rotate` or re-register with an invite", nil
+		case "key_mismatch":
+			return false, "auth recovery reached /auth/token but the server rejected the key assertion; run `anx auth rotate` if possible or re-register with an invite", nil
+		case "agent_revoked":
+			return false, "local profile is revoked; register a new agent profile with an invite", nil
+		case "wake_proof_required":
+			return false, "hosted workspace wake still blocked /auth/token; update the hosted control plane or use the web dashboard/admin recovery path", nil
+		default:
+			return false, firstNonEmpty(strings.TrimSpace(normalized.Hint), normalized.Error()), nil
+		}
+	})
+
 	client, err := httpclient.New(cfg)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
@@ -219,7 +250,7 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 			return false, "", callErr
 		}
 		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Sprintf("health status %d", resp.StatusCode), nil
+			return false, doctorHTTPFailureMessage("health", resp), nil
 		}
 		return true, "core health endpoint reachable", nil
 	})
@@ -232,7 +263,7 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 			return false, "", callErr
 		}
 		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Sprintf("handshake status %d", resp.StatusCode), nil
+			return false, doctorHTTPFailureMessage("handshake", resp), nil
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(resp.Body, &payload); err != nil {
@@ -268,6 +299,25 @@ func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResul
 		return result, errnorm.WithDetails(errnorm.Local("doctor_failed", "doctor found failing checks"), summary)
 	}
 	return result, nil
+}
+
+func doctorHTTPFailureMessage(label string, resp httpclient.RawResponse) string {
+	base := fmt.Sprintf("%s status %d", label, resp.StatusCode)
+	normalized := errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+	if normalized == nil {
+		return base
+	}
+	parts := []string{base}
+	if code := strings.TrimSpace(normalized.Code); code != "" && code != "remote_error" {
+		parts = append(parts, "code="+code)
+	}
+	if msg := strings.TrimSpace(normalized.Message); msg != "" && !strings.HasPrefix(msg, "request failed with status") {
+		parts = append(parts, msg)
+	}
+	if hint := strings.TrimSpace(normalized.Hint); hint != "" {
+		parts = append(parts, "Hint: "+hint)
+	}
+	return strings.Join(parts, " — ")
 }
 
 func apiCallUsageText() string {

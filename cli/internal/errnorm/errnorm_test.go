@@ -87,6 +87,23 @@ func TestEnrichAuthRequiredGetsAuthHint(t *testing.T) {
 	}
 }
 
+func TestEnrichWakeProofRequiredGetsHostedRecoveryHint(t *testing.T) {
+	t.Parallel()
+
+	err := FromHTTPFailure(401, []byte(`{"error":{"code":"wake_proof_required","message":"validated workspace wake proof is required","recoverable":true,"hint":"generic"}}`))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Hint, "/auth/token") || !strings.Contains(err.Hint, "auth whoami") {
+		t.Fatalf("expected hosted auth recovery hint, got %q", err.Hint)
+	}
+	details, _ := err.Details.(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
+	if rec["kind"] != "hosted_wake_recovery" || rec["recovery_route"] != "/auth/token" {
+		t.Fatalf("unexpected recovery details: %#v", rec)
+	}
+}
+
 func TestEnrichInvalidRequestIfUpdatedAtRequired(t *testing.T) {
 	t.Parallel()
 
