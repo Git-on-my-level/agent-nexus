@@ -167,9 +167,6 @@ commands:
   "boards.cards.batch_add":
     classification: exposed_write
     reason: "ordinary board card creation"
-  "boards.cards.create":
-    classification: exposed_write
-    reason: "ordinary board card creation"
   "boards.cards.get":
     classification: exposed_read
     reason: "board-scoped card read"

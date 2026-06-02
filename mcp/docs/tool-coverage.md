@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 124
+- Command count: 123
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -15,7 +15,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agents | 4 |
 | artifacts | 10 |
 | auth | 15 |
-| boards | 14 |
+| boards | 13 |
 | cards | 13 |
 | derived | 1 |
 | docs | 12 |
@@ -35,7 +35,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 43 |
-| exposed_write | 41 |
+| exposed_write | 40 |
 | gated_admin | 14 |
 | gated_sensitive | 11 |
 | unsupported_bootstrap_auth | 6 |
@@ -47,7 +47,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 84 | exposed_read + exposed_write + adapted |
+| standalone default | 83 | exposed_read + exposed_write + adapted |
 | hosted default | 42 | explicit read-only private-app allowlist |
 | gated | 25 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -94,7 +94,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | auth.token | auth | POST | /auth/token | unsupported_bootstrap_auth | raw token exchange is not exposed as an MCP tool |
 | boards.archive | boards | POST | /boards/{board_id}/archive | exposed_write | ordinary reversible board lifecycle write |
 | boards.cards.batch_add | boards | POST | /boards/{board_id}/cards/batch | exposed_write | ordinary board card creation |
-| boards.cards.create | boards | POST | /boards/{board_id}/cards | exposed_write | ordinary board card creation |
 | boards.cards.get | boards | GET | /boards/{board_id}/cards/{card_id} | exposed_read | board-scoped card read |
 | boards.cards.list | boards | GET | /boards/{board_id}/cards | exposed_read | board card inventory read |
 | boards.create | boards | POST | /boards | exposed_write | ordinary board creation |

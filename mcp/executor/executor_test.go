@@ -166,12 +166,12 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 			wantPath:   "/artifacts/artifact-1",
 		},
 		{
-			name:          "board cards write",
-			commandID:     "boards.cards.create",
-			arguments:     map[string]any{"path": map[string]any{"board_id": "board-1"}, "body": map[string]any{"card.title": "Do it"}},
+			name:          "cards write",
+			commandID:     "cards.create",
+			arguments:     map[string]any{"body": map[string]any{"board_id": "board-1", "card.title": "Do it"}},
 			wantMethod:    http.MethodPost,
-			wantPath:      "/boards/board-1/cards",
-			wantBodyField: map[string]any{"card.title": "Do it"},
+			wantPath:      "/cards",
+			wantBodyField: map[string]any{"board_id": "board-1", "card.title": "Do it"},
 		},
 		{
 			name:          "card revisions write",
