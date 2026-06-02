@@ -4,13 +4,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `124`
-- Baseline-allowed required-field gaps: `126`
-- Missing recommended examples: `124`
+- Command operations: `123`
+- Baseline-allowed required-field gaps: `125`
+- Missing recommended examples: `123`
 
 ## Baseline gap counts
 
-- `x-anx-agent-notes`: `117`
+- `x-anx-agent-notes`: `116`
 - `x-anx-cli-path`: `3`
 - `x-anx-concepts`: `1`
 - `x-anx-error-codes`: `4`
@@ -56,7 +56,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `auth.token` `POST /auth/token` missing `x-anx-agent-notes`
 - `boards.archive` `POST /boards/{board_id}/archive` missing `x-anx-agent-notes`
 - `boards.cards.batch_add` `POST /boards/{board_id}/cards/batch` missing `x-anx-agent-notes`
-- `boards.cards.create` `POST /boards/{board_id}/cards` missing `x-anx-agent-notes`
 - `boards.cards.get` `GET /boards/{board_id}/cards/{card_id}` missing `x-anx-agent-notes`
 - `boards.cards.list` `GET /boards/{board_id}/cards` missing `x-anx-agent-notes`
 - `boards.create` `POST /boards` missing `x-anx-agent-notes`
@@ -184,7 +183,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `auth.token` `POST /auth/token`
 - `boards.archive` `POST /boards/{board_id}/archive`
 - `boards.cards.batch_add` `POST /boards/{board_id}/cards/batch`
-- `boards.cards.create` `POST /boards/{board_id}/cards`
 - `boards.cards.get` `GET /boards/{board_id}/cards/{card_id}`
 - `boards.cards.list` `GET /boards/{board_id}/cards`
 - `boards.create` `POST /boards`

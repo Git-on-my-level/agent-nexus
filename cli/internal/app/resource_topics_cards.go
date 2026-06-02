@@ -211,6 +211,10 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 	case "list":
 		fs := newSilentFlagSet("cards list")
 		var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
+		var boardFlag trackedString
+		var boardIDFlag trackedString
+		fs.Var(&boardFlag, "board", "Board ref, handle, or id; lists cards on one board")
+		fs.Var(&boardIDFlag, "board-id", "Board id; equivalent to --board for scripts")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived cards")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived cards")
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed cards")
@@ -223,6 +227,24 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		}
 		if len(fs.Args()) > 0 {
 			return nil, "cards list", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx cards list`")
+		}
+		boardID := strings.TrimSpace(boardIDFlag.value)
+		if strings.TrimSpace(boardFlag.value) != "" {
+			if boardID != "" {
+				return nil, "cards list", errnorm.Usage("invalid_flags", "`--board` and `--board-id` cannot be combined")
+			}
+			boardID = strings.TrimSpace(boardFlag.value)
+		}
+		if boardID != "" {
+			if includeArchived || archivedOnly || includeTrashed || trashedOnly {
+				return nil, "cards list", errnorm.Usage("invalid_flags", "lifecycle filters are not supported with `anx cards list --board`; use global `anx cards list` for lifecycle filtering")
+			}
+			resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
+			if err != nil {
+				return nil, "cards list", err
+			}
+			result, callErr := a.invokeTypedJSON(ctx, cfg, "cards list", "boards.cards.list", map[string]string{"board_id": resolvedBoard}, nil, nil)
+			return result, "cards list", callErr
 		}
 		query := make([]queryParam, 0, 4)
 		if err := appendLifecycleStatesForHTTPList(&query, "", includeArchived, archivedOnly, includeTrashed, trashedOnly); err != nil {
@@ -1508,7 +1530,7 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 			return a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoard, cardNest, "after_card_id")
 		}
 		return nil
-	case "boards.cards.add", "boards.cards.create":
+	case "boards.cards.add":
 		if pathParams == nil {
 			return nil
 		}

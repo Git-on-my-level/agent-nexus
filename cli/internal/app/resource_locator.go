@@ -369,7 +369,7 @@ func locatorFromCommandBody(commandID string, body map[string]any) (resourceLoca
 		artifact := extractNestedMap(body, "artifact")
 		id := publicLocatorID(artifact, "artifact")
 		return resourceLocator{Kind: "artifact", ID: id}, id != ""
-	case "cards.create", "boards.cards.create":
+	case "cards.create":
 		card := extractNestedMap(body, "card")
 		id := publicLocatorID(card, "card")
 		boardID := firstNonEmpty(refID(anyString(card["board_ref"])), strings.TrimSpace(anyString(card["board_handle"])))

@@ -3971,6 +3971,13 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			messagePart: "board",
 		},
 		{
+			name:        "boards cards move removed",
+			args:        []string{"boards", "cards", "move", "--board-id", "board_123", "--card-id", "card_123", "--column", "review"},
+			command:     "boards cards",
+			code:        "unknown_subcommand",
+			messagePart: "valid subcommands",
+		},
+		{
 			name:        "config lenient invalid flag",
 			args:        []string{"config", "use", "agent-a", "--unknown"},
 			command:     "config use",
@@ -4209,7 +4216,7 @@ func TestBoardCommands(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards":
 			var payload map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode boards cards create body: %v", err)
+				t.Fatalf("decode board-scoped card create body: %v", err)
 			}
 			if _, hasParent := payload["parent_thread"]; hasParent {
 				t.Fatalf("unexpected parent_thread in create payload %#v", payload)
@@ -4217,7 +4224,25 @@ func TestBoardCommands(t *testing.T) {
 			if got := anyStringValue(payload["request_key"]); got != "req-1" {
 				t.Fatalf("expected create request_key req-1, got %#v", payload)
 			}
-			if got := anyStringValue(payload["document_ref"]); got != "document:doc_1" {
+			card, _ := payload["card"].(map[string]any)
+			if got := anyStringValue(card["document_ref"]); got != "document:doc_1" {
+				t.Fatalf("expected create document_ref document:doc_1, got %#v", payload)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `","updated_at":"` + nextUpdatedAt + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","thread_id":"` + cardThreadID + `","parent_thread":"` + cardThreadID + `","title":"Launch task","body":"","version":1,"column_key":"backlog","rank":"a","assignee":null,"priority":null,"status":"todo","pinned_document_id":"doc_1","created_at":"` + updatedAt + `","created_by":"actor_1","updated_at":"` + nextUpdatedAt + `","updated_by":"actor_1","provenance":{"sources":["inferred"]}}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/cards":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode cards create body: %v", err)
+			}
+			if got := anyStringValue(payload["board_id"]); got != boardID {
+				t.Fatalf("expected cards create board_id %q, got %#v", boardID, payload)
+			}
+			if got := anyStringValue(payload["request_key"]); got != "req-1" {
+				t.Fatalf("expected create request_key req-1, got %#v", payload)
+			}
+			card, _ := payload["card"].(map[string]any)
+			if got := anyStringValue(card["document_ref"]); got != "document:doc_1" {
 				t.Fatalf("expected create document_ref document:doc_1, got %#v", payload)
 			}
 			w.WriteHeader(http.StatusCreated)
@@ -4290,29 +4315,22 @@ func TestBoardCommands(t *testing.T) {
 		t.Fatalf("expected boards.cards.list command_id, got %#v", cardsListPayload)
 	}
 
-	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID, "--column", "backlog", "--request-key", "req-1", "--document-ref", "document:doc_1"}))
-	if got := anyStringValue(createPayload["command_id"]); got != "boards.cards.create" {
-		t.Fatalf("expected boards.cards.create command_id, got %#v", createPayload)
+	canonicalCardsListPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "cards", "list", "--board", boardID}))
+	if got := anyStringValue(canonicalCardsListPayload["command"]); got != "cards list" {
+		t.Fatalf("expected canonical cards list command, got %#v", canonicalCardsListPayload)
+	}
+	if got := anyStringValue(canonicalCardsListPayload["command_id"]); got != "cards.list" {
+		t.Fatalf("expected canonical cards list command id, got %#v", canonicalCardsListPayload)
+	}
+
+	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "cards", "create", "--board", boardID, "--title", "Launch task", "--body", "Launch task body", "--column", "backlog", "--request-key", "req-1", "--document-ref", "document:doc_1"}))
+	if got := anyStringValue(createPayload["command_id"]); got != "cards.create" {
+		t.Fatalf("expected cards.create command_id, got %#v", createPayload)
 	}
 
 	getCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "get", "--board-id", boardID, "--card-id", cardID}))
 	if got := anyStringValue(getCardPayload["command_id"]); got != "boards.cards.get" {
 		t.Fatalf("expected boards.cards.get command_id, got %#v", getCardPayload)
-	}
-
-	updateCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "patch", "--card-id", cardID, "--if-updated-at", updatedAt, "--resolution", "done"}))
-	if got := anyStringValue(updateCardPayload["command_id"]); got != "boards.cards.patch" {
-		t.Fatalf("expected boards.cards.patch command_id, got %#v", updateCardPayload)
-	}
-
-	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "move", "--board-id", boardID, "--card-id", cardID, "--if-board-updated-at", updatedAt, "--column", "review", "--after-card-id", peerCardID}))
-	if got := anyStringValue(movePayload["command_id"]); got != "boards.cards.move" {
-		t.Fatalf("expected boards.cards.move command_id, got %#v", movePayload)
-	}
-
-	archivePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "archive", "--card-id", cardID, "--if-board-updated-at", updatedAt}))
-	if got := anyStringValue(archivePayload["command_id"]); got != "boards.cards.archive" {
-		t.Fatalf("expected boards.cards.archive command_id, got %#v", archivePayload)
 	}
 }
 
@@ -4448,17 +4466,15 @@ func TestAgentGuideDocumentsRefNativeIdentity(t *testing.T) {
 	}
 }
 
-func TestBoardCardsMoveRejectsBeforeAndAfterFlags(t *testing.T) {
+func TestCardsCreateRejectsBeforeAndAfterFlags(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"boards", "cards", "move",
-		"--board-id", "board_1234567890abcdef",
-		"--card-id", "card_1234567890abcdef",
-		"--if-board-updated-at", "2026-03-08T00:00:00Z",
-		"--column", "review",
+		"cards", "create",
+		"--board", "board_1234567890abcdef",
+		"--title", "Task",
 		"--before-card-id", "card_a_1234567890abcdef",
 		"--after-card-id", "card_b_1234567890abcdef",
 	})
@@ -6365,12 +6381,12 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 		}
 	})
 
-	t.Run("boards_cards_create", func(t *testing.T) {
+	t.Run("cards_create", func(t *testing.T) {
 		t.Parallel()
 		var receivedBody map[string]any
 		boardID := "board_1"
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodPost && r.URL.Path == "/boards/"+boardID+"/cards" {
+			if r.Method == http.MethodPost && r.URL.Path == "/cards" {
 				body, _ := io.ReadAll(r.Body)
 				json.Unmarshal(body, &receivedBody)
 				w.Header().Set("Content-Type", "application/json")
@@ -6384,8 +6400,7 @@ func TestCreateCommandsDefaultEmptyListFields(t *testing.T) {
 
 		home := t.TempDir()
 		env := map[string]string{}
-		input := `{"card":{"title":"C","column_key":"backlog","provenance":{"sources":[]}}}`
-		result := runCLIForTest(t, home, env, strings.NewReader(input), []string{"--json", "--base-url", server.URL, "boards", "cards", "create", "--board-id", boardID})
+		result := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "cards", "create", "--board", boardID, "--title", "C", "--body", "Body", "--column", "backlog"})
 		assertEnvelopeOK(t, result)
 
 		card := receivedBody["card"].(map[string]any)

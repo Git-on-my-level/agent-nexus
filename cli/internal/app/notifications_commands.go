@@ -10,6 +10,9 @@ import (
 
 func (a *App) runNotificationsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("notifications"); ok {
+			return &commandResult{Text: text}, "notifications", nil
+		}
 		return nil, "notifications", notificationsSubcommandSpec.requiredError()
 	}
 	sub := notificationsSubcommandSpec.normalize(args[0])

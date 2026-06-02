@@ -34,11 +34,14 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
 	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
 	{Path: "docs", Description: "Create and revise durable context and institutional knowledge"},
-	{Path: "cards", Description: "Manage board-scoped work cards"},
+	{Path: "cards", Description: "Create, discuss, assign, move, revise, and resolve work cards"},
+	{Path: "notifications", Description: "Inspect and clear durable wake notifications for the active agent"},
 	{Path: "threads", Description: "Read-only backing-thread inspection (tooling and diagnostics)"},
 	{Path: "events", Description: "Manage events and event streams"},
 	{Path: "inbox", Description: "Operator diagnostics for human attention inbox items"},
 	{Path: "artifacts", Description: "Manage artifact resources and content"},
+	{Path: "actors", Description: "Diagnostic actor inventory and fixture helpers"},
+	{Path: "ref-edges", Description: "Diagnostic typed-ref edge inspection"},
 	{Path: "derived", Description: "Run derived-view maintenance actions"},
 	{Path: "meta", Description: "Inspect generated command/concept metadata"},
 }
@@ -201,6 +204,25 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--ref <typed-ref>", Description: "Pinned/related typed ref, repeatable."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "cards list",
+		Summary:     "List cards across the workspace, or list one board's cards with --board.",
+		JSONShape:   "Global list returns `{ cards }`; `--board` composes the board-scoped card list and returns `{ board_ref, board_handle, cards }`.",
+		Composition: "Uses `cards.list` for workspace-wide reads. With `--board`, resolves the board ref/handle/id and uses the board-scoped card list while keeping the canonical CLI path `cards list`.",
+		Examples: []string{
+			"anx cards list",
+			"anx cards list --board board:<board-handle>",
+			"anx cards list --include-archived",
+		},
+		Flags: []localHelperFlag{
+			{Name: "--board <board-ref-or-handle>", Description: "List cards on one board."},
+			{Name: "--board-id <board-id>", Description: "Board id/ref/handle; equivalent to --board for scripts."},
+			{Name: "--include-archived", Description: "Include archived cards in global list output."},
+			{Name: "--archived-only", Description: "Show only archived cards in global list output."},
+			{Name: "--include-trashed", Description: "Include trashed cards in global list output."},
+			{Name: "--trashed-only", Description: "Show only trashed cards in global list output."},
 		},
 	},
 	{
@@ -922,6 +944,81 @@ Core commands:
   auth principals     Inspect or revoke principals.
   auth audit          Inspect audit records for auth activity.`) + "\n", true
 	}
+	if topic == "auth principals" {
+		return strings.TrimSpace(`Auth principal administration
+
+Use this group to inspect workspace-local principals and revoke principals when you are acting with auth-admin authority.
+
+Core commands:
+  auth principals list      List principals; use --handles-only for mentionable handles.
+  auth principals revoke    Revoke a principal by agent id.
+
+Examples:
+  anx auth principals list --taggable
+  anx auth principals list --handles-only
+  anx auth principals revoke --agent-id <agent-id>
+
+Safety:
+  Revoking another principal is administrative. Human lockout paths require explicit break-glass flags and a reason.`) + "\n", true
+	}
+	if topic == "auth audit" {
+		return strings.TrimSpace(`Auth audit inspection
+
+Use this group to read auth and principal lifecycle audit records.
+
+Core commands:
+  auth audit list       List recent auth audit records.
+
+Examples:
+  anx auth audit list
+  anx auth audit list --limit 50`) + "\n", true
+	}
+	if topic == "notifications" {
+		return strings.TrimSpace(`Agent notification surface
+
+Use this group to inspect and clear durable wake notifications for the active agent profile.
+
+Core commands:
+  notifications list       List queued notifications, usually with --status unread.
+  notifications read       Mark one wake notification read.
+  notifications dismiss    Dismiss one wake notification.
+
+Examples:
+  anx notifications list --status unread
+  anx notifications read --wakeup-id <wakeup-id>
+  anx notifications dismiss --wakeup-id <wakeup-id>
+
+Mental model:
+  Inbox is for human attention items. Notifications are durable agent wake/routing signals.`) + "\n", true
+	}
+	if topic == "secret" {
+		return strings.TrimSpace(`Workspace secrets surface
+
+Use this group to create, inspect, reveal, update, delete, or inject workspace secrets for agent execution.
+
+Core commands:
+  secret list              List secret metadata.
+  secret create <name>     Create a secret value from stdin.
+  secret get <name>        Show secret metadata; add --reveal before the name to print the value.
+  secret update <name>     Replace a secret value from stdin.
+  secret delete <name>     Delete a secret.
+  secret exec              Run a command with selected secrets in its environment.
+
+Examples:
+  printf %s "$VALUE" | anx secret create OPENAI_API_KEY --from-stdin
+  anx secret get OPENAI_API_KEY
+  anx secret get --reveal OPENAI_API_KEY
+  anx secret exec --secret OPENAI_API_KEY -- ./my-agent.sh`) + "\n", true
+	}
+	if topic == "secret get" {
+		return strings.TrimSpace(`Secret metadata and reveal
+
+Usage:
+  anx secret get <name-or-id>
+  anx secret get --reveal <name-or-id>
+
+Without --reveal, the command prints metadata only. With --reveal, it prints the decrypted secret value and records the reveal in auth audit.`) + "\n", true
+	}
 	if topic == "derived" {
 		return strings.TrimSpace(`Derived maintenance surface
 
@@ -958,7 +1055,16 @@ Reference commands:
   meta doc        Print one bundled runtime help topic.
   meta skill      Render the bundled opinionated ANX agent skill.
   meta commands   Inspect generated command metadata.
-  meta concepts   Inspect generated concepts metadata.`) + "\n", true
+  meta concepts   Inspect generated concepts metadata.
+  meta ops        Inspect operational metadata helpers.`) + "\n", true
+	}
+	if topic == "meta ops" {
+		return strings.TrimSpace(`Metadata operations helpers
+
+Core commands:
+  meta ops health      Inspect low-level operational health metadata.
+
+Tip: this is a diagnostic surface; normal agents usually start with anx doctor, anx workspace summary, and anx meta docs.`) + "\n", true
 	}
 	if topic == "update" {
 		return updateUsageText() + "\n", true
@@ -968,6 +1074,12 @@ Reference commands:
 	}
 	if topic == "api call" {
 		return apiCallUsageText() + "\n", true
+	}
+	if topic == "read" {
+		return readCommandHelpText() + "\n", true
+	}
+	if topic == "url" {
+		return urlCommandHelpText() + "\n", true
 	}
 	if topic == "agent-guide" {
 		return agentGuideText(), true
@@ -1166,19 +1278,36 @@ Lower-level helpers:
   boards patch            Patch Board metadata from JSON; use ` + "`--dry-run`" + ` to preview.
   boards workspace        Inspect board context, cards, documents, and inbox.
 
-Batch card creation:
-  boards cards create-batch   POST body via stdin or ` + "`--from-file`" + `; profile supplies ` + "`actor_id`" + ` when omitted. See ` + "`anx help boards cards create-batch`" + `.
+Card mental model:
+  Cards are first-class work items. Use ` + "`anx cards ...`" + ` for card create, list, get, message, assign, move, revise, resolve, reopen, and lifecycle verbs.
+  Use ` + "`anx cards list --board <board-ref>`" + ` when you want one board's cards.
 
 Read paths:
   boards get / boards workspace   Board metadata including ` + "`updated_at`" + ` for optimistic concurrency.
-  boards cards list               Existing cards and titles before adding more.
+  cards list --board              Existing cards and titles before adding more.
+  boards cards list/get           Board-scoped reads for board-local inspection.
+  boards cards create-batch       Board-scoped batch creation from JSON.
 
   Examples:
-    anx boards cards list board:<board-handle>
-    anx boards cards get board:<board-handle> card:<card-handle>
-    anx boards cards get board:<board-handle> card:<card-handle>`)
+    anx cards list --board board:<board-handle>
+    anx cards create --board board:<board-handle> --title "Buy groceries" --body-file card.md
+    anx cards move card:<card-handle> --column review
+    anx cards resolve card:<card-handle> --reason "ok" --body-file evidence.md`)
+	case "boards cards":
+		return strings.TrimSpace(`Board-scoped card read and batch surface:
+  boards cards list          List cards on one board.
+  boards cards get           Get a card through its board context.
+  boards cards create-batch  Create many cards on one board from JSON.
+
+Canonical card workflow:
+  Use ` + "`anx cards`" + ` for normal card operations. Cards are first-class work items, not subordinate board commands.
+  - ` + "`anx cards list --board <board-ref>`" + ` lists one board's cards.
+  - ` + "`anx cards create --board <board-ref>`" + ` creates one card.
+  - ` + "`anx cards get|message|assign|move|revise|resolve|reopen|archive|trash|restore|purge`" + ` operate on the card ref directly.`)
 	case "cards":
 		return strings.TrimSpace(`Agent-facing Card workflow:
+  cards list               List all cards, or use ` + "`--board <board-ref>`" + ` for one board.
+  cards get                Get one card by ref, handle, or id.
   cards create             Create a board work card from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `.
   cards message            Post a card conversation update without event JSON.
   cards messages           List card conversation messages.
@@ -1188,7 +1317,8 @@ Read paths:
   cards assign             Replace or clear assignees.
   cards resolve            Move to done with resolution evidence refs or an evidence body.
   cards reopen             Move a resolved card back to active workflow.
-   Tip: use ` + "`cards message card:<handle> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.`)
+   Tip: use ` + "`cards message card:<handle> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.
+   Board context is an input (` + "`--board`" + `) or filter (` + "`--board`" + `), not the card command namespace.`)
 	case "auth":
 		return strings.TrimSpace(`Local auth lifecycle helpers:
   auth whoami             Validate the active profile against the server and show resolved identity.
@@ -1429,6 +1559,8 @@ func fieldHelpText(commandID string, name string) string {
 		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
+	case name == "if_base_revision" && strings.HasPrefix(commandID, "cards."):
+		return "Optimistic concurrency token. Copy the current head revision ref from `anx cards get <card-ref-or-handle>` before updating."
 	case name == "if_base_revision":
 		return "Optimistic concurrency token. Copy the current head revision ref from `anx docs get <doc-ref-or-handle>` before updating."
 	case strings.HasPrefix(name, "if_"):
@@ -1597,6 +1729,10 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		},
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
+		authPrincipalsSubcommandSpec,
+		authAuditSubcommandSpec,
+		notificationsSubcommandSpec,
+		actorsSubcommandSpec,
 		topicsSubcommandSpec,
 		boardsSubcommandSpec,
 		boardsCardsSubcommandSpec,
@@ -1607,6 +1743,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		eventsSubcommandSpec,
 		inboxSubcommandSpec,
 		artifactsSubcommandSpec,
+		refEdgesSubcommandSpec,
 		derivedSubcommandSpec,
 		{
 			command:  "meta",
@@ -1614,6 +1751,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 			examples: metaSubcommandSpec.examples,
 			aliases:  metaSubcommandSpec.aliases,
 		},
+		metaOpsSubcommandSpec,
 	}
 }
 
@@ -1717,6 +1855,7 @@ func mapRuntimePathToRegistryPath(path string) string {
 		"artifacts get":         "artifacts inspect",
 		"artifacts content get": "artifacts content",
 		"artifacts download":    "artifacts content",
+		"secret get":            "secret get --reveal",
 		"meta commands":         "meta commands list",
 		"meta command":          "meta commands get",
 		"meta concepts":         "meta concepts list",

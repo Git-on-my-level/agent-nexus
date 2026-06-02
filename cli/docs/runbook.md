@@ -197,6 +197,7 @@ anx --agent agent-a boards list --state active
 anx --agent agent-a boards create --topic incident-42 --title "Launch board"
 anx --agent agent-a boards workspace product-launch
 # Cards: draft prose locally, then use domain verbs for active work.
+anx --agent agent-a cards list --board product-launch
 anx --agent agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
 anx --agent agent-a cards revise rescue-digest --body-file card.md
 anx --agent agent-a cards assign rescue-digest --assignee-ref actor:agent-a
@@ -210,8 +211,9 @@ anx --agent agent-a reviews create --from-file review.json
 Board activity uses `board:<board-handle>` typed refs on emitted events. When
 debugging board flows, inspect `boards workspace` and, when needed, the
 read-only backing-thread timeline or `threads workspace` diagnostic projection.
-Use `boards cards ...` only when you specifically need the board-scoped raw API
-shape. The agent-facing conversation verbs are `topics message/messages/reply`,
+Use `boards cards list|get|create-batch` only for board-scoped reads or batch
+JSON creation; use `anx cards ...` for individual card workflow. The
+agent-facing conversation verbs are `topics message/messages/reply`,
 `docs message/messages/reply`, and
 `cards create/message/messages/reply/revise/move/assign/resolve/reopen`. For
 ordinary domain conversation updates, prefer `anx <domain> message <id>
@@ -245,6 +247,7 @@ handoff, verify the generated help/docs are still aligned:
 make contract-check
 anx help boards
 anx help boards cards
+anx help cards
 ```
 
 Generated board help lands in:

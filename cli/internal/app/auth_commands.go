@@ -14,7 +14,10 @@ import (
 )
 
 func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("auth"); ok {
+			return &commandResult{Text: text}, "auth", nil
+		}
 		return nil, "auth", authSubcommandSpec.requiredError()
 	}
 	service := authcli.New(cfg)
@@ -62,7 +65,10 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 }
 
 func (a *App) runAuthInvites(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := generatedHelpText("auth invites"); ok {
+			return &commandResult{Text: text}, nil
+		}
 		return nil, authInvitesSubcommandSpec.requiredError()
 	}
 	subcommand := authInvitesSubcommandSpec.normalize(args[0])
@@ -161,7 +167,10 @@ func (a *App) runAuthInvitesRevoke(ctx context.Context, service *authcli.Service
 }
 
 func (a *App) runAuthBootstrap(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := generatedHelpText("auth bootstrap"); ok {
+			return &commandResult{Text: text}, nil
+		}
 		return nil, authBootstrapSubcommandSpec.requiredError()
 	}
 	subcommand := authBootstrapSubcommandSpec.normalize(args[0])
@@ -174,7 +183,10 @@ func (a *App) runAuthBootstrap(ctx context.Context, service *authcli.Service, ar
 }
 
 func (a *App) runAuthPrincipals(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("auth principals"); ok {
+			return &commandResult{Text: text}, nil
+		}
 		return nil, authPrincipalsSubcommandSpec.requiredError()
 	}
 	switch authPrincipalsSubcommandSpec.normalize(args[0]) {
@@ -188,7 +200,10 @@ func (a *App) runAuthPrincipals(ctx context.Context, service *authcli.Service, a
 }
 
 func (a *App) runAuthAudit(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("auth audit"); ok {
+			return &commandResult{Text: text}, nil
+		}
 		return nil, authAuditSubcommandSpec.requiredError()
 	}
 	switch authAuditSubcommandSpec.normalize(args[0]) {

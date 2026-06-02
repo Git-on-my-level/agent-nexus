@@ -183,8 +183,8 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 
 	switch msg {
 	case "body is required":
-		return "The request body was empty or not a JSON object. Send an object on stdin or via `--from-file` (for example `anx boards cards create --help` or `anx cards create --help`).",
-			map[string]any{"kind": "missing_request_body", "help_cli": "anx boards cards create --help"}
+		return "The request body was empty or not a JSON object. Send an object on stdin or via `--from-file` (for example `anx cards create --help` or `anx boards cards create-batch --help`).",
+			map[string]any{"kind": "missing_request_body", "help_cli": "anx cards create --help"}
 	case "patch is required":
 		return "The JSON body must include a top-level `patch` object for this operation. Pipe JSON to stdin or use `--from-file`; see the command help for the expected keys.",
 			map[string]any{"kind": "missing_required_field", "field": "patch"}
@@ -207,8 +207,8 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "The JSON body must include an `event` object for primitive event ingest. See `anx help` for the events ingest topic.",
 			map[string]any{"kind": "missing_required_field", "field": "event", "help_cli": "anx help"}
 	case "title is required":
-		return "Card create requires a non-empty `title` (or `card.title`). See `anx boards cards create --help`.",
-			map[string]any{"kind": "missing_required_field", "field": "title", "help_cli": "anx boards cards create --help"}
+		return "Card create requires a non-empty `title` (or `card.title`). See `anx cards create --help`.",
+			map[string]any{"kind": "missing_required_field", "field": "title", "help_cli": "anx cards create --help"}
 	case "board.title is required":
 		return "Board create requires `board.title`. See `anx boards create --help`.",
 			map[string]any{"kind": "missing_required_field", "field": "board.title", "help_cli": "anx boards create --help"}
@@ -219,10 +219,10 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "Pagination `cursor` must be the opaque string from a previous list response (or omit it to start from the beginning). Do not invent or truncate cursor values.",
 			map[string]any{"kind": "invalid_pagination", "field": "cursor"}
 	case "resolution_refs require resolution":
-		return "You sent `resolution_refs` without a valid move to the done column. Add evidence refs, move the card to `done`, or clear `resolution_refs`. See `anx boards cards create --help` / `anx cards patch --help`.",
+		return "You sent `resolution_refs` without a valid move to the done column. Add evidence refs, move the card to `done`, or clear `resolution_refs`. See `anx cards create --help` / `anx cards patch --help`.",
 			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards patch --help"}
 	case "resolution requires column_key done":
-		return "To set `resolution`, the card must be in column_key `done` (move it with `anx cards move` or `anx boards cards move` first).",
+		return "To set `resolution`, the card must be in column_key `done`; move it with `anx cards move`.",
 			map[string]any{"kind": "resolution_workflow", "field": "resolution", "help_cli": "anx cards move --help"}
 	case "resolution_refs are required when resolution is set":
 		return "When `resolution` is set, include non-empty `resolution_refs` consistent with that resolution. See `anx cards patch --help` for the JSON shape.",
@@ -231,8 +231,8 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "Moving into column_key `done` requires terminal evidence. Put at least one `artifact:` or `event:` ref in `resolution_refs` on the move payload (core sets `resolution` to done). See `anx cards move --help`.",
 			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards move --help"}
 	case "done column requires resolution_refs":
-		return "Cards in column_key `done` need non-empty `resolution_refs` with at least one `artifact:` or `event:` ref. See `anx boards cards create --help` / `anx cards move --help`.",
-			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx boards cards create --help"}
+		return "Cards in column_key `done` need non-empty `resolution_refs` with at least one `artifact:` or `event:` ref. See `anx cards create --help` / `anx cards move --help`.",
+			map[string]any{"kind": "resolution_workflow", "field": "resolution_refs", "help_cli": "anx cards move --help"}
 	case "reason is required":
 		return "This trash/archive-style request requires a non-empty `reason` string in the JSON body. See the command help (for example `anx cards trash --help`) and pass `--reason` or include `reason` in stdin JSON.",
 			map[string]any{"kind": "missing_required_field", "field": "reason", "help_cli": "anx cards trash --help"}
@@ -243,8 +243,8 @@ func enrichInvalidRequestByMessage(msg string) (string, map[string]any) {
 		return "`items` must be a non-empty array of request objects. See `anx boards cards create-batch --help`.",
 			map[string]any{"kind": "invalid_request_shape", "field": "items", "help_cli": "anx boards cards create-batch --help"}
 	case "status is not supported on card create; column_key and resolution define lifecycle":
-		return "Do not send `status` on card create. Set `column_key` (and `resolution` when closing) instead. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "status", "help_cli": "anx boards cards create --help"}
+		return "Do not send `status` on card create. Set `column_key` (and `resolution` when closing) instead. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "status", "help_cli": "anx cards create --help"}
 	case "JSON body must be an object":
 		return "The HTTP body must be a single JSON object `{...}`, not an array or bare scalar. Pipe a JSON object on stdin or use `--from-file`.",
 			map[string]any{"kind": "invalid_request_shape", "field": "body"}
@@ -304,7 +304,7 @@ func enrichCardPatchNotWritable(msg string) (string, map[string]any) {
 	if !strings.Contains(msg, " is not writable; use the move endpoint for board placement changes") {
 		return "", nil
 	}
-	return "That field cannot be changed via card patch. Update board placement with `anx cards move` or `anx boards cards move` (see `--help`), and use `patch.resolution` / `column_key` for lifecycle.",
+	return "That field cannot be changed via card patch. Update board placement with `anx cards move` (see `--help`), and use `patch.resolution` / `column_key` for lifecycle.",
 		map[string]any{"kind": "use_move_endpoint", "help_cli": "anx cards move --help"}
 }
 
@@ -332,26 +332,26 @@ func enrichPatchNotSupportedMessage(msg string) (string, map[string]any) {
 		return "Use `patch.summary` instead of `patch.body_markdown`. See `anx cards patch --help`.",
 			map[string]any{"kind": "unsupported_field", "field": "patch.body_markdown", "help_cli": "anx cards patch --help"}
 	case "body is not supported; use summary":
-		return "Card create uses `summary` for text; `body` is not accepted. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "body", "help_cli": "anx boards cards create --help"}
+		return "Card create uses `summary` for text; `body` is not accepted. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "body", "help_cli": "anx cards create --help"}
 	case "body_markdown is not supported; use summary":
-		return "Card create uses `summary`; `body_markdown` is not accepted. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "body_markdown", "help_cli": "anx boards cards create --help"}
+		return "Card create uses `summary`; `body_markdown` is not accepted. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "body_markdown", "help_cli": "anx cards create --help"}
 	case "assignee is not supported; use assignee_refs":
-		return "Card create uses `assignee_refs` (list of actor ref strings), not `assignee`. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "assignee", "help_cli": "anx boards cards create --help"}
+		return "Card create uses `assignee_refs` (list of actor ref strings), not `assignee`. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "assignee", "help_cli": "anx cards create --help"}
 	case "pinned_document_id is not supported; use document_ref":
-		return "Use `document_ref` instead of `pinned_document_id` on card create. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "pinned_document_id", "help_cli": "anx boards cards create --help"}
+		return "Use `document_ref` instead of `pinned_document_id` on card create. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "pinned_document_id", "help_cli": "anx cards create --help"}
 	case "refs is not supported; use related_refs and topic_ref":
-		return "Use `related_refs` and `topic_ref` instead of `refs` on card create. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "refs", "help_cli": "anx boards cards create --help"}
+		return "Use `related_refs` and `topic_ref` instead of `refs` on card create. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "refs", "help_cli": "anx cards create --help"}
 	case "priority is not supported in the canonical card model":
-		return "`priority` is not supported on card create in the canonical model. See `anx boards cards create --help`.",
-			map[string]any{"kind": "unsupported_field", "field": "priority", "help_cli": "anx boards cards create --help"}
+		return "`priority` is not supported on card create in the canonical model. See `anx cards create --help`.",
+			map[string]any{"kind": "unsupported_field", "field": "priority", "help_cli": "anx cards create --help"}
 	default:
 		if strings.Contains(msg, "must not be combined with legacy aliases") {
-			return "You mixed canonical fields with deprecated aliases in one request. Keep only the canonical fields named in the error, or only the legacy aliases, not both. See `anx cards patch --help` / `anx boards cards create --help`.",
+			return "You mixed canonical fields with deprecated aliases in one request. Keep only the canonical fields named in the error, or only the legacy aliases, not both. See `anx cards patch --help` / `anx cards create --help`.",
 				map[string]any{"kind": "invalid_request_shape", "help_cli": "anx cards patch --help"}
 		}
 	}

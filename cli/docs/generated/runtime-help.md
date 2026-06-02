@@ -31,17 +31,25 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards` (group): Track active work with boards, columns, and cards
 - `workspace` (group): Summarize workspace boards and counts for first-run orientation
 - `docs` (group): Create and revise durable context and institutional knowledge
-- `cards` (group): Manage board-scoped work cards
+- `cards` (group): Create, discuss, assign, move, revise, and resolve work cards
+- `notifications` (group): Inspect and clear durable wake notifications for the active agent
 - `threads` (group): Read-only backing-thread inspection (tooling and diagnostics)
 - `events` (group): Manage events and event streams
 - `inbox` (group): Operator diagnostics for human attention inbox items
 - `artifacts` (group): Manage artifact resources and content
+- `actors` (group): Diagnostic actor inventory and fixture helpers
+- `ref-edges` (group): Diagnostic typed-ref edge inspection
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
 - `auth invites list` (command): List invite tokens
 - `auth invites create` (command): Create invite token
 - `auth invites revoke` (command): Revoke invite
 - `auth bootstrap status` (command): Bootstrap registration availability
+- `auth principals list` (command): List principals
+- `auth principals revoke` (command): Revoke principal by agent id
+- `auth audit list` (command): List auth audit entries
+- `actors list` (command): List actors
+- `actors create` (command): Create actor (dev fixture)
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
 - `topics timeline` (command): Get topic timeline
@@ -58,7 +66,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards restore` (command): Restore board from trash
 - `boards purge` (command): Permanently delete trashed board
 - `boards cards` (group): Nested generated help topic.
-- `boards cards create` (command): Create card on board
 - `boards cards create-batch` (command): Batch create cards on board
 - `boards cards get` (command): Get board-scoped card
 - `docs list` (command): List documents
@@ -70,7 +77,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs restore` (command): Restore document from trash
 - `docs purge` (command): Permanently delete trashed document
 - `docs revision get` (command): Get document revision
-- `cards list` (command): List cards
 - `cards get` (command): Get card
 - `cards history` (command): List card revisions
 - `cards archive` (command): Archive card
@@ -103,6 +109,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `artifacts trash` (command): Move artifact to trash
 - `artifacts restore` (command): Restore artifact from trash
 - `artifacts purge` (command): Permanently delete trashed artifact
+- `ref-edges list` (command): List ref edges (forward or reverse indexed lookup)
 - `derived rebuild` (command): Rebuild derived projections
 - `meta commands` (command): List command registry metadata
 - `meta command` (command): Get one command metadata entry
@@ -122,6 +129,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics messages` (local-helper): List messages from a Topic conversation.
 - `topics reply` (local-helper): Reply to an existing Topic message.
 - `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
+- `cards list` (local-helper): List cards across the workspace, or list one board's cards with --board.
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
 - `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
 - `cards patch` (local-helper): Patch card metadata from scalar flags, or from advanced JSON.
@@ -246,10 +254,10 @@ topics
 - Read next: anx topics list ; anx topics get ; anx topics workspace
 
 boards
-- Use when: You need active work tracking with workflow columns, cards, ownership, ordering, and movement.
-- Not for: Free-form discussion or durable institutional knowledge.
+- Use when: You need an active-work view with workflow columns, ownership, ordering, and visible progress across cards.
+- Not for: Operating on an individual card; use `anx cards ...` for card creation, movement, messages, assignment, revisions, resolution, and lifecycle.
 - Examples: triage board, release board, initiative tracking board
-- Read next: anx boards list ; anx boards workspace ; anx boards cards list
+- Read next: anx boards list ; anx boards workspace ; anx cards list --board <board-ref>
 
 docs
 - Use when: You need long-term relevant context or institutional knowledge that should be written, revised, read, and referenced as a document.
@@ -258,10 +266,10 @@ docs
 - Read next: anx docs list ; anx docs get ; anx docs content
 
 cards
-- Use when: You need one board-scoped tracked work item with column, rank, assignee, and move/update operations.
+- Use when: You need a first-class tracked work item with body, assignees, workflow column, messages, revisions, and completion evidence.
 - Not for: The broader topic discussion, durable knowledge, or append-only event history.
 - Examples: implementation task, review item, follow-up, blocked work
-- Read next: anx cards list ; anx cards get ; anx cards move
+- Read next: anx cards list ; anx cards list --board <board-ref> ; anx cards get ; anx cards move
 
 events
 - Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
@@ -336,12 +344,12 @@ Core model
 
 - `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
 - `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
-- `cards`: the primary work items. Use them for tracked execution on boards.
+- `cards`: the primary work items. Use `anx cards ...` for card creation, list/get, messages, assignment, workflow movement, revisions, resolution, reopen, and lifecycle.
 - `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
 - `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
-- `boards`: structured coordination views. Use to group and review work across multiple objects.
+- `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.
 - `auth` and profiles: identity plus reusable config.
 - `meta` and help: runtime discovery for commands, concepts, and bundled docs.
 
@@ -350,7 +358,7 @@ Heuristic:
 - Use `topics` for ongoing work, ownership, current conversation, and operator coordination.
 - Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.
 - Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
-- Use `boards` for portfolio or workflow visibility.
+- Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.
 - Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
 - Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
 
@@ -1479,17 +1487,21 @@ Active work tracking:
   boards patch            Patch Board metadata from JSON; use `--dry-run` to preview.
   boards workspace        Inspect board context, cards, documents, and inbox.
 
-Batch card creation:
-  boards cards create-batch   POST body via stdin or `--from-file`; profile supplies `actor_id` when omitted. See `anx help boards cards create-batch`.
+Card mental model:
+  Cards are first-class work items. Use `anx cards ...` for card create, list, get, message, assign, move, revise, resolve, reopen, and lifecycle verbs.
+  Use `anx cards list --board <board-ref>` when you want one board's cards.
 
 Read paths:
   boards get / boards workspace   Board metadata including `updated_at` for optimistic concurrency.
-  boards cards list               Existing cards and titles before adding more.
+  cards list --board              Existing cards and titles before adding more.
+  boards cards list/get           Board-scoped reads for board-local inspection.
+  boards cards create-batch       Board-scoped batch creation from JSON.
 
   Examples:
-    anx boards cards list board:<board-handle>
-    anx boards cards get board:<board-handle> card:<card-handle>
-    anx boards cards get board:<board-handle> card:<card-handle>
+    anx cards list --board board:<board-handle>
+    anx cards create --board board:<board-handle> --title "Buy groceries" --body-file card.md
+    anx cards move card:<card-handle> --column review
+    anx cards resolve card:<card-handle> --reason "ok" --body-file evidence.md
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1553,7 +1565,7 @@ Tip: `anx help <command path>` for full command-level generated details.
 
 ## `cards`
 
-Manage board-scoped work cards
+Create, discuss, assign, move, revise, and resolve work cards
 
 ```text
 Generated Help: cards
@@ -1573,6 +1585,8 @@ Commands:
   cards trash              Move card to trash
 
 Agent-facing Card workflow:
+  cards list               List all cards, or use `--board <board-ref>` for one board.
+  cards get                Get one card by ref, handle, or id.
   cards create             Create a board work card from flags plus `--body` / `--body-file`.
   cards message            Post a card conversation update without event JSON.
   cards messages           List card conversation messages.
@@ -1583,6 +1597,7 @@ Agent-facing Card workflow:
   cards resolve            Move to done with resolution evidence refs or an evidence body.
   cards reopen             Move a resolved card back to active workflow.
    Tip: use `cards message card:<handle> --body-file update.md` for ordinary status updates. Use raw `events create` only for contract-level writes or unusual integrations.
+   Board context is an input (`--board`) or filter (`--board`), not the card command namespace.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1590,6 +1605,29 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `notifications`
+
+Inspect and clear durable wake notifications for the active agent
+
+```text
+Agent notification surface
+
+Use this group to inspect and clear durable wake notifications for the active agent profile.
+
+Core commands:
+  notifications list       List queued notifications, usually with --status unread.
+  notifications read       Mark one wake notification read.
+  notifications dismiss    Dismiss one wake notification.
+
+Examples:
+  anx notifications list --status unread
+  anx notifications read --wakeup-id <wakeup-id>
+  anx notifications dismiss --wakeup-id <wakeup-id>
+
+Mental model:
+  Inbox is for human attention items. Notifications are durable agent wake/routing signals.
 ```
 
 ## `threads`
@@ -1719,6 +1757,43 @@ Global flags:
 Tip: `anx help <command path>` for full command-level generated details.
 ```
 
+## `actors`
+
+Diagnostic actor inventory and fixture helpers
+
+```text
+Generated Help: actors
+
+Commands:
+  actors create            Create actor (dev fixture)
+  actors list              List actors
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx actors ... ; anx --json actors ... ; anx actors ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `ref-edges`
+
+Diagnostic typed-ref edge inspection
+
+```text
+Generated Help: ref-edges
+
+Commands:
+  ref-edges list           List ref edges (forward or reverse indexed lookup)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx ref-edges ... ; anx --json ref-edges ... ; anx ref-edges ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+
+Tip: `anx help <command path>` for full command-level generated details.
+```
+
 ## `derived`
 
 Run derived-view maintenance actions
@@ -1755,6 +1830,7 @@ Reference commands:
   meta skill      Render the bundled opinionated ANX agent skill.
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
+  meta ops        Inspect operational metadata helpers.
 ```
 
 ## `auth invites list`
@@ -1856,6 +1932,134 @@ Generated Help: auth bootstrap status
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth bootstrap status ... ; anx --json auth bootstrap status ... ; anx auth bootstrap status ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth principals list`
+
+List principals
+
+```text
+Generated Help: auth principals list
+
+- Command ID: `auth.principals.list`
+- CLI path: `auth principals list`
+- HTTP: `GET /auth/principals`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Operator visibility into registered principals for the workspace.
+- Output: Returns principal list JSON.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth principals list ... ; anx --json auth principals list ... ; anx auth principals list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth principals revoke`
+
+Revoke principal by agent id
+
+```text
+Generated Help: auth principals revoke
+
+- Command ID: `auth.principals.revoke`
+- CLI path: `auth principals revoke`
+- HTTP: `POST /auth/principals/{principal_id}/revoke`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Administrative revocation of a principal linkage.
+- Output: Returns result JSON.
+- Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
+- Concepts: `auth`
+- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+
+Inputs:
+  Required:
+  - path `principal_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth principals revoke ... ; anx --json auth principals revoke ... ; anx auth principals revoke ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `auth audit list`
+
+List auth audit entries
+
+```text
+Generated Help: auth audit list
+
+- Command ID: `auth.audit.list`
+- CLI path: `auth audit list`
+- HTTP: `GET /auth/audit`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Operator audit trail for auth-sensitive actions.
+- Output: Returns audit list JSON.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `auth`, `audit`
+- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx auth audit list ... ; anx --json auth audit list ... ; anx auth audit list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `actors list`
+
+List actors
+
+```text
+Generated Help: actors list
+
+- Command ID: `actors.list`
+- CLI path: `actors list`
+- HTTP: `GET /actors`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Enumerate durable actor records for operator UI and dev fixtures.
+- Output: Returns `{ actors, next_cursor? }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `actors`, `auth`
+- Adjacent commands: `actors create`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx actors list ... ; anx --json actors list ... ; anx actors list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `actors create`
+
+Create actor (dev fixture)
+
+```text
+Generated Help: actors create
+
+- Command ID: `actors.create`
+- CLI path: `actors create`
+- HTTP: `POST /actors`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Dev-only actor registration when dev_actor_mode is enabled.
+- Output: Returns `{ actor }`.
+- Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
+- Concepts: `actors`, `auth`
+- Adjacent commands: `actors list`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx actors create ... ; anx --json actors create ... ; anx actors create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2083,7 +2287,7 @@ Generated Help: boards list
 - Output: Returns `{ boards, next_cursor? }` (each `boards[]` item is `{ board, summary }` with `summary` a `BoardSummary` projection, not the board's text blurb).
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 
 Global flags:
@@ -2108,7 +2312,7 @@ Generated Help: boards get
 - Output: Returns `{ board, summary }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2136,7 +2340,7 @@ Generated Help: boards patch
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`, `concurrency`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2174,7 +2378,7 @@ Generated Help: boards archive
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2204,7 +2408,7 @@ Generated Help: boards unarchive
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards workspace`
 
 Inputs:
   Required:
@@ -2234,7 +2438,7 @@ Generated Help: boards trash
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2265,7 +2469,7 @@ Generated Help: boards restore
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2295,7 +2499,7 @@ Generated Help: boards purge
 - Output: Returns `{ purged, board_ref, board_handle }`; internal board_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2317,10 +2521,20 @@ Nested generated help topic.
 Generated Help: boards cards
 
 Commands:
-  boards cards create      Create card on board
   boards cards create-batch Batch create cards on board
   boards cards get         Get board-scoped card
   boards cards list        List board cards
+
+Board-scoped card read and batch surface:
+  boards cards list          List cards on one board.
+  boards cards get           Get a card through its board context.
+  boards cards create-batch  Create many cards on one board from JSON.
+
+Canonical card workflow:
+  Use `anx cards` for normal card operations. Cards are first-class work items, not subordinate board commands.
+  - `anx cards list --board <board-ref>` lists one board's cards.
+  - `anx cards create --board <board-ref>` creates one card.
+  - `anx cards get|message|assign|move|revise|resolve|reopen|archive|trash|restore|purge` operate on the card ref directly.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2328,61 +2542,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
-```
-
-## `boards cards create`
-
-Create card on board
-
-```text
-Generated Help: boards cards create
-
-- Command ID: `boards.cards.create`
-- CLI path: `boards cards create`
-- HTTP: `POST /boards/{board_id}/cards`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a first-class card and attach it to a board.
-- Output: Returns `{ card }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Concepts: `boards`, `cards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
-
-Inputs:
-  Required:
-  - path `board_id`
-  - body `card.title` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `board_handle` (string)
-  - body `board_id` (string)
-  - body `board_ref` (any)
-  - body `card.after_card_id` (string)
-  - body `card.assignee_refs` (list<any>)
-  - body `card.before_card_id` (string)
-  - body `card.column_key` (string)
-  - body `card.definition_of_done` (list<string>)
-  - body `card.document_ref` (string)
-  - body `card.due_at` (datetime)
-  - body `card.handle` (string)
-  - body `card.id` (string)
-  - body `card.provenance.by_field` (object)
-  - body `card.provenance.notes` (string)
-  - body `card.provenance.sources` (list<string>)
-  - body `card.related_refs` (list<any>)
-  - body `card.resolution` (string)
-  - body `card.resolution_refs` (list<any>)
-  - body `card.risk` (string)
-  - body `card.summary` (string)
-  - body `card.topic_ref` (string)
-  - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
-  - body `request_key` (string)
-  Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.resolution: done; card.risk: critical, high, low, medium
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx boards cards create ... ; anx --json boards cards create ... ; anx boards cards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards create-batch`
@@ -2401,7 +2560,7 @@ Generated Help: boards cards create-batch
 - Output: Returns `{ board, cards }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `boards`, `cards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2442,7 +2601,7 @@ Generated Help: boards cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`, `cards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -2701,31 +2860,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision get ... ; anx --json docs revision get ... ; anx docs revision get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `cards list`
-
-List cards
-
-```text
-Generated Help: cards list
-
-- Command ID: `cards.list`
-- CLI path: `cards list`
-- HTTP: `GET /cards`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Scan first-class card resources across boards.
-- Output: Returns `{ cards }`.
-- Error codes: `auth_required`, `invalid_token`
-- Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx cards list ... ; anx --json cards list ... ; anx cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3690,6 +3824,30 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `ref-edges list`
+
+List ref edges (forward or reverse indexed lookup)
+
+```text
+Generated Help: ref-edges list
+
+- Command ID: `ref_edges.list`
+- CLI path: `ref-edges list`
+- HTTP: `GET /ref-edges`
+- Stability: `beta`
+- Input mode: `query`
+- Why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
+- Output: Returns `{ ref_edges }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `refs`, `inspection`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx ref-edges list ... ; anx --json ref-edges list ... ; anx ref-edges list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `derived rebuild`
 
 Rebuild derived projections
@@ -4308,7 +4466,7 @@ Generated Help: boards create
 - Output: Returns `{ board }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `boards`, `write`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:
@@ -4346,6 +4504,49 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `cards list`
+
+List cards across the workspace, or list one board's cards with --board.
+
+```text
+Generated Help: cards list
+
+- Command ID: `cards.list`
+- CLI path: `cards list`
+- HTTP: `GET /cards`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Scan first-class card resources across boards.
+- Output: Returns `{ cards }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `cards`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+
+Local Help: cards list
+
+- Kind: `local helper`
+- Summary: List cards across the workspace, or list one board's cards with --board.
+- Composition: Uses `cards.list` for workspace-wide reads. With `--board`, resolves the board ref/handle/id and uses the board-scoped card list while keeping the canonical CLI path `cards list`.
+- JSON body: Global list returns `{ cards }`; `--board` composes the board-scoped card list and returns `{ board_ref, board_handle, cards }`.
+- Examples:
+  - `anx cards list`
+  - `anx cards list --board board:<board-handle>`
+  - `anx cards list --include-archived`
+
+Flags:
+  --board <board-ref-or-handle> List cards on one board.
+  --board-id <board-id>        Board id/ref/handle; equivalent to --board for scripts.
+  --include-archived           Include archived cards in global list output.
+  --archived-only              Show only archived cards in global list output.
+  --include-trashed            Include trashed cards in global list output.
+  --trashed-only               Show only trashed cards in global list output.
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx cards list ... ; anx --json cards list ... ; anx cards list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4427,8 +4628,8 @@ Generated Help: cards create
 - HTTP: `POST /cards`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or board_handle here instead of a path segment. Interoperable with board-scoped create.
-- Output: Returns `{ board, card }` (same as board-scoped create).
+- Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
+- Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `cards`, `boards`, `write`
 - Adjacent commands: `cards archive`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
@@ -4672,7 +4873,7 @@ Generated Help: cards revise
 Inputs:
   Required:
   - path `card_id`
-  - body `if_base_revision` (string): Optimistic concurrency token. Copy the current head revision ref from `anx docs get <doc-ref-or-handle>` before updating.
+  - body `if_base_revision` (string): Optimistic concurrency token. Copy the current head revision ref from `anx cards get <card-ref-or-handle>` before updating.
   - body `revision.summary` (string)
   - body `revision.title` (string)
   Optional:
@@ -5297,7 +5498,7 @@ Generated Help: boards workspace
 - Output: Returns `{ board, primary_topic, cards, documents, inbox, board_summary, projection_freshness, board_summary_freshness, warnings, section_kinds, generated_at }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`, `workspace`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards cards list`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`
 
 Inputs:
   Required:
@@ -5338,7 +5539,7 @@ Generated Help: boards cards list
 - Output: Returns `{ board_ref, board_handle, cards }`; internal board_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `boards`, `cards`
-- Adjacent commands: `boards archive`, `boards cards create`, `boards cards create-batch`, `boards cards get`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
+- Adjacent commands: `boards archive`, `boards cards create-batch`, `boards cards get`, `boards create`, `boards get`, `boards list`, `boards patch`, `boards purge`, `boards restore`, `boards trash`, `boards unarchive`, `boards workspace`
 
 Inputs:
   Required:

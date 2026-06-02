@@ -92,7 +92,10 @@ func (a *App) runMetaRawUtility(ctx context.Context, cfg config.Resolved, comman
 }
 
 func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string) (*commandResult, string, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("meta ops"); ok {
+			return &commandResult{Text: text}, "meta ops", nil
+		}
 		return nil, "meta ops", metaOpsSubcommandSpec.requiredError()
 	}
 	switch metaOpsSubcommandSpec.normalize(args[0]) {

@@ -1571,16 +1571,6 @@ paths:
       operationId: createBoardCard
       summary: Create card on board
       tags: [boards, cards]
-      x-anx-surface: canonical
-      x-anx-command-id: boards.cards.create
-      x-anx-cli-path: boards cards create
-      x-anx-why: Create a first-class card and attach it to a board.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ card }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
-      x-anx-concepts: [boards, cards, write]
-      x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/BoardID'
       requestBody:
@@ -1718,11 +1708,11 @@ paths:
       x-anx-command-id: cards.create
       x-anx-cli-path: cards create
       x-anx-why: >
-        Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or
-        board_handle here instead of a path segment. Interoperable with board-scoped create.
+        Create a card by supplying board_ref or board_handle in the request body. Use this canonical
+        card workflow path for single-card creation.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ board, card }` (same as board-scoped create)."
+      x-anx-output-envelope: "Returns `{ board, card }`."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [cards, boards, write]
       x-anx-stability: beta

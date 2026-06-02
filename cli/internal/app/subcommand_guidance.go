@@ -195,17 +195,17 @@ var boardsSubcommandSpec = subcommandSpec{
 		"anx boards patch board:launch --from-file board-patch.json",
 		"anx boards archive board:launch --reason \"merged elsewhere\"",
 		"anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md",
+		"anx cards list --board board:launch",
 	},
 }
 
 var boardsCardsSubcommandSpec = subcommandSpec{
 	command: "boards cards",
-	valid:   []string{"list", "create", "create-batch", "get", "patch", "move", "archive"},
+	valid:   []string{"list", "create-batch", "get"},
 	examples: []string{
 		"anx cards create --board board:launch --title \"Buy groceries\" --body-file card.md",
-		"anx cards message card:buy-groceries --body-file update.md",
-		"anx cards move card:buy-groceries --column review",
-		"anx cards resolve card:buy-groceries --reason \"ok\" --body \"Validated\"",
+		"anx cards list --board board:launch",
+		"anx cards get card:buy-groceries",
 		"anx boards cards list board:launch",
 		"anx boards cards get board:launch card:buy-groceries",
 		"anx boards cards create-batch --board-id board:launch --from-file batch.json",

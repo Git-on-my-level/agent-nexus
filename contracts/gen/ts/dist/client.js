@@ -1494,7 +1494,6 @@ export const commandRegistry = [
             "board_id"
         ],
         "adjacent_commands": [
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -1566,7 +1565,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.get",
             "boards.cards.list",
             "boards.create",
@@ -1581,178 +1579,6 @@ export const commandRegistry = [
         ],
         "go_method": "BoardsCardsBatchAdd",
         "ts_method": "boardsCardsBatchAdd"
-    },
-    {
-        "command_id": "boards.cards.create",
-        "cli_path": "boards cards create",
-        "group": "boards",
-        "method": "POST",
-        "path": "/boards/{board_id}/cards",
-        "operation_id": "createBoardCard",
-        "summary": "Create card on board",
-        "why": "Create a first-class card and attach it to a board.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ card }`.",
-        "error_codes": [
-            "auth_required",
-            "invalid_request",
-            "invalid_token",
-            "not_found",
-            "conflict"
-        ],
-        "concepts": [
-            "boards",
-            "cards",
-            "write"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "card.title",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "board_handle",
-                    "type": "string"
-                },
-                {
-                    "name": "board_id",
-                    "type": "string"
-                },
-                {
-                    "name": "board_ref",
-                    "type": "any"
-                },
-                {
-                    "name": "card.after_card_id",
-                    "type": "string"
-                },
-                {
-                    "name": "card.assignee_refs",
-                    "type": "list\u003cany\u003e"
-                },
-                {
-                    "name": "card.before_card_id",
-                    "type": "string"
-                },
-                {
-                    "name": "card.column_key",
-                    "type": "string",
-                    "enum_values": [
-                        "backlog",
-                        "blocked",
-                        "done",
-                        "in_progress",
-                        "ready",
-                        "review"
-                    ]
-                },
-                {
-                    "name": "card.definition_of_done",
-                    "type": "list\u003cstring\u003e"
-                },
-                {
-                    "name": "card.document_ref",
-                    "type": "string"
-                },
-                {
-                    "name": "card.due_at",
-                    "type": "datetime"
-                },
-                {
-                    "name": "card.handle",
-                    "type": "string"
-                },
-                {
-                    "name": "card.id",
-                    "type": "string"
-                },
-                {
-                    "name": "card.provenance.by_field",
-                    "type": "object"
-                },
-                {
-                    "name": "card.provenance.notes",
-                    "type": "string"
-                },
-                {
-                    "name": "card.provenance.sources",
-                    "type": "list\u003cstring\u003e"
-                },
-                {
-                    "name": "card.related_refs",
-                    "type": "list\u003cany\u003e"
-                },
-                {
-                    "name": "card.resolution",
-                    "type": "string",
-                    "enum_values": [
-                        "done"
-                    ]
-                },
-                {
-                    "name": "card.resolution_refs",
-                    "type": "list\u003cany\u003e"
-                },
-                {
-                    "name": "card.risk",
-                    "type": "string",
-                    "enum_values": [
-                        "critical",
-                        "high",
-                        "low",
-                        "medium"
-                    ]
-                },
-                {
-                    "name": "card.summary",
-                    "type": "string"
-                },
-                {
-                    "name": "card.topic_ref",
-                    "type": "string"
-                },
-                {
-                    "name": "if_board_updated_at",
-                    "type": "datetime"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "board_id"
-        ],
-        "adjacent_commands": [
-            "boards.archive",
-            "boards.cards.batch_add",
-            "boards.cards.get",
-            "boards.cards.list",
-            "boards.create",
-            "boards.get",
-            "boards.list",
-            "boards.patch",
-            "boards.purge",
-            "boards.restore",
-            "boards.trash",
-            "boards.unarchive",
-            "boards.workspace"
-        ],
-        "go_method": "BoardsCardsCreate",
-        "ts_method": "boardsCardsCreate"
     },
     {
         "command_id": "boards.cards.get",
@@ -1785,7 +1611,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.list",
             "boards.create",
@@ -1831,7 +1656,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.create",
@@ -1912,7 +1736,6 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -1957,7 +1780,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -1998,7 +1820,6 @@ export const commandRegistry = [
         "surface": "canonical",
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2089,7 +1910,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2145,7 +1965,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2201,7 +2020,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2263,7 +2081,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2319,7 +2136,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2365,7 +2181,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "boards.archive",
-            "boards.cards.create",
             "boards.cards.batch_add",
             "boards.cards.get",
             "boards.cards.list",
@@ -2449,12 +2264,12 @@ export const commandRegistry = [
         "path": "/cards",
         "operation_id": "createCard",
         "summary": "Create card (global path)",
-        "why": "Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or board_handle here instead of a path segment. Interoperable with board-scoped create.",
+        "why": "Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ board, card }` (same as board-scoped create).",
+        "output_envelope": "Returns `{ board, card }`.",
         "error_codes": [
             "auth_required",
             "invalid_request",
@@ -6430,9 +6245,6 @@ export class AnxClient {
     }
     boardsCardsBatchAdd(pathParams, options = {}) {
         return this.invoke("boards.cards.batch_add", pathParams, options);
-    }
-    boardsCardsCreate(pathParams, options = {}) {
-        return this.invoke("boards.cards.create", pathParams, options);
     }
     boardsCardsGet(pathParams, options = {}) {
         return this.invoke("boards.cards.get", pathParams, options);

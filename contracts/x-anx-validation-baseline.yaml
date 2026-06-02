@@ -42,7 +42,6 @@ known_missing:
     - boards.patch
     - boards.archive
     - boards.cards.list
-    - boards.cards.create
     - boards.cards.batch_add
     - boards.cards.get
     - boards.purge

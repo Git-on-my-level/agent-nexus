@@ -21,7 +21,7 @@ var secretSubcommandSpec = subcommandSpec{
 	examples: []string{
 		"anx secret list",
 		"anx secret create OPENAI_API_KEY",
-		"anx secret get OPENAI_API_KEY --reveal",
+		"anx secret get --reveal OPENAI_API_KEY",
 		"anx secret update OPENAI_API_KEY",
 		"anx secret delete OPENAI_API_KEY",
 		"anx secret exec --secret OPENAI_API_KEY -- ./my-agent.sh",
@@ -34,6 +34,9 @@ var secretSubcommandSpec = subcommandSpec{
 
 func (a *App) runSecretCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := helpTopicText("secret"); ok {
+			return &commandResult{Text: text}, "secret", nil
+		}
 		return nil, "secret", secretSubcommandSpec.requiredError()
 	}
 	sub := secretSubcommandSpec.normalize(args[0])

@@ -29,10 +29,10 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "boards",
-		UseWhen:     "You need active work tracking with workflow columns, cards, ownership, ordering, and movement.",
-		NotFor:      "Free-form discussion or durable institutional knowledge.",
+		UseWhen:     "You need an active-work view with workflow columns, ownership, ordering, and visible progress across cards.",
+		NotFor:      "Operating on an individual card; use `anx cards ...` for card creation, movement, messages, assignment, revisions, resolution, and lifecycle.",
 		Examples:    []string{"triage board", "release board", "initiative tracking board"},
-		RelatedRead: []string{"anx boards list", "anx boards workspace", "anx boards cards list"},
+		RelatedRead: []string{"anx boards list", "anx boards workspace", "anx cards list --board <board-ref>"},
 	},
 	{
 		Name:        "docs",
@@ -43,10 +43,10 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "cards",
-		UseWhen:     "You need one board-scoped tracked work item with column, rank, assignee, and move/update operations.",
+		UseWhen:     "You need a first-class tracked work item with body, assignees, workflow column, messages, revisions, and completion evidence.",
 		NotFor:      "The broader topic discussion, durable knowledge, or append-only event history.",
 		Examples:    []string{"implementation task", "review item", "follow-up", "blocked work"},
-		RelatedRead: []string{"anx cards list", "anx cards get", "anx cards move"},
+		RelatedRead: []string{"anx cards list", "anx cards list --board <board-ref>", "anx cards get", "anx cards move"},
 	},
 	{
 		Name:        "events",

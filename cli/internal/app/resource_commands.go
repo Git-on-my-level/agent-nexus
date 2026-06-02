@@ -62,6 +62,14 @@ var (
 		{name: "inbox-item-id", kind: preflightFlagString, usage: "Inbox item id or alias"},
 		{name: "risk-horizon-days", kind: preflightFlagString, usage: "Derived inbox risk horizon days"},
 	}
+	cardsListRuntimeFlags = []runtimeCommandFlagSpec{
+		{name: "board", kind: preflightFlagString, usage: "Board ref, handle, or id; uses the board-scoped card list"},
+		{name: "board-id", kind: preflightFlagString, usage: "Board id; equivalent to --board for scripts"},
+		{name: "include-archived", kind: preflightFlagBool, usage: "Include archived cards"},
+		{name: "archived-only", kind: preflightFlagBool, usage: "Show only archived cards"},
+		{name: "include-trashed", kind: preflightFlagBool, usage: "Include trashed cards"},
+		{name: "trashed-only", kind: preflightFlagBool, usage: "Show only trashed cards"},
+	}
 )
 
 func resourceRuntimePreflightSpecs() map[string]map[string]preflightFlagSpec {
@@ -69,6 +77,7 @@ func resourceRuntimePreflightSpecs() map[string]map[string]preflightFlagSpec {
 		"threads list":   preflightSpecsFromRuntimeFlags(threadsListRuntimeFlags),
 		"artifacts list": preflightSpecsFromRuntimeFlags(artifactsListRuntimeFlags),
 		"inbox get":      preflightSpecsFromRuntimeFlags(inboxGetRuntimeFlags),
+		"cards list":     preflightSpecsFromRuntimeFlags(cardsListRuntimeFlags),
 	}
 }
 
@@ -563,7 +572,10 @@ func formatCountValue(value any) string {
 }
 
 func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		if text, ok := generatedHelpText("actors"); ok {
+			return &commandResult{Text: text}, "actors", nil
+		}
 		return nil, "actors", actorsSubcommandSpec.requiredError()
 	}
 	sub := actorsSubcommandSpec.normalize(args[0])
@@ -1430,16 +1442,6 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 			}
 		}
 		return result, "boards cards list", callErr
-	case "create":
-		boardID, body, err := a.parseBoardCardCreateInput(ctx, args[1:], cfg, "boards cards create")
-		if err != nil {
-			return nil, "boards cards create", err
-		}
-		if bodyMap, ok := body.(map[string]any); ok {
-			ensureEmptyListDefaults(bodyMap, "card", []string{"assignee_refs", "resolution_refs", "related_refs"})
-		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards create", "boards.cards.create", map[string]string{"board_id": boardID}, nil, body)
-		return addResourceURLToResult(cfg, "boards.cards.create", result), "boards cards create", callErr
 	case "create-batch":
 		boardID, body, err := a.parseBoardBatchCardCreateInput(ctx, args[1:], cfg, "boards cards create-batch")
 		if err != nil {
@@ -1462,33 +1464,6 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "card_id": resolvedCard}, nil, nil)
 		return result, "boards cards get", callErr
-	case "patch":
-		pathParams, body, err := a.parseBoardCardUpdateInput(ctx, args[1:], cfg, "boards cards patch")
-		if err != nil {
-			return nil, "boards cards patch", err
-		}
-		rawCardID := strings.TrimSpace(pathParams["card_id"])
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards patch", "cards.patch", "card_id", rawCardID, cardIDLookupSpec, nil, body)
-		return result, "boards cards patch", callErr
-	case "move":
-		boardID, identifier, body, err := a.parseBoardCardMoveInput(ctx, args[1:], cfg, "boards cards move")
-		if err != nil {
-			return nil, "boards cards move", err
-		}
-		resolvedCard, err := a.resolveMaybeBoardCardID(ctx, cfg, boardID, identifier)
-		if err != nil {
-			return nil, "boards cards move", err
-		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards move", "cards.move", map[string]string{"card_id": resolvedCard}, nil, body)
-		return result, "boards cards move", callErr
-	case "archive":
-		pathParams, body, err := a.parseBoardCardArchiveInput(ctx, args[1:], cfg, "boards cards archive")
-		if err != nil {
-			return nil, "boards cards archive", err
-		}
-		rawCardID := strings.TrimSpace(pathParams["card_id"])
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "boards cards archive", "cards.archive", "card_id", rawCardID, cardIDLookupSpec, nil, body)
-		return result, "boards cards archive", callErr
 	default:
 		return nil, "boards cards", boardsCardsSubcommandSpec.unknownError(args[0])
 	}
@@ -2899,145 +2874,6 @@ func (a *App) parseBoardCardBoardScopedTarget(args []string, commandName string)
 		return "", "", err
 	}
 	return boardID, cardID, nil
-}
-
-func (a *App) parseBoardCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {
-	fs := newSilentFlagSet(commandName)
-	var boardIDFlag, cardIDFlag trackedString
-	var titleFlag, summaryFlag trackedString
-	var actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, fromFileFlag trackedString
-	var columnFlag, resolutionFlag trackedString
-	var assigneeRefFlags trackedStrings
-	var beforeCardIDFlag, afterCardIDFlag trackedString
-	var documentRefFlag trackedString
-	fs.Var(&boardIDFlag, "board-id", "Board id")
-	fs.Var(&cardIDFlag, "card-id", "Card id")
-	fs.Var(&titleFlag, "title", "Card title")
-	fs.Var(&summaryFlag, "summary", "Card summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id")
-	fs.Var(&requestKeyFlag, "request-key", "Request key")
-	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token")
-	fs.Var(&columnFlag, "column", "Target board column key")
-	fs.Var(&beforeCardIDFlag, "before-card-id", "Place before this card id in the target column")
-	fs.Var(&afterCardIDFlag, "after-card-id", "Place after this card id in the target column")
-	fs.Var(&assigneeRefFlags, "assignee-ref", "Assignee actor typed reference (repeatable)")
-	fs.Var(&resolutionFlag, "resolution", "Terminal resolution when column is done (done only; use trash to abandon work)")
-	fs.Var(&documentRefFlag, "document-ref", "Document typed reference")
-	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
-	if err := fs.Parse(args); err != nil {
-		return "", nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	boardID := strings.TrimSpace(boardIDFlag.value)
-	if boardID == "" && len(positionals) > 0 {
-		boardID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if len(positionals) > 0 {
-		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	if err := validateID(boardID, "board id"); err != nil {
-		return "", nil, err
-	}
-	if err := validatePlacementFlags(beforeCardIDFlag.value, afterCardIDFlag.value, commandName); err != nil {
-		return "", nil, err
-	}
-
-	skipStdin := hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, summaryFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeRefFlags, resolutionFlag, documentRefFlag)
-	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
-	if err != nil {
-		return "", nil, err
-	}
-	if len(payload) > 0 {
-		if hasAnyBoardMutationFieldFlags(cardIDFlag, titleFlag, summaryFlag, actorIDFlag, requestKeyFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag, assigneeRefFlags, resolutionFlag, documentRefFlag) {
-			return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("field flags cannot be combined with JSON body input for `anx %s`", commandName))
-		}
-		body, err := decodeJSONPayload(payload)
-		if err != nil {
-			return "", nil, err
-		}
-		bodyMap, _ := body.(map[string]any)
-		if bodyMap == nil {
-			return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-		}
-		resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-		if err != nil {
-			return "", nil, err
-		}
-		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "before_card_id"); err != nil {
-			return "", nil, err
-		}
-		if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, bodyMap, "after_card_id"); err != nil {
-			return "", nil, err
-		}
-		if cardNest, ok := bodyMap["card"].(map[string]any); ok && cardNest != nil {
-			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, cardNest, "before_card_id"); err != nil {
-				return "", nil, err
-			}
-			if err := a.normalizeBoardMutationCardAnchorField(ctx, cfg, resolvedBoardID, cardNest, "after_card_id"); err != nil {
-				return "", nil, err
-			}
-		}
-		if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
-			return "", nil, err
-		}
-		return resolvedBoardID, bodyMap, nil
-	}
-
-	body := map[string]any{}
-	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
-	if err != nil {
-		return "", nil, err
-	}
-	if actorID != "" {
-		body["actor_id"] = actorID
-	}
-	if cardID := strings.TrimSpace(cardIDFlag.value); cardID != "" {
-		body["card_id"] = cardID
-	}
-	if requestKey := strings.TrimSpace(requestKeyFlag.value); requestKey != "" {
-		body["request_key"] = requestKey
-	}
-	if ifBoardUpdatedAt := strings.TrimSpace(ifBoardUpdatedAtFlag.value); ifBoardUpdatedAt != "" {
-		body["if_board_updated_at"] = ifBoardUpdatedAt
-	}
-	if title := strings.TrimSpace(titleFlag.value); title != "" {
-		body["title"] = title
-	}
-	if summary := strings.TrimSpace(summaryFlag.value); summary != "" {
-		body["summary"] = summary
-	}
-	if column := strings.TrimSpace(columnFlag.value); column != "" {
-		body["column_key"] = column
-	}
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", nil, err
-	}
-	if beforeCard := strings.TrimSpace(beforeCardIDFlag.value); beforeCard != "" {
-		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCard)
-		if err != nil {
-			return "", nil, err
-		}
-		body["before_card_id"] = resolved
-	}
-	if afterCard := strings.TrimSpace(afterCardIDFlag.value); afterCard != "" {
-		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCard)
-		if err != nil {
-			return "", nil, err
-		}
-		body["after_card_id"] = resolved
-	}
-	if assigneeRefs := normalizeStringFilters(assigneeRefFlags.values); len(assigneeRefs) > 0 {
-		body["assignee_refs"] = assigneeRefs
-	}
-	if resolution := strings.TrimSpace(resolutionFlag.value); resolution != "" {
-		body["resolution"] = resolution
-	}
-	if documentRef := strings.TrimSpace(documentRefFlag.value); documentRef != "" {
-		body["document_ref"] = documentRef
-	}
-	return resolvedBoardID, body, nil
 }
 
 func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string, cfg config.Resolved, commandName string) (string, any, error) {

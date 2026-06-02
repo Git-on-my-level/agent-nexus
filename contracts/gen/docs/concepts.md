@@ -76,11 +76,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `boards`
 
-- Commands: `16`
+- Commands: `15`
 - Command IDs:
   - `boards.archive`
   - `boards.cards.batch_add`
-  - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
   - `boards.create`
@@ -97,10 +96,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `17`
+- Commands: `16`
 - Command IDs:
   - `boards.cards.batch_add`
-  - `boards.cards.create`
   - `boards.cards.get`
   - `boards.cards.list`
   - `cards.archive`
@@ -328,7 +326,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `50`
+- Commands: `49`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -341,7 +339,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `artifacts.unarchive`
   - `boards.archive`
   - `boards.cards.batch_add`
-  - `boards.cards.create`
   - `boards.create`
   - `boards.patch`
   - `boards.purge`

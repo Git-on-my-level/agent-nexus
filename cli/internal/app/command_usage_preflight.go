@@ -471,15 +471,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"boards list": merge(listFlags, map[string]preflightFlagSpec{
 			"owner": valueFlag,
 		}, lifecycle),
-		"cards list": merge(map[string]preflightFlagSpec{
-			"board-id": valueFlag,
-			"board":    valueFlag,
-			"state":    valueFlag,
-			"q":        valueFlag,
-			"limit":    valueFlag,
-			"cursor":   valueFlag,
-			"full-id":  boolFlag,
-		}, lifecycle),
 		"actors list": {
 			"q":      valueFlag,
 			"limit":  valueFlag,

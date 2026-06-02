@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `124`
+- Commands: `123`
 
 ## `actors.create`
 
@@ -450,18 +450,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ board, cards }`.
 
-## `boards.cards.create`
-
-- CLI path: `boards cards create`
-- HTTP: `POST /boards/{board_id}/cards`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Create a first-class card and attach it to a board.
-- Concepts: `boards`, `cards`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ card }`.
-
 ## `boards.cards.get`
 
 - CLI path: `boards cards get`
@@ -613,10 +601,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Create a card with the same body as POST /boards/{board_id}/cards, but supply board_ref or board_handle here instead of a path segment. Interoperable with board-scoped create.
+- Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
 - Concepts: `cards`, `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
-- Output: Returns `{ board, card }` (same as board-scoped create).
+- Output: Returns `{ board, card }`.
 
 ## `cards.get`
 
