@@ -189,6 +189,33 @@ class ANXClient:
     def get_event(self, event_id: str) -> dict[str, Any]:
         return self.raw_request("GET", f"/events/{event_id}")
 
+    def list_events(
+        self,
+        *,
+        thread_id: str | None = None,
+        types: Iterable[str] | None = None,
+        actor_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        params: list[tuple[str, str]] = []
+        if thread_id:
+            params.append(("thread_id", thread_id))
+        if actor_id:
+            params.append(("actor_id", actor_id))
+        for item in types or []:
+            normalized = str(item).strip()
+            if normalized:
+                params.append(("type", normalized))
+        params.append(("limit", str(limit)))
+        path = "/events"
+        if params:
+            path = f"{path}?{urlencode(params)}"
+        payload = self.raw_request("GET", path)
+        events = payload.get("events") if isinstance(payload, dict) else None
+        if not isinstance(events, list):
+            return []
+        return [item for item in events if isinstance(item, dict)]
+
     def create_artifact(self, *, artifact: dict[str, Any], content: Any, content_type: str = "structured") -> dict[str, Any]:
         body: dict[str, Any] = {"artifact": artifact, "content": content, "content_type": content_type}
         actor_id = self._actor_id()

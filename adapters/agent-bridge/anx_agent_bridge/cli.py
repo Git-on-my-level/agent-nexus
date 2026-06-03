@@ -303,7 +303,7 @@ def cmd_adapter_contract(args: argparse.Namespace) -> int:
         "stdin_json_doctor": doctor_example,
         "stdout_json_dispatch": {
             "schema_version": RESPONSE_SCHEMA_VERSION,
-            "response_text": "Reply text posted back to ANX (may be empty string).",
+            "response_text": "Final visible fallback text. The bridge posts it only when the agent did not post a thread response directly.",
             "native_session_id": "optional-native-session-id",
             "metadata": {},
         },

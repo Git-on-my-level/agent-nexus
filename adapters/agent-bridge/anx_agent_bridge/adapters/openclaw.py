@@ -180,7 +180,7 @@ def _extract_response_text(raw_stdout: str) -> str:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return raw
+        return ""
     text = _last_payload_text(_lookup(data, "result", "payloads"))
     if text:
         return text
@@ -221,6 +221,8 @@ def _last_payload_text(payloads: Any) -> str:
 
 def _payload_text(item: Any) -> str:
     if isinstance(item, dict):
+        if not _payload_is_visible_final(item):
+            return ""
         text = _clean_string(item.get("text"))
         if text:
             return text
@@ -228,6 +230,17 @@ def _payload_text(item: Any) -> str:
         if isinstance(payload, dict):
             return _clean_string(payload.get("text"))
     return ""
+
+
+def _payload_is_visible_final(item: dict[str, Any]) -> bool:
+    markers = {
+        _clean_string(item.get("type")).lower(),
+        _clean_string(item.get("kind")).lower(),
+        _clean_string(item.get("role")).lower(),
+    }
+    if markers & {"thought", "reasoning", "tool", "tool_call", "tool_result", "progress", "log"}:
+        return False
+    return bool(markers & {"assistant", "assistant_message", "final", "final_message", "final_visible_text"})
 
 
 def _resolve_bin(settings: dict[str, Any], env_key: str, config_key: str, default_name: str) -> str:

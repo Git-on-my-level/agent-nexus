@@ -44,9 +44,9 @@ def test_openclaw_extract_response_prefers_last_meaningful_payload() -> None:
         {
             "result": {
                 "payloads": [
-                    {"text": "first visible text"},
-                    {"payload": {"text": ""}},
-                    {"text": "final visible text"},
+                    {"type": "assistant_message", "text": "first visible text"},
+                    {"type": "assistant_message", "payload": {"text": ""}},
+                    {"type": "final", "text": "final visible text"},
                 ]
             },
             "finalAssistantVisibleText": "fallback text",
@@ -62,12 +62,35 @@ def test_openclaw_extract_response_falls_back_to_final_visible_text() -> None:
     assert openclaw._extract_response_text(raw) == "final fallback"
 
 
+def test_openclaw_extract_response_ignores_non_json_stdout() -> None:
+    raw = "progress: thinking\nfinal maybe mixed in stdout"
+
+    assert openclaw._extract_response_text(raw) == ""
+
+
+def test_openclaw_extract_response_ignores_internal_payloads_when_final_visible_text_exists() -> None:
+    raw = json.dumps(
+        {
+            "result": {
+                "payloads": [
+                    {"type": "thought", "text": "internal thought"},
+                    {"type": "tool_result", "payload": {"text": "tool output"}},
+                    {"type": "progress", "text": "still working"},
+                ],
+                "finalAssistantVisibleText": "final fallback",
+            }
+        }
+    )
+
+    assert openclaw._extract_response_text(raw) == "final fallback"
+
+
 def test_openclaw_dispatch_strips_trailing_standalone_no_reply(monkeypatch) -> None:
     def fake_run(cmd: list[str], *, timeout: int):
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=0,
-            stdout=json.dumps({"result": {"payloads": [{"text": "Full answer.\n\nNO_REPLY"}]}}),
+            stdout=json.dumps({"result": {"payloads": [{"type": "final", "text": "Full answer.\n\nNO_REPLY"}]}}),
             stderr="",
         )
 
@@ -92,7 +115,7 @@ def test_openclaw_dispatch_keeps_inline_no_reply_content(monkeypatch) -> None:
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=0,
-            stdout=json.dumps({"result": {"payloads": [{"text": "Use NO_REPLY only as a sentinel."}]}}),
+            stdout=json.dumps({"result": {"payloads": [{"type": "final", "text": "Use NO_REPLY only as a sentinel."}]}}),
             stderr="",
         )
 
@@ -120,7 +143,7 @@ def test_openclaw_dispatch_creates_isolated_session_and_does_not_persist_native_
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=0,
-            stdout=json.dumps({"result": {"payloads": [{"text": "first"}, {"text": "final answer"}]}}),
+            stdout=json.dumps({"result": {"payloads": [{"type": "assistant_message", "text": "first"}, {"type": "final", "text": "final answer"}]}}),
             stderr="",
         )
 

@@ -58,6 +58,7 @@ class StubClient:
         self.list_notification_calls = []
         self.notification_reads = []
         self.notifications = []
+        self.thread_events = []
 
     def stream_events(self, **_kwargs):
         for event in self._events:
@@ -74,8 +75,24 @@ class StubClient:
         return {"agent": {"agent_id": "agent-hermes", "registration": kwargs.get("registration")}}
 
     def create_event(self, **kwargs):
+        event = {"id": f"event-{len(self.created_events) + len(self.thread_events) + 1}", **kwargs.get("event", {})}
+        event.setdefault("actor_id", "actor-hermes")
         self.created_events.append(kwargs)
-        return {"event": {"id": f"event-{len(self.created_events)}", **kwargs.get("event", {})}}
+        self.thread_events.append(event)
+        return {"event": event}
+
+    def list_events(self, *, thread_id=None, types=None, actor_id=None, limit=50):
+        allowed_types = {str(item) for item in (types or []) if str(item).strip()}
+        events = []
+        for event in self.thread_events:
+            if thread_id and event.get("thread_id") != thread_id:
+                continue
+            if actor_id and event.get("actor_id") != actor_id:
+                continue
+            if allowed_types and event.get("type") not in allowed_types:
+                continue
+            events.append(event)
+        return list(reversed(events))[:limit]
 
     def bridge_check_in(self, payload):
         self.bridge_checkins.append(payload)
@@ -270,6 +287,7 @@ def test_handle_notification_marks_read_after_dispatch():
     assert bridge.adapter.last_prompt_text.startswith(
         "You were tagged in an Agent Nexus topic or card."
     )
+    assert "Post any user-facing response directly back into the same backing thread" in bridge.adapter.last_prompt_text
     assert '"subject_ref": "topic:topic-1"' in bridge.adapter.last_prompt_text
     assert '"resolved_subject"' in bridge.adapter.last_prompt_text
     assert client.claimed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
@@ -281,6 +299,94 @@ def test_handle_notification_marks_read_after_dispatch():
         "event:evt-trigger",
         "artifact:wake-1",
     ]
+
+
+def test_handle_notification_suppresses_fallback_when_agent_posts_direct_response():
+    bridge, state, client = build_bridge([])
+    original_dispatch = bridge.adapter.dispatch
+
+    def dispatch_and_post(packet, prompt_text, session_key, existing_native_session_id=None):
+        client.thread_events.append(
+            {
+                "id": "manual-message-1",
+                "type": "message_posted",
+                "thread_id": packet.thread_id,
+                "actor_id": packet.actor_id,
+                "payload": {"text": "Manual response from agent."},
+            }
+        )
+        return original_dispatch(packet, prompt_text, session_key, existing_native_session_id)
+
+    bridge.adapter.dispatch = dispatch_and_post
+
+    bridge._handle_notification(
+        {
+            "wakeup_id": "wake-1",
+            "target_actor_id": "actor-hermes",
+            "thread_id": "thread-1",
+            "request_event_id": "evt-request",
+            "trigger_event_id": "evt-trigger",
+        }
+    )
+
+    assert client.created_events == []
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert client.completed_wakeups == [{"wakeup_id": "wake-1", "bridge_instance_id": "bridge-test"}]
+    assert client.notification_reads == ["wake-1"]
+
+
+def test_direct_agent_response_is_not_redispatched_when_completion_fails_once():
+    bridge, state, client = build_bridge([])
+    original_dispatch = bridge.adapter.dispatch
+    completion_attempts = {"count": 0}
+
+    def dispatch_and_post(packet, prompt_text, session_key, existing_native_session_id=None):
+        client.thread_events.append(
+            {
+                "id": "manual-message-1",
+                "type": "message_posted",
+                "thread_id": packet.thread_id,
+                "actor_id": packet.actor_id,
+                "payload": {"text": "Manual response from agent."},
+            }
+        )
+        return original_dispatch(packet, prompt_text, session_key, existing_native_session_id)
+
+    def fail_completion_once(*_args, **_kwargs):
+        completion_attempts["count"] += 1
+        if completion_attempts["count"] == 1:
+            raise RuntimeError("completion write failed")
+        return {
+            "notification": {
+                "wakeup_id": "wake-1",
+                "bridge_instance_id": "bridge-test",
+                "delivery_status": "completed",
+            }
+        }
+
+    bridge.adapter.dispatch = dispatch_and_post
+    client.complete_agent_wakeup = fail_completion_once
+    notification = {
+        "wakeup_id": "wake-1",
+        "target_actor_id": "actor-hermes",
+        "thread_id": "thread-1",
+        "request_event_id": "evt-request",
+        "trigger_event_id": "evt-trigger",
+    }
+
+    bridge._handle_notification(notification)
+
+    assert client.created_events == []
+    assert "wake-1" in state.handled_wakeup_ids()
+    assert "wake-1" in state.completion_pending_wakeup_ids()
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert client.failed_wakeups[-1]["wakeup_id"] == "wake-1"
+
+    bridge._handle_notification(notification)
+
+    assert completion_attempts["count"] == 2
+    assert len(bridge.adapter.dispatch_calls) == 1
+    assert "wake-1" not in state.completion_pending_wakeup_ids()
 
 
 def test_packet_event_refs_omits_empty_trigger_event_id():

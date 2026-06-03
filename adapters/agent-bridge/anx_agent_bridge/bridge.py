@@ -203,6 +203,7 @@ class AgentBridge:
         prompt_text = build_wake_prompt(packet)
         session_map = self.state.session_map()
         existing_session_id = session_map.get(packet.session_key)
+        pre_dispatch_agent_message_ids = self._agent_message_ids_for_thread(packet)
         try:
             result = self.adapter.dispatch(packet, prompt_text, packet.session_key, existing_native_session_id=existing_session_id)
         except Exception as exc:
@@ -231,7 +232,13 @@ class AgentBridge:
         marked_handled = False
         try:
             response_text = result.response_text.strip()
-            if response_text:
+            if self._agent_posted_message_since(packet, pre_dispatch_agent_message_ids):
+                LOGGER.info(
+                    "Wakeup %s: agent posted a thread response directly; suppressing adapter final-text fallback",
+                    packet.wakeup_id,
+                )
+                reply_posted = True
+            elif response_text:
                 self._post_reply_message_with_retries(packet, response_text, result.native_session_id)
                 reply_posted = True
             if reply_posted:
@@ -260,6 +267,38 @@ class AgentBridge:
 
     def _packet_subject_refs(self, packet: WakePacket) -> list[str]:
         return packet.subject_context_refs()
+
+    def _agent_message_ids_for_thread(self, packet: WakePacket) -> set[str] | None:
+        if not packet.thread_id or not packet.actor_id:
+            return set()
+        try:
+            return {
+                event_id
+                for event_id in (
+                    str(event.get("id", "")).strip()
+                    for event in self.client.list_events(
+                        thread_id=packet.thread_id,
+                        types=[MESSAGE_POSTED_EVENT],
+                        actor_id=packet.actor_id,
+                        limit=200,
+                    )
+                )
+                if event_id
+            }
+        except Exception:
+            LOGGER.exception(
+                "Wakeup %s: failed to list agent messages for fallback writeback detection",
+                packet.wakeup_id,
+            )
+            return None
+
+    def _agent_posted_message_since(self, packet: WakePacket, before_ids: set[str] | None) -> bool:
+        if before_ids is None or not packet.thread_id or not packet.actor_id:
+            return False
+        current_ids = self._agent_message_ids_for_thread(packet)
+        if current_ids is None:
+            return False
+        return bool(current_ids - before_ids)
 
     def _record_wakeup_failure(
         self,

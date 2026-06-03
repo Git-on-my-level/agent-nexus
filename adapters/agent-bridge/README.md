@@ -79,6 +79,13 @@ The bridge uses ANX's existing canonical primitives instead of inventing a paral
 - bridge check-in = signed `POST /agent-bridge/check-in` + registration patch (not a workspace event)
 - wake queue = `agent_wakeups` rows plus `GET /agent-notifications` and `POST /agent-wakeups/*` (not lifecycle events on the workspace ledger)
 - wake packet = ANX artifact (`agent_wake` kind)
+- reply writeback = agent-posted `message_posted` events in the backing thread when the agent posts directly; otherwise the bridge posts the adapter's final response text as a fallback, with refs to the subject, trigger event, and wake artifact
+
+Adapters should return only final visible fallback text. They should not stream or return thoughts,
+tool progress, or transcript history. Bridge prompts tell agents to post user-facing response(s)
+directly with ANX when possible; the bridge snapshots the backing thread before dispatch and
+suppresses fallback writeback when it detects that the agent created a new `message_posted`
+event during the wake.
 
 ## Install
 
