@@ -142,7 +142,8 @@
       const body = await res.json();
       const org = body.organization;
       if (!org?.id) {
-        message = "Organization created but no id was returned.";
+        message =
+          "Organization was created, but we couldn't continue onboarding. Refresh the dashboard and try again.";
         return;
       }
       upsertHostedOrganization(org, { active: true });
@@ -166,15 +167,14 @@
   <div class="mx-auto max-w-[520px] py-8">
     <h1 class="text-display text-fg">Name your organization</h1>
     <p class="mt-1.5 text-body text-fg-muted">
-      Your organization owns billing, members, and audit history.
+      Your organization is where you manage your team, workspaces, and billing.
     </p>
 
     <div class="mt-5 rounded-md border border-line bg-panel p-4">
       <p class="text-subtitle text-fg">How this is organized</p>
       <p class="mt-3 text-body text-fg">
-        At the team or company level, the organization covers billing and
-        membership. Workspaces are projects inside it; you'll add your first
-        workspace next.
+        Use one organization for a team or company. You'll add projects as
+        workspaces next.
       </p>
     </div>
 

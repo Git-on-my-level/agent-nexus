@@ -52,7 +52,7 @@
   <div class="rounded-md border border-line bg-bg-soft px-6 py-6">
     <h1 class="text-display text-fg">Create your account</h1>
     <p class="mt-1.5 text-meta text-fg-subtle">
-      Hosted sign-up uses Google or GitHub only.
+      Sign up with Google or GitHub.
     </p>
 
     <div class="mt-5 space-y-3">
@@ -102,7 +102,7 @@
 
     <div class="mt-4">
       <p class="text-micro text-fg-subtle">
-        By continuing you agree to the Agent Nexus (ANX) terms of service.
+        By continuing, you agree to the Agent Nexus Terms of Service.
       </p>
     </div>
   </div>

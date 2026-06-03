@@ -16,7 +16,7 @@ export async function classifiedCpFetch(path, init) {
     throw new FetchError(
       "network",
       0,
-      "You're offline or the server is unreachable.",
+      "We couldn't connect to Agent Nexus. Check your connection and try again.",
     );
   }
   if (!res.ok) {

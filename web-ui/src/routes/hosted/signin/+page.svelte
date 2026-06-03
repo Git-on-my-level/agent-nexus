@@ -69,7 +69,8 @@
       launchPayload?.launch_session?.finish_url,
     );
     if (!finishURL) {
-      message = "Launch session response did not include a valid finish URL.";
+      message =
+        "We couldn't open the workspace. Return to the dashboard and try again.";
       return { kind: "error" };
     }
 

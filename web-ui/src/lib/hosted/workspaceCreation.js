@@ -21,7 +21,7 @@ export async function readHostedCreateError(res, activeOrg) {
     (lower.includes("quota") && lower.includes("workspace")) ||
     (lower.includes("limit") && lower.includes("workspace"))
   ) {
-    return `Workspace limit reached for ${hostedOrgLabel(activeOrg)}. This organization cannot create another workspace on its current plan. Remove a workspace or request a limit review from billing.`;
+    return `You've reached ${hostedOrgLabel(activeOrg)}'s workspace limit. Delete an unused workspace or contact us to raise the limit.`;
   }
 
   return detail || "Failed to create workspace.";

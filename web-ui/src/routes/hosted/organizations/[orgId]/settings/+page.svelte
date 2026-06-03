@@ -48,6 +48,36 @@
       confirmation.trim() === String(org?.slug ?? "").trim(),
   );
 
+  function organizationStatusLabel(status) {
+    const s = String(status ?? "")
+      .trim()
+      .toLowerCase();
+    if (s === "active") return "Active";
+    if (s === "suspended" || s === "deactivated") return "Deactivated";
+    if (s === "archived") return "Archived";
+    return "Unavailable";
+  }
+
+  function organizationAccessLabel(accessMode) {
+    const mode = String(accessMode ?? "")
+      .trim()
+      .toLowerCase();
+    if (!mode || mode === "read_write") return "Full access";
+    if (mode === "read_only") return "Read-only";
+    return "Limited access";
+  }
+
+  function restrictionReasonLabel(reason) {
+    const r = String(reason ?? "")
+      .trim()
+      .toLowerCase();
+    if (!r) return "";
+    if (r === "decommission") return "Deactivated";
+    if (r === "quota") return "Usage limit reached";
+    if (r === "billing") return "Billing issue";
+    return "Access limited";
+  }
+
   async function loadData() {
     if (!orgId) return;
     phase = "loading";
@@ -190,15 +220,15 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <span class="rounded bg-panel px-2 py-1 text-micro text-fg-muted"
-            >{org.status}</span
+            >{organizationStatusLabel(org.status)}</span
           >
           <span class="rounded bg-panel px-2 py-1 text-micro text-fg-muted"
-            >{org.access_mode || "read_write"}</span
+            >{organizationAccessLabel(org.access_mode)}</span
           >
           {#if org.restriction_reason}
             <span
               class="rounded bg-danger-soft px-2 py-1 text-micro text-danger-text"
-              >{org.restriction_reason}</span
+              >{restrictionReasonLabel(org.restriction_reason)}</span
             >
           {/if}
         </div>
@@ -209,9 +239,13 @@
       <div class="max-w-2xl">
         <h2 class="text-subtitle text-danger-text">Deactivate organization</h2>
         <p class="mt-2 text-body text-danger-text">
-          Deactivation is a soft lock. Workspaces and billing records are kept.
-          Hosted access is blocked, and running workspace runtimes stop through
-          normal idle handling.
+          Deactivation does not delete your data right away. We'll schedule it
+          for deletion, while keeping workspaces and billing records for support
+          and compliance. For immediate deletion, please
+          <a
+            class="text-danger-text underline hover:text-danger-text"
+            href="mailto:david@scalingforever.com">reach out</a
+          >.
         </p>
       </div>
 

@@ -74,8 +74,7 @@
     const pub = servicePublicKey.trim();
     if ((sid && !pub) || (!sid && pub)) {
       advancedOpen = true;
-      message =
-        "Service identity fields must both be set (BYO) or both left empty (platform managed).";
+      message = "Fill in both advanced fields, or leave both blank.";
       return;
     }
     busy = true;
@@ -100,7 +99,8 @@
       const createBody = await res.json();
       const workspace = createBody.workspace ?? createBody;
       if (!workspace?.id) {
-        message = "Workspace created but no id was returned.";
+        message =
+          "Workspace was created, but we couldn't open it yet. Go to the dashboard and try again.";
         return;
       }
       setActiveOrg(String(activeOrg.id));
@@ -128,10 +128,10 @@
   </p>
   <h1 class="mt-2 text-display text-fg">Create a workspace</h1>
   <p class="mt-1 text-meta text-fg-subtle">
-    Workspaces are isolated environments inside
+    Create a separate workspace for each project or codebase in
     <span class="text-fg"
       >{activeOrg?.display_name || activeOrg?.slug || "your organization"}</span
-    >. Each one runs its own agent and stores its own threads.
+    >. Each workspace keeps its work and history separate.
   </p>
 
   <form
@@ -208,12 +208,8 @@
             class="mt-3 space-y-3 rounded-md border border-line bg-bg px-3 py-3"
           >
             <p class="text-micro text-fg-subtle">
-              Optional fleet provisioning for operators. Agent access in the
-              workspace uses invites, not these fields.
-            </p>
-            <p class="text-micro text-fg-subtle">
-              Platform provisioning is the default. Set both fields only for
-              bring-your-own service identity.
+              Most teams can leave this blank. These fields are only for teams
+              bringing their own workspace service identity.
             </p>
             <label class="block text-micro text-fg-muted">
               Service identity id

@@ -9,12 +9,12 @@ export const CALLBACK_COPY = {
     body: "This link has already been used to open the workspace. If you're trying to open the workspace again, return to the dashboard.",
   },
   session_exchange_unreachable: {
-    heading: "Control plane unreachable",
-    body: "The control plane is temporarily unavailable. Wait a moment and try again.",
+    heading: "Couldn't open workspace",
+    body: "Agent Nexus is temporarily unavailable. Wait a moment and try again.",
   },
   workspace_core_unreachable: {
     heading: "Workspace unreachable",
-    body: "The workspace server didn't respond after 10 attempts. Try again in a moment.",
+    body: "The workspace is taking longer than expected to open. Try again in a moment.",
   },
   UNKNOWN: {
     heading: "Couldn't open workspace",

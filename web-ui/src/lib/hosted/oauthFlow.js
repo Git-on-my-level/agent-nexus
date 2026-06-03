@@ -287,7 +287,7 @@ export async function startHostedOAuthFlow({
   const authorizationURL = String(oauthSession?.authorization_url ?? "").trim();
   const state = String(oauthSession?.state ?? "").trim();
   if (!authorizationURL || !state) {
-    throw new Error("Unexpected response from control plane.");
+    throw new Error("We couldn't start sign-in. Please try again.");
   }
 
   storeHostedOAuthContinuation(state, continuation);
@@ -314,7 +314,7 @@ export async function createHostedLaunchSession({
       workspaceSlug,
     }));
   if (!normalizedWorkspaceId) {
-    throw new Error("Workspace continuation is missing a workspace id.");
+    throw new Error("We couldn't find the workspace to open.");
   }
 
   const response = await cpFetch(
@@ -373,7 +373,7 @@ export async function resolveHostedWorkspaceId({
     : organizations;
 
   if (normalizedOrganizationSlug && candidateOrgs.length === 0) {
-    throw new Error("Workspace organization could not be found.");
+    throw new Error("We couldn't find that organization.");
   }
 
   const matches = [];
@@ -397,12 +397,10 @@ export async function resolveHostedWorkspaceId({
   }
 
   if (matches.length === 0) {
-    throw new Error("Workspace continuation could not find that workspace.");
+    throw new Error("We couldn't find that workspace.");
   }
   if (matches.length > 1) {
-    throw new Error(
-      "Workspace continuation is ambiguous; include the organization slug.",
-    );
+    throw new Error("We found more than one matching workspace.");
   }
   return String(matches[0]?.id ?? "").trim();
 }

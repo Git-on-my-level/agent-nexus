@@ -107,7 +107,7 @@
       const body = await res.json();
       const redirectURL = String(body?.redirect_url ?? "").trim();
       if (!redirectURL) {
-        throw new Error("Authorization response did not include a redirect.");
+        throw new Error("We couldn't finish connecting ChatGPT. Try again.");
       }
       window.location.assign(redirectURL);
     } catch (error) {
@@ -163,7 +163,7 @@
         </label>
 
         <label class="block">
-          <span class="text-micro font-medium text-fg">Agent username</span>
+          <span class="text-micro font-medium text-fg">ChatGPT agent name</span>
           <input
             bind:value={visibleName}
             class="mt-1 h-9 w-full rounded border border-line bg-panel px-3 text-body text-fg"
@@ -181,7 +181,7 @@
           disabled={!workspaceID || !visibleName.trim()}
           class="w-full"
         >
-          Authorize
+          Connect ChatGPT
         </Button>
       </form>
     {/if}

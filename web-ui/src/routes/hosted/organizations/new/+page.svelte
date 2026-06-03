@@ -58,7 +58,8 @@
       const body = await res.json();
       const org = body.organization;
       if (!org?.id) {
-        message = "Organization created but no id was returned.";
+        message =
+          "Organization was created, but we couldn't open it yet. Return to the dashboard and try again.";
         return;
       }
       await loadHostedSession();
@@ -85,8 +86,8 @@
   </p>
   <h1 class="mt-2 text-display text-fg">Create an organization</h1>
   <p class="mt-1 text-meta text-fg-subtle">
-    Organizations group workspaces, members, and billing. You can rename the
-    organization later, but the slug is permanent.
+    Create a home for your team's workspaces and billing. You can rename it
+    later; the URL slug cannot be changed.
   </p>
 
   <form

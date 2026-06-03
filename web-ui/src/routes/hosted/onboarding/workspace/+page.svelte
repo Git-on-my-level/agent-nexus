@@ -179,7 +179,8 @@
       const body = await res.json();
       const ws = body.workspace ?? body;
       if (!ws?.id) {
-        message = "Workspace created but no id was returned.";
+        message =
+          "Workspace was created, but we couldn't open it yet. Refresh the dashboard and try again.";
         return;
       }
       await loadHostedSession();
@@ -202,7 +203,7 @@
   <div class="mx-auto max-w-[520px] py-8">
     <h1 class="text-display text-fg">Name your first workspace</h1>
     <p class="mt-1.5 text-body text-fg-muted">
-      A workspace holds one project's topics, boards, artifacts, and inbox. You
+      Create a workspace for the first project you want agents to work on. You
       can add more later.
     </p>
 

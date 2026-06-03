@@ -119,7 +119,7 @@ export const PLAN_CARDS = [
     price: "$0",
     priceSuffix: "/mo",
     tagline: "Good for weekend projects or a small business.",
-    features: ["Community support", "Core hosted features"],
+    features: ["Community support", "Try the core features."],
     ctaLabel: "Free plan",
     ctaUpgrade: false,
   },

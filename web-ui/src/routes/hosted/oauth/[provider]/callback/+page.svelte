@@ -118,16 +118,16 @@
     if (!code || !state) {
       message =
         mode === "signup"
-          ? "OAuth signup callback is missing code or state."
-          : "OAuth sign-in callback is missing code or state.";
+          ? "We couldn't finish sign-up. Please try again."
+          : "We couldn't finish sign-in. Please try again.";
       busy = false;
       return;
     }
     if (!continuation) {
       message =
         mode === "signup"
-          ? "OAuth signup continuation is missing or expired."
-          : "OAuth sign-in continuation is missing or expired.";
+          ? "We couldn't finish sign-up. Please try again."
+          : "We couldn't finish sign-in. Please try again.";
       busy = false;
       return;
     }
@@ -159,8 +159,8 @@
       if (!token) {
         message =
           mode === "signup"
-            ? "Signed up but no session token was returned."
-            : "Signed in but no session token was returned.";
+            ? "We couldn't finish setting up your account. Please try again."
+            : "We couldn't finish signing you in. Please try again.";
         return;
       }
       await persistHostedCpAccessToken(token);
@@ -224,8 +224,8 @@
       <p class="mt-2 text-meta text-fg-subtle">
         {busy
           ? mode === "signup"
-            ? "Verifying the provider response and preparing your hosted account…"
-            : "Verifying the provider response and loading your hosted session…"
+            ? "Setting up your account…"
+            : "Signing you in…"
           : "Redirecting…"}
       </p>
     {/if}

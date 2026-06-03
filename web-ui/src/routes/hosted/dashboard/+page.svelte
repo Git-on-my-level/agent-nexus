@@ -201,7 +201,8 @@
         body?.launch_session?.finish_url,
       );
       if (!finishURL) {
-        message = "Launch response did not include a valid finish URL.";
+        message =
+          "We couldn't open the workspace. Try again from the dashboard.";
         return;
       }
       window.location.assign(finishURL);
@@ -312,8 +313,8 @@
           {#if String(createdWorkspace.status ?? "").toLowerCase() === "ready"}
             It is ready to open in {activeOrg?.display_name || activeOrg?.slug}.
           {:else}
-            It is listed below as {createdWorkspace.status || "provisioning"}.
-            Agent Nexus will show the Open action once setup finishes.
+            Setup is still in progress. Agent Nexus will show Open once it is
+            ready.
           {/if}
         {:else}
           Refreshing the workspace list for
@@ -405,7 +406,7 @@
       {:else if workspaces.length === 0}
         <StateEmpty
           title="Spin up your first workspace"
-          helper="Workspaces hold the threads, topics, and artifacts your AI agent produces. Create one to get started."
+          helper="Create a workspace to give your agent a place to work."
           actionLabel="Create workspace"
           actionHref="/hosted/workspaces/new"
         />

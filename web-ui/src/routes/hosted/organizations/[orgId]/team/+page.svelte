@@ -41,6 +41,16 @@
       myMembership.status === "active",
   );
 
+  function memberStatusLabel(status) {
+    const s = String(status ?? "")
+      .trim()
+      .toLowerCase();
+    if (s === "active") return "Active";
+    if (s === "disabled") return "Removed";
+    if (s === "pending") return "Pending";
+    return "Unavailable";
+  }
+
   async function loadData() {
     if (!orgId) return;
     loadError = "";
@@ -250,9 +260,8 @@
     </p>
     <h1 class="mt-1 text-display text-fg">Team &amp; invites</h1>
     <p class="mt-1 text-meta text-fg-subtle">
-      Agent Nexus (ANX) uses organization roles for the hosted control plane.
-      Workspaces and agents in the app stay workspace-local; invite people here
-      to join your org on ANX.
+      Invite people to your organization. Team members can access the workspaces
+      in this organization based on their role.
     </p>
   </div>
 
@@ -362,7 +371,7 @@
                   <div class="text-micro text-fg-subtle">{m.account_email}</div>
                 {/if}
                 <div class="mt-0.5 text-micro text-fg-subtle">
-                  Status: {m.status} ·
+                  Status: {memberStatusLabel(m.status)} ·
                   {String(m.account_id) === myAccountId ? "You" : "Member"}
                 </div>
               </div>
