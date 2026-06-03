@@ -118,7 +118,12 @@ describe("access page", () => {
     expect(screen.queryByRole("option", { name: "Any" })).toBeNull();
     expect(screen.queryByLabelText(/Agent profile name/i)).toBeNull();
     expect(screen.getByLabelText(/Agent username/i)).toBeTruthy();
-    expect(screen.getByText(/hosted team management/i)).toBeTruthy();
+    const organizationsLink = screen.getByRole("link", {
+      name: /your Organizations/i,
+    });
+    expect(organizationsLink.getAttribute("href")).toBe(
+      "/hosted/organizations",
+    );
   });
 
   it("requires an agent username before creating a hosted invite", async () => {
@@ -151,7 +156,7 @@ describe("access page", () => {
     expect(coreClientMock.createInvite).not.toHaveBeenCalled();
   });
 
-  it("copies hosted invite commands with the username as the default agent profile", async () => {
+  it("copies hosted invite instructions with the username as the default agent profile", async () => {
     render(AccessPage, {
       props: {
         data: {
@@ -177,14 +182,25 @@ describe("access page", () => {
       expect(screen.getByText("Invite created successfully")).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: "Copy token" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Copy token" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Copy CLI command" }),
+    ).toBeNull();
     await fireEvent.click(
-      screen.getByRole("button", { name: "Copy CLI command" }),
+      screen.getByRole("button", { name: "Copy instructions" }),
     );
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining(
         "anx --base-url https://core.example.com --agent claude-code auth register --username claude-code --invite-token oinv_123",
+      ),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("anx --version"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
       ),
     );
   });

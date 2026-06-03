@@ -18,7 +18,11 @@ describe("inviteRegistrationMessage", () => {
       "anx --base-url https://core.example.com --agent hermes-prod auth register --username hermes.prod --invite-token oinv_123",
     );
     expect(message).toContain(
-      "Install the ANX CLI first if this machine does not already have it:",
+      "Check whether the ANX CLI is already installed:",
+    );
+    expect(message).toContain("anx --version");
+    expect(message).toContain(
+      "If that command is not found, install the ANX CLI:",
     );
     expect(message).toContain(
       "curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
@@ -26,7 +30,8 @@ describe("inviteRegistrationMessage", () => {
     expect(message).toContain(
       "Use the anx-core API origin for --base-url (the same value as the workspace coreBaseUrl), not the web app path under /o/.../w/....",
     );
-    expect(message).not.toContain("replace any placeholder values");
+    expect(message).toContain("Run this registration command:");
+    expect(message).not.toContain("Replace the placeholder value");
   });
 
   it("defaults the CLI agent profile from the username", () => {
@@ -73,6 +78,9 @@ describe("inviteRegistrationMessage", () => {
 
     expect(message).toContain(
       "Replace the placeholder value for username before running the command.",
+    );
+    expect(message).toContain(
+      "Run this registration command after filling in the placeholder:",
     );
     expect(message).toContain(
       "The CLI requires --username; it will not choose one automatically.",

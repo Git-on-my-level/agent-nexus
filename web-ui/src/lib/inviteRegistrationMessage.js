@@ -75,11 +75,15 @@ export function buildRegistrationMessage(
   }
 
   const lines = [
-    "Install the ANX CLI first if this machine does not already have it:",
+    "Check whether the ANX CLI is already installed:",
+    "",
+    "  anx --version",
+    "",
+    "If that command is not found, install the ANX CLI:",
     "",
     "  curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
     "",
-    "Register with this ANX workspace using the invite token below.",
+    "Register a new CLI profile with this ANX workspace using the invite token below.",
     "Use the anx-core API origin for --base-url (the same value as the workspace coreBaseUrl), not the web app path under /o/.../w/....",
     "",
   ];
@@ -89,10 +93,10 @@ export function buildRegistrationMessage(
       `Replace the placeholder ${missingLabels.length === 1 ? "value" : "values"} for ${joinWithAnd(missingLabels)} before running the command.`,
       "The CLI requires --username; it will not choose one automatically. When --agent is not provided separately, use the same value as the workspace username.",
       "",
-      "Run the following command:",
+      "Run this registration command after filling in the placeholder:",
     );
   } else {
-    lines.push("Run the following command:");
+    lines.push("Run this registration command:");
   }
 
   lines.push(

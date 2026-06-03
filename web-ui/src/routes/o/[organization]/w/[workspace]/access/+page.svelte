@@ -12,7 +12,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { suggestAgentUsername } from "$lib/agentInviteIdentity.js";
-  import { buildRegistrationCommand } from "$lib/inviteRegistrationMessage";
+  import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
   import { buildWakeRegistrationMessage } from "$lib/wakeRegistrationMessage.js";
   import { enrichPrincipalsWithWakeRouting as loadPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
   import {
@@ -375,11 +375,11 @@
     }
   }
 
-  async function copyRegistrationCommand() {
+  async function copyRegistrationInstructions() {
     if (!createdToken) return;
     try {
       await navigator.clipboard.writeText(
-        buildRegistrationCommand(
+        buildRegistrationMessage(
           createdToken,
           data.registrationBaseUrl,
           createdInviteAgentName,
@@ -753,63 +753,58 @@
               token to select and copy.
               {#if createdInviteKind === "agent" || createdInviteKind === "any"}
                 {createdInviteCommandHasPlaceholders
-                  ? "The CLI command will include a username placeholder."
-                  : "The CLI command uses the agent username for --username and --agent."}
+                  ? "The instructions will include a username placeholder."
+                  : "The instructions use the agent username for --username and --agent."}
               {/if}
             </p>
-            <div
-              class="mt-2 rounded bg-bg px-2 py-1.5 font-mono text-micro text-fg"
-            >
-              <span
-                class="block min-w-0 cursor-text break-all [user-select:text]"
-                role="button"
-                tabindex="0"
-                aria-label="One-time invite token, double-click or press Enter to select for copying"
-                title="Double-click to select, then copy (⌘C / Ctrl+C)"
-                ondblclick={(e) => {
-                  e.preventDefault();
-                  selectNodeText(e.currentTarget);
-                }}
-                onkeydown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+            <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+              <div
+                class="min-w-0 flex-1 rounded bg-bg px-2 py-1.5 font-mono text-micro text-fg"
+              >
+                <span
+                  class="block min-w-0 cursor-text break-all [user-select:text]"
+                  role="button"
+                  tabindex="0"
+                  aria-label="One-time invite token, double-click or press Enter to select for copying"
+                  title="Double-click to select, then copy (⌘C / Ctrl+C)"
+                  ondblclick={(e) => {
                     e.preventDefault();
                     selectNodeText(e.currentTarget);
-                  }
-                }}>{createdToken}</span
-              >
+                  }}
+                  onkeydown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectNodeText(e.currentTarget);
+                    }
+                  }}>{createdToken}</span
+                >
+              </div>
+              {#if createdInviteKind === "agent" || createdInviteKind === "any"}
+                <Button
+                  variant="primary"
+                  size="compact"
+                  class="shrink-0 sm:h-auto"
+                  onclick={copyRegistrationInstructions}
+                >
+                  {messageCopied ? "Instructions copied" : "Copy instructions"}
+                </Button>
+              {:else}
+                <Button
+                  variant="primary"
+                  size="compact"
+                  class="shrink-0 sm:h-auto"
+                  onclick={copyInviteToken}
+                >
+                  {tokenCopied ? "Token copied" : "Copy token"}
+                </Button>
+              {/if}
             </div>
             {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="compact"
-                  onclick={copyInviteToken}
-                >
-                  {tokenCopied ? "Token copied" : "Copy token"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="compact"
-                  onclick={copyRegistrationCommand}
-                >
-                  {messageCopied ? "CLI command copied" : "Copy CLI command"}
-                </Button>
-              </div>
               <p class="mt-1.5 text-micro text-fg-muted">
                 {createdInviteCommandHasPlaceholders
-                  ? "Copies a command template with instructions for your agent to finish before registering."
-                  : "Copies a ready-to-paste command for your agent to register."}
+                  ? "Copies setup instructions with a command template for your agent to complete before registering."
+                  : "Copies install, profile, and registration instructions for your agent."}
               </p>
-            {:else}
-              <div class="mt-2">
-                <Button
-                  variant="ghost"
-                  size="compact"
-                  onclick={copyInviteToken}
-                >
-                  {tokenCopied ? "Token copied" : "Copy token"}
-                </Button>
-              </div>
             {/if}
           </div>
           <button
@@ -910,7 +905,9 @@
           }}
           class="space-y-4"
         >
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            class="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start"
+          >
             <div class="flex flex-col">
               <label
                 class="mb-1 block text-micro font-medium text-fg-muted"
@@ -931,7 +928,7 @@
               </select>
               <p class="mt-1 text-micro text-fg-muted">
                 {hostedMode
-                  ? "Workspace invites are for CLI agents. Invite teammates from the hosted organization team page."
+                  ? "Workspace invites are for CLI agents. To invite a person, go to your Organizations."
                   : newInviteKind === "human"
                     ? "Invites a human to join via passkey."
                     : newInviteKind === "any"
@@ -993,25 +990,26 @@
                 </p>
               </div>
             {/if}
-          </div>
-          <div class="flex justify-end border-t border-line pt-3">
-            <Button
-              variant="primary"
-              size="compact"
-              disabled={creatingInvite}
-              type="submit"
-            >
-              {creatingInvite ? "Creating..." : "Create invite"}
-            </Button>
+            <div class="flex items-end md:col-span-2 lg:col-span-1">
+              <Button
+                variant="primary"
+                size="compact"
+                disabled={creatingInvite}
+                type="submit"
+                class="w-full lg:w-auto"
+              >
+                {creatingInvite ? "Creating..." : "Create invite"}
+              </Button>
+            </div>
           </div>
         </form>
         {#if hostedMode}
           <p class="mt-3 border-t border-line pt-3 text-micro text-fg-muted">
-            To invite a person, use
+            To invite a person, go to
             <a
               class="font-medium text-accent-text hover:text-accent-text"
-              href="/hosted/organizations">hosted team management</a
-            >. Human workspace invites are hidden in hosted mode.
+              href="/hosted/organizations">your Organizations</a
+            >.
           </p>
         {/if}
       </div>
@@ -1241,7 +1239,7 @@
                                     agent's existing ANX profile.
                                   </p>
                                   <button
-                                    class="mt-2 cursor-pointer rounded border border-line px-2 py-1 text-micro font-medium text-fg hover:bg-line-subtle"
+                                    class="mt-2 cursor-pointer rounded bg-accent-solid px-2.5 py-1.5 text-micro font-medium text-white hover:bg-accent"
                                     onclick={() =>
                                       copyWakeRegistrationMessage(principal)}
                                     type="button"
