@@ -389,7 +389,9 @@ describe("Onboarding organization page — inline guide copy", () => {
     const fullGuideText = guidePanel.textContent.replace(/\s+/g, " ").trim();
 
     expect(fullGuideText).toContain("How this is organized");
-    expect(fullGuideText).toContain("billing and membership");
-    expect(fullGuideText).toContain("Workspaces are projects inside it");
+    expect(fullGuideText).toContain(
+      "Use one organization for a team or company",
+    );
+    expect(fullGuideText).toContain("You'll add projects as workspaces next");
   });
 });

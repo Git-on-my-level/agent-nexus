@@ -65,9 +65,7 @@ describe("hosted auth pages", () => {
     };
     const { container } = render(HostedSignupPage);
 
-    expect(container.textContent).toContain(
-      "Hosted sign-up uses Google or GitHub only.",
-    );
+    expect(container.textContent).toContain("Sign up with Google or GitHub.");
     expect(container.textContent).not.toMatch(/invite-only/i);
     expect(container.textContent).not.toMatch(/beta/i);
     expect(container.textContent).not.toContain("passkey");

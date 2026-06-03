@@ -279,7 +279,9 @@ describe("Onboarding workspace page — form submission", () => {
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
       expect(alert).toBeTruthy();
-      expect(alert.textContent).toContain("Workspace limit reached for Acme");
+      expect(alert.textContent).toContain(
+        "You've reached Acme's workspace limit",
+      );
     });
   });
 

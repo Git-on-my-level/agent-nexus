@@ -208,7 +208,7 @@ describe("hosted oauth callback page", () => {
     await waitFor(() => {
       const alert = container.querySelector("[role='alert']");
       expect(alert?.textContent).toContain(
-        "OAuth sign-in continuation is missing or expired.",
+        "We couldn't finish sign-in. Please try again.",
       );
     });
     expect(hostedCpFetch).not.toHaveBeenCalled();
