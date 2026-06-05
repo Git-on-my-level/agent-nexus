@@ -27,6 +27,10 @@ describe("allowHostedControlPlanePath", () => {
     expect(allowHostedControlPlanePath("admin/analytics/audit-events")).toBe(
       true,
     );
+    expect(allowHostedControlPlanePath("admin/analytics/capacity")).toBe(true);
+    expect(
+      allowHostedControlPlanePath("admin/analytics/operations-health"),
+    ).toBe(true);
     expect(allowHostedControlPlanePath("admin/analytics/hosts")).toBe(true);
     expect(allowHostedControlPlanePath("admin/analytics/hosts/host_1")).toBe(
       true,

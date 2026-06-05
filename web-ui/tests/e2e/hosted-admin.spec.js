@@ -241,6 +241,90 @@ const account = {
   ],
 };
 
+const capacity = {
+  generated_at: "2026-05-20T02:00:00Z",
+  fleet: {
+    hosts_total: 1,
+    hosts_fresh: 1,
+    hosts_stale: 0,
+    hosts_draining: 0,
+    hosts_placement_unavailable: 0,
+    workspace_slots_allocated: 2,
+    workspace_slots_total: 20,
+    headroom_workspaces: 18,
+    headroom_bottleneck: "",
+    fleet_cpu_load_5m_pct: 45,
+    fleet_mem_pct: 60,
+    fleet_workspace_disk_pct: 50,
+    fleet_docker_disk_pct: 50,
+    fleet_inode_pct_max: 25,
+  },
+  hosts: [
+    {
+      id: "host_1",
+      label: "packed-a",
+      freshness: "fresh",
+      telemetry_age_seconds: 15,
+      drain_mode: false,
+      placement_available: true,
+      slots_used: 2,
+      slots_total: 20,
+      cpu_load_5m_pct: 45,
+      mem_pct: 60,
+      workspace_disk_pct: 50,
+      docker_disk_pct: 50,
+      inode_pct: 25,
+      orphan_container_count: 1,
+      docker_daemon_available: true,
+      saturation_score: 60,
+      saturation_driver: "memory",
+      headroom_workspaces: 18,
+      headroom_driver: "",
+    },
+  ],
+};
+
+const operationsHealth = {
+  generated_at: "2026-05-20T02:00:00Z",
+  window: "24h",
+  window_from: "2026-05-19T02:00:00Z",
+  provisioning: {
+    attempts: 4,
+    successes: 4,
+    failures: 0,
+    in_flight: 0,
+    success_rate: 1,
+    median_time_to_ready_seconds: 12,
+    p95_time_to_ready_seconds: 18,
+    top_failure_reasons: [],
+    recent_failures: [],
+  },
+  backups: {
+    attempts: 2,
+    successes: 2,
+    failures: 0,
+    success_rate: 1,
+    workspaces_eligible: 2,
+    workspaces_with_fresh_backup: 2,
+    stale_backup_workspace_count: 0,
+    backup_coverage: 1,
+    oldest_successful_backup_age_seconds: 3600,
+    recent_failures: [],
+  },
+  billing: {
+    webhook_failure_count: 1,
+    subscriptions_past_due: 0,
+    subscriptions_unpaid: 0,
+    subscriptions_canceled: 0,
+    recent_webhook_failures: [],
+  },
+  entitlements: {
+    grants_in_window: 1,
+    revokes_in_window: 0,
+    recent_events: [],
+  },
+};
+
 const auditEvents = [
   {
     id: "audit_1",
@@ -334,6 +418,22 @@ async function installAdminAnalyticsRoutes(page) {
       });
       return;
     }
+    if (path.endsWith("/capacity")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ capacity }),
+      });
+      return;
+    }
+    if (path.endsWith("/operations-health")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ operations_health: operationsHealth }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -351,26 +451,7 @@ test.describe("hosted admin overview", () => {
       window.localStorage.setItem("anx_admin_actor", "ops@example.com");
     });
 
-    await page.route(
-      "**/hosted/api/admin/analytics/overview",
-      async (route) => {
-        expect(route.request().headers()["x-anx-admin-token"]).toBe(
-          "admin-secret",
-        );
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ overview }),
-        });
-      },
-    );
-    await page.route("**/hosted/api/admin/analytics/hosts", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ hosts: [host] }),
-      });
-    });
+    await installAdminAnalyticsRoutes(page);
 
     await page.goto("/hosted/admin");
 
@@ -379,18 +460,20 @@ test.describe("hosted admin overview", () => {
     ).toBeVisible();
     await expect(page.getByText("Heartbeat issues")).toBeVisible();
     await expect(page.getByText("1 stale / 1 unknown")).toBeVisible();
+    await expect(page.getByText("Fleet headroom")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Host saturation" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Operational health" }),
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Top organizations" }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: /Alpha Ops/ })).toBeVisible();
     await expect(page.getByText("Billing webhook failed")).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Host resources" }),
-    ).toBeVisible();
-    await expect(page.getByText("CPU load")).toBeVisible();
-    await expect(page.getByText("Memory")).toBeVisible();
-    await expect(page.getByText("60%")).toBeVisible();
-    await expect(page.getByText("Unknown telemetry").first()).toBeVisible();
+    await expect(page.getByText("packed-a").first()).toBeVisible();
+    await expect(page.getByText("60%").first()).toBeVisible();
   });
 
   test("shows unauthorized state when the admin token is rejected", async ({
@@ -471,6 +554,30 @@ test.describe("hosted admin overview", () => {
     ).toBeVisible();
     await expect(page.getByText("delivery_status")).toBeVisible();
     await expect(page.getByText("invite_token")).toHaveCount(0);
+  });
+
+  test("prefills audit event filters from overview deep links", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("anx_admin_token", "admin-secret");
+      window.localStorage.setItem("anx_admin_actor", "ops@example.com");
+    });
+    await installAdminAnalyticsRoutes(page);
+
+    await page.goto(
+      "/hosted/admin/audit-events?event_types=billing_webhook_failed",
+    );
+
+    await expect(
+      page.getByRole("heading", { name: "Audit events", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('input[placeholder="type_a,type_b"]')).toHaveValue(
+      "billing_webhook_failed",
+    );
+    await expect(
+      page.getByRole("link", { name: "Billing webhook failed" }),
+    ).toBeVisible();
   });
 
   test("renders infra host live view and empty telemetry warning", async ({

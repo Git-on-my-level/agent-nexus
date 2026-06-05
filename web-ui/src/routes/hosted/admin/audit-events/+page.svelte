@@ -1,10 +1,16 @@
 <script>
   import { onMount } from "svelte";
+  import { page } from "$app/state";
 
   import Button from "$lib/components/Button.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import StatusPill from "$lib/hosted/StatusPill.svelte";
+  import {
+    adminHeaders,
+    readAdminActor,
+    readAdminToken,
+  } from "$lib/hosted/adminAuth.js";
   import {
     detailHref,
     eventLabel,
@@ -12,9 +18,6 @@
     formatListValue,
   } from "$lib/hosted/adminOverview.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
-
-  const TOKEN_STORAGE_KEY = "anx_admin_token";
-  const ACTOR_STORAGE_KEY = "anx_admin_actor";
 
   let token = $state("");
   let actor = $state("");
@@ -28,16 +31,15 @@
   let error = $state("");
 
   onMount(() => {
-    token = localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
-    actor = localStorage.getItem(ACTOR_STORAGE_KEY) ?? "";
+    token = readAdminToken();
+    actor = readAdminActor();
+    const params = page.url.searchParams;
+    organizationID = params.get("organization_id") ?? "";
+    workspaceID = params.get("workspace_id") ?? "";
+    accountID = params.get("account_id") ?? "";
+    eventTypes = params.get("event_types") ?? "";
     void loadEvents("");
   });
-
-  function headers() {
-    const out = { "x-anx-admin-token": token.trim() };
-    if (actor.trim()) out["x-anx-admin-actor"] = actor.trim();
-    return out;
-  }
 
   function query(cursor = "") {
     const q = new URLSearchParams();
@@ -61,7 +63,7 @@
       const res = await hostedCpFetch(
         `admin/analytics/audit-events?${query(cursor)}`,
         {
-          headers: headers(),
+          headers: adminHeaders(token, actor),
         },
       );
       if (!res.ok) throw new Error(await responseError(res));
