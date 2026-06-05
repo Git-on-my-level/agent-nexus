@@ -79,3 +79,4 @@ Before handoff on cross-module work:
 - Do not treat `make check` as the first debugging step; start with component checks.
 - Do not move durable state or contract decisions into the CLI or UI layers.
 - Do not duplicate module-specific detail here when it belongs in a child `AGENTS.md`.
+- Git hooks use `core.hooksPath=scripts/git-hooks` (not `pre-commit install`). Run `make install-hooks` after clone, submodule init, or worktree moves; stale `.git/*/hooks/pre-commit` scripts from an old checkout are ignored once `hooksPath` is set.

@@ -37,7 +37,7 @@ make serve
 make e2e-smoke
 ```
 
-`make setup` also installs pre-commit/pre-push hooks into a repo-local `.venv/` and installs the pinned local `actionlint` binary used by repo workflow checks into `.bin/`.
+`make setup` creates a repo-local `.venv/`, installs pre-commit hook environments, wires Git to tracked wrappers under `scripts/git-hooks/` (path-agnostic across worktrees and submodule checkouts), and installs the pinned local `actionlint` binary used by repo workflow checks into `.bin/`. After moving or recloning the repo, run `make install-hooks` (or `make setup`) from this directory so Git picks up the wrappers again.
 
 Regenerate contract artifacts from the canonical OpenAPI contracts:
 

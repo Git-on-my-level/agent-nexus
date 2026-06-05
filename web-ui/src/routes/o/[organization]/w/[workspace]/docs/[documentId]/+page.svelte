@@ -1268,6 +1268,8 @@
           <WorkspaceResourceTopRow
             breadcrumbAriaLabel="Breadcrumb and document status"
             desktopAriaLabel="Document details"
+            dense={Boolean(document.thread_id)}
+            showDesktop={!document.thread_id}
             desktop={docDesktop}
           >
             {#snippet breadcrumb()}

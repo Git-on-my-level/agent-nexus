@@ -16,21 +16,18 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { topicDetailStore } from "$lib/topicDetailStore";
-  import { BOARD_LIFECYCLE_STATE_LABELS } from "$lib/boardUtils";
   import {
     resourceCopyValue,
     resourceDisplayLabel,
   } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
-  function topicLifecycleBadgeClass(state) {
-    if (state === "active") return "bg-ok-soft text-ok-text";
-    if (state === "archived") return "bg-warn-soft text-warn-text";
-    if (state === "trashed") return "bg-line text-fg-muted";
-    return "bg-line text-fg-muted";
-  }
-
-  let { threadId = "", detailAsTopic = true } = $props();
+  let {
+    threadId = "",
+    detailAsTopic = true,
+    dense = false,
+    showDesktop = true,
+  } = $props();
 
   let topic = $derived($topicDetailStore.topic);
   let topicSummary = $derived(
@@ -147,11 +144,13 @@
 <WorkspaceResourceTopRow
   breadcrumbAriaLabel="Breadcrumb and topic status"
   desktopAriaLabel="Topic details"
+  {dense}
+  {showDesktop}
   desktop={topic ? topicDesktop : undefined}
 >
   {#snippet breadcrumb()}
     <a
-      class="shrink-0 hover:text-fg"
+      class="shrink-0 transition-colors hover:text-fg"
       href={workspacePath(
         organizationSlug,
         workspaceSlug,
@@ -159,19 +158,13 @@
       )}>{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
     >
     <span class="shrink-0 text-fg-subtle">/</span>
-    <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
-      <span class="min-w-0 shrink truncate text-fg" aria-current="page">
-        {resourceDisplayLabel(topic, threadId)}
-      </span>
-      >
-      {#if topic}
-        <span
-          class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium capitalize leading-none sm:px-2 sm:py-0.5 sm:text-micro {topicLifecycleBadgeClass(
-            topic.state,
-          )}">{BOARD_LIFECYCLE_STATE_LABELS[topic.state] ?? topic.state}</span
-        >
-      {/if}
-    </div>
+    <span
+      class="min-w-0 shrink truncate text-fg-muted"
+      aria-current="page"
+      title={resourceDisplayLabel(topic, threadId)}
+    >
+      {resourceDisplayLabel(topic, threadId)}
+    </span>
   {/snippet}
   {#snippet actions()}
     {#if topic?.id}

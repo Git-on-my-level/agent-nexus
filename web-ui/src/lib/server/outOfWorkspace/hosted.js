@@ -45,6 +45,7 @@ function mapWorkspaceRowFromControlPlane(match) {
     organizationId: String(match.organization_id ?? "").trim(),
     status: String(match.status ?? "").trim(),
     desiredState: String(match.desired_state ?? "").trim(),
+    listenPort: Number.parseInt(String(match.listen_port ?? ""), 10) || 0,
   };
 }
 

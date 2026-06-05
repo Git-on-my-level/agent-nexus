@@ -25,15 +25,19 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+install-hooks: ## Point git at tracked path-agnostic hook wrappers (safe across worktrees/submodules)
+	git config core.hooksPath scripts/git-hooks
+
 setup: ## Install repo tooling plus dependencies for web-ui, core, and cli
 	$(PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip pre-commit
-	$(PRE_COMMIT_BIN) install --install-hooks -t pre-commit -t pre-push
+	$(PRE_COMMIT_BIN) install-hooks
+	$(MAKE) install-hooks
 	./scripts/install-actionlint.sh
 	pnpm install
 	cd $(CORE_DIR) && go mod download

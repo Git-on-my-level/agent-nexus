@@ -20,6 +20,10 @@
   let {
     breadcrumbAriaLabel = "Breadcrumb",
     desktopAriaLabel = "Resource details",
+    /** Tighter bottom margin for dock / chat layouts. */
+    dense = false,
+    /** When false, hides the large desktop title block (breadcrumb remains). */
+    showDesktop = true,
     breadcrumb,
     actions,
     desktop,
@@ -27,7 +31,9 @@
 </script>
 
 <div
-  class="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:gap-2 lg:mb-2"
+  class="{dense
+    ? 'mb-0'
+    : 'mb-1 lg:mb-2'} flex min-w-0 items-center justify-between gap-1.5 sm:gap-2"
 >
   <nav
     class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-fg-muted"
@@ -42,7 +48,7 @@
   {/if}
 </div>
 
-{#if desktop}
+{#if desktop && showDesktop}
   <div
     class="mt-0 hidden max-w-full flex-col gap-1.5 lg:flex"
     aria-label={desktopAriaLabel}

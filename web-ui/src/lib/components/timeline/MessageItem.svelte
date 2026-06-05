@@ -2,20 +2,19 @@
   import { browser } from "$app/environment";
   import { page } from "$app/stores";
 
-  import Self from "$lib/components/timeline/MessageItem.svelte";
+  import ActorAvatar from "$lib/components/ActorAvatar.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import MessageActions from "$lib/components/timeline/MessageActions.svelte";
+  import { scrollAndHighlightTarget } from "$lib/deepLinkTargets";
   import { formatTimestamp } from "$lib/formatDate";
   import { resolveRefLink } from "$lib/refLinkModel.js";
   import {
     docCommentBodyFocus,
     docCommentBodyHover,
   } from "$lib/stores/docCommentBodyRailSync.js";
-
-  const MAX_REPLY_DEPTH = 48;
 
   let {
     message,
@@ -26,7 +25,6 @@
     onTrash = null,
     onUnarchive = null,
     lifecycleBusy = false,
-    depth = 0,
     /**
      * Visual variant for the archive lifecycle button. "resolve" relabels
      * Archive→Resolve and Unarchive→Reopen (same `archived_at` lifecycle)
@@ -134,6 +132,19 @@
   });
 
   let isAnchoredComment = $derived(Boolean(docComment));
+  let replyTo = $derived(message?.replyTo ?? null);
+
+  function scrollToReplyParent() {
+    if (!browser || !replyTo?.id) return;
+    const target = document.getElementById(`message-${replyTo.id}`);
+    scrollAndHighlightTarget(target);
+  }
+
+  function truncateReplyText(text, max = 120) {
+    const t = String(text ?? "").trim();
+    if (!t) return "message";
+    return t.length > max ? `${t.slice(0, max)}…` : t;
+  }
 
   const RECEIPT_DELIVERY_STAGE_INDEX = {
     requested: 0,
@@ -263,12 +274,11 @@
   // the accent — keeps reply trees readable.
   let articleClasses = $derived(
     [
-      "rounded-md border bg-panel px-3 py-1.5",
-      depth > 0 ? "bg-bg-soft" : "",
+      "group/msg relative rounded-md border bg-panel px-3 py-1.5 transition-colors",
       message.archived_at ? "opacity-60" : "",
-      isAnchoredComment && depth === 0
+      isAnchoredComment
         ? "border-line border-l-2 border-l-accent"
-        : "border-line",
+        : "border-line hover:border-line-strong",
       isBodyDocCommentHover || isBodyDocCommentFocus
         ? "ring-1 ring-accent ring-offset-1 ring-offset-bg"
         : "",
@@ -341,23 +351,71 @@
             }
           : undefined}
       >
-        <div class="mb-1.5 flex min-w-0 w-full items-center gap-1.5">
-          <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-0.5">
+        <!--
+          Floating action toolbar: hover-revealed (or focus-revealed for
+          keyboard) so the resting card stays clean. Anchored top-right and
+          drawn over the panel background so it reads over message content,
+          including grouped rows that have no header to host actions.
+        -->
+        <div
+          class="msg-toolbar absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-md border border-line bg-panel/95 px-0.5 opacity-0 shadow-sm transition-opacity duration-150 focus-within:opacity-100 group-hover/msg:opacity-100"
+        >
+          <CopyButton
+            value={messageHref}
+            iconOnly
+            icon="link"
+            label="Copy message link"
+            size="sm"
+          />
+          {@render visibleActions()}
+        </div>
+
+        {#if replyTo}
+          <button
+            type="button"
+            class="mb-1 flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left text-micro text-fg-subtle transition-colors hover:text-fg"
+            onclick={scrollToReplyParent}
+            title={truncateReplyText(replyTo.text, 500)}
+            aria-label={`Jump to message from ${actorName(replyTo.authorActorId)}: ${truncateReplyText(replyTo.text, 80)}`}
+          >
+            <svg
+              class="h-3 w-3 shrink-0 text-fg-subtle transition-colors group-hover/msg:text-accent"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
+              />
+            </svg>
+            <span class="shrink-0 font-medium text-fg-muted">
+              {actorName(replyTo.authorActorId)}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-fg-subtle">
+              {truncateReplyText(replyTo.text)}
+            </span>
+          </button>
+        {/if}
+
+        <div class="mb-1.5 flex min-w-0 w-full items-start gap-2 pr-16">
+          <ActorAvatar
+            label={actorLine}
+            seed={String(message.actor_id ?? actorLine)}
+            size="sm"
+          />
+          <div class="flex min-w-0 min-h-[1.25rem] flex-1 items-center gap-1">
             <span
-              class="min-w-0 max-w-full truncate font-mono text-[0.65rem] leading-tight text-fg-muted"
+              class="min-w-0 truncate text-meta font-semibold leading-tight text-fg"
               title={actorLine}
             >
               {actorDisplayLine}
             </span>
-            <CopyButton
-              value={messageHref}
-              iconOnly
-              icon="link"
-              label="Copy message link"
-              size="sm"
-            />
-            <span class="shrink-0 text-[0.65rem] leading-tight text-fg-muted"
-              >· {formatTimestamp(message.ts) || "—"}</span
+            <span class="shrink-0 text-micro leading-tight text-fg-muted"
+              >{formatTimestamp(message.ts) || "—"}</span
             >
             {#if notificationReceipts.length > 0}
               <span class="ml-1 flex shrink-0 items-center gap-1 text-micro">
@@ -449,9 +507,6 @@
               </span>
             {/if}
           </div>
-          <div class="flex shrink-0 items-center gap-0.5">
-            {@render visibleActions()}
-          </div>
         </div>
 
         <div class="min-w-0">
@@ -530,33 +585,18 @@
             {/each}
           </div>
         {/if}
-
-        {#if message.children.length > 0 && depth < MAX_REPLY_DEPTH}
-          <div
-            class="mt-2 -mx-3 space-y-1.5 border-l border-line pl-2 sm:pl-2.5"
-          >
-            {#each message.children as child (child.id)}
-              <Self
-                message={child}
-                {threadId}
-                {actorName}
-                {onReply}
-                {onArchive}
-                {onTrash}
-                {onUnarchive}
-                {lifecycleBusy}
-                {archiveLabelKind}
-                {artifactRoutesById}
-                {eventRoutesById}
-                {getLiveAnchorStatusForMessage}
-                {organizationSlug}
-                {workspaceSlug}
-                depth={depth + 1}
-              />
-            {/each}
-          </div>
-        {/if}
       </article>
     </ContextMenuHost>
   {/snippet}
 </MessageActions>
+
+<style>
+  /* Touch devices have no hover state: keep the action toolbar (reply,
+     archive, trash, copy link) visible so it stays reachable, since there is
+     no overflow-menu fallback for these primary row actions. */
+  @media (hover: none) {
+    .msg-toolbar {
+      opacity: 1;
+    }
+  }
+</style>

@@ -572,9 +572,9 @@ test.describe("hosted admin overview", () => {
     await expect(
       page.getByRole("heading", { name: "Audit events", exact: true }),
     ).toBeVisible();
-    await expect(page.locator('input[placeholder="type_a,type_b"]')).toHaveValue(
-      "billing_webhook_failed",
-    );
+    await expect(
+      page.locator('input[placeholder="type_a,type_b"]'),
+    ).toHaveValue("billing_webhook_failed");
     await expect(
       page.getByRole("link", { name: "Billing webhook failed" }),
     ).toBeVisible();

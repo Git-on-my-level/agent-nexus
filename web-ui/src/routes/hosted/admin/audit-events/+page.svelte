@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
 
   import Button from "$lib/components/Button.svelte";
@@ -15,7 +16,6 @@
     detailHref,
     eventLabel,
     formatDateTime,
-    formatListValue,
   } from "$lib/hosted/adminOverview.js";
   import { hostedCpFetch } from "$lib/hosted/cpFetch.js";
 
@@ -41,15 +41,26 @@
     void loadEvents("");
   });
 
-  function query(cursor = "") {
+  function filterParams() {
     const q = new URLSearchParams();
-    q.set("limit", "50");
-    if (cursor) q.set("cursor", cursor);
     if (organizationID.trim()) q.set("organization_id", organizationID.trim());
     if (workspaceID.trim()) q.set("workspace_id", workspaceID.trim());
     if (accountID.trim()) q.set("account_id", accountID.trim());
     if (eventTypes.trim()) q.set("event_types", eventTypes.trim());
+    return q;
+  }
+
+  function query(cursor = "") {
+    const q = filterParams();
+    q.set("limit", "50");
+    if (cursor) q.set("cursor", cursor);
     return q.toString();
+  }
+
+  function syncUrl() {
+    const url = new URL(page.url);
+    url.search = filterParams().toString();
+    replaceState(url, page.state);
   }
 
   async function loadEvents(cursor = "") {
@@ -59,6 +70,7 @@
     }
     loading = true;
     error = "";
+    if (!cursor) syncUrl();
     try {
       const res = await hostedCpFetch(
         `admin/analytics/audit-events?${query(cursor)}`,
@@ -98,7 +110,7 @@
 </script>
 
 <svelte:head>
-  <title>Admin Audit Events - Agent Nexus (ANX)</title>
+  <title>Admin Audit Events — Agent Nexus (ANX)</title>
 </svelte:head>
 
 <div class="mx-auto max-w-7xl space-y-4 px-4 py-5">
@@ -117,7 +129,7 @@
       onclick={() => loadEvents("")}
       disabled={loading}
     >
-      {loading ? "Refreshing..." : "Refresh"}
+      {loading ? "Refreshing…" : "Refresh"}
     </Button>
   </header>
 
@@ -201,14 +213,11 @@
                 >
                   {eventLabel(event.event_type)}
                 </a>
-                <div class="mt-1">
-                  <StatusPill
-                    status={event.event_type?.includes("failed")
-                      ? "failed"
-                      : "active"}
-                    label={formatListValue(event.event_type)}
-                  />
-                </div>
+                {#if event.event_type?.includes("failed")}
+                  <div class="mt-1">
+                    <StatusPill status="failed" label="Failed" />
+                  </div>
+                {/if}
               </td>
               <td class="max-w-[18rem] px-3 py-2 font-mono text-fg-subtle">
                 <div class="truncate">{event.target_type || "unknown"}</div>
@@ -247,7 +256,7 @@
           onclick={() => loadEvents(nextCursor)}
           disabled={loading}
         >
-          {loading ? "Loading..." : "Load more"}
+          {loading ? "Loading more…" : "Load more"}
         </Button>
       </div>
     {/if}

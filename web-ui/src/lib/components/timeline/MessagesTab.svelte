@@ -24,11 +24,7 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { emptyMessageEventConfirmModal } from "$lib/confirmModal.js";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
-  import {
-    eventRefsInclude,
-    flattenMessageThreadView,
-    toMessageThreadView,
-  } from "$lib/messageThreadUtils";
+  import { eventRefsInclude, toFlatMessageView } from "$lib/messageThreadUtils";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import {
     filterMentionCandidates,
@@ -186,10 +182,11 @@
     }).artifactRoutesById;
     return { ...base, ...extra };
   });
-  let messageThreads = $derived(
-    toMessageThreadView(filteredTimeline, {
+  let flatMessages = $derived(
+    toFlatMessageView(filteredTimeline, {
       threadId,
       suppressDisplayDocumentId,
+      suppressThreadRefs: true,
       artifacts: timelineArtifacts,
       cards: timelineCards,
       documents: timelineDocuments,
@@ -197,8 +194,8 @@
       notificationReceiptsByEventId: timelineNotificationReceipts,
     }),
   );
-  let allMessages = $derived(flattenMessageThreadView(messageThreads));
-  let hasMessages = $derived(messageThreads.length > 0);
+  let allMessages = $derived(flatMessages);
+  let hasMessages = $derived(flatMessages.length > 0);
   let archivedMessageCount = $derived(
     refScopedTimeline.filter(
       (e) =>
@@ -231,6 +228,11 @@
   let replyChipDetailTitle = $derived(
     replyAutoMentionHandle
       ? `Notifying @${replyAutoMentionHandle} is pre-filled; delete that mention from the message to skip wake.`
+      : "",
+  );
+  let replyTargetAuthorName = $derived(
+    replyTargetMessage
+      ? actorName(String(replyTargetMessage.actor_id ?? ""))
       : "",
   );
   let postingMessage = $state(false);
@@ -959,11 +961,11 @@
           </p>
         {/if}
         <div
-          class="flex min-w-0 flex-col gap-3"
+          class="flex min-w-0 flex-col gap-1.5 sm:gap-2"
           class:msgtab-thread-items--pin-end={pinActive &&
             pinComposerAlignThreadEnd}
         >
-          {#each messageThreads as message (message.id)}
+          {#each flatMessages as message (message.id)}
             <MessageItem
               {message}
               {threadId}
@@ -1092,7 +1094,13 @@
             d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
           />
         </svg>
-        <span class="shrink-0 text-micro text-fg-muted"> Replying to </span>
+        <span class="shrink-0 text-micro text-fg-muted">Replying to</span>
+        {#if replyTargetAuthorName}
+          <span class="shrink-0 font-medium text-fg-muted"
+            >{replyTargetAuthorName}</span
+          >
+          <span class="shrink-0 text-fg-subtle" aria-hidden="true">·</span>
+        {/if}
         <span
           class="min-w-0 flex-1 truncate text-meta italic text-fg"
           title={replyTargetMessage?.messageText || "message"}

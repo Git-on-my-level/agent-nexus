@@ -665,6 +665,8 @@
         <WorkspaceResourceTopRow
           breadcrumbAriaLabel="Breadcrumb and board status"
           desktopAriaLabel="Board details"
+          dense
+          showDesktop={false}
           desktop={boardDesktop}
         >
           {#snippet breadcrumb()}

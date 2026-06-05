@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   eventRefsInclude,
   flattenMessageThreadView,
+  toFlatMessageView,
   toMessageThreadView,
 } from "../../src/lib/messageThreadUtils.js";
 
@@ -292,6 +293,78 @@ describe("message thread utils", () => {
       { threadId: "thread-1", suppressDisplayDocumentId: "doc-1" },
     );
     expect(threads[0].displayRefs).toEqual([]);
+  });
+
+  it("resolves reply parents when stored refs use public event handles", () => {
+    const flat = toFlatMessageView(
+      [
+        {
+          id: "ev-root-uuid",
+          handle: "message-posted-root",
+          ref: "event:message-posted-root",
+          ts: "2026-03-03T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "actor-a",
+          refs: ["thread:general"],
+          payload: { text: "root message" },
+        },
+        {
+          id: "ev-reply-uuid",
+          handle: "message-posted-reply",
+          ref: "event:message-posted-reply",
+          ts: "2026-03-03T10:01:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "actor-b",
+          refs: ["thread:general", "event:message-posted-root"],
+          payload: { text: "reply text" },
+        },
+      ],
+      { threadId: "thread-uuid-1" },
+    );
+
+    expect(flat[1].replyTo).toMatchObject({
+      id: "ev-root-uuid",
+      authorActorId: "actor-a",
+      text: "root message",
+    });
+    expect(flat[1].displayRefs).toEqual([]);
+  });
+
+  it("toFlatMessageView sorts chronologically with reply previews", () => {
+    const flat = toFlatMessageView(
+      [
+        {
+          id: "reply-1",
+          ts: "2026-03-03T10:01:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "actor-b",
+          refs: ["thread:general", "event:root-1"],
+          payload: { text: "first reply" },
+        },
+        {
+          id: "root-1",
+          ts: "2026-03-03T10:00:00.000Z",
+          type: "message_posted",
+          thread_id: "thread-1",
+          actor_id: "actor-a",
+          refs: ["thread:general"],
+          payload: { text: "root message" },
+        },
+      ],
+      { threadId: "thread-uuid-1" },
+    );
+
+    expect(flat.map((m) => m.id)).toEqual(["root-1", "reply-1"]);
+    expect(flat[1].replyTo).toMatchObject({
+      id: "root-1",
+      authorActorId: "actor-a",
+      text: "root message",
+    });
+    expect(flat[0].replyTo).toBeNull();
+    expect(flat.every((m) => m.displayRefs.length === 0)).toBe(true);
   });
 
   it("attaches notification receipts to the triggering message", () => {

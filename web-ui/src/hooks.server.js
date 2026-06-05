@@ -24,6 +24,11 @@ import {
   isHostedWorkspaceProxyPath,
   proxyToControlPlaneWorkspace,
 } from "$lib/server/hostedWorkspaceProxy";
+import {
+  isHostedWorkspaceStreamPath,
+  proxyHostedWorkspaceStreamToCore,
+  shouldProxyHostedWorkspaceStreamInDev,
+} from "$lib/server/hostedWorkspaceStreamProxy";
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
@@ -382,6 +387,12 @@ export async function handle({ event, resolve }) {
   const pathname = stripBasePath(event.url.pathname);
   const method = event.request.method;
   if (isHostedWorkspaceProxyPath(pathname)) {
+    if (
+      shouldProxyHostedWorkspaceStreamInDev() &&
+      isHostedWorkspaceStreamPath(pathname)
+    ) {
+      return proxyHostedWorkspaceStreamToCore(event, pathname);
+    }
     return proxyToControlPlaneWorkspace(event, pathname);
   }
 

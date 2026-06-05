@@ -13,6 +13,7 @@
   } from "$lib/urlState";
 
   import TopicDetailHeader from "$lib/components/topic-detail/TopicDetailHeader.svelte";
+  import WorkspaceResourceTabList from "$lib/components/WorkspaceResourceTabList.svelte";
   import TopicOverviewTab from "$lib/components/topic-detail/TopicOverviewTab.svelte";
   import TopicBoardsPanel from "$lib/components/topic-detail/TopicBoardsPanel.svelte";
   import TopicDocumentsPanel from "$lib/components/topic-detail/TopicDocumentsPanel.svelte";
@@ -87,6 +88,14 @@
     $topicDetailStore.ownedBoards.length +
       $topicDetailStore.boardMemberships.length,
   );
+
+  let topicTabItems = $derived([
+    { id: "messages", label: "Messages" },
+    { id: "about", label: "About" },
+    { id: "documents", label: "Docs", badge: documentCount },
+    { id: "boards", label: "Boards", badge: boardCount },
+    { id: "timeline", label: "Timeline" },
+  ]);
 
   let conflictWarning = $state("");
   let editNotice = $state("");
@@ -393,34 +402,20 @@
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head max-lg:px-4" : "contents"}>
-      <TopicDetailHeader {threadId} {detailAsTopic} />
+      <TopicDetailHeader
+        {threadId}
+        {detailAsTopic}
+        dense={isMessagesTab}
+        showDesktop={!isMessagesTab}
+      />
 
-      <div
-        class="mt-3 flex gap-0 border-b border-line"
-        aria-label="Topic sections"
-        role="tablist"
-      >
-        {#each [{ id: "messages", label: "Messages" }, { id: "about", label: "About" }, { id: "documents", label: "Docs", badge: documentCount }, { id: "boards", label: "Boards", badge: boardCount }, { id: "timeline", label: "Timeline" }] as tab (tab.id)}
-          <button
-            class={`relative cursor-pointer px-3 py-2 text-[13px] font-medium transition-colors ${activeTab === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"}`}
-            onclick={() => void setActiveTab(tab.id)}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            tabindex={activeTab === tab.id ? 0 : -1}
-          >
-            {tab.label}{#if tab.badge !== undefined && tab.badge > 0}
-              <span class="ml-0.5 tabular-nums text-fg-muted"
-                >({tab.badge})</span
-              >{/if}
-            {#if activeTab === tab.id}
-              <span
-                class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-accent-solid"
-              ></span>
-            {/if}
-          </button>
-        {/each}
-      </div>
+      <WorkspaceResourceTabList
+        ariaLabel="Topic sections"
+        tabs={topicTabItems}
+        {activeTab}
+        onTabChange={(tabId) => void setActiveTab(tabId)}
+        dense={isMessagesTab}
+      />
     </div>
 
     {#if activeTab === "about"}

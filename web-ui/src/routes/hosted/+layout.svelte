@@ -131,7 +131,7 @@
   }
 </script>
 
-<div class="min-h-screen bg-bg text-fg">
+<div class="flex min-h-screen flex-col bg-bg text-fg">
   <header
     class="sticky top-0 z-30 border-b border-line bg-bg backdrop-blur supports-[backdrop-filter]:bg-bg"
   >
@@ -360,7 +360,7 @@
     {/if}
   </header>
 
-  <main class="mx-auto w-full max-w-6xl px-4 py-6">
+  <main class="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
     {#if !isPublic && session.phase === "error"}
       <HostedSessionErrorPanel
         message={session.error ||

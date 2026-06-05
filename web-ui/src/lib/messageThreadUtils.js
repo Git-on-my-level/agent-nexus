@@ -43,26 +43,94 @@ function collectEventRefIds(event) {
   return ids;
 }
 
-/**
- * Parent for a reply is conveyed as `event:<parent_event_id>` in refs (see anx-schema
- * message_posted). Messages may include multiple `event:` refs (e.g. citations); the
- * parent is the ref that points at another message_posted in this thread when possible.
- */
-function extractParentEventId(event, messageIdsInThread) {
-  const candidates = collectEventRefIds(event);
-  if (candidates.length === 0) {
-    return "";
+/** @param {unknown} message */
+function messageIdentityKeys(message) {
+  const keys = [];
+  const id = String(message?.id ?? "").trim();
+  const handle = String(message?.handle ?? "").trim();
+  const ref = String(message?.ref ?? "").trim();
+  if (id) keys.push(id);
+  if (handle) keys.push(handle);
+  if (ref.startsWith("event:")) {
+    const value = ref.slice("event:".length).trim();
+    if (value) keys.push(value);
   }
-  const idSet =
-    messageIdsInThread instanceof Set
-      ? messageIdsInThread
-      : new Set(messageIdsInThread ?? []);
-  for (const id of candidates) {
-    if (idSet.has(id)) {
-      return id;
+  return keys;
+}
+
+/**
+ * Index messages by durable id, public handle, and `event:` ref value so reply
+ * parent resolution works after core canonicalizes refs to handles.
+ */
+export function buildMessageByKey(messages = []) {
+  const map = new Map();
+  for (const message of Array.isArray(messages) ? messages : []) {
+    for (const key of messageIdentityKeys(message)) {
+      if (!map.has(key)) {
+        map.set(key, message);
+      }
     }
   }
-  return candidates[0];
+  return map;
+}
+
+function parentReplyRefValues(parentMessage) {
+  const values = new Set();
+  const id = String(parentMessage?.id ?? "").trim();
+  const handle = String(parentMessage?.handle ?? "").trim();
+  const ref = String(parentMessage?.ref ?? "").trim();
+  if (id) values.add(id);
+  if (handle) values.add(handle);
+  if (ref.startsWith("event:")) {
+    const value = ref.slice("event:".length).trim();
+    if (value) values.add(value);
+  }
+  return values;
+}
+
+function eventRefValue(ref) {
+  const text = String(ref ?? "").trim();
+  if (!text.startsWith("event:")) return "";
+  return text.slice("event:".length).trim();
+}
+
+function refIsReplyToParent(ref, parentMessage) {
+  if (!parentMessage) return false;
+  const value = eventRefValue(ref);
+  if (!value) return false;
+  return parentReplyRefValues(parentMessage).has(value);
+}
+
+/** Hide resolved parent refs and unresolved first reply candidates from chips. */
+function shouldHideReplyParentRef(ref, event, parentMessage) {
+  if (refIsReplyToParent(ref, parentMessage)) {
+    return true;
+  }
+  if (parentMessage) {
+    return false;
+  }
+  const candidates = collectEventRefIds(event);
+  const value = eventRefValue(ref);
+  return candidates.length > 0 && value === candidates[0];
+}
+
+/**
+ * Parent for a reply is conveyed as `event:<parent_event_id>` in refs (see anx-schema
+ * message_posted). Core may persist that ref as a public handle while clients keep
+ * the durable event id on the message row.
+ */
+function extractParentEventId(event, messageByKey) {
+  const candidates = collectEventRefIds(event);
+  if (candidates.length === 0 || !(messageByKey instanceof Map)) {
+    return "";
+  }
+  for (const key of candidates) {
+    const parent = messageByKey.get(key);
+    if (parent) {
+      return String(parent.id ?? "").trim();
+    }
+  }
+  return "";
 }
 
 function stripMessagePrefix(value) {
@@ -109,8 +177,12 @@ function extractDocumentComment(event) {
 
 function decorateMessageEvent(event, options = {}) {
   const view = toTimelineViewEvent(event, options);
-  const messageIdsInThread = options.messageIdsInThread;
-  const parentEventId = extractParentEventId(event, messageIdsInThread);
+  const messageByKey = options.messageByKey;
+  const parentEventId = extractParentEventId(event, messageByKey);
+  const parentMessage =
+    parentEventId && messageByKey instanceof Map
+      ? (messageByKey.get(parentEventId) ?? null)
+      : null;
   const threadId = String(options.threadId ?? event?.thread_id ?? "").trim();
   const eventId = String(event?.id ?? "").trim();
   const documentComment = extractDocumentComment(event);
@@ -141,6 +213,8 @@ function decorateMessageEvent(event, options = {}) {
     ? String(documentComment.revision_id).trim()
     : "";
 
+  const suppressThreadRefs = Boolean(options.suppressThreadRefs);
+
   return {
     ...view,
     parentEventId,
@@ -149,10 +223,13 @@ function decorateMessageEvent(event, options = {}) {
     notificationReceipts,
     displayRefs: view.refs.filter((refValue) => {
       const ref = String(refValue ?? "");
+      if (suppressThreadRefs && ref.startsWith("thread:")) {
+        return false;
+      }
       if (threadId && ref === `thread:${threadId}`) {
         return false;
       }
-      if (parentEventId && ref === `event:${parentEventId}`) {
+      if (shouldHideReplyParentRef(ref, event, parentMessage)) {
         return false;
       }
       if (
@@ -208,13 +285,9 @@ export function toMessageThreadView(events = [], options = {}) {
   const rawMessages = Array.isArray(events)
     ? events.filter((event) => String(event?.type ?? "") === "message_posted")
     : [];
-  const messageIdsInThread = new Set(
-    rawMessages.map((e) => String(e?.id ?? "").trim()).filter(Boolean),
-  );
+  const messageByKey = buildMessageByKey(rawMessages);
   const messages = rawMessages
-    .map((event) =>
-      decorateMessageEvent(event, { ...options, messageIdsInThread }),
-    )
+    .map((event) => decorateMessageEvent(event, { ...options, messageByKey }))
     .sort(compareEventsOldestFirst);
 
   const nodesById = new Map(
@@ -254,6 +327,52 @@ export function toMessageThreadView(events = [], options = {}) {
   roots.sort(compareEventsOldestFirst);
 
   return roots;
+}
+
+function buildReplyToPreview(parentMessage) {
+  if (!parentMessage || typeof parentMessage !== "object") {
+    return null;
+  }
+  const id = String(parentMessage.id ?? "").trim();
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    authorActorId: String(parentMessage.actor_id ?? "").trim(),
+    text: extractMessageText(parentMessage),
+    isAnchoredComment: Boolean(extractDocumentComment(parentMessage)),
+  };
+}
+
+/**
+ * Flat, chronological chat stream (oldest first). Each row may include
+ * `replyTo` (parent preview).
+ */
+export function toFlatMessageView(events = [], options = {}) {
+  const rawMessages = Array.isArray(events)
+    ? events.filter((event) => String(event?.type ?? "") === "message_posted")
+    : [];
+  const messageByKey = buildMessageByKey(rawMessages);
+  const decorateOpts = {
+    ...options,
+    messageByKey,
+    suppressThreadRefs: options.suppressThreadRefs ?? true,
+  };
+  const messages = rawMessages
+    .map((event) => decorateMessageEvent(event, decorateOpts))
+    .sort(compareEventsOldestFirst);
+
+  return messages.map((message) => {
+    const parent = message.parentEventId
+      ? (messageByKey.get(message.parentEventId) ?? null)
+      : null;
+    return {
+      ...message,
+      replyTo: buildReplyToPreview(parent),
+      children: [],
+    };
+  });
 }
 
 export function flattenMessageThreadView(threads = []) {

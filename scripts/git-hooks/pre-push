@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+pre_commit="${repo_root}/.venv/bin/pre-commit"
+if [[ ! -x "${pre_commit}" ]]; then
+  echo "Missing ${pre_commit}; run: make setup" >&2
+  exit 1
+fi
+
+exec "${pre_commit}" hook-impl \
+  --config="${repo_root}/.pre-commit-config.yaml" \
+  --hook-type=pre-push \
+  --hook-dir "${HERE}" \
+  -- "$@"
