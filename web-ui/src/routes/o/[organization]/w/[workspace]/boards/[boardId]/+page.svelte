@@ -661,7 +661,7 @@
     class="page-dock-layout page-dock-layout--fixed-mobile-chat page-dock-layout--board-viewport-chat"
   >
     <div class="page-dock-scroll">
-      <div class="mb-3 max-md:mb-2">
+      <div class="mb-1 max-md:mb-0.5">
         <WorkspaceResourceTopRow
           breadcrumbAriaLabel="Breadcrumb and board status"
           desktopAriaLabel="Board details"

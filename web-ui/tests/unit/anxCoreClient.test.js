@@ -34,6 +34,48 @@ describe("anxCoreClient error messaging", () => {
     expect(JSON.parse(seenBodies[0])).toMatchObject({ actor_id: "" });
   });
 
+  it("addBoardCard uses cards.create with board_id and nested card fields", async () => {
+    const seenUrls = [];
+    const seenBodies = [];
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      actorIdProvider: () => "actor-1",
+      fetchFn: async (url, init) => {
+        seenUrls.push(String(url));
+        seenBodies.push(init?.body ?? "");
+        return new Response(
+          JSON.stringify({
+            board: { id: "board-1" },
+            card: { id: "card-1", title: "Plan the thing" },
+          }),
+          {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    });
+
+    await client.addBoardCard("my-board", {
+      if_board_updated_at: "2026-06-05T12:00:00Z",
+      title: "Plan the thing",
+      summary: "Summary",
+      column_key: "ready",
+    });
+
+    expect(seenUrls).toEqual(["http://core.test/cards"]);
+    expect(JSON.parse(seenBodies[0])).toEqual({
+      actor_id: "actor-1",
+      board_id: "my-board",
+      if_board_updated_at: "2026-06-05T12:00:00Z",
+      card: {
+        title: "Plan the thing",
+        summary: "Summary",
+        column_key: "ready",
+      },
+    });
+  });
+
   it("forwards actor list query parameters", async () => {
     const seenUrls = [];
     const client = createAnxCoreClient({

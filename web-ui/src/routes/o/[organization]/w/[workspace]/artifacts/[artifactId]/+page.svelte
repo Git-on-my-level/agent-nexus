@@ -411,6 +411,8 @@
   <WorkspaceResourceTopRow
     breadcrumbAriaLabel="Breadcrumb and artifact kind"
     desktopAriaLabel="Artifact details"
+    dense
+    showDesktop={false}
     desktop={artifactDesktop}
   >
     {#snippet breadcrumb()}
@@ -437,13 +439,13 @@
         {#if !artifact.archived_at}
           <ArchiveButton
             busy={lifecycleBusy}
-            size="md"
+            size="sm"
             onarchive={() => (confirmModal = { open: true, action: "archive" })}
           />
         {/if}
         <TrashButton
           busy={lifecycleBusy}
-          size="md"
+          size="sm"
           ontrash={() => (confirmModal = { open: true, action: "trash" })}
         />
       {/if}

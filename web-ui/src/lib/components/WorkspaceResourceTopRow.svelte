@@ -33,16 +33,16 @@
 <div
   class="{dense
     ? 'mb-0'
-    : 'mb-1 lg:mb-2'} flex min-w-0 items-center justify-between gap-1.5 sm:gap-2"
+    : 'mb-0.5 lg:mb-1'} flex min-w-0 items-center justify-between gap-1 sm:gap-1.5"
 >
   <nav
-    class="flex min-w-0 flex-1 items-center gap-1.5 text-meta text-fg-muted"
+    class="flex min-w-0 flex-1 items-center gap-1 text-meta text-fg-muted"
     aria-label={breadcrumbAriaLabel}
   >
     {@render breadcrumb()}
   </nav>
   {#if actions}
-    <div class="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
+    <div class="flex shrink-0 items-center gap-0.5 sm:gap-1">
       {@render actions()}
     </div>
   {/if}
@@ -50,7 +50,7 @@
 
 {#if desktop && showDesktop}
   <div
-    class="mt-0 hidden max-w-full flex-col gap-1.5 lg:flex"
+    class="mt-0 hidden max-w-full flex-col gap-1 lg:flex"
     aria-label={desktopAriaLabel}
   >
     {@render desktop()}

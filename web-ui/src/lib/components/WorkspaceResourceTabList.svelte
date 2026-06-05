@@ -13,15 +13,15 @@
 </script>
 
 <div
-  class={dense
-    ? "mt-1.5 flex gap-0 overflow-x-auto border-b border-line [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    : "mt-3 flex gap-0 border-b border-line"}
+  class="{dense
+    ? 'mt-0.5'
+    : 'mt-1'} flex gap-0 overflow-x-auto border-b border-line [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
   aria-label={ariaLabel}
   role="tablist"
 >
   {#each tabs as tab (tab.id)}
     <button
-      class={`relative shrink-0 cursor-pointer px-2.5 py-1.5 text-micro font-medium transition-colors sm:px-3 sm:py-2 sm:text-[13px] ${activeTab === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"}`}
+      class={`relative shrink-0 cursor-pointer px-2 py-1 text-micro font-medium transition-colors sm:px-2.5 ${activeTab === tab.id ? "text-fg" : "text-fg-muted hover:text-fg"}`}
       onclick={() => onTabChange?.(tab.id)}
       type="button"
       role="tab"

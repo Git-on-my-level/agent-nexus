@@ -962,6 +962,11 @@
     padding: 1.25rem 1rem 5rem;
   }
 
+  /* Resource detail dock pages: tighter top inset — header is already compact. */
+  .shell-main-scroll:has(.page-dock-layout) {
+    padding-top: 0.625rem;
+  }
+
   .shell-content {
     width: min(var(--shell-content-max, 64rem), 100%);
     max-width: 100%;
@@ -1086,7 +1091,7 @@
       top: 0;
       z-index: 18;
       background: var(--bg);
-      padding-bottom: 0.625rem;
+      padding-bottom: 0.25rem;
     }
 
     .page-dock-layout--topic-messages .page-dock-feed {
@@ -1158,7 +1163,7 @@
       top: 0;
       z-index: 18;
       background: var(--bg);
-      padding-bottom: 0.625rem;
+      padding-bottom: 0.25rem;
     }
 
     /*

@@ -30,11 +30,13 @@ describe("topic detail header", () => {
     expect(src).not.toContain("topicLifecycleBadgeClass");
   });
 
-  it("WorkspaceTopicThreadDetailPage uses shared tab list and dock header density", () => {
+  it("WorkspaceTopicThreadDetailPage uses shared tab list and compact header", () => {
     const src = readFileSync(pagePath, "utf8");
     expect(src).toContain("WorkspaceResourceTabList");
-    expect(src).toContain("dense={isMessagesTab}");
-    expect(src).toContain("showDesktop={!isMessagesTab}");
+    expect(src).toContain("dense showDesktop={false}");
+    expect(src).toContain("dense");
+    expect(src).not.toContain("dense={isMessagesTab}");
+    expect(src).not.toContain("showDesktop={!isMessagesTab}");
     expect(src).not.toContain("compact={isMessagesTab}");
   });
 

@@ -675,8 +675,20 @@ const adapterCommandTable = [
   ],
   [
     "addBoardCard",
-    "boards.cards.create",
-    (boardId, payload) => pb(pathParams({ board_id: boardId }), payload),
+    "cards.create",
+    (boardId, payload = {}) => {
+      const { if_board_updated_at, request_key, ...card } = payload;
+      return {
+        options: b({
+          board_id: boardId,
+          ...(if_board_updated_at != null && if_board_updated_at !== ""
+            ? { if_board_updated_at }
+            : {}),
+          ...(request_key ? { request_key } : {}),
+          card,
+        }),
+      };
+    },
     true,
   ],
   [

@@ -1260,7 +1260,7 @@
   >
     <div
       class="doc-detail-main min-w-0 flex-1 {document.thread_id
-        ? 'page-dock-scroll lg:pt-6 lg:pb-10'
+        ? 'page-dock-scroll lg:pt-3 lg:pb-10'
         : ''}"
     >
       <div class="doc-detail-content-row flex gap-4">
@@ -1268,8 +1268,8 @@
           <WorkspaceResourceTopRow
             breadcrumbAriaLabel="Breadcrumb and document status"
             desktopAriaLabel="Document details"
-            dense={Boolean(document.thread_id)}
-            showDesktop={!document.thread_id}
+            dense
+            showDesktop={false}
             desktop={docDesktop}
           >
             {#snippet breadcrumb()}

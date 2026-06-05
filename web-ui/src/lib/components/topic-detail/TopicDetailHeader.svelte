@@ -113,14 +113,14 @@
 
 {#snippet topicDesktop()}
   <h1
-    class="min-w-0 text-title font-semibold {topic?.title
+    class="min-w-0 text-subtitle font-semibold {topic?.title
       ? 'text-fg'
       : 'text-fg-subtle italic'}"
   >
     {topic?.title || "Untitled topic"}
   </h1>
   {#if topicSummary}
-    <p class="line-clamp-3 text-[13px] text-fg-muted" title={topicSummary}>
+    <p class="line-clamp-2 text-meta text-fg-muted" title={topicSummary}>
       {topicSummary}
     </p>
   {/if}
@@ -178,13 +178,13 @@
       {#if !topic.archived_at}
         <ArchiveButton
           busy={lifecycleBusy}
-          size="md"
+          size="sm"
           onarchive={() => (confirmModal = { open: true, action: "archive" })}
         />
       {/if}
       <TrashButton
         busy={lifecycleBusy}
-        size="md"
+        size="sm"
         ontrash={() => (confirmModal = { open: true, action: "trash" })}
       />
     {/if}

@@ -382,15 +382,15 @@
   Other tabs render in normal page flow.
 -->
 {#if topicLoading}
-  <TopicDetailHeader {threadId} {detailAsTopic} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
   <p class="text-[13px] text-fg-muted">Loading...</p>
 {:else if topicError}
-  <TopicDetailHeader {threadId} {detailAsTopic} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
   <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {topicError}
   </p>
 {:else if !topic}
-  <TopicDetailHeader {threadId} {detailAsTopic} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
   <p class="text-[13px] text-fg-muted">
     {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
@@ -402,19 +402,14 @@
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head max-lg:px-4" : "contents"}>
-      <TopicDetailHeader
-        {threadId}
-        {detailAsTopic}
-        dense={isMessagesTab}
-        showDesktop={!isMessagesTab}
-      />
+      <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
 
       <WorkspaceResourceTabList
         ariaLabel="Topic sections"
         tabs={topicTabItems}
         {activeTab}
         onTabChange={(tabId) => void setActiveTab(tabId)}
-        dense={isMessagesTab}
+        dense
       />
     </div>
 
