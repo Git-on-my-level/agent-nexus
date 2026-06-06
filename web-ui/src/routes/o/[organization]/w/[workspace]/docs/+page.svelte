@@ -4,6 +4,7 @@
   import { coreClient } from "$lib/coreClient";
   import { filterTopLevelDocuments } from "$lib/documentVisibility";
   import { formatTimestamp } from "$lib/formatDate";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import CompactFilterBar from "$lib/components/CompactFilterBar.svelte";
@@ -459,6 +460,7 @@
   {#if createOpen}
     <form
       class="mb-4 rounded-md border border-line bg-bg-soft p-4"
+      data-anx-save-scope
       onsubmit={(e) => {
         e.preventDefault();
         void handleCreate();
@@ -517,6 +519,9 @@
           class="cursor-pointer rounded-md bg-accent-solid px-3 py-1.5 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
           disabled={creating}
           type="submit"
+          data-anx-save-shortcut
+          aria-keyshortcuts="Meta+S Control+S"
+          title={`Create doc (${formatShortcut("S")})`}
         >
           {creating ? "Creating…" : "Create doc"}
         </button>

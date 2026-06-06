@@ -787,6 +787,503 @@ test("documents list redirects through the default workspace and loads revision 
   await expect(page.getByText("Version 3", { exact: true })).toHaveCount(0);
 });
 
+test("inline title rename — commits a new revision carrying the title patch", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-rename-e2e";
+  const baseRevisionId = "rev-rename-1";
+  let renamePayload = null;
+  let renameCount = 0;
+
+  const initialDoc = {
+    id: "renamable-doc",
+    title: "Old Title",
+    status: "active",
+    head_revision_id: baseRevisionId,
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+  const initialRevision = {
+    revision_id: baseRevisionId,
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-r1",
+    revision_hash: "rhash-r1",
+    content: "# Old Title\n\nBody stays the same.",
+  };
+  const renamedDoc = {
+    ...initialDoc,
+    title: "Fresh Title",
+    head_revision_id: "rev-rename-2",
+    head_revision_number: 2,
+    updated_at: new Date().toISOString(),
+  };
+  const renamedRevision = {
+    ...initialRevision,
+    revision_id: "rev-rename-2",
+    revision_number: 2,
+    prev_revision_id: baseRevisionId,
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Doc Renamer", tags: ["human"] }],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [] }),
+    });
+  });
+
+  await page.route(/\/docs\/renamable-doc\/revisions$/, async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    renamePayload = JSON.parse(request.postData() ?? "{}");
+    renameCount += 1;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ document: renamedDoc, revision: renamedRevision }),
+    });
+  });
+
+  await page.route(/\/docs\/renamable-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document: renameCount === 0 ? initialDoc : renamedDoc,
+          revision: renameCount === 0 ? initialRevision : renamedRevision,
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/o/local/w/local/docs/renamable-doc");
+  await expect(
+    page.getByRole("heading", { name: "Old Title" }).first(),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Rename document" }).click();
+  const titleInput = page.getByRole("textbox", { name: "Document title" });
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill("Fresh Title");
+  await titleInput.press("Enter");
+
+  await expect.poll(() => renameCount).toBe(1);
+  expect(renamePayload).toMatchObject({
+    if_base_revision: baseRevisionId,
+    document: { title: "Fresh Title" },
+  });
+  await expect(
+    page.getByRole("heading", { name: "Fresh Title" }).first(),
+  ).toBeVisible();
+});
+
+test("document outline — wide viewport shows a table of contents that scrolls to a heading", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-toc-e2e";
+  const doc = {
+    id: "outline-doc",
+    title: "Outline Doc",
+    status: "active",
+    head_revision_id: "rev-outline-1",
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+  const revision = {
+    revision_id: "rev-outline-1",
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-o1",
+    revision_hash: "rhash-o1",
+    content:
+      "# Overview\n\nIntro paragraph.\n\n## Architecture\n\nDetails about the system.\n\n## Rollout Plan\n\nPhased steps.",
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [
+          { id: actorId, display_name: "Outline Tester", tags: ["human"] },
+        ],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [] }),
+    });
+  });
+
+  await page.route(/\/docs\/outline-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ document: doc, revision }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/o/local/w/local/docs/outline-doc");
+  await page.waitForLoadState("networkidle");
+
+  const outline = page.getByRole("navigation", { name: "Document outline" });
+  await expect(outline).toBeVisible();
+  await expect(outline.getByText("On this page")).toBeVisible();
+  await expect(
+    outline.getByRole("button", { name: "Architecture" }),
+  ).toBeVisible();
+  await expect(
+    outline.getByRole("button", { name: "Rollout Plan" }),
+  ).toBeVisible();
+
+  await outline.getByRole("button", { name: "Rollout Plan" }).click();
+  // The matching heading anchor exists in the rendered body.
+  await expect(
+    page.locator('.js-doc-markdown-body [id="rollout-plan"]'),
+  ).toBeVisible();
+});
+
+test("editor toolbar — formatting is undoable and caret-only headings do not select trailing text", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-toolbar-e2e";
+  const doc = {
+    id: "toolbar-doc",
+    title: "Toolbar Doc",
+    status: "active",
+    head_revision_id: "rev-tb-1",
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+  const revision = {
+    revision_id: "rev-tb-1",
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-tb",
+    revision_hash: "rhash-tb",
+    content: "Hello world",
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [
+          { id: actorId, display_name: "Toolbar Tester", tags: ["human"] },
+        ],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [] }),
+    });
+  });
+
+  await page.route(/\/docs\/toolbar-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ document: doc, revision }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/o/local/w/local/docs/toolbar-doc");
+  await page.getByRole("button", { name: "Edit" }).click();
+  const textarea = page.getByRole("textbox", { name: "Content (Markdown)" });
+  await expect(textarea).toBeVisible();
+
+  // Select the word "Hello" (offsets 0-5) and apply Bold.
+  await textarea.evaluate((el) => {
+    el.focus();
+    el.setSelectionRange(0, 5);
+  });
+  await page.getByRole("button", { name: /^Bold/ }).click();
+  await expect.poll(() => textarea.inputValue()).toBe("**Hello** world");
+
+  // Cmd/Ctrl+Z reverts the toolbar insertion (native undo stack preserved).
+  await textarea.focus();
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => textarea.inputValue()).toBe("Hello world");
+
+  // Caret-only H2 on a non-empty line prefixes the line without selecting
+  // trailing text (regression: it used to grab characters on the next row).
+  await textarea.evaluate((el) => {
+    el.focus();
+    el.setSelectionRange(0, 0);
+  });
+  await page.getByRole("button", { name: /^Heading 2/ }).click();
+  await expect.poll(() => textarea.inputValue()).toBe("## Hello world");
+  const collapsed = await textarea.evaluate(
+    (el) => el.selectionStart === el.selectionEnd,
+  );
+  expect(collapsed).toBe(true);
+});
+
+test("editor — Cmd/Ctrl+S saves when dirty and is a no-op when clean", async ({
+  page,
+}) => {
+  const actorId = "actor-docs-save-hotkey-e2e";
+  const baseRevisionId = "rev-save-hk-1";
+  let saveCount = 0;
+  let savePayload = null;
+
+  const doc = {
+    id: "save-hotkey-doc",
+    title: "Save Hotkey Doc",
+    status: "active",
+    head_revision_id: baseRevisionId,
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+  const revision = {
+    revision_id: baseRevisionId,
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-shk",
+    revision_hash: "rhash-shk",
+    content: "Original body",
+  };
+  const savedRevision = {
+    ...revision,
+    revision_id: "rev-save-hk-2",
+    revision_number: 2,
+    prev_revision_id: baseRevisionId,
+    content: "Edited via hotkey",
+  };
+  const savedDoc = {
+    ...doc,
+    head_revision_id: savedRevision.revision_id,
+    head_revision_number: 2,
+    updated_at: new Date().toISOString(),
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Save Tester", tags: ["human"] }],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [] }),
+    });
+  });
+
+  await page.route(/\/docs\/save-hotkey-doc\/revisions$/, async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    savePayload = JSON.parse(request.postData() ?? "{}");
+    saveCount += 1;
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ document: savedDoc, revision: savedRevision }),
+    });
+  });
+
+  await page.route(/\/docs\/save-hotkey-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document: saveCount === 0 ? doc : savedDoc,
+          revision: saveCount === 0 ? revision : savedRevision,
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/o/local/w/local/docs/save-hotkey-doc");
+  await page.getByRole("button", { name: "Edit" }).click();
+  const textarea = page.getByRole("textbox", { name: "Content (Markdown)" });
+  await expect(textarea).toBeVisible();
+
+  await textarea.focus();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect.poll(() => saveCount).toBe(0);
+
+  await textarea.fill("Edited via hotkey");
+  await textarea.focus();
+  await page.keyboard.press("ControlOrMeta+s");
+  await expect.poll(() => saveCount).toBe(1);
+  expect(savePayload).toMatchObject({
+    if_base_revision: baseRevisionId,
+    content: "Edited via hotkey",
+  });
+});
+
+test("doc more actions — Escape closes the kebab menu", async ({ page }) => {
+  const actorId = "actor-docs-more-esc-e2e";
+  const doc = {
+    id: "more-actions-doc",
+    title: "More Actions Doc",
+    status: "active",
+    head_revision_id: "rev-ma-1",
+    head_revision_number: 1,
+    updated_at: "2026-03-08T10:00:00Z",
+    updated_by: actorId,
+  };
+  const revision = {
+    revision_id: "rev-ma-1",
+    revision_number: 1,
+    created_at: "2026-03-08T10:00:00Z",
+    created_by: actorId,
+    content_type: "text",
+    content_hash: "hash-ma",
+    revision_hash: "rhash-ma",
+    content: "Body",
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [
+          { id: actorId, display_name: "More Actions", tags: ["human"] },
+        ],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads: [] }),
+    });
+  });
+
+  await page.route(/\/docs\/more-actions-doc$/, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ document: doc, revision }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/o/local/w/local/docs/more-actions-doc");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("menuitem", { name: "Archive" }),
+  ).not.toBeVisible();
+});
+
 test("doc with thread — compact viewport uses bottom dock, not side rail", async ({
   page,
 }) => {

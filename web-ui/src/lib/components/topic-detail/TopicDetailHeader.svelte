@@ -8,6 +8,7 @@
     principalRegistry,
   } from "$lib/actorSession";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
@@ -130,18 +131,13 @@
         moreActionsOpen = false;
       }
     }
-    function onDocKey(e) {
-      if (e.key === "Escape") moreActionsOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
 </script>
@@ -214,7 +210,14 @@
       />
     {/if}
     {#if topic && detailAsTopic && !topic.trashed_at && threadId}
-      <div bind:this={moreActionsRoot} class="relative">
+      <div
+        bind:this={moreActionsRoot}
+        class="relative"
+        use:dismissOnEscape={{
+          enabled: moreActionsOpen,
+          onDismiss: closeMoreActions,
+        }}
+      >
         <button
           type="button"
           class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"

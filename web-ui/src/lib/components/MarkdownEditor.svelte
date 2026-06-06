@@ -1,5 +1,6 @@
 <script>
   import { renderMarkdown } from "$lib/markdown.js";
+  import { formatShortcut } from "$lib/keyboardHints.js";
 
   let {
     value = $bindable(""),
@@ -264,10 +265,10 @@
                 class:md-editor-btn--strike={action.key === "strike"}
                 onclick={() => applyAction(action)}
                 title="{action.label}{action.shortcut
-                  ? ` (${navigator?.platform?.includes('Mac') ? '⌘' : 'Ctrl+'}${action.shortcut.toUpperCase()})`
+                  ? ` (${formatShortcut(action.shortcut.toUpperCase())})`
                   : ''}"
                 aria-label="{action.label}{action.shortcut
-                  ? ` (${navigator?.platform?.includes('Mac') ? '⌘' : 'Ctrl+'}${action.shortcut.toUpperCase()})`
+                  ? ` (${formatShortcut(action.shortcut.toUpperCase())})`
                   : ''}"
                 type="button">{action.icon}</button
               >

@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
   import { resourceRouteSegment } from "$lib/resourceIdentity.js";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let board = $state(/** @type {Record<string, any> | null} */ (null));
@@ -132,7 +133,7 @@
       </div>
     {/if}
 
-    <div class="rounded-md border border-line bg-panel p-5">
+    <div class="rounded-md border border-line bg-panel p-5" data-anx-save-scope>
       <label class="block text-meta font-medium text-fg">
         Title
         <input
@@ -157,6 +158,9 @@
           disabled={saving}
           onclick={submit}
           type="button"
+          data-anx-save-shortcut
+          aria-keyshortcuts="Meta+S Control+S"
+          title={`Save (${formatShortcut("S")})`}
         >
           {saving ? "Saving…" : "Save"}
         </button>

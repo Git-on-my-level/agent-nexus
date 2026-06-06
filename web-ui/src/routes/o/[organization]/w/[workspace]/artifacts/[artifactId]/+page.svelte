@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -73,18 +74,13 @@
         moreActionsOpen = false;
       }
     }
-    function onDocKey(e) {
-      if (e.key === "Escape") moreActionsOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
   let artifactTopicRef = $derived.by(() => {
@@ -470,7 +466,14 @@
     {/snippet}
     {#snippet actions()}
       {#if !artifact.trashed_at}
-        <div bind:this={moreActionsRoot} class="relative">
+        <div
+          bind:this={moreActionsRoot}
+          class="relative"
+          use:dismissOnEscape={{
+            enabled: moreActionsOpen,
+            onDismiss: closeMoreActions,
+          }}
+        >
           <button
             type="button"
             class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"

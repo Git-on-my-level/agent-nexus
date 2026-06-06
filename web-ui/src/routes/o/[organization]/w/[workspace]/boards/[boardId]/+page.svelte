@@ -12,6 +12,7 @@
   import Icon from "$lib/components/Icon.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import Button from "$lib/components/Button.svelte";
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import {
     actorRegistry,
@@ -674,18 +675,13 @@
         sortOpen = false;
       }
     }
-    function onDocKey(/** @type {KeyboardEvent} */ e) {
-      if (e.key === "Escape") sortOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
 
@@ -700,18 +696,13 @@
         filtersOpen = false;
       }
     }
-    function onDocKey(/** @type {KeyboardEvent} */ e) {
-      if (e.key === "Escape") filtersOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
 
@@ -726,18 +717,13 @@
         boardMoreOpen = false;
       }
     }
-    function onDocKey(/** @type {KeyboardEvent} */ e) {
-      if (e.key === "Escape") boardMoreOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
 </script>
@@ -966,7 +952,16 @@
           {/snippet}
           {#snippet actions()}
             {#if !board.trashed_at}
-              <div bind:this={sortRoot} class="relative">
+              <div
+                bind:this={sortRoot}
+                class="relative"
+                use:dismissOnEscape={{
+                  enabled: sortOpen,
+                  onDismiss: () => {
+                    sortOpen = false;
+                  },
+                }}
+              >
                 <button
                   type="button"
                   class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasCustomSort
@@ -1011,7 +1006,16 @@
                   </div>
                 {/if}
               </div>
-              <div bind:this={filterRoot} class="relative">
+              <div
+                bind:this={filterRoot}
+                class="relative"
+                use:dismissOnEscape={{
+                  enabled: filtersOpen,
+                  onDismiss: () => {
+                    filtersOpen = false;
+                  },
+                }}
+              >
                 <button
                   type="button"
                   class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
@@ -1121,7 +1125,16 @@
               >
                 Add card
               </Button>
-              <div bind:this={boardMoreRoot} class="relative">
+              <div
+                bind:this={boardMoreRoot}
+                class="relative"
+                use:dismissOnEscape={{
+                  enabled: boardMoreOpen,
+                  onDismiss: () => {
+                    boardMoreOpen = false;
+                  },
+                }}
+              >
                 <button
                   type="button"
                   class="relative inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"

@@ -6,6 +6,7 @@
   import { page } from "$app/stores";
   import { env } from "$env/dynamic/public";
 
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import Button from "$lib/components/Button.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
@@ -262,7 +263,15 @@
             </div>
           {/if}
 
-          <div class="relative">
+          <div
+            class="relative"
+            use:dismissOnEscape={{
+              enabled: menuOpen,
+              onDismiss: () => {
+                menuOpen = false;
+              },
+            }}
+          >
             <button
               type="button"
               aria-haspopup="menu"

@@ -48,6 +48,7 @@
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
     handleModEnterFormSubmit,
+    handleModSave,
   } from "$lib/formSubmitShortcut.js";
   import {
     bindWorkspaceHref,
@@ -610,6 +611,9 @@
         commandPaletteOpen = !commandPaletteOpen;
       }
       return;
+    }
+    if (!event.defaultPrevented) {
+      handleModSave(event, { commandPaletteOpen });
     }
     if (!event.defaultPrevented) {
       handleModEnterFormSubmit(event, { commandPaletteOpen });

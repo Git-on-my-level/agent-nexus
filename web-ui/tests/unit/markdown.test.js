@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { renderMarkdown } from "../../src/lib/markdown.js";
+import {
+  extractDocumentOutline,
+  renderMarkdown,
+} from "../../src/lib/markdown.js";
 
 describe("markdown", () => {
   it("returns an empty string for empty or non-string input", () => {
@@ -194,5 +197,59 @@ describe("markdown", () => {
 
     expect(result).toContain('rel="noopener noreferrer"');
     expect(result).toContain('target="_blank"');
+  });
+
+  it("adds slugged anchor ids to rendered headings", () => {
+    const html = renderMarkdown("# Getting Started\n\n## API & Usage");
+    expect(html).toContain('<h1 id="getting-started"');
+    expect(html).toContain('<h2 id="api-usage"');
+  });
+
+  it("de-duplicates repeated heading slugs deterministically", () => {
+    const html = renderMarkdown("# Notes\n\n## Notes\n\n### Notes");
+    expect(html).toContain('id="notes"');
+    expect(html).toContain('id="notes-1"');
+    expect(html).toContain('id="notes-2"');
+  });
+});
+
+describe("extractDocumentOutline", () => {
+  it("returns an empty list for empty or non-string input", () => {
+    expect(extractDocumentOutline("")).toEqual([]);
+    expect(extractDocumentOutline(null)).toEqual([]);
+    expect(extractDocumentOutline(undefined)).toEqual([]);
+  });
+
+  it("extracts H1-H3 headings with level, plain text, and slug id", () => {
+    const outline = extractDocumentOutline(
+      "# Title\n\nintro\n\n## Section **one**\n\n### Detail `code`\n\n#### Too deep",
+    );
+    expect(outline).toEqual([
+      { level: 1, text: "Title", id: "title" },
+      { level: 2, text: "Section one", id: "section-one" },
+      { level: 3, text: "Detail code", id: "detail-code" },
+    ]);
+  });
+
+  it("keeps slug ids aligned with the rendered anchors when duplicated", () => {
+    const source = "# Notes\n\n## Notes";
+    const outline = extractDocumentOutline(source);
+    const html = renderMarkdown(source);
+    for (const heading of outline) {
+      expect(html).toContain(`id="${heading.id}"`);
+    }
+    expect(outline.map((h) => h.id)).toEqual(["notes", "notes-1"]);
+  });
+
+  it("advances dedupe counters for skipped deep headings so ids still match render", () => {
+    // An h4 "Notes" sits between two surfaced headings; the renderer slugs it
+    // (notes-1), so the second visible "Notes" must become notes-2.
+    const source = "# Notes\n\n#### Notes\n\n## Notes";
+    const outline = extractDocumentOutline(source);
+    const html = renderMarkdown(source);
+    expect(outline.map((h) => h.id)).toEqual(["notes", "notes-2"]);
+    for (const heading of outline) {
+      expect(html).toContain(`id="${heading.id}"`);
+    }
   });
 });

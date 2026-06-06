@@ -60,13 +60,18 @@ It gives operators fast, glanceable visibility into the shared workspace maintai
 
 Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts: use `(event.metaKey || event.ctrlKey)` in any local key handlers.
 
+**Platform hint labels:** `src/lib/keyboardHints.js` (`isMacPlatform`, `modSymbol`, `formatShortcut`) is the single source for ⌘ vs Ctrl display copy in tooltips and `aria-keyshortcuts`.
+
 **Global handlers** live in `src/lib/formSubmitShortcut.js` and are wired from `src/routes/+layout.svelte` (after palette toggle, each step skips if `event.defaultPrevented`; workspace picker closes on Escape before escape-blur runs):
 
+- **Layer S — contextual save:** `handleModSave`. ⌘/Ctrl+S clicks an enabled `[data-anx-save-shortcut]` button when focus is inside a matching `[data-anx-save-scope]`, inside an open `[role="dialog"]`, or when exactly one enabled save button exists on the page. Disabled save buttons gate dirty-state (no-op; browser default otherwise). Pair scope + save on create/edit surfaces.
 - **Layer A — form submit:** `handleModEnterFormSubmit`. ⌘/Ctrl+Enter on a text-like control inside a `<form>` calls `requestSubmit()`. Opt out: `data-anx-no-submit-shortcut` on the form or focused control.
 - **Layer B — blur commit:** `handleModEnterBlurCommit`. On controls (or ancestors) tagged `data-anx-mod-enter-commit="blur"`, ⌘/Ctrl+Enter blurs so `onblur` can persist. Opt out: `data-anx-no-text-shortcut` or `data-anx-no-submit-shortcut` on the focused control or an ancestor.
 - **Escape blur (sparse):** `handleEscapeTextBlurCommit`. Only when `data-anx-escape-dismiss="blur"` is present; same opt-outs as Layer B. Prefer discarding drafts via the action below instead of inferring from the DOM.
 
 **Component-owned Escape:** `use:inlineEditEscape` from `src/lib/actions/inlineEditEscape.js` on the node. Use for inline edits that must revert Svelte state (stopPropagation by default so global escape-blur does not run). Provides `onRevert`, `onAfter`, `update`, `destroy`.
+
+**Popover / menu dismiss:** `use:dismissOnEscape` from `src/lib/actions/dismissOnEscape.js` on the popover root while open (`enabled`, `onDismiss`). Capture-phase document listener; stops propagation so other handlers do not run.
 
 **Inbox respond form:** The response composer is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit` → `submitResponse()`). No per-field Mod+Enter handler is required.
 

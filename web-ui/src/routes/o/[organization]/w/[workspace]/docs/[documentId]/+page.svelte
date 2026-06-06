@@ -9,6 +9,10 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import DocumentMarkdownEditor from "$lib/components/DocumentMarkdownEditor.svelte";
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
+  import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
+  import { extractDocumentOutline } from "$lib/markdown.js";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { splitTypedRef } from "$lib/inboxUtils";
@@ -80,6 +84,14 @@
   });
   let saving = $state(false);
   let saveError = $state("");
+  /** Notion-style click-to-rename on the prominent document title. */
+  let titleEditing = $state(false);
+  let titleDraft = $state("");
+  let titleSaving = $state(false);
+  let titleError = $state("");
+  let titleInputEl = $state(/** @type {HTMLInputElement | null} */ (null));
+  /** Active table-of-contents heading id (scrollspy). */
+  let activeOutlineId = $state("");
   let loadingSelectedRevisionKey = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let docLifecycleBusy = $state(false);
@@ -131,18 +143,13 @@
         moreActionsOpen = false;
       }
     }
-    function onDocKey(e) {
-      if (e.key === "Escape") moreActionsOpen = false;
-    }
     window.document.addEventListener("pointerdown", onDocPointerDown, true);
-    window.document.addEventListener("keydown", onDocKey, true);
     return () => {
       window.document.removeEventListener(
         "pointerdown",
         onDocPointerDown,
         true,
       );
-      window.document.removeEventListener("keydown", onDocKey, true);
     };
   });
   function documentTopicRefForLink(doc) {
@@ -204,6 +211,13 @@
     selectedRevision?.content ?? headRevision?.content ?? "",
   );
   let displayedRevision = $derived(selectedRevision ?? headRevision);
+  /** Outline (H1-H3) for the table-of-contents; only shown for longer docs. */
+  let docOutline = $derived(extractDocumentOutline(displayedContent));
+  let showOutline = $derived(!editOpen && docOutline.length >= 3);
+  /** Unsaved-content indicator for the editor footer. */
+  let editorDirty = $derived(
+    editOpen && editDraft.content !== (headRevision?.content ?? ""),
+  );
   let isViewingOldRevision = $derived(
     selectedRevision &&
       selectedRevision.revision_id !== headRevision?.revision_id,
@@ -277,6 +291,17 @@
   let headContentType = $derived(headRevision?.content_type ?? "text");
   let isTextEditable = $derived(
     headContentType === "text" || headContentType === "",
+  );
+  /**
+   * Inline title rename is only safe on the head of a text document that is not
+   * trashed: renaming appends a revision (title isn't patchable via docs.patch),
+   * so we reuse the head content as the base body.
+   */
+  let canEditTitle = $derived(
+    Boolean(document) &&
+      isTextEditable &&
+      !document?.trashed_at &&
+      !isViewingOldRevision,
   );
 
   let workspaceHref = $derived(
@@ -583,6 +608,102 @@
       saveError = `Failed to save revision: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
       saving = false;
+    }
+  }
+
+  function startTitleEdit() {
+    if (!canEditTitle || titleSaving) return;
+    titleError = "";
+    titleDraft = String(document?.title ?? "").trim();
+    titleEditing = true;
+    void tick().then(() => {
+      titleInputEl?.focus();
+      titleInputEl?.select();
+    });
+  }
+
+  function cancelTitleEdit() {
+    titleEditing = false;
+    titleError = "";
+  }
+
+  async function commitTitleEdit() {
+    if (!titleEditing) return;
+    const next = titleDraft.trim();
+    const current = String(document?.title ?? "").trim();
+    if (!next || next === current) {
+      titleEditing = false;
+      titleError = "";
+      return;
+    }
+    if (!headRevision?.revision_id) {
+      titleError = "Cannot rename: missing base revision. Please reload.";
+      return;
+    }
+    titleSaving = true;
+    titleError = "";
+    try {
+      // Title is not patchable via docs.patch, so renaming appends a revision
+      // that carries the unchanged head body plus the new title.
+      const result = await coreClient.updateDocument(documentId, {
+        content: headRevision.content ?? displayedContent,
+        content_type: headContentType || "text",
+        if_base_revision: headRevision.revision_id,
+        document: { title: next },
+      });
+      document = result.document ?? document;
+      headRevision = result.revision ?? headRevision;
+      selectedRevision = null;
+      revisions = [];
+      titleEditing = false;
+      if (requestedRevisionId) {
+        await setRequestedRevision("");
+      }
+    } catch (e) {
+      titleError = `Failed to rename: ${e instanceof Error ? e.message : String(e)}`;
+    } finally {
+      titleSaving = false;
+    }
+  }
+
+  /**
+   * Table-of-contents scrollspy: highlight the outline entry nearest the top of
+   * the viewport as the operator scrolls the rendered body.
+   */
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    if (!showOutline || !docBodyMarkdownRoot) {
+      activeOutlineId = "";
+      return;
+    }
+    const ids = docOutline.map((h) => h.id);
+    void displayedContent;
+    function recompute() {
+      const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+      if (!root) return;
+      const passed = ids.filter((id) => {
+        const el = root.querySelector(`[id="${CSS.escape(id)}"]`);
+        return (
+          el instanceof HTMLElement && el.getBoundingClientRect().top <= 120
+        );
+      });
+      activeOutlineId = passed.at(-1) ?? ids[0] ?? "";
+    }
+    recompute();
+    window.addEventListener("scroll", recompute, { passive: true });
+    window.addEventListener("resize", recompute);
+    return () => {
+      window.removeEventListener("scroll", recompute);
+      window.removeEventListener("resize", recompute);
+    };
+  });
+
+  function scrollToOutline(id) {
+    const root = /** @type {HTMLElement | null} */ (docBodyMarkdownRoot);
+    const el = root?.querySelector(`[id="${CSS.escape(id)}"]`);
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      activeOutlineId = id;
     }
   }
 
@@ -1376,7 +1497,14 @@
                     {headContentType} — edit via CLI
                   </span>
                 {/if}
-                <div bind:this={moreActionsRoot} class="relative">
+                <div
+                  bind:this={moreActionsRoot}
+                  class="relative"
+                  use:dismissOnEscape={{
+                    enabled: moreActionsOpen,
+                    onDismiss: closeMoreActions,
+                  }}
+                >
                   <button
                     type="button"
                     class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
@@ -1449,68 +1577,109 @@
             {/snippet}
           </WorkspaceResourceTopRow>
 
-          {#if editOpen}
-            <form
-              class="mt-3 rounded-md border border-line bg-bg-soft p-4"
-              onsubmit={(e) => {
-                e.preventDefault();
-                void handleSave();
-              }}
-            >
-              <label class="mb-3 block">
-                <span class="text-micro font-medium text-fg-muted">Title</span>
-                <input
-                  bind:value={editDraft.title}
-                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 text-meta text-fg"
-                  type="text"
-                />
-              </label>
-
-              <label>
-                <span class="text-micro font-medium text-fg-muted"
-                  >Content (Markdown) <span class="text-danger-text">*</span
-                  ></span
-                >
-                <textarea
-                  bind:value={editDraft.content}
-                  class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-2 text-meta text-fg font-mono leading-relaxed resize-y"
-                  rows="20"
-                ></textarea>
-              </label>
-
-              <div class="mt-3 flex items-center gap-2">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="compact"
-                  disabled={saving}
-                >
-                  {saving ? "Saving…" : "Save revision"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  onclick={closeEdit}
-                  type="button"
-                >
-                  Cancel
-                </Button>
-              </div>
-
-              {#if saveError}
-                <div
-                  class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-                  role="alert"
-                >
-                  {saveError}
-                </div>
-              {/if}
-              <p class="mt-2 text-micro text-fg-muted">
-                Base revision: <span class="font-mono"
-                  >{headRevision?.revision_id ?? "—"}</span
-                > — optimistic concurrency is enforced.
+          <div class="mt-3 mb-1">
+            {#if titleEditing}
+              <input
+                bind:this={titleInputEl}
+                bind:value={titleDraft}
+                class="w-full border-none bg-transparent p-0 text-display font-semibold text-fg outline-none placeholder:text-fg-subtle"
+                placeholder="Untitled document"
+                aria-label="Document title"
+                onkeydown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitTitleEdit();
+                  }
+                }}
+                onblur={() => void commitTitleEdit()}
+                use:inlineEditEscape={{ onRevert: cancelTitleEdit }}
+              />
+            {:else if canEditTitle}
+              <button
+                type="button"
+                class="group/title -ml-1 flex max-w-full items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-panel-hover"
+                onclick={startTitleEdit}
+                aria-label="Rename document"
+                title="Rename document"
+              >
+                <h1 class="min-w-0 truncate text-display font-semibold text-fg">
+                  {resourceDisplayLabel(document, documentId)}
+                </h1>
+                {#if titleSaving}
+                  <svg
+                    class="h-4 w-4 shrink-0 animate-spin text-fg-muted"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                {:else}
+                  <Icon
+                    name="pencil"
+                    class="h-4 w-4 shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover/title:opacity-100"
+                  />
+                {/if}
+              </button>
+            {:else}
+              <h1 class="min-w-0 text-display font-semibold text-fg">
+                {resourceDisplayLabel(document, documentId)}
+              </h1>
+            {/if}
+            {#if titleError}
+              <p class="mt-1 text-micro text-danger-text" role="alert">
+                {titleError}
               </p>
-            </form>
+            {/if}
+            {#if !titleEditing && String(document.summary ?? "").trim()}
+              <p class="mt-1 text-meta text-fg-muted">
+                {String(document.summary).trim()}
+              </p>
+            {/if}
+            <p
+              class="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-micro text-fg-subtle"
+            >
+              <span class="text-fg-muted"
+                >v{displayedRevision?.revision_number ?? "—"}</span
+              >
+              <span aria-hidden="true">·</span>
+              <span
+                >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
+              >
+              <span aria-hidden="true">·</span>
+              <ActorLabel
+                label={actorName(displayedRevision?.created_by)}
+                seed={displayedRevision?.created_by}
+                size="xs"
+                prefix="by"
+                nameClass="text-micro text-fg-subtle"
+              />
+            </p>
+          </div>
+
+          {#if editOpen}
+            <div class="mt-4">
+              <DocumentMarkdownEditor
+                bind:value={editDraft.content}
+                {saving}
+                {saveError}
+                dirty={editorDirty}
+                baseRevisionId={headRevision?.revision_id ?? ""}
+                onsave={() => void handleSave()}
+                oncancel={closeEdit}
+              />
+            </div>
           {/if}
 
           {#if isViewingOldRevision}
@@ -1531,12 +1700,12 @@
           {/if}
 
           {#if !editOpen}
-            <div class="mt-3 min-w-0">
-              <div class="min-w-0 rounded-md border border-line bg-bg-soft">
+            <div class="mt-5 flex min-w-0 gap-8">
+              <div class="min-w-0 flex-1">
                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                 <div
                   bind:this={docBodyMarkdownRoot}
-                  class="js-doc-markdown-body px-4 py-3"
+                  class="js-doc-markdown-body mx-auto max-w-[46rem]"
                   role="region"
                   aria-label="Document body"
                   onmouseup={refreshStashedDocSelection}
@@ -1544,13 +1713,42 @@
                   {#if displayedContent}
                     <MarkdownRenderer
                       source={displayedContent}
-                      class="text-meta leading-relaxed text-fg"
+                      class="markdown-rendered--doc text-fg"
                     />
                   {:else}
                     <p class="text-meta text-fg-muted">(No content)</p>
                   {/if}
                 </div>
               </div>
+              {#if showOutline}
+                <aside class="hidden w-56 shrink-0 xl:block">
+                  <nav class="sticky top-6" aria-label="Document outline">
+                    <p
+                      class="mb-2 px-3 text-micro font-semibold uppercase tracking-wide text-fg-subtle"
+                    >
+                      On this page
+                    </p>
+                    <ul class="border-l border-line">
+                      {#each docOutline as heading (heading.id)}
+                        <li>
+                          <button
+                            type="button"
+                            class="block w-full truncate border-l-2 py-1 pr-2 text-left text-micro transition-colors -ml-px {activeOutlineId ===
+                            heading.id
+                              ? 'border-accent text-fg'
+                              : 'border-transparent text-fg-muted hover:text-fg'}"
+                            style={`padding-left: ${0.75 + (heading.level - 1) * 0.75}rem;`}
+                            onclick={() => scrollToOutline(heading.id)}
+                            title={heading.text}
+                          >
+                            {heading.text}
+                          </button>
+                        </li>
+                      {/each}
+                    </ul>
+                  </nav>
+                </aside>
+              {/if}
             </div>
           {/if}
 

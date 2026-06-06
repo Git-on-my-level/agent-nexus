@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { resourceRouteSegment } from "$lib/resourceIdentity.js";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let creating = $state(false);
@@ -71,7 +72,7 @@
     </div>
   {/if}
 
-  <div class="rounded-md border border-line bg-panel p-5">
+  <div class="rounded-md border border-line bg-panel p-5" data-anx-save-scope>
     <label class="block text-meta font-medium text-fg">
       Board title
       <input
@@ -98,6 +99,9 @@
         disabled={creating}
         onclick={submit}
         type="button"
+        data-anx-save-shortcut
+        aria-keyshortcuts="Meta+S Control+S"
+        title={`Create board (${formatShortcut("S")})`}
       >
         {creating ? "Creating…" : "Create board"}
       </button>

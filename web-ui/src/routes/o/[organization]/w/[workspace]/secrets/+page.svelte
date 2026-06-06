@@ -6,6 +6,7 @@
     isHumanWorkspacePrincipal,
   } from "$lib/authSession";
   import Button from "$lib/components/Button.svelte";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import InlineAlert from "$lib/components/InlineAlert.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -148,7 +149,10 @@
   {/if}
 
   {#if showCreateForm}
-    <div class="mb-4 rounded-md border border-line bg-panel p-4">
+    <div
+      class="mb-4 rounded-md border border-line bg-panel p-4"
+      data-anx-save-scope
+    >
       <h2 class="mb-3 text-meta font-medium text-fg">Create secret</h2>
       {#if createError}
         <InlineAlert class="mb-2" variant="danger">{createError}</InlineAlert>
@@ -204,6 +208,9 @@
             variant="primary"
             disabled={creating || !newName.trim() || !newValue}
             onclick={handleCreate}
+            saveShortcut
+            aria-keyshortcuts="Meta+S Control+S"
+            title={`Create (${formatShortcut("S")})`}
           >
             {creating ? "Creating..." : "Create"}
           </Button>

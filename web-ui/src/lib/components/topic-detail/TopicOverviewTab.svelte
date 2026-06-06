@@ -2,6 +2,7 @@
   import { topicDetailStore } from "$lib/topicDetailStore";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import Button from "$lib/components/Button.svelte";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import { splitTypedRef } from "$lib/inboxUtils";
@@ -245,6 +246,7 @@
   {#if editOpen && editDraft}
     <form
       class="mt-3 border-t border-line p-4"
+      data-anx-save-scope
       onsubmit={(event) => {
         event.preventDefault();
         void handleSave();
@@ -278,6 +280,9 @@
           size="compact"
           type="submit"
           disabled={savingEdit}
+          saveShortcut
+          aria-keyshortcuts="Meta+S Control+S"
+          title={`Save changes (${formatShortcut("S")})`}
           >{savingEdit ? "Saving..." : "Save changes"}</Button
         >
         <button

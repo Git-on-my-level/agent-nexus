@@ -6,6 +6,7 @@
 
   import { authenticatedAgent } from "$lib/authSession";
   import ActorAvatar from "$lib/components/ActorAvatar.svelte";
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Button from "$lib/components/Button.svelte";
   import SelectableId from "$lib/components/SelectableId.svelte";
@@ -1227,6 +1228,12 @@
                             class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-line bg-panel px-3 py-3 sm:left-24"
                             style="box-shadow: var(--shadow-modal)"
                             role="tooltip"
+                            use:dismissOnEscape={{
+                              enabled: true,
+                              onDismiss: () => {
+                                wakePopoverTarget = null;
+                              },
+                            }}
                           >
                             <div class="flex items-start justify-between gap-3">
                               <div class="min-w-0 flex-1">

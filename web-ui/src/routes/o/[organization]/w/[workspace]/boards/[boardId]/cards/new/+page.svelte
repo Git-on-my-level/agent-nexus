@@ -20,6 +20,7 @@
     touchRecentAssigneeIds,
   } from "$lib/recentAssignees.js";
   import { toActorPickerOptions } from "$lib/systemActor.js";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import {
     resourceDisplayLabel,
     resourceRef,
@@ -289,7 +290,10 @@
       </div>
     {/if}
 
-    <div class="space-y-5 rounded-md border border-line bg-panel p-5">
+    <div
+      class="space-y-5 rounded-md border border-line bg-panel p-5"
+      data-anx-save-scope
+    >
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
         <label class="min-w-0 flex-1 text-micro font-medium text-fg-muted">
           Card title
@@ -466,6 +470,9 @@
           type="button"
           disabled={saving}
           onclick={submit}
+          data-anx-save-shortcut
+          aria-keyshortcuts="Meta+S Control+S"
+          title={`Add card (${formatShortcut("S")})`}
         >
           {saving ? "Adding…" : "Add card"}
         </button>

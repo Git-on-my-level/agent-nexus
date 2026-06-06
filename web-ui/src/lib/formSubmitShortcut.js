@@ -10,6 +10,9 @@ export const MOD_ENTER_COMMIT_ATTR = "data-anx-mod-enter-commit";
 /** Value `blur`: Escape blurs the focused text control. Use sparingly. */
 export const ESCAPE_DISMISS_ATTR = "data-anx-escape-dismiss";
 
+/** Primary save/submit control for contextual ⌘/Ctrl+S (Layer S). */
+export const SAVE_SHORTCUT_ATTR = "data-anx-save-shortcut";
+
 /**
  * ⌘/Ctrl+Enter on a text-like control inside a `<form>` runs the form's implicit submit
  * (same as activating the default submit button), including constraint validation.
@@ -18,6 +21,31 @@ export const ESCAPE_DISMISS_ATTR = "data-anx-escape-dismiss";
  * @param {{ commandPaletteOpen?: boolean }} [options]
  * @returns {boolean} true if the event was handled (caller may want to stop further handling)
  */
+/**
+ * Contextual ⌘/Ctrl+S on an enabled `[data-anx-save-shortcut]` button clicks it.
+ * Skips when no eligible target (falls through to browser Save dialog).
+ *
+ * @param {KeyboardEvent} event
+ * @param {{ commandPaletteOpen?: boolean }} [options]
+ * @returns {boolean}
+ */
+export function handleModSave(event, options = {}) {
+  const { commandPaletteOpen = false } = options;
+  if (commandPaletteOpen) return false;
+  if (event.defaultPrevented) return false;
+  if (event.repeat) return false;
+  if (event.key !== "s" && event.key !== "S") return false;
+  if (!(event.metaKey || event.ctrlKey)) return false;
+  if (event.shiftKey) return false;
+
+  const button = findSaveShortcutButton();
+  if (!button || button.disabled) return false;
+
+  event.preventDefault();
+  button.click();
+  return true;
+}
+
 export function handleModEnterFormSubmit(event, options = {}) {
   const { commandPaletteOpen = false } = options;
   if (commandPaletteOpen) return false;
@@ -114,6 +142,55 @@ function findBlurShortcutTarget(event) {
   if (active instanceof HTMLElement && isBlurCommitTextControl(active)) {
     return active;
   }
+  return null;
+}
+
+/**
+ * True when focus is inside a modal/dialog that has no save shortcut (e.g. confirm).
+ *
+ * @returns {boolean}
+ */
+function isInsideModalWithoutSave() {
+  const active = document.activeElement;
+  if (!(active instanceof Element)) return false;
+  const modal = active.closest('[aria-modal="true"], [role="dialog"]');
+  if (!(modal instanceof HTMLElement)) return false;
+  const selector = `[${SAVE_SHORTCUT_ATTR}]:not([disabled])`;
+  return !modal.querySelector(selector);
+}
+
+/**
+ * @returns {HTMLButtonElement | null}
+ */
+function findSaveShortcutButton() {
+  const selector = `[${SAVE_SHORTCUT_ATTR}]:not([disabled])`;
+  const active = document.activeElement;
+
+  if (active instanceof Element) {
+    const nearest = active.closest(selector);
+    if (nearest instanceof HTMLButtonElement) return nearest;
+    const container = active.closest("[data-anx-save-scope]");
+    if (container) {
+      const scoped = container.querySelector(selector);
+      if (scoped instanceof HTMLButtonElement) return scoped;
+    }
+  }
+
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  for (let i = dialogs.length - 1; i >= 0; i -= 1) {
+    const dialog = dialogs[i];
+    if (!(dialog instanceof HTMLElement)) continue;
+    const inDialog = dialog.querySelector(selector);
+    if (inDialog instanceof HTMLButtonElement) return inDialog;
+  }
+
+  if (isInsideModalWithoutSave()) return null;
+
+  const all = document.querySelectorAll(selector);
+  if (all.length === 1 && all[0] instanceof HTMLButtonElement) {
+    return all[0];
+  }
+
   return null;
 }
 

@@ -2,10 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ESCAPE_DISMISS_ATTR,
+  SAVE_SHORTCUT_ATTR,
   TEXT_SHORTCUT_OPT_OUT,
   handleEscapeTextBlurCommit,
   handleModEnterBlurCommit,
   handleModEnterFormSubmit,
+  handleModSave,
 } from "../../src/lib/formSubmitShortcut.js";
 
 afterEach(() => {
@@ -31,6 +33,111 @@ function escapeEvent(target, extra = {}) {
     ...extra,
   });
 }
+
+function modSaveEvent(extra = {}) {
+  return new KeyboardEvent("keydown", {
+    key: "s",
+    metaKey: true,
+    bubbles: true,
+    cancelable: true,
+    ...extra,
+  });
+}
+
+describe("handleModSave", () => {
+  it("clicks the save button scoped to focused control", () => {
+    document.body.innerHTML = `
+      <div data-anx-save-scope>
+        <textarea id="editor"></textarea>
+        <button id="save" ${SAVE_SHORTCUT_ATTR} type="button">Save</button>
+      </div>
+    `;
+    const ta = /** @type {HTMLTextAreaElement} */ (
+      document.getElementById("editor")
+    );
+    const save = /** @type {HTMLButtonElement} */ (
+      document.getElementById("save")
+    );
+    const clickSpy = vi.spyOn(save, "click");
+    ta.focus();
+
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, {})).toBe(true);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it("returns false when save button is disabled", () => {
+    document.body.innerHTML = `
+      <div data-anx-save-scope>
+        <textarea id="editor"></textarea>
+        <button id="save" ${SAVE_SHORTCUT_ATTR} type="button" disabled>Save</button>
+      </div>
+    `;
+    const ta = document.getElementById("editor");
+    ta.focus();
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, {})).toBe(false);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
+  it("returns false when commandPaletteOpen", () => {
+    document.body.innerHTML = `
+      <button id="save" ${SAVE_SHORTCUT_ATTR} type="button">Save</button>
+    `;
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, { commandPaletteOpen: true })).toBe(false);
+  });
+
+  it("prefers save button inside an open dialog", () => {
+    document.body.innerHTML = `
+      <button id="page-save" ${SAVE_SHORTCUT_ATTR} type="button">Page</button>
+      <div role="dialog">
+        <button id="dialog-save" ${SAVE_SHORTCUT_ATTR} type="button">Dialog</button>
+      </div>
+    `;
+    const dialogSave = /** @type {HTMLButtonElement} */ (
+      document.getElementById("dialog-save")
+    );
+    const clickSpy = vi.spyOn(dialogSave, "click");
+
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, {})).toBe(true);
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it("clicks the only enabled save button on the page", () => {
+    document.body.innerHTML = `
+      <button id="save" ${SAVE_SHORTCUT_ATTR} type="button">Save</button>
+    `;
+    const save = /** @type {HTMLButtonElement} */ (
+      document.getElementById("save")
+    );
+    const clickSpy = vi.spyOn(save, "click");
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, {})).toBe(true);
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it("does not use singleton fallback when focus is in a modal without save", () => {
+    document.body.innerHTML = `
+      <button id="page-save" ${SAVE_SHORTCUT_ATTR} type="button">Save</button>
+      <div role="dialog" aria-modal="true">
+        <button id="cancel" type="button">Cancel</button>
+      </div>
+    `;
+    const pageSave = /** @type {HTMLButtonElement} */ (
+      document.getElementById("page-save")
+    );
+    const cancel = document.getElementById("cancel");
+    const clickSpy = vi.spyOn(pageSave, "click");
+    cancel.focus();
+
+    const ev = modSaveEvent();
+    expect(handleModSave(ev, {})).toBe(false);
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+});
 
 describe("handleModEnterFormSubmit", () => {
   it("calls requestSubmit and prevents default when input is in form", () => {

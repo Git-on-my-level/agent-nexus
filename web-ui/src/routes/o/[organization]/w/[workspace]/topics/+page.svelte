@@ -4,6 +4,7 @@
 
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import {
     buildThreadFilterQueryParamsFromThreadListState,
     buildTopicListApiQueryParams,
@@ -523,6 +524,7 @@
 {#if listSurface === "topics" && createOpen}
   <form
     class="mb-4 rounded-md border border-line bg-bg-soft p-4"
+    data-anx-save-scope
     onsubmit={(event) => {
       event.preventDefault();
       createTopic();
@@ -561,6 +563,9 @@
         class="cursor-pointer rounded-md bg-accent-solid px-4 py-2 text-micro font-medium text-white hover:bg-accent disabled:opacity-50"
         disabled={creatingTopic}
         type="submit"
+        data-anx-save-shortcut
+        aria-keyshortcuts="Meta+S Control+S"
+        title={`Create topic (${formatShortcut("S")})`}
       >
         {creatingTopic ? "Creating…" : "Create topic"}
       </button>

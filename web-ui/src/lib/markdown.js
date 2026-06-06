@@ -6,6 +6,97 @@ const marked = new Marked({
   breaks: false,
 });
 
+/**
+ * Build a slug generator that mirrors GitHub-style heading anchors and
+ * de-duplicates repeats within a single document (e.g. two "Notes" headings
+ * become `notes` and `notes-1`). A fresh slugger must be used per parse so the
+ * suffix counters stay aligned between the rendered HTML and any derived
+ * table-of-contents.
+ */
+function createHeadingSlugger() {
+  const seen = new Map();
+  return (raw) => {
+    const base =
+      String(raw ?? "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "") || "section";
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count}`;
+  };
+}
+
+/** Strip common inline markdown so outline labels read as plain prose. */
+function headingDisplayText(raw) {
+  return String(raw ?? "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .trim();
+}
+
+// Active slugger for the in-progress `marked.parse` call. `marked.parse` is
+// synchronous, so we set this immediately before parsing and clear it after.
+let activeHeadingSlugger = null;
+
+marked.use({
+  renderer: {
+    /** @param {{ depth?: number, tokens?: unknown[], text?: string }} token */
+    heading(token) {
+      const depth =
+        typeof token?.depth === "number" && token.depth >= 1 && token.depth <= 6
+          ? token.depth
+          : 1;
+      const inlineHtml = token?.tokens
+        ? this.parser.parseInline(token.tokens)
+        : String(token?.text ?? "");
+      const slugger = activeHeadingSlugger ?? createHeadingSlugger();
+      const id = slugger(token?.text ?? "");
+      return `<h${depth} id="${id}">${inlineHtml}</h${depth}>\n`;
+    },
+  },
+});
+
+/**
+ * Extract an ordered outline (H1-H3) from markdown source for a document
+ * table-of-contents. Ids match the anchors emitted by `renderMarkdown` so
+ * clicking an entry can scroll to the heading.
+ *
+ * @param {string} source
+ * @returns {Array<{ level: number, text: string, id: string }>}
+ */
+export function extractDocumentOutline(source) {
+  if (!source || typeof source !== "string") return [];
+  let tokens;
+  try {
+    tokens = marked.lexer(source);
+  } catch {
+    return [];
+  }
+  const slugger = createHeadingSlugger();
+  const outline = [];
+  for (const token of tokens) {
+    if (token?.type !== "heading") continue;
+    const depth = Number(token.depth);
+    // Slug every heading (1-6) so dedupe counters stay aligned with the
+    // renderer, but only surface H1-H3 in the outline.
+    const id = slugger(token.text ?? "");
+    if (depth < 1 || depth > 3) continue;
+    const text = headingDisplayText(token.text ?? "");
+    if (!text) continue;
+    outline.push({ level: depth, text, id });
+  }
+  return outline;
+}
+
 const ALLOWED_TAGS = [
   "h1",
   "h2",
@@ -110,6 +201,13 @@ function sanitizeHtml(html) {
 
 export function renderMarkdown(source, { inline = false } = {}) {
   if (!source || typeof source !== "string") return "";
-  const raw = inline ? marked.parseInline(source) : marked.parse(source);
+  if (inline) return sanitizeHtml(marked.parseInline(source));
+  activeHeadingSlugger = createHeadingSlugger();
+  let raw;
+  try {
+    raw = marked.parse(source);
+  } finally {
+    activeHeadingSlugger = null;
+  }
   return sanitizeHtml(raw);
 }

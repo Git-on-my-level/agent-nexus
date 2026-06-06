@@ -9,6 +9,8 @@
     onclick = undefined,
     title = undefined,
     "aria-label": ariaLabel = undefined,
+    "aria-keyshortcuts": ariaKeyshortcuts = undefined,
+    saveShortcut = false,
     class: className = "",
     children,
     leading,
@@ -57,8 +59,10 @@
     {title}
     class={classes}
     aria-label={ariaLabel}
+    aria-keyshortcuts={ariaKeyshortcuts}
     aria-busy={busy || undefined}
     role="button"
+    data-anx-save-shortcut={saveShortcut || undefined}
     {onclick}
   >
     {#if busy}
@@ -96,7 +100,9 @@
     disabled={effectiveDisabled}
     class={classes}
     aria-label={ariaLabel}
+    aria-keyshortcuts={ariaKeyshortcuts}
     aria-busy={busy || undefined}
+    data-anx-save-shortcut={saveShortcut || undefined}
     {onclick}
   >
     {#if busy}
