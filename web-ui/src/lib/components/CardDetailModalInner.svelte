@@ -83,6 +83,8 @@
     presentation = "modal",
     /** When set (overview|resolution|timeline|revisions), syncs active tab from URL. */
     requestedDetailTab = "",
+    /** Canonical shareable URL for this card (overrides page URL in Share). */
+    shareUrl = "",
     onDetailTabChange = undefined,
   } = $props();
 
@@ -1126,6 +1128,7 @@
               resourceId={cardShareRef}
               resourceLabel="card ref"
               rawRecord={cardItem}
+              {shareUrl}
             />
           {/if}
           <div class="relative" bind:this={cardActionsMenuEl}>

@@ -1,5 +1,6 @@
 <script>
   import Button from "$lib/components/Button.svelte";
+  import { copyText } from "$lib/clipboard.js";
 
   let {
     value = "",
@@ -14,13 +15,10 @@
   let timer;
 
   async function onCopy() {
-    try {
-      await navigator.clipboard.writeText(String(value ?? ""));
+    if (await copyText(value)) {
       copied = true;
       clearTimeout(timer);
       timer = setTimeout(() => (copied = false), 1400);
-    } catch {
-      // clipboard unavailable; swallow
     }
   }
 

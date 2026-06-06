@@ -31,6 +31,7 @@
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
+  import { absoluteUrl } from "$lib/absoluteUrl.js";
   import {
     enrichInboxItem,
     formatInboxItemBoardPanelResourceLine,
@@ -166,6 +167,27 @@
       navigateBoardCardParam({ tab: t });
     }
   }
+
+  /**
+   * Canonical, absolute shareable URL for a card: the dedicated card route
+   * (works on every viewport), not the desktop-only `?card=` deep-link.
+   * @param {object} cardItem
+   */
+  function cardShareLink(cardItem) {
+    const id =
+      resourceRouteSegment(cardItem?.membership, "card") ||
+      boardCardStableId(cardItem?.membership);
+    if (!id) return "";
+    return absoluteUrl(
+      workspaceHref(
+        `/boards/${encodeURIComponent(boardRouteSegment)}/cards/${encodeURIComponent(id)}`,
+      ),
+    );
+  }
+
+  let detailModalShareUrl = $derived(
+    detailModalCard ? cardShareLink(detailModalCard) : "",
+  );
 
   function openCardDetailModal(cardItem) {
     const id =
@@ -1353,6 +1375,7 @@
           createCardHref={workspaceHref(
             `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,
           )}
+          {cardShareLink}
           onopencard={openCardDetailModal}
           oncarddrop={handleCardDrop}
           oninlinecreate={handleInlineCreate}
@@ -1410,6 +1433,7 @@
   columnPeerStableIds={cardDetailColumnPeerIds}
   {actorName}
   requestedDetailTab={boardCardDetailTab}
+  shareUrl={detailModalShareUrl}
   onDetailTabChange={handleBoardCardDetailTabChange}
   onclose={closeCardDetailModal}
   onmovecard={moveCard}

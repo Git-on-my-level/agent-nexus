@@ -15,15 +15,16 @@
   import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import { boardListColumnMetricItems } from "$lib/workspaceRowMetrics.js";
   import CopyButton from "$lib/components/CopyButton.svelte";
-  import RowActionBar from "$lib/components/RowActionBar.svelte";
+  import WorkspaceListRowShell from "$lib/components/WorkspaceListRowShell.svelte";
+  import { copyText } from "$lib/clipboard.js";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
+  import { absoluteUrl } from "$lib/absoluteUrl.js";
   import {
-    resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
@@ -475,66 +476,68 @@
         )}
         {@const totalCards = Number(item.listStats?.card_count ?? 0)}
         {@const boardsMetricFooter = `${totalCards} card${totalCards === 1 ? "" : "s"}`}
-        <div
-          class="flex items-stretch {showBorderTop
-            ? 'border-t border-line'
-            : ''}"
+        {@const boardLink = absoluteUrl(
+          workspaceHref(
+            `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
+          ),
+        )}
+        <WorkspaceListRowShell
+          class={showBorderTop ? "border-t border-line" : ""}
+          contextMenuItems={[
+            {
+              key: "copy-link",
+              label: "Copy link",
+              onSelect: () => void copyText(boardLink),
+            },
+          ]}
         >
-          <div
-            class="group/row relative min-w-0 flex-1 px-3 py-2.5 pr-12 text-left transition-colors hover:bg-panel-hover sm:px-4"
-          >
+          {#snippet row()}
             <a
               aria-label={`Open board ${resourceDisplayLabel(board)}`}
-              class="absolute inset-0 z-0"
+              class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-panel-hover sm:px-4"
               href={workspaceHref(
                 `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
               )}
-            ></a>
-            <div
-              class="pointer-events-none relative z-10 flex min-w-0 items-start justify-between gap-3"
             >
               <div class="min-w-0 flex-1">
-                <div class="flex min-w-0 items-start justify-between gap-3">
-                  <WorkspaceResourceListRow
-                    title={resourceDisplayLabel(board)}
-                    description={board.summary ?? ""}
-                    titleClass="group-hover/row:text-accent-text transition-colors"
-                  >
-                    {#snippet badges()}
-                      <LifecycleBadge
-                        state={board.state}
-                        label={BOARD_STATUS_LABELS[board.state]}
-                        forceShow={boardsHaveMixedLifecycle}
-                      />
-                      {#if isBoardArchived(board) && board.state !== "archived"}
-                        <LifecycleBadge state="archived" forceShow />
-                      {/if}
-                    {/snippet}
-                  </WorkspaceResourceListRow>
-                  <div
-                    class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-                  >
-                    <span class="w-14 text-right text-fg-muted"
-                      >{formatTimestamp(board.updated_at) || "—"}</span
-                    >
-                  </div>
-                </div>
+                <WorkspaceResourceListRow
+                  title={resourceDisplayLabel(board)}
+                  description={board.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={board.state}
+                      label={BOARD_STATUS_LABELS[board.state]}
+                      forceShow={boardsHaveMixedLifecycle}
+                    />
+                    {#if isBoardArchived(board) && board.state !== "archived"}
+                      <LifecycleBadge state="archived" forceShow />
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
                 <InlineWorkspaceMetricStrip
                   items={columnMetrics}
                   footer={boardsMetricFooter}
                 />
               </div>
-            </div>
-            <RowActionBar groupName="row" class="top-2 z-20">
-              <CopyButton
-                value={resourceCopyValue("board", board)}
-                iconOnly
-                label="Copy board ref"
-                size="sm"
-              />
-            </RowActionBar>
-          </div>
-        </div>
+            </a>
+          {/snippet}
+          {#snippet meta()}
+            <span class="w-14 text-right text-fg-muted"
+              >{formatTimestamp(board.updated_at) || "—"}</span
+            >
+          {/snippet}
+          {#snippet actions()}
+            <CopyButton
+              value={boardLink}
+              iconOnly
+              icon="link"
+              label="Copy board link"
+              size="sm"
+            />
+          {/snippet}
+        </WorkspaceListRowShell>
       {/if}
     {/snippet}
     {#if boardSel.selectMode}

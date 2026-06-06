@@ -12,6 +12,7 @@
     columnPeerStableIds = [],
     actorName = (id) => id,
     requestedDetailTab = "",
+    shareUrl = "",
     onDetailTabChange = undefined,
     onclose = () => {},
     onmovecard = async () => {},
@@ -32,6 +33,7 @@
     {columnPeerStableIds}
     {actorName}
     {requestedDetailTab}
+    {shareUrl}
     {onDetailTabChange}
     {onclose}
     {onmovecard}

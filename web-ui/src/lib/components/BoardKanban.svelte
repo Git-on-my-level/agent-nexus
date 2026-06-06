@@ -27,6 +27,8 @@
     oncarddrop = async () => {},
     oninlinecreate = async () => {},
     createCardHref = "",
+    /** @type {(cardItem: object) => string} Absolute shareable URL for a card. */
+    cardShareLink = () => "",
   } = $props();
 
   const DRAG_THRESHOLD_PX = 6;
@@ -428,6 +430,7 @@
                       <BoardCard
                         {cardItem}
                         {boardId}
+                        cardHref={cardShareLink(cardItem)}
                         dragging={isDragging}
                         dropBefore={showDropBefore}
                         dropAfter={showDropAfter}

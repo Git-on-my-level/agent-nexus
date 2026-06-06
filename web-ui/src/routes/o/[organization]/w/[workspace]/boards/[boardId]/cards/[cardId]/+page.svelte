@@ -1,4 +1,5 @@
 <script>
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import {
@@ -24,6 +25,11 @@
   let workspace = $state(null);
   let loading = $state(false);
   let error = $state("");
+  // On desktop the standalone card page is redundant with (and worse than) the
+  // board's card modal, so we redirect to the board's `?card=` deep-link. The
+  // dedicated route stays the canonical shareable link and the real experience
+  // on mobile, where there is no modal.
+  let redirectingToBoardModal = $state(false);
   let mutationNotice = $state("");
   let mutationError = $state("");
   let conflictWarning = $state("");
@@ -267,7 +273,26 @@
     await closeCardPage();
   }
 
+  function isDesktopViewport() {
+    return Boolean(
+      browser && window.matchMedia?.("(min-width: 1024px)")?.matches,
+    );
+  }
+
   $effect(() => {
+    if (!browser || !boardId || !cardId) return;
+    if (!isDesktopViewport()) return;
+    redirectingToBoardModal = true;
+    const params = new URLSearchParams();
+    params.set("card", cardId);
+    const tab = String($page.url.searchParams.get("tab") ?? "").trim();
+    if (tab) params.set("tab", tab);
+    const base = workspaceHref(`/boards/${encodeURIComponent(boardId)}`);
+    void goto(`${base}?${params.toString()}`, { replaceState: true });
+  });
+
+  $effect(() => {
+    if (redirectingToBoardModal || isDesktopViewport()) return;
     if (workspaceSlug && boardId && cardId) {
       const routeKey = serializeCardRouteKey(cardRouteKey(boardId, cardId));
       if (routeKey !== loadedCardRouteKey) {
@@ -277,7 +302,28 @@
   });
 </script>
 
-{#if loading}
+{#if redirectingToBoardModal}
+  <div
+    class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
+  >
+    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+      <circle
+        class="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        stroke-width="4"
+      ></circle>
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      ></path>
+    </svg>
+    Opening card...
+  </div>
+{:else if loading}
   <div
     class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >

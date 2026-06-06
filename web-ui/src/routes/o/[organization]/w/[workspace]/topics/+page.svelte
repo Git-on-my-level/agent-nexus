@@ -22,6 +22,7 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import WorkspaceListRowShell from "$lib/components/WorkspaceListRowShell.svelte";
+  import { copyText } from "$lib/clipboard.js";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
@@ -31,8 +32,8 @@
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { topicListLinkedMetricItems } from "$lib/workspaceRowMetrics.js";
+  import { absoluteUrl } from "$lib/absoluteUrl.js";
   import {
-    resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
@@ -651,52 +652,61 @@
           </div>
         </div>
       {:else}
+        {@const topicLink = absoluteUrl(
+          workspaceHref(
+            `/topics/${encodeURIComponent(resourceRouteSegment(topic, "topic"))}`,
+          ),
+        )}
         <WorkspaceListRowShell
           class={showBorderTop ? "border-t border-line" : ""}
+          contextMenuItems={[
+            {
+              key: "copy-link",
+              label: "Copy link",
+              onSelect: () => void copyText(topicLink),
+            },
+          ]}
         >
           {#snippet row()}
             <a
-              class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 pr-12 transition-colors hover:bg-panel-hover"
+              class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-panel-hover"
               href={workspaceHref(
                 `/topics/${encodeURIComponent(resourceRouteSegment(topic, "topic"))}`,
               )}
             >
               <div class="min-w-0 flex-1">
-                <div class="flex min-w-0 items-start justify-between gap-3">
-                  <WorkspaceResourceListRow
-                    title={topic.title}
-                    description={topic.current_summary ?? topic.summary ?? ""}
-                    titleClass="group-hover/row:text-accent-text transition-colors"
-                  >
-                    {#snippet badges()}
-                      <LifecycleBadge
-                        state={topic.state}
-                        forceShow={topicsHaveMixedLifecycle}
-                      />
-                      {#if isTopicArchived(topic) && topic.state !== "archived"}
-                        <LifecycleBadge state="archived" forceShow />
-                      {/if}
-                    {/snippet}
-                  </WorkspaceResourceListRow>
-                  <div
-                    class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-                  >
-                    <span class="w-14 text-right text-fg-muted"
-                      >{formatTimestamp(topic.updated_at) || "—"}</span
-                    >
-                  </div>
-                </div>
+                <WorkspaceResourceListRow
+                  title={topic.title}
+                  description={topic.current_summary ?? topic.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={topic.state}
+                      forceShow={topicsHaveMixedLifecycle}
+                    />
+                    {#if isTopicArchived(topic) && topic.state !== "archived"}
+                      <LifecycleBadge state="archived" forceShow />
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
                 <InlineWorkspaceMetricStrip
                   items={topicListLinkedMetricItems(topic)}
                 />
               </div>
             </a>
           {/snippet}
+          {#snippet meta()}
+            <span class="w-14 text-right text-fg-muted"
+              >{formatTimestamp(topic.updated_at) || "—"}</span
+            >
+          {/snippet}
           {#snippet actions()}
             <CopyButton
-              value={resourceCopyValue("topic", topic)}
+              value={topicLink}
               iconOnly
-              label="Copy topic ref"
+              icon="link"
+              label="Copy topic link"
               size="sm"
             />
           {/snippet}

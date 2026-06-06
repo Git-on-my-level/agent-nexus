@@ -5,7 +5,9 @@
     principalRegistry,
   } from "$lib/actorSession";
   import ActorAvatar from "$lib/components/ActorAvatar.svelte";
+  import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import { copyText } from "$lib/clipboard.js";
   import {
     boardCardHeaderTitle,
     boardCardStableId,
@@ -22,6 +24,7 @@
    * @typedef {object} BoardCardProps
    * @property {object} cardItem
    * @property {string} [boardId]
+   * @property {string} [cardHref]
    * @property {() => void} [onclick]
    * @property {(e: PointerEvent) => void} [ondragstart]
    * @property {(e: KeyboardEvent) => void} [onboardkeydown]
@@ -35,6 +38,7 @@
   let {
     cardItem,
     boardId = "",
+    cardHref = "",
     onclick = () => {},
     ondragstart = undefined,
     onboardkeydown = undefined,
@@ -67,6 +71,18 @@
   );
 
   const dueOverdue = $derived(cardDueAt ? isOverdue(cardDueAt) : false);
+
+  const contextMenuItems = $derived(
+    cardHref
+      ? [
+          {
+            key: "copy-link",
+            label: "Copy link",
+            onSelect: () => void copyText(cardHref),
+          },
+        ]
+      : [],
+  );
 
   const assigneeNames = $derived.by(() => {
     const actors = $actorRegistry;
@@ -164,108 +180,110 @@
       aria-hidden="true"
     ></div>
   {/if}
-  <div
-    class="group overflow-hidden rounded-md border border-line bg-panel transition-all hover:border-line-strong hover:shadow-sm {dragging
-      ? 'opacity-40'
-      : ''}"
-  >
+  <ContextMenuHost items={contextMenuItems} disabled={!cardHref}>
     <div
-      aria-label={`Manage ${headerTitle}`}
-      class="flex cursor-pointer select-none"
-      {onclick}
-      onkeydown={handleCardKeydown}
-      onpointerdown={handleCardPointerDown}
-      role="button"
-      tabindex="0"
+      class="group overflow-hidden rounded-md border border-line bg-panel transition-all hover:border-line-strong hover:shadow-sm {dragging
+        ? 'opacity-40'
+        : ''}"
     >
       <div
-        class="min-w-0 flex-1 px-2.5 py-2 transition-colors hover:bg-line-subtle/50"
+        aria-label={`Manage ${headerTitle}`}
+        class="flex cursor-pointer select-none"
+        {onclick}
+        onkeydown={handleCardKeydown}
+        onpointerdown={handleCardPointerDown}
+        role="button"
+        tabindex="0"
       >
-        <div class="flex items-start gap-2">
-          <div class="min-w-0 flex-1">
-            <span
-              class="block truncate text-meta font-medium leading-snug {titleColorClass}"
-            >
-              {headerTitle}
-            </span>
+        <div
+          class="min-w-0 flex-1 px-2.5 py-2 transition-colors hover:bg-line-subtle/50"
+        >
+          <div class="flex items-start gap-2">
+            <div class="min-w-0 flex-1">
+              <span
+                class="block truncate text-meta font-medium leading-snug {titleColorClass}"
+              >
+                {headerTitle}
+              </span>
 
-            {#if showSummary}
-              <p class="mt-0.5 line-clamp-2 text-micro text-fg-muted">
-                {summaryText}
-              </p>
-            {/if}
-
-            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {#if showResolutionChip}
-                <span
-                  class="rounded px-1 py-0.5 text-micro font-medium {cardResolutionTone(
-                    cardResolution,
-                  )}"
-                >
-                  {cardResolutionLabel(cardResolution)}
-                </span>
+              {#if showSummary}
+                <p class="mt-0.5 line-clamp-2 text-micro text-fg-muted">
+                  {summaryText}
+                </p>
               {/if}
 
-              {#if cardDueAt}
-                <span
-                  class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro {dueOverdue
-                    ? 'bg-danger-soft text-danger-text'
-                    : 'bg-line text-fg-muted'}"
-                  title={`Due ${formatTimestamp(cardDueAt)}`}
-                >
-                  <Icon name="calendar" class="h-3 w-3" />
-                  {formatTimestamp(cardDueAt) || "—"}
-                </span>
-              {/if}
-
-              {#if timelineMessageCount > 0}
-                <span
-                  class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
-                  title={`${timelineMessageCount} comment${timelineMessageCount === 1 ? "" : "s"}`}
-                >
-                  <Icon name="comment" class="h-3 w-3" />
-                  <span class="tabular-nums font-medium"
-                    >{timelineMessageCount > 99
-                      ? "99+"
-                      : timelineMessageCount}</span
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {#if showResolutionChip}
+                  <span
+                    class="rounded px-1 py-0.5 text-micro font-medium {cardResolutionTone(
+                      cardResolution,
+                    )}"
                   >
-                </span>
-              {/if}
+                    {cardResolutionLabel(cardResolution)}
+                  </span>
+                {/if}
 
-              {#if cardUpdatedRelative}
-                <span
-                  class="text-micro text-fg-subtle tabular-nums"
-                  title="Last updated"
-                >
-                  {cardUpdatedRelative}
-                </span>
-              {/if}
+                {#if cardDueAt}
+                  <span
+                    class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro {dueOverdue
+                      ? 'bg-danger-soft text-danger-text'
+                      : 'bg-line text-fg-muted'}"
+                    title={`Due ${formatTimestamp(cardDueAt)}`}
+                  >
+                    <Icon name="calendar" class="h-3 w-3" />
+                    {formatTimestamp(cardDueAt) || "—"}
+                  </span>
+                {/if}
+
+                {#if timelineMessageCount > 0}
+                  <span
+                    class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
+                    title={`${timelineMessageCount} comment${timelineMessageCount === 1 ? "" : "s"}`}
+                  >
+                    <Icon name="comment" class="h-3 w-3" />
+                    <span class="tabular-nums font-medium"
+                      >{timelineMessageCount > 99
+                        ? "99+"
+                        : timelineMessageCount}</span
+                    >
+                  </span>
+                {/if}
+
+                {#if cardUpdatedRelative}
+                  <span
+                    class="text-micro text-fg-subtle tabular-nums"
+                    title="Last updated"
+                  >
+                    {cardUpdatedRelative}
+                  </span>
+                {/if}
+              </div>
             </div>
+
+            {#if assigneeNames.length > 0}
+              <div class="flex shrink-0 -space-x-1.5 pt-0.5">
+                {#each assigneeNames.slice(0, 3) as assignee (assignee.id)}
+                  <ActorAvatar
+                    label={assignee.name}
+                    seed={assignee.id}
+                    size="xs"
+                    class="ring-1 ring-panel"
+                  />
+                {/each}
+                {#if assigneeNames.length > 3}
+                  <span
+                    class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-line text-[10px] font-medium text-fg-muted ring-1 ring-panel"
+                  >
+                    +{assigneeNames.length - 3}
+                  </span>
+                {/if}
+              </div>
+            {/if}
           </div>
-
-          {#if assigneeNames.length > 0}
-            <div class="flex shrink-0 -space-x-1.5 pt-0.5">
-              {#each assigneeNames.slice(0, 3) as assignee (assignee.id)}
-                <ActorAvatar
-                  label={assignee.name}
-                  seed={assignee.id}
-                  size="xs"
-                  class="ring-1 ring-panel"
-                />
-              {/each}
-              {#if assigneeNames.length > 3}
-                <span
-                  class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-line text-[10px] font-medium text-fg-muted ring-1 ring-panel"
-                >
-                  +{assigneeNames.length - 3}
-                </span>
-              {/if}
-            </div>
-          {/if}
         </div>
       </div>
     </div>
-  </div>
+  </ContextMenuHost>
   {@render footer?.()}
 </div>
 
