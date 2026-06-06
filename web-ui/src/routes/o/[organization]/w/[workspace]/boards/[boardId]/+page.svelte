@@ -3,9 +3,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import BoardFeedStrip from "$lib/components/BoardFeedStrip.svelte";
-  import BoardCard from "$lib/components/BoardCard.svelte";
+  import BoardKanban from "$lib/components/BoardKanban.svelte";
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
+  import MarkDoneModal from "$lib/components/MarkDoneModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
@@ -14,12 +15,18 @@
   import TrashButton from "$lib/components/TrashButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import {
     actorRegistry,
+    getSelectedActorId,
     lookupActorDisplayName,
     principalRegistry,
   } from "$lib/actorSession";
+  import {
+    applyOptimisticCardMove,
+    buildCardResolvedAttestationEvent,
+    cardHasTerminalEvidence,
+  } from "$lib/boardCardMove.js";
+  import { getAuthenticatedActorId } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
@@ -37,11 +44,10 @@
   import {
     BOARD_STATUS_LABELS,
     BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT,
+    boardCardHeaderTitle,
     boardCardStableId,
-    boardColumnTitle,
     freshnessStatusLabel,
     freshnessStatusTone,
-    groupBoardWorkspaceCards,
     sortedColumnPeersStableIds,
   } from "$lib/boardUtils";
   import { readEnumSearchParam, withUpdatedSearchParams } from "$lib/urlState";
@@ -57,18 +63,39 @@
 
   let workspace = $state(null);
   let loading = $state(false);
+  let mutating = $state(false);
   let error = $state("");
-  let mutationNotice = $state("");
   let mutationError = $state("");
   let conflictWarning = $state("");
 
-  let backlogOpen = $state(false);
-  let doneOpen = $state(false);
+  let markDoneModal = $state({
+    open: false,
+    cardItem: /** @type {object | null} */ (null),
+    movePayload: /** @type {Record<string, unknown> | null} */ (null),
+    busy: false,
+  });
   let confirmModal = $state({ open: false, action: "" });
   let boardLifecycleBusy = $state(false);
   let boardMoreOpen = $state(false);
   let boardMoreRoot = $state(/** @type {HTMLDivElement | null} */ (null));
   let detailModalCard = $state(null);
+
+  let filtersOpen = $state(false);
+  let filterRoot = $state(/** @type {HTMLDivElement | null} */ (null));
+  const emptyFilters = () => ({
+    q: "",
+    mineOnly: false,
+    dueFilter: "",
+    risk: /** @type {string[]} */ ([]),
+  });
+  let filterDraft = $state(emptyFilters());
+  let filterApplied = $state(emptyFilters());
+  let hasActiveFilters = $derived(
+    Boolean(filterApplied.q.trim()) ||
+      filterApplied.mineOnly ||
+      Boolean(filterApplied.dueFilter) ||
+      filterApplied.risk.length > 0,
+  );
 
   let previousBoardId = $state("");
   let previousCardUrlParam = $state("");
@@ -100,6 +127,9 @@
   );
   let boardRouteSegment = $derived(
     resourceRouteSegment(workspace?.board, "board") || boardId,
+  );
+  let currentActorId = $derived(
+    getAuthenticatedActorId() || getSelectedActorId(workspaceSlug) || "",
   );
 
   /** Keeps `$page.url` aligned with shallow card query-param changes (`replaceState` alone can leave `$page` stale). */
@@ -165,23 +195,26 @@
     );
   }
 
-  async function loadWorkspace(targetBoardId = boardId) {
+  async function loadWorkspace(targetBoardId = boardId, options = {}) {
     if (!targetBoardId) return;
+    const silent = Boolean(options.silent);
     const requestId = ++boardLoadRequestId;
     const routeKey = boardRouteKey(targetBoardId);
     const serializedRouteKey = serializeBoardRouteKey(routeKey);
     const routeChanged =
       loadedBoardRouteKey && loadedBoardRouteKey !== serializedRouteKey;
-    loading = true;
-    error = "";
+    if (!silent) {
+      loading = true;
+      error = "";
+    }
     loadedBoardRouteKey = serializedRouteKey;
     if (
-      routeChanged ||
-      String(workspace?.board?.id ?? "") !== String(targetBoardId)
+      !silent &&
+      (routeChanged ||
+        String(workspace?.board?.id ?? "") !== String(targetBoardId))
     ) {
       workspace = null;
       detailModalCard = null;
-      mutationNotice = "";
       mutationError = "";
       conflictWarning = "";
     }
@@ -191,17 +224,18 @@
       workspace = loadedWorkspace;
     } catch (e) {
       if (!isCurrentBoardLoad(requestId, routeKey)) return;
-      error = `Failed to load board: ${e instanceof Error ? e.message : String(e)}`;
-      workspace = null;
+      if (!silent) {
+        error = `Failed to load board: ${e instanceof Error ? e.message : String(e)}`;
+        workspace = null;
+      }
     } finally {
-      if (isCurrentBoardLoad(requestId, routeKey)) {
+      if (isCurrentBoardLoad(requestId, routeKey) && !silent) {
         loading = false;
       }
     }
   }
 
   function clearMutationMessages() {
-    mutationNotice = "";
     mutationError = "";
     conflictWarning = "";
   }
@@ -215,33 +249,41 @@
   async function handleBoardConflict() {
     conflictWarning =
       "Board was updated elsewhere. Reloaded latest board state. Reapply your change.";
-    mutationNotice = "";
     mutationError = "";
     await loadWorkspace(boardId);
   }
 
-  async function runBoardMutation(action, successMessage) {
+  async function runBoardMutation(action, successMessage, options = {}) {
     clearMutationMessages();
+    const optimisticApply = options.optimisticApply;
+    const snapshot = optimisticApply
+      ? structuredClone($state.snapshot(workspace))
+      : null;
 
+    if (optimisticApply) {
+      workspace = optimisticApply(workspace);
+    }
+
+    mutating = true;
     try {
       await action();
-      await loadWorkspace(boardId);
-
-      mutationNotice = successMessage;
+      await loadWorkspace(boardId, { silent: true });
     } catch (e) {
+      if (snapshot) {
+        workspace = snapshot;
+      }
       if (e?.status === 409) {
         await handleBoardConflict();
         return;
       }
-
       mutationError = formatMutationError("Board write failed", e);
+    } finally {
+      mutating = false;
     }
   }
 
-  async function moveCard(cardItem, payload, successMessage) {
-    if (!workspace?.board) return;
-
-    const cardId = boardCardStableId(cardItem.membership);
+  function buildMovePayload(cardItem, payload) {
+    if (!workspace?.board) return null;
     const nextPayload = {
       if_board_updated_at: workspace.board.updated_at,
       ...payload,
@@ -252,29 +294,137 @@
       const membRefs = [...(memb.resolution_refs ?? [])]
         .map((r) => String(r ?? "").trim())
         .filter(Boolean);
-
       const incomingRefs = Array.isArray(nextPayload.resolution_refs)
         ? [...nextPayload.resolution_refs]
             .map((r) => String(r ?? "").trim())
             .filter(Boolean)
         : [];
       const mergedRefs = incomingRefs.length > 0 ? incomingRefs : [...membRefs];
-
       if (mergedRefs.length === 0) {
-        clearMutationMessages();
-        mutationError =
-          "Cannot move card to Done: add at least one artifact or event resolution ref first.";
-        return;
+        return null;
       }
       delete nextPayload.resolution;
       if (incomingRefs.length === 0 && mergedRefs.length > 0) {
         nextPayload.resolution_refs = mergedRefs;
       }
     }
+    return nextPayload;
+  }
+
+  async function resolveCardWithAttestation(cardItem, movePayload, note = "") {
+    const eventBody = buildCardResolvedAttestationEvent({
+      cardItem,
+      board: workspace?.board,
+      boardId,
+      note,
+    });
+    const result = await coreClient.createEvent({ event: eventBody });
+    const eventId = String(result?.event?.id ?? "").trim();
+    if (!eventId) {
+      throw new Error("Attestation event was created without an id.");
+    }
+    const resolutionRefs = [
+      `event:${eventId}`,
+      ...(cardItem?.membership?.resolution_refs ?? [])
+        .map((r) => String(r ?? "").trim())
+        .filter(Boolean),
+    ];
+    return {
+      ...movePayload,
+      resolution_refs: [...new Set(resolutionRefs)],
+    };
+  }
+
+  async function executeCardMove(cardItem, payload, successMessage) {
+    if (!workspace?.board) return;
+    const cardId = boardCardStableId(cardItem.membership);
+    const nextPayload = buildMovePayload(cardItem, payload);
+    if (!nextPayload) return false;
+
     await runBoardMutation(
       () => coreClient.moveBoardCard(boardId, cardId, nextPayload),
       successMessage,
+      {
+        optimisticApply: (ws) =>
+          applyOptimisticCardMove(ws, cardId, {
+            column_key: String(payload.column_key ?? ""),
+            before_card_id: String(payload.before_card_id ?? ""),
+          }),
+      },
     );
+    return true;
+  }
+
+  async function moveCard(cardItem, payload, successMessage) {
+    const columnKey = String(payload?.column_key ?? "").trim();
+    if (
+      columnKey === "done" &&
+      !cardHasTerminalEvidence(cardItem?.membership, payload?.resolution_refs)
+    ) {
+      markDoneModal = {
+        open: true,
+        cardItem,
+        movePayload: { ...payload },
+        busy: false,
+      };
+      return;
+    }
+    await executeCardMove(cardItem, payload, successMessage);
+  }
+
+  async function handleCardDrop(cardItem, payload) {
+    const toColumn = String(payload?.column_key ?? "").trim();
+    const message = toColumn === "done" ? "Card marked done." : "Card moved.";
+    await moveCard(
+      cardItem,
+      {
+        column_key: payload?.column_key,
+        before_card_id: payload?.before_card_id,
+      },
+      message,
+    );
+  }
+
+  async function handleMarkDoneConfirm(note) {
+    const pending = markDoneModal;
+    if (!pending.cardItem || !pending.movePayload) return;
+    markDoneModal = { ...pending, busy: true };
+    try {
+      const payload = await resolveCardWithAttestation(
+        pending.cardItem,
+        pending.movePayload,
+        note,
+      );
+      markDoneModal = {
+        open: false,
+        cardItem: null,
+        movePayload: null,
+        busy: false,
+      };
+      await executeCardMove(pending.cardItem, payload, "Card marked done.");
+    } catch (e) {
+      markDoneModal = { ...pending, busy: false };
+      mutationError = formatMutationError("Could not mark card done", e);
+    }
+  }
+
+  async function handleInlineCreate({ title, column_key }) {
+    if (!workspace?.board) return;
+    const trimmed = String(title ?? "").trim();
+    if (!trimmed) return;
+    await runBoardMutation(async () => {
+      await coreClient.addBoardCard(boardId, {
+        if_board_updated_at: workspace.board.updated_at,
+        title: trimmed,
+        summary: "",
+        column_key: String(column_key ?? "backlog"),
+        risk: "medium",
+        resolution: null,
+        resolution_refs: [],
+        related_refs: [],
+        assignee_refs: [],
+      });
+    }, "Card added.");
   }
 
   async function saveCardDetails(cardItem, patch) {
@@ -465,6 +615,61 @@
     boardMoreOpen = false;
   }
 
+  let docsCount = $derived((workspace?.documents?.items ?? []).length);
+  let reviewInboxCount = $derived(enrichedInboxItems.length);
+  let boardMoreBadgeCount = $derived(docsCount + reviewInboxCount);
+
+  function toggleFilters() {
+    if (!filtersOpen)
+      filterDraft = { ...filterApplied, risk: [...filterApplied.risk] };
+    filtersOpen = !filtersOpen;
+  }
+
+  function applyFilters() {
+    filterApplied = { ...filterDraft, risk: [...filterDraft.risk] };
+    filtersOpen = false;
+  }
+
+  function resetFilters() {
+    filterDraft = emptyFilters();
+    filterApplied = emptyFilters();
+    filtersOpen = false;
+  }
+
+  /** @param {string} value */
+  function toggleRiskFilter(value) {
+    const set = new Set(filterDraft.risk);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    filterDraft = { ...filterDraft, risk: [...set] };
+  }
+
+  $effect(() => {
+    if (!filtersOpen) return;
+    function onDocPointerDown(/** @type {PointerEvent} */ e) {
+      if (
+        filterRoot &&
+        e.target instanceof Node &&
+        !filterRoot.contains(e.target)
+      ) {
+        filtersOpen = false;
+      }
+    }
+    function onDocKey(/** @type {KeyboardEvent} */ e) {
+      if (e.key === "Escape") filtersOpen = false;
+    }
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
+    };
+  });
+
   $effect(() => {
     if (!boardMoreOpen) return;
     function onDocPointerDown(/** @type {PointerEvent} */ e) {
@@ -492,7 +697,7 @@
   });
 </script>
 
-{#if loading}
+{#if loading && !workspace}
   <div
     class="mt-12 flex items-center justify-center gap-2 text-meta text-fg-muted"
   >
@@ -531,30 +736,9 @@
     contextLinkLabel,
     boardInspectNav?.segment,
   )}
-  {@const cardsByColumn = groupBoardWorkspaceCards(
-    workspace.cards,
-    board.column_schema,
-  )}
   {@const boardWarnings = workspace.warnings?.items ?? []}
 
   {@const boardFreshness = workspace.projection_freshness}
-  {@const activeColumns = board.column_schema.filter(
-    (c) => c.key !== "backlog" && c.key !== "done",
-  )}
-  {@const sortByUpdatedDesc = (a, b) =>
-    String(b?.membership?.updated_at ?? "").localeCompare(
-      String(a?.membership?.updated_at ?? ""),
-    )}
-  {@const backlogCards = [...(cardsByColumn["backlog"] ?? [])].sort(
-    sortByUpdatedDesc,
-  )}
-  {@const doneCards = [...(cardsByColumn["done"] ?? [])].sort(
-    sortByUpdatedDesc,
-  )}
-  {@const boardIsEmpty =
-    backlogCards.length === 0 &&
-    doneCards.length === 0 &&
-    activeColumns.every((c) => (cardsByColumn[c.key] ?? []).length === 0)}
 
   {#if board.trashed_at}
     <div
@@ -737,6 +921,101 @@
           {/snippet}
           {#snippet actions()}
             {#if !board.trashed_at}
+              <div bind:this={filterRoot} class="relative">
+                <button
+                  type="button"
+                  class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters
+                    ? 'border-accent bg-accent-soft text-accent-text'
+                    : 'border-line bg-transparent text-fg-muted hover:bg-panel-hover hover:text-fg'}"
+                  aria-haspopup="dialog"
+                  aria-expanded={filtersOpen}
+                  onclick={toggleFilters}
+                  data-testid="board-filters-toggle"
+                >
+                  <Icon name="filter" class="h-3.5 w-3.5" />
+                  {hasActiveFilters ? "Filtered" : "Filter"}
+                </button>
+                {#if filtersOpen}
+                  <div
+                    class="absolute right-0 z-50 mt-1 w-80 rounded-md border border-line bg-panel p-3 shadow-lg"
+                    role="dialog"
+                    aria-label="Filter cards"
+                    data-testid="board-filter-panel"
+                  >
+                    <div class="space-y-3">
+                      <label class="block text-micro">
+                        <span class="font-medium text-fg-muted">Search</span>
+                        <input
+                          bind:value={filterDraft.q}
+                          class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta"
+                          placeholder="Title or summary"
+                          type="search"
+                        />
+                      </label>
+                      <div class="flex items-end gap-3">
+                        <label class="flex-1 text-micro">
+                          <span class="font-medium text-fg-muted">Due</span>
+                          <select
+                            bind:value={filterDraft.dueFilter}
+                            class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta"
+                          >
+                            <option value="">Any</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="soon">Due within 7 days</option>
+                            <option value="none">No due date</option>
+                          </select>
+                        </label>
+                        <label
+                          class="flex cursor-pointer items-center gap-2 pb-1.5 text-meta text-fg"
+                        >
+                          <input
+                            type="checkbox"
+                            bind:checked={filterDraft.mineOnly}
+                            class="h-3.5 w-3.5 rounded border-line"
+                          />
+                          My cards
+                        </label>
+                      </div>
+                      <fieldset class="text-micro">
+                        <legend class="font-medium text-fg-muted"
+                          >Priority</legend
+                        >
+                        <div class="mt-1.5 flex flex-wrap gap-3">
+                          {#each ["critical", "high", "medium", "low"] as risk (risk)}
+                            <label
+                              class="flex cursor-pointer items-center gap-1.5 capitalize"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={filterDraft.risk.includes(risk)}
+                                onchange={() => toggleRiskFilter(risk)}
+                                class="h-3.5 w-3.5 rounded border-line"
+                              />
+                              {risk}
+                            </label>
+                          {/each}
+                        </div>
+                      </fieldset>
+                    </div>
+                    <div class="mt-3 flex gap-1.5">
+                      <button
+                        type="button"
+                        class="rounded-md bg-accent px-3 py-1.5 text-micro font-medium text-white"
+                        onclick={applyFilters}
+                      >
+                        Apply
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md border border-line px-3 py-1.5 text-micro text-fg-muted hover:bg-line-subtle"
+                        onclick={resetFilters}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+              </div>
               <ResourceShareMenu
                 resourceId={resourceCopyValue("board", board)}
                 resourceLabel="board ref"
@@ -768,7 +1047,7 @@
               <div bind:this={boardMoreRoot} class="relative">
                 <button
                   type="button"
-                  class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+                  class="relative inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="More actions"
                   aria-haspopup="menu"
                   aria-expanded={boardMoreOpen}
@@ -776,22 +1055,145 @@
                   onclick={toggleBoardMore}
                 >
                   <Icon name="kebab" class="h-4 w-4" />
+                  {#if boardMoreBadgeCount > 0}
+                    <span
+                      class="absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white"
+                      aria-hidden="true"
+                    >
+                      {boardMoreBadgeCount > 99 ? "99+" : boardMoreBadgeCount}
+                    </span>
+                  {/if}
                 </button>
                 {#if boardMoreOpen}
                   <div
-                    class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-1 shadow-lg"
+                    class="absolute right-0 z-50 mt-1 max-h-[min(32rem,80vh)] w-80 overflow-y-auto rounded-md border border-line bg-panel shadow-lg"
                     role="menu"
                   >
                     <a
                       role="menuitem"
-                      class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover"
+                      class="block w-full px-3 py-2.5 text-left text-micro font-medium text-fg hover:bg-panel-hover"
                       href={workspaceHref(
                         `/boards/${encodeURIComponent(boardRouteSegment)}/edit`,
                       )}
                       onclick={closeBoardMore}
                     >
-                      Settings
+                      Board settings
                     </a>
+
+                    <div class="border-t border-line px-3 py-2.5">
+                      <div class="flex items-center justify-between">
+                        <h3
+                          class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+                        >
+                          Workspace docs
+                        </h3>
+                        <span
+                          class="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-fg-muted"
+                        >
+                          {docsCount}
+                        </span>
+                      </div>
+                      {#if docsCount === 0}
+                        <p class="mt-1.5 text-micro text-fg-muted">
+                          No linked doc lineages yet.
+                        </p>
+                      {:else}
+                        <div class="mt-1.5 space-y-1.5">
+                          {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document (document.id)}
+                            <a
+                              class="block rounded border border-line bg-bg-soft px-2.5 py-1.5 text-micro transition-colors hover:border-line-strong"
+                              href={workspaceHref(
+                                `/docs/${encodeURIComponent(resourceRouteSegment(document, "document"))}`,
+                              )}
+                              onclick={closeBoardMore}
+                            >
+                              <div class="truncate font-medium text-fg">
+                                {resourceDisplayLabel(document)}
+                              </div>
+                              <div class="mt-0.5 text-[11px] text-fg-muted">
+                                Head v{document.head_revision_number ?? "—"} · Updated
+                                {formatTimestamp(document.updated_at) || "—"}
+                              </div>
+                            </a>
+                          {/each}
+                        </div>
+                        {#if docsCount > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
+                          <p class="mt-1.5 text-[11px] text-fg-muted">
+                            Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {docsCount}
+                          </p>
+                        {/if}
+                      {/if}
+                    </div>
+
+                    <div class="border-t border-line px-3 py-2.5">
+                      <div class="flex items-center justify-between">
+                        <h3
+                          class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+                        >
+                          Review inbox
+                        </h3>
+                        <span
+                          class="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-fg-muted"
+                        >
+                          {reviewInboxCount}
+                        </span>
+                      </div>
+                      {#if reviewInboxCount === 0}
+                        <p class="mt-1.5 text-micro text-fg-muted">
+                          No active derived inbox items.
+                        </p>
+                      {:else}
+                        <div class="mt-1.5 space-y-1.5">
+                          {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item (item.id)}
+                            {@const inboxResourceLine =
+                              formatInboxItemBoardPanelResourceLine(item)}
+                            <div
+                              class="rounded border border-line bg-bg-soft px-2.5 py-1.5"
+                            >
+                              <div
+                                class="truncate text-micro font-medium text-fg"
+                              >
+                                {item.title ||
+                                  item.summary ||
+                                  item.ref ||
+                                  item.id}
+                              </div>
+                              <div class="mt-0.5 text-[11px] text-fg-muted">
+                                <span
+                                  class={item.urgency_level === "immediate"
+                                    ? "text-danger-text"
+                                    : item.urgency_level === "high"
+                                      ? "text-warn-text"
+                                      : ""}>{item.urgency_label}</span
+                                >
+                                {#if inboxResourceLine}
+                                  · {inboxResourceLine}
+                                {/if}
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                        {#if reviewInboxCount > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
+                          <p class="mt-1.5 text-[11px] text-fg-muted">
+                            Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {reviewInboxCount}
+                          </p>
+                        {/if}
+                      {/if}
+                    </div>
+
+                    <div class="border-t border-line p-2">
+                      <IdsIntegrityDisclosure
+                        rows={[
+                          {
+                            label: "Board ref",
+                            value: resourceCopyValue("board", board),
+                            copyLabel: "Copy board ref",
+                          },
+                        ]}
+                        rawJson={JSON.stringify(board, null, 2)}
+                        rawJsonCopyLabel="Copy board JSON"
+                      />
+                    </div>
                   </div>
                 {/if}
               </div>
@@ -801,15 +1203,8 @@
       </div>
 
       <!-- Notification alerts -->
-      {#if mutationNotice || conflictWarning || mutationError}
+      {#if conflictWarning || mutationError}
         <div class="mb-3 space-y-2">
-          {#if mutationNotice}
-            <div
-              class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
-            >
-              {mutationNotice}
-            </div>
-          {/if}
           {#if conflictWarning}
             <div
               class="rounded-md bg-warn-soft px-3 py-2 text-micro text-warn-text"
@@ -827,246 +1222,22 @@
         </div>
       {/if}
 
-      {#snippet renderCard(cardItem)}
-        <BoardCard
-          {cardItem}
-          {boardId}
-          onclick={() => openCardDetailModal(cardItem)}
-        />
-      {/snippet}
-
       <section class="mb-3">
-        {#if boardIsEmpty}
-          <StateEmpty
-            title="No cards on this board yet"
-            helper="Cards appear here when topics are added to the board's columns."
-            actionLabel="Create card"
-            actionHref={workspaceHref(
-              `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,
-            )}
-            class="!border-dashed"
-          />
-        {:else}
-          <div class="mb-3 rounded-md border border-line bg-panel">
-            <button
-              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-line-subtle"
-              onclick={() => {
-                backlogOpen = !backlogOpen;
-              }}
-              type="button"
-            >
-              <svg
-                class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {backlogOpen
-                  ? 'rotate-90'
-                  : ''}"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
-              >
-              <span class="text-micro font-medium text-fg-muted">Backlog</span>
-              <span
-                class="rounded bg-line px-1.5 py-0.5 text-micro text-fg-muted"
-                >{backlogCards.length}</span
-              >
-            </button>
-            {#if backlogOpen}
-              <div class="space-y-2 border-t border-line px-3 py-2">
-                {#if backlogCards.length === 0}
-                  <p class="text-micro text-fg-muted">No cards</p>
-                {:else}
-                  {#each backlogCards as cardItem (boardCardStableId(cardItem.membership))}
-                    {@render renderCard(cardItem)}
-                  {/each}
-                {/if}
-              </div>
-            {/if}
-          </div>
-
-          <div class="flex gap-3 overflow-x-auto pb-4">
-            {#each activeColumns as column (column.key)}
-              {@const cards = cardsByColumn[column.key] ?? []}
-              {@const isBlocked = column.key === "blocked"}
-              <div
-                class="flex min-w-[260px] flex-1 flex-col rounded-md bg-bg-soft"
-              >
-                <div class="flex items-center gap-2 px-3 py-2.5">
-                  <h3
-                    class="text-micro font-semibold uppercase tracking-wide {isBlocked &&
-                    cards.length > 0
-                      ? 'text-warn-text'
-                      : 'text-fg-muted'}"
-                  >
-                    {column.title ||
-                      boardColumnTitle(column.key, board.column_schema)}
-                  </h3>
-                  <span
-                    class="min-w-[1.25rem] rounded px-1.5 py-0.5 text-center text-micro font-semibold tabular-nums {isBlocked &&
-                    cards.length > 0
-                      ? 'bg-warn-soft text-warn-text'
-                      : 'bg-line text-fg-muted'}"
-                  >
-                    {cards.length}
-                  </span>
-                </div>
-                <div
-                  class="flex-1 space-y-2 overflow-y-auto px-2 pb-2"
-                  style="max-height: calc(100vh - 260px); min-height: 120px;"
-                >
-                  {#if cards.length === 0}
-                    <div
-                      class="flex items-center justify-center rounded-md border border-dashed border-line px-3 py-10 text-micro text-fg-muted"
-                    >
-                      No cards
-                    </div>
-                  {:else}
-                    {#each cards as cardItem (boardCardStableId(cardItem.membership))}
-                      {@render renderCard(cardItem)}
-                    {/each}
-                  {/if}
-                </div>
-              </div>
-            {/each}
-          </div>
-
-          <div class="rounded-md border border-line bg-panel">
-            <button
-              class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-line-subtle"
-              onclick={() => {
-                doneOpen = !doneOpen;
-              }}
-              type="button"
-            >
-              <svg
-                class="h-3.5 w-3.5 shrink-0 text-fg-muted transition-transform {doneOpen
-                  ? 'rotate-90'
-                  : ''}"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2"><path d="M9 5l7 7-7 7" /></svg
-              >
-              <span class="text-micro font-medium text-fg-muted">Done</span>
-              <span
-                class="rounded bg-line px-1.5 py-0.5 text-micro text-fg-muted"
-                >{doneCards.length}</span
-              >
-            </button>
-            {#if doneOpen}
-              <div class="space-y-2 border-t border-line px-3 py-2">
-                {#if doneCards.length === 0}
-                  <p class="text-micro text-fg-muted">No cards</p>
-                {:else}
-                  {#each doneCards as cardItem (boardCardStableId(cardItem.membership))}
-                    {@render renderCard(cardItem)}
-                  {/each}
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </section>
-
-      <div class="grid gap-3 lg:grid-cols-3">
-        <section class="rounded-md border border-line bg-panel">
-          <div class="border-b border-line px-4 py-2.5">
-            <h2 class="text-meta font-medium text-fg">Workspace docs</h2>
-          </div>
-          <div class="px-4 py-3">
-            {#if (workspace.documents?.items ?? []).length === 0}
-              <p class="text-micro text-fg-muted">
-                No linked doc lineages yet.
-              </p>
-            {:else}
-              <div class="space-y-2">
-                {#each workspace.documents.items.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as document (document.id)}
-                  <a
-                    class="block rounded border border-line bg-bg-soft px-3 py-2 text-micro transition-colors hover:border-line-strong"
-                    href={workspaceHref(
-                      `/docs/${encodeURIComponent(resourceRouteSegment(document, "document"))}`,
-                    )}
-                  >
-                    <div class="font-medium text-fg">
-                      {resourceDisplayLabel(document)}
-                    </div>
-                    <div class="mt-1 text-micro text-fg-muted">
-                      Head v{document.head_revision_number ?? "—"} · Updated {formatTimestamp(
-                        document.updated_at,
-                      ) || "—"}
-                    </div>
-                  </a>
-                {/each}
-              </div>
-              {#if (workspace.documents?.items ?? []).length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-                <p class="mt-2 text-micro text-fg-muted">
-                  Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {workspace
-                    .documents.items.length}
-                </p>
-              {/if}
-            {/if}
-          </div>
-        </section>
-
-        <section class="rounded-md border border-line bg-panel">
-          <div class="border-b border-line px-4 py-2.5">
-            <h2 class="text-meta font-medium text-fg">Review inbox</h2>
-            <p class="mt-1 text-micro text-fg-muted">
-              Derived risk and decision signals for resources tied to this board
-              (backing threads).
-            </p>
-          </div>
-          <div class="px-4 py-3">
-            {#if enrichedInboxItems.length === 0}
-              <p class="text-micro text-fg-muted">
-                No active derived inbox items.
-              </p>
-            {:else}
-              <div class="space-y-2">
-                {#each enrichedInboxItems.slice(0, BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT) as item (item.id)}
-                  {@const inboxResourceLine =
-                    formatInboxItemBoardPanelResourceLine(item)}
-                  <div class="rounded border border-line bg-bg-soft px-3 py-2">
-                    <div class="text-micro font-medium text-fg">
-                      {item.title || item.summary || item.ref || item.id}
-                    </div>
-                    <div class="mt-1 text-micro text-fg-muted">
-                      <span
-                        class={item.urgency_level === "immediate"
-                          ? "text-danger-text"
-                          : item.urgency_level === "high"
-                            ? "text-warn-text"
-                            : ""}>{item.urgency_label}</span
-                      >
-                      {#if inboxResourceLine}
-                        · {inboxResourceLine}
-                      {/if}
-                    </div>
-                  </div>
-                {/each}
-              </div>
-              {#if enrichedInboxItems.length > BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT}
-                <p class="mt-2 text-micro text-fg-muted">
-                  Showing {BOARD_WORKSPACE_PANEL_PREVIEW_LIMIT} of {enrichedInboxItems.length}
-                </p>
-              {/if}
-            {/if}
-          </div>
-        </section>
-      </div>
-
-      <div class="mt-4">
-        <IdsIntegrityDisclosure
-          rows={[
-            {
-              label: "Board ref",
-              value: resourceCopyValue("board", board),
-              copyLabel: "Copy board ref",
-            },
-          ]}
-          rawJson={JSON.stringify(board, null, 2)}
-          rawJsonCopyLabel="Copy board JSON"
+        <BoardKanban
+          {workspace}
+          {board}
+          {boardId}
+          {currentActorId}
+          filters={filterApplied}
+          disabled={mutating || Boolean(board.trashed_at)}
+          createCardHref={workspaceHref(
+            `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,
+          )}
+          onopencard={openCardDetailModal}
+          oncarddrop={handleCardDrop}
+          oninlinecreate={handleInlineCreate}
         />
-      </div>
+      </section>
 
       {#if boardWarnings.length > 0}
         <section
@@ -1125,6 +1296,23 @@
   onsavecard={saveCardDetails}
   onrevisecard={reviseCardContent}
   onremovecard={removeCard}
+/>
+
+<MarkDoneModal
+  open={markDoneModal.open}
+  cardTitle={boardCardHeaderTitle(
+    markDoneModal.cardItem?.membership,
+    markDoneModal.cardItem?.backing?.thread,
+  )}
+  busy={markDoneModal.busy}
+  onconfirm={handleMarkDoneConfirm}
+  oncancel={() =>
+    (markDoneModal = {
+      open: false,
+      cardItem: null,
+      movePayload: null,
+      busy: false,
+    })}
 />
 
 <ConfirmModal

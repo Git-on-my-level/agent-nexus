@@ -952,10 +952,7 @@
           class="min-w-0 flex-1 cursor-pointer rounded-md border border-line bg-bg-soft px-2 py-1 pr-7 text-meta text-fg focus:outline-none focus:ring-1 focus:ring-accent"
         >
           {#each board?.column_schema ?? [] as column (column.key)}
-            <option
-              value={column.key}
-              disabled={column.key === "done" && doneColumnOptionDisabled}
-            >
+            <option value={column.key}>
               {column.title ||
                 boardColumnTitle(column.key, board?.column_schema ?? [])}
             </option>
@@ -1620,13 +1617,13 @@
 
             {#if doneColumnOptionDisabled && !membershipColumnIsDone}
               <p
-                class="rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
+                class="rounded-md border border-accent/30 bg-accent-soft/30 px-3 py-2 text-micro text-fg-muted"
               >
-                Moving to <span class="text-fg">Done</span> requires at least
-                one
-                <span class="font-mono text-fg">artifact:</span> or
-                <span class="font-mono text-fg">event:</span> ref in resolution refs
-                (for example uploaded evidence).
+                To move this card to <span class="font-medium text-fg"
+                  >Done</span
+                >, add evidence below or use the column picker — we'll record a
+                short human attestation automatically if you mark it done
+                without uploading files.
               </p>
             {/if}
 

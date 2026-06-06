@@ -4,16 +4,17 @@
     lookupActorDisplayName,
     principalRegistry,
   } from "$lib/actorSession";
+  import ActorAvatar from "$lib/components/ActorAvatar.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import {
     boardCardHeaderTitle,
     boardCardStableId,
     boardCardTimelineMessageCount,
-    freshnessStatusLabel,
-    freshnessStatusTone,
   } from "$lib/boardUtils";
   import {
     cardResolutionLabel,
     cardResolutionTone,
+    isOverdue,
   } from "$lib/cardDisplayUtils";
   import { formatTimestamp } from "$lib/formatDate";
 
@@ -22,11 +23,24 @@
    * @property {object} cardItem
    * @property {string} [boardId]
    * @property {() => void} [onclick]
+   * @property {(e: PointerEvent) => void} [ondragstart]
+   * @property {(e: KeyboardEvent) => void} [onboardkeydown]
+   * @property {boolean} [dragging]
+   * @property {boolean} [dropBefore]
    * @property {import("svelte").Snippet} [footer]
    */
 
   /** @type {BoardCardProps} */
-  let { cardItem, boardId = "", onclick = () => {}, footer } = $props();
+  let {
+    cardItem,
+    boardId = "",
+    onclick = () => {},
+    ondragstart = undefined,
+    onboardkeydown = undefined,
+    dragging = false,
+    dropBefore = false,
+    footer,
+  } = $props();
 
   const membership = $derived(cardItem?.membership);
   const backing = $derived(cardItem?.backing);
@@ -37,30 +51,20 @@
 
   const rowStatus = $derived(boardCardRowStatus(membership, thread));
   const headerTitle = $derived(boardCardHeaderTitle(membership, thread));
-  const cardFreshness = $derived(derived?.freshness);
   const timelineMessageCount = $derived(
     boardCardTimelineMessageCount(cardItem),
   );
   const cardResolution = $derived(String(membership?.resolution ?? "").trim());
   const summaryText = $derived(String(membership?.summary ?? "").trim());
   const cardDueAt = $derived(String(membership?.due_at ?? "").trim());
-  const cardUpdatedAt = $derived(String(membership?.updated_at ?? "").trim());
-  const cardUpdatedRelative = $derived(formatTimestamp(cardUpdatedAt));
-  const cardUpdatedTitle = $derived(
-    cardUpdatedAt
-      ? `Last edited ${new Date(cardUpdatedAt).toLocaleString()}`
-      : "",
+  const cardUpdatedRelative = $derived(
+    formatTimestamp(String(membership?.updated_at ?? "").trim()),
   );
   const assigneeRefs = $derived(
     Array.isArray(membership?.assignee_refs) ? membership.assignee_refs : [],
   );
 
-  const dueOverdue = $derived.by(() => {
-    if (!cardDueAt) return false;
-    const d = new Date(cardDueAt);
-    if (isNaN(d.getTime())) return false;
-    return d.getTime() < Date.now();
-  });
+  const dueOverdue = $derived(cardDueAt ? isOverdue(cardDueAt) : false);
 
   const assigneeNames = $derived.by(() => {
     const actors = $actorRegistry;
@@ -69,16 +73,22 @@
       const id = String(ref ?? "")
         .replace(/^actor:/, "")
         .trim();
-      return lookupActorDisplayName(id, actors, principals);
+      return {
+        id,
+        name: lookupActorDisplayName(id, actors, principals),
+      };
     });
   });
 
-  const assigneeVisible = $derived(assigneeNames.slice(0, 2));
-  const assigneeMore = $derived(
-    assigneeNames.length > 2 ? assigneeNames.length - 2 : 0,
+  const showResolutionChip = $derived(
+    cardResolution === "done" ||
+      cardResolution === "completed" ||
+      cardResolution === "superseded",
   );
 
-  const titleColorClass = $derived(threadStatusColor(rowStatus));
+  const showSummary = $derived(
+    Boolean(summaryText) && summaryText !== headerTitle,
+  );
 
   function threadStatusColor(status) {
     switch (status) {
@@ -110,12 +120,20 @@
     return "active";
   }
 
-  const showSummary = $derived(
-    Boolean(summaryText) && summaryText !== headerTitle,
-  );
+  const titleColorClass = $derived(threadStatusColor(rowStatus));
+
+  /** @param {PointerEvent} e */
+  function handleCardPointerDown(e) {
+    if (e.button !== 0 || !ondragstart) return;
+    ondragstart(e);
+  }
 
   /** @param {KeyboardEvent} e */
   function handleCardKeydown(e) {
+    if (onboardkeydown) {
+      onboardkeydown(e);
+      if (e.defaultPrevented) return;
+    }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onclick();
@@ -125,124 +143,124 @@
 
 <div
   id={`card-${cardRowId}`}
+  data-board-card-slot
+  data-card-id={cardRowId}
   data-board-id={boardId || undefined}
-  class="group overflow-hidden rounded-md border border-line bg-panel transition-colors hover:border-line-strong"
+  class="relative {dropBefore ? 'board-card-drop-before' : ''}"
 >
+  {#if dropBefore}
+    <div
+      class="pointer-events-none absolute -top-1 left-0 right-0 z-10 h-0.5 rounded-full bg-accent"
+      aria-hidden="true"
+    ></div>
+  {/if}
   <div
-    aria-label={`Manage ${headerTitle}`}
-    class="cursor-pointer px-2.5 py-2 transition-colors hover:bg-line-subtle"
-    {onclick}
-    onkeydown={handleCardKeydown}
-    role="button"
-    tabindex="0"
+    class="group overflow-hidden rounded-md border border-line bg-panel transition-all hover:border-line-strong hover:shadow-sm {dragging
+      ? 'opacity-40'
+      : ''}"
   >
-    <div class="min-w-0">
-      <span
-        class="block truncate text-meta font-medium leading-snug {titleColorClass}"
+    <div
+      aria-label={`Manage ${headerTitle}`}
+      class="flex cursor-pointer select-none"
+      {onclick}
+      onkeydown={handleCardKeydown}
+      onpointerdown={handleCardPointerDown}
+      role="button"
+      tabindex="0"
+    >
+      <div
+        class="min-w-0 flex-1 px-2.5 py-2 transition-colors hover:bg-line-subtle/50"
       >
-        {headerTitle}
-      </span>
-
-      <div class="mt-1 flex flex-wrap items-center gap-1">
-        <span
-          class="rounded-md px-1 py-0.5 text-micro font-medium {cardResolutionTone(
-            cardResolution,
-          )}"
-        >
-          {cardResolutionLabel(cardResolution)}
-        </span>
-
-        {#if assigneeVisible.length > 0}
-          {#each assigneeVisible as name (name)}
+        <div class="flex items-start gap-2">
+          <div class="min-w-0 flex-1">
             <span
-              class="max-w-[7rem] truncate rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
-              title={name}
+              class="block truncate text-meta font-medium leading-snug {titleColorClass}"
             >
-              {name}
+              {headerTitle}
             </span>
-          {/each}
-          {#if assigneeMore > 0}
-            <span
-              class="rounded-md bg-line px-1 py-0.5 text-micro text-fg-muted"
-            >
-              +{assigneeMore} more
-            </span>
+
+            {#if showSummary}
+              <p class="mt-0.5 line-clamp-2 text-micro text-fg-muted">
+                {summaryText}
+              </p>
+            {/if}
+
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {#if showResolutionChip}
+                <span
+                  class="rounded px-1 py-0.5 text-micro font-medium {cardResolutionTone(
+                    cardResolution,
+                  )}"
+                >
+                  {cardResolutionLabel(cardResolution)}
+                </span>
+              {/if}
+
+              {#if cardDueAt}
+                <span
+                  class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-micro {dueOverdue
+                    ? 'bg-danger-soft text-danger-text'
+                    : 'bg-line text-fg-muted'}"
+                  title={`Due ${formatTimestamp(cardDueAt)}`}
+                >
+                  <Icon name="calendar" class="h-3 w-3" />
+                  {formatTimestamp(cardDueAt) || "—"}
+                </span>
+              {/if}
+
+              {#if timelineMessageCount > 0}
+                <span
+                  class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
+                  title={`${timelineMessageCount} comment${timelineMessageCount === 1 ? "" : "s"}`}
+                >
+                  <Icon name="comment" class="h-3 w-3" />
+                  <span class="tabular-nums font-medium"
+                    >{timelineMessageCount > 99
+                      ? "99+"
+                      : timelineMessageCount}</span
+                  >
+                </span>
+              {/if}
+
+              {#if cardUpdatedRelative}
+                <span
+                  class="text-micro text-fg-subtle tabular-nums"
+                  title="Last updated"
+                >
+                  {cardUpdatedRelative}
+                </span>
+              {/if}
+            </div>
+          </div>
+
+          {#if assigneeNames.length > 0}
+            <div class="flex shrink-0 -space-x-1.5 pt-0.5">
+              {#each assigneeNames.slice(0, 3) as assignee (assignee.id)}
+                <ActorAvatar
+                  label={assignee.name}
+                  seed={assignee.id}
+                  size="xs"
+                  class="ring-1 ring-panel"
+                />
+              {/each}
+              {#if assigneeNames.length > 3}
+                <span
+                  class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-line text-[10px] font-medium text-fg-muted ring-1 ring-panel"
+                >
+                  +{assigneeNames.length - 3}
+                </span>
+              {/if}
+            </div>
           {/if}
-        {/if}
-
-        {#if cardDueAt}
-          <span
-            class="rounded-md px-1 py-0.5 text-micro {dueOverdue
-              ? 'bg-danger-soft text-danger-text'
-              : 'bg-line text-fg-muted'}"
-          >
-            Due {formatTimestamp(cardDueAt) || "—"}
-          </span>
-        {/if}
-
-        {#if cardFreshness}
-          <span
-            class="rounded-md px-1 py-0.5 text-micro {freshnessStatusTone(
-              cardFreshness.status,
-            )}"
-          >
-            {freshnessStatusLabel(cardFreshness.status)}
-          </span>
-        {/if}
-
-        {#if cardUpdatedRelative}
-          <span
-            class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
-            title={cardUpdatedTitle}
-            aria-label={`Edited ${cardUpdatedRelative}`}
-          >
-            <svg
-              class="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" stroke-linecap="round" />
-            </svg>
-            <span class="tabular-nums">{cardUpdatedRelative}</span>
-          </span>
-        {/if}
-
-        {#if timelineMessageCount > 0}
-          <span
-            class="inline-flex items-center gap-0.5 text-micro text-fg-muted"
-            title={`${timelineMessageCount} message${timelineMessageCount === 1 ? "" : "s"} on card thread`}
-            aria-label={`${timelineMessageCount} comment${timelineMessageCount === 1 ? "" : "s"}`}
-          >
-            <svg
-              class="h-3 w-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path
-                d="M21 12a8 8 0 0 1-11.6 7.15L4 20l1-4.2A8 8 0 1 1 21 12Z"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span class="tabular-nums font-semibold"
-              >{timelineMessageCount > 99 ? "99+" : timelineMessageCount}</span
-            >
-          </span>
-        {/if}
+        </div>
       </div>
-
-      {#if showSummary}
-        <p class="mt-1 truncate text-micro text-fg-muted">
-          {summaryText}
-        </p>
-      {/if}
     </div>
   </div>
   {@render footer?.()}
 </div>
+
+<style>
+  .board-card-drop-before {
+    padding-top: 0.25rem;
+  }
+</style>

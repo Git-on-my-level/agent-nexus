@@ -494,21 +494,26 @@ test("board UI supports create/edit and card mutation flows", async ({
     });
   });
 
-  await page.route(/\/boards\/board-created\/cards$/, async (route) => {
-    const payload = JSON.parse(route.request().postData() ?? "{}");
-    addCardPayloads.push(payload);
+  await page.route(/\/cards$/, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    const body = JSON.parse(route.request().postData() ?? "{}");
+    addCardPayloads.push(body);
+    const cardInput = body.card ?? body;
     const now = nextTimestamp();
-    const threadToken = (payload.related_refs ?? []).find((ref) =>
+    const threadToken = (cardInput.related_refs ?? []).find((ref) =>
       String(ref ?? "").startsWith("thread:"),
     );
     const threadId = String(threadToken ?? "")
       .replace(/^thread:/, "")
       .trim();
-    const title = String(payload.title ?? "").trim();
+    const title = String(cardInput.title ?? "").trim();
     const targetColumnCards = cards.filter(
-      (card) => card.column_key === payload.column_key,
+      (card) => card.column_key === cardInput.column_key,
     );
-    const docFromPayload = String(payload.document_ref ?? "")
+    const docFromPayload = String(cardInput.document_ref ?? "")
       .replace(/^document:/, "")
       .trim();
     const newCard = {
@@ -516,11 +521,11 @@ test("board UI supports create/edit and card mutation flows", async ({
       board_id: "board-created",
       thread_id: threadId,
       title,
-      summary: String(payload.summary ?? "").trim() || title,
-      related_refs: Array.isArray(payload.related_refs)
-        ? payload.related_refs
+      summary: String(cardInput.summary ?? "").trim() || title,
+      related_refs: Array.isArray(cardInput.related_refs)
+        ? cardInput.related_refs
         : [],
-      column_key: payload.column_key,
+      column_key: cardInput.column_key,
       rank: String(targetColumnCards.length + 1).padStart(4, "0"),
       document_ref: docFromPayload ? `document:${docFromPayload}` : null,
       created_at: now,
@@ -729,16 +734,30 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: "Create board" }).click();
 
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/boards\/board-created$/);
+  await expect(page.getByTestId("board-kanban")).toBeVisible();
+  await expect(page.getByText("No cards on this board yet")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Launch Control" }),
+    page.locator('[aria-current="page"]', { hasText: "Launch Control" }),
   ).toBeVisible();
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Workspace docs" }),
-  ).toBeVisible();
-  await expect(page.getByText("0 resolved", { exact: true })).toBeVisible();
-  await expect(page.getByText("Review inbox", { exact: true })).toBeVisible();
   await expect(page.getByText("Warnings", { exact: true })).toBeVisible();
+
+  // Workspace docs and Review inbox now live in the board "More actions" menu.
+  await page.getByRole("button", { name: "More actions" }).click();
+  const boardMoreMenu = page.getByRole("menu");
+  await expect(
+    boardMoreMenu.getByRole("heading", { name: "Workspace docs" }),
+  ).toBeVisible();
+  await expect(
+    boardMoreMenu.getByText("No linked doc lineages yet."),
+  ).toBeVisible();
+  await expect(
+    boardMoreMenu.getByRole("heading", { name: "Review inbox" }),
+  ).toBeVisible();
+  await expect(
+    boardMoreMenu.getByText("No active derived inbox items."),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(boardCreatePayloads).toEqual([
     {
       actor_id: actorId,
@@ -758,7 +777,7 @@ test("board UI supports create/edit and card mutation flows", async ({
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Launch Control v2" }),
+    page.locator('[aria-current="page"]', { hasText: "Launch Control v2" }),
   ).toBeVisible();
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
   expect(boardPatchPayloads.at(-1)).toEqual({
@@ -802,15 +821,15 @@ test("board UI supports create/edit and card mutation flows", async ({
   await expect(
     page.getByRole("button", { name: "Manage Review Prep" }),
   ).toBeVisible();
-  const reviewInboxPanel = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Review inbox" }) });
+  await page.getByRole("button", { name: "More actions" }).click();
+  const reviewInboxPanel = page.getByRole("menu");
   await expect(
     reviewInboxPanel.getByText("Need sign-off on review prep"),
   ).toBeVisible();
   await expect(reviewInboxPanel.locator(".text-warn-text")).toContainText(
     /High/i,
   );
+  await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Manage Review Prep" }).click();
 
@@ -863,7 +882,6 @@ test("board UI supports create/edit and card mutation flows", async ({
     .getByRole("button", { name: "Close" })
     .click();
 
-  await page.getByRole("button", { name: "Done 1" }).click();
   await expect(
     page.getByRole("button", { name: "Manage Review Prep" }),
   ).toBeVisible();
@@ -911,33 +929,39 @@ test("board UI supports create/edit and card mutation flows", async ({
   expect(addCardPayloads).toEqual([
     {
       actor_id: actorId,
+      board_id: "board-created",
       if_board_updated_at: "2026-03-05T02:00:00.000Z",
-      title: "Execution Track",
-      summary: "Execution Track",
-      column_key: "ready",
-      document_ref: "document:doc-playbook",
-      assignee_refs: [],
-      risk: "medium",
-      resolution: null,
-      resolution_refs: [],
-      related_refs: ["thread:thread-execution"],
-      due_at: null,
-      definition_of_done: [],
+      card: {
+        title: "Execution Track",
+        summary: "Execution Track",
+        column_key: "ready",
+        document_ref: "document:doc-playbook",
+        assignee_refs: [],
+        risk: "medium",
+        resolution: null,
+        resolution_refs: [],
+        related_refs: ["thread:thread-execution"],
+        due_at: null,
+        definition_of_done: [],
+      },
     },
     {
       actor_id: actorId,
+      board_id: "board-created",
       if_board_updated_at: "2026-03-05T03:00:00.000Z",
-      title: "Review Prep",
-      summary: "Review Prep",
-      column_key: "ready",
-      document_ref: null,
-      assignee_refs: [],
-      risk: "medium",
-      resolution: null,
-      resolution_refs: [],
-      related_refs: ["thread:thread-review"],
-      due_at: null,
-      definition_of_done: [],
+      card: {
+        title: "Review Prep",
+        summary: "Review Prep",
+        column_key: "ready",
+        document_ref: null,
+        assignee_refs: [],
+        risk: "medium",
+        resolution: null,
+        resolution_refs: [],
+        related_refs: ["thread:thread-review"],
+        due_at: null,
+        definition_of_done: [],
+      },
     },
   ]);
   expect(movePayloads).toEqual([
@@ -971,6 +995,194 @@ test("board UI supports create/edit and card mutation flows", async ({
       if_board_updated_at: "2026-03-05T08:00:00.000Z",
     },
   ]);
+});
+
+test("board supports pointer drag-and-drop between columns", async ({
+  page,
+}) => {
+  const threads = [
+    {
+      id: "thread-a",
+      type: "process",
+      title: "Card Alpha",
+      state: "active",
+      updated_at: "2026-03-04T00:00:00.000Z",
+      updated_by: actorId,
+      open_cards: [],
+    },
+    {
+      id: "thread-b",
+      type: "process",
+      title: "Card Bravo",
+      state: "active",
+      updated_at: "2026-03-04T00:00:00.000Z",
+      updated_by: actorId,
+      open_cards: [],
+    },
+  ];
+  const documents = [];
+  const board = {
+    id: "board-drag",
+    title: "Drag Board",
+    state: "active",
+    owners: [actorId],
+    thread_id: "thread-a",
+    refs: ["thread:thread-a"],
+    document_refs: [],
+    column_schema: columns,
+    pinned_refs: [],
+    created_at: "2026-03-04T00:00:00.000Z",
+    created_by: actorId,
+    updated_at: "2026-03-04T00:00:00.000Z",
+    updated_by: actorId,
+  };
+  let cards = [
+    {
+      id: "thread-a",
+      board_id: "board-drag",
+      thread_id: "thread-a",
+      title: "Card Alpha",
+      summary: "Card Alpha",
+      column_key: "ready",
+      rank: "0001",
+      document_ref: null,
+      created_at: "2026-03-04T00:00:00.000Z",
+      created_by: actorId,
+      updated_at: "2026-03-04T00:00:00.000Z",
+      updated_by: actorId,
+    },
+    {
+      id: "thread-b",
+      board_id: "board-drag",
+      thread_id: "thread-b",
+      title: "Card Bravo",
+      summary: "Card Bravo",
+      column_key: "ready",
+      rank: "0002",
+      document_ref: null,
+      created_at: "2026-03-04T00:00:00.000Z",
+      created_by: actorId,
+      updated_at: "2026-03-04T00:00:00.000Z",
+      updated_by: actorId,
+    },
+  ];
+  const movePayloads = [];
+  let mutationCounter = 0;
+  const nextTimestamp = () => {
+    mutationCounter += 1;
+    return `2026-03-05T0${mutationCounter}:00:00.000Z`;
+  };
+
+  await page.addInitScript((selectedActorId) => {
+    window.localStorage.setItem("anx_ui_actor_id:local", selectedActorId);
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  }, actorId);
+
+  await page.route(/\/actors$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        actors: [{ id: actorId, display_name: "Board Tester" }],
+      }),
+    });
+  });
+
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ threads }),
+    });
+  });
+
+  await page.route(/\/docs(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents }),
+    });
+  });
+
+  await page.route(/\/boards\/board-drag\/workspace$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(buildWorkspace(board, cards, threads, documents, [])),
+    });
+  });
+
+  await page.route(/\/cards\/thread-a\/move$/, async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    const payload = JSON.parse(route.request().postData() ?? "{}");
+    movePayloads.push(payload);
+    const moving = cards.find((card) => card.thread_id === "thread-a");
+    moving.column_key = payload.column_key;
+    moving.updated_at = nextTimestamp();
+    board.updated_at = moving.updated_at;
+    for (const column of columns) renormalize(cards, column.key);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ board, card: moving }),
+    });
+  });
+
+  await page.goto("/o/local/w/local/boards/board-drag");
+
+  await expect(
+    page.locator('[aria-current="page"]', { hasText: "Drag Board" }),
+  ).toBeVisible();
+
+  const sourceCard = page.locator("#card-thread-a");
+  await expect(sourceCard).toContainText("Card Alpha");
+  const targetBody = page.locator(
+    '[data-board-column-body][data-column-key="in_progress"]',
+  );
+
+  const cardBox = await sourceCard.boundingBox();
+  const targetBox = await targetBody.boundingBox();
+  if (!cardBox || !targetBox) throw new Error("missing drag geometry");
+
+  const movePromise = page.waitForResponse(
+    (resp) =>
+      resp.url().includes("/cards/thread-a/move") &&
+      resp.request().method() === "POST",
+    { timeout: 15_000 },
+  );
+
+  await page.mouse.move(
+    cardBox.x + cardBox.width / 2,
+    cardBox.y + cardBox.height / 2,
+  );
+  await page.mouse.down();
+  // First small move clears the drag threshold and shows the ghost.
+  await page.mouse.move(
+    cardBox.x + cardBox.width / 2 + 12,
+    cardBox.y + cardBox.height / 2 + 12,
+    { steps: 4 },
+  );
+  await page.mouse.move(
+    targetBox.x + targetBox.width / 2,
+    targetBox.y + Math.min(40, targetBox.height / 2),
+    { steps: 10 },
+  );
+  await page.mouse.up();
+
+  await movePromise;
+
+  expect(movePayloads.length).toBe(1);
+  expect(movePayloads[0].column_key).toBe("in_progress");
+
+  const inProgressSection = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "In Progress" }) });
+  await expect(inProgressSection.locator("#card-thread-a")).toContainText(
+    "Card Alpha",
+  );
 });
 
 test("board detail shows pending freshness and hides derived card counts until refreshed", async ({
@@ -1088,10 +1300,10 @@ test("board detail shows pending freshness and hides derived card counts until r
   await page.goto("/o/local/w/local/boards/board-pending");
 
   await expect(
-    page.getByRole("heading", { name: "Pending Board" }),
+    page.locator('[aria-current="page"]', { hasText: "Pending Board" }),
   ).toBeVisible();
   await expect(page.getByText("Pending refresh", { exact: true })).toHaveCount(
-    2,
+    1,
   );
   await expect(
     page.locator('[title*="Derived summaries are being refreshed"]'),
@@ -1238,7 +1450,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
   await page.goto("/o/local/w/local/boards/board-conflict");
 
   await expect(
-    page.getByRole("heading", { name: "Conflict Board" }),
+    page.locator('[aria-current="page"]', { hasText: "Conflict Board" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "More actions" }).click();
@@ -1263,7 +1475,7 @@ test("board edit conflict reloads latest state and allows retry", async ({
 
   await expect(page).toHaveURL(/\/boards\/board-conflict$/);
   await expect(
-    page.getByRole("heading", { name: "Recovered Board Title" }),
+    page.locator('[aria-current="page"]', { hasText: "Recovered Board Title" }),
   ).toBeVisible();
 
   expect(patchPayloads).toEqual([
