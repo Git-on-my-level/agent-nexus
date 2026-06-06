@@ -5,6 +5,7 @@
   import { page } from "$app/stores";
 
   import { authenticatedAgent } from "$lib/authSession";
+  import ActorAvatar from "$lib/components/ActorAvatar.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Button from "$lib/components/Button.svelte";
   import SelectableId from "$lib/components/SelectableId.svelte";
@@ -1171,7 +1172,7 @@
                       ? "rounded-b-md"
                       : ""}
               <div
-                class="group relative px-3 py-2.5 transition-colors hover:bg-line-subtle {rowRound} {i >
+                class="group/row relative px-3 py-2.5 transition-colors hover:bg-panel-hover {rowRound} {i >
                 0
                   ? 'border-t border-line'
                   : ''} {principal.revoked ? 'opacity-50' : ''}"
@@ -1189,6 +1190,11 @@
                       class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
                     >
                       {#if principal.username}
+                        <ActorAvatar
+                          label={principal.username}
+                          seed={principal.agent_id}
+                          size="xs"
+                        />
                         <span class="truncate text-meta font-medium text-fg">
                           {principal.username}
                         </span>

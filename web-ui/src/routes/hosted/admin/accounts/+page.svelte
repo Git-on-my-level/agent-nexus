@@ -222,7 +222,9 @@
         </thead>
         <tbody>
           {#each filteredRows as account (account.id)}
-            <tr class="border-b border-line/60 last:border-b-0">
+            <tr
+              class="border-b border-line/60 last:border-b-0 transition-colors hover:bg-panel-hover"
+            >
               <td class="max-w-[19rem] px-4 py-2"
                 ><a
                   class="block truncate text-fg hover:text-accent-text"

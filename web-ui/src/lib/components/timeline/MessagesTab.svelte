@@ -22,6 +22,7 @@
   } from "$lib/principalWakeRouting.js";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import { emptyMessageEventConfirmModal } from "$lib/confirmModal.js";
   import MessageItem from "$lib/components/timeline/MessageItem.svelte";
   import { eventRefsInclude, toFlatMessageView } from "$lib/messageThreadUtils";
@@ -1012,20 +1013,7 @@
       <div
         class="mb-2 flex items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5"
       >
-        <svg
-          class="h-3.5 w-3.5 shrink-0 text-accent"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M8 12h8M8 8h8m-8 8h5m-9 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 3.5Z"
-          />
-        </svg>
+        <Icon name="comment" class="h-3.5 w-3.5 shrink-0 text-accent" />
         <span
           class="min-w-0 flex-1 truncate text-meta italic text-fg"
           title={pendingSelectedQuote}
@@ -1049,20 +1037,7 @@
           title="Clear (Esc)"
           aria-label="Clear comment selection"
         >
-          <svg
-            class="h-3.5 w-3.5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18 18 6M6 6l12 12"
-            />
-          </svg>
+          <Icon name="close" class="h-3.5 w-3.5" />
         </button>
       </div>
     {/if}
@@ -1080,20 +1055,7 @@
         class="mb-2 flex items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5"
         title={replyChipDetailTitle || undefined}
       >
-        <svg
-          class="h-3.5 w-3.5 shrink-0 text-accent"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
-          />
-        </svg>
+        <Icon name="replyTo" class="h-3.5 w-3.5 shrink-0 text-accent" />
         <span class="shrink-0 text-micro text-fg-muted">Replying to</span>
         {#if replyTargetAuthorName}
           <span class="shrink-0 font-medium text-fg-muted"
@@ -1116,20 +1078,7 @@
           title="Clear reply"
           aria-label="Clear reply target"
         >
-          <svg
-            class="h-3.5 w-3.5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M6 18 18 6M6 6l12 12"
-            />
-          </svg>
+          <Icon name="close" class="h-3.5 w-3.5" />
         </button>
       </div>
     {/if}

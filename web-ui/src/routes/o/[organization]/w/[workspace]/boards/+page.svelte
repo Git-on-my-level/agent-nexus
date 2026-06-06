@@ -14,6 +14,8 @@
   import { BOARD_STATUS_LABELS, parseDelimitedValues } from "$lib/boardUtils";
   import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import { boardListColumnMetricItems } from "$lib/workspaceRowMetrics.js";
+  import CopyButton from "$lib/components/CopyButton.svelte";
+  import RowActionBar from "$lib/components/RowActionBar.svelte";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
@@ -21,6 +23,7 @@
   import Button from "$lib/components/Button.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import {
+    resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
@@ -478,7 +481,7 @@
             : ''}"
         >
           <div
-            class="group relative min-w-0 flex-1 px-3 py-2.5 text-left transition-colors hover:bg-line-subtle sm:px-4"
+            class="group/row relative min-w-0 flex-1 px-3 py-2.5 pr-12 text-left transition-colors hover:bg-panel-hover sm:px-4"
           >
             <a
               aria-label={`Open board ${resourceDisplayLabel(board)}`}
@@ -495,7 +498,7 @@
                   <WorkspaceResourceListRow
                     title={resourceDisplayLabel(board)}
                     description={board.summary ?? ""}
-                    titleClass="group-hover:text-accent-text transition-colors"
+                    titleClass="group-hover/row:text-accent-text transition-colors"
                   >
                     {#snippet badges()}
                       <LifecycleBadge
@@ -522,6 +525,14 @@
                 />
               </div>
             </div>
+            <RowActionBar groupName="row" class="top-2 z-20">
+              <CopyButton
+                value={resourceCopyValue("board", board)}
+                iconOnly
+                label="Copy board ref"
+                size="sm"
+              />
+            </RowActionBar>
           </div>
         </div>
       {/if}

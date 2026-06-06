@@ -34,6 +34,14 @@ module.exports = {
       blue: {
         400: "#60a5fa",
       },
+      // Decorative identity tints for deterministic avatars (avatarModel.js).
+      // theme.colors replaces Tailwind's defaults, so these must be declared
+      // explicitly or the avatar palette slots render with no color.
+      sky: { 300: "#7dd3fc", 500: "#0ea5e9" },
+      rose: { 300: "#fda4af", 500: "#f43f5e" },
+      violet: { 300: "#c4b5fd", 500: "#8b5cf6" },
+      teal: { 300: "#5eead4", 500: "#14b8a6" },
+      fuchsia: { 300: "#f0abfc", 500: "#d946ef" },
       transparent: "transparent",
       current: "currentColor",
       white: "#fff",

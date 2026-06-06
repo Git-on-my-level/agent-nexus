@@ -7,6 +7,7 @@
   import { env } from "$env/dynamic/public";
 
   import Button from "$lib/components/Button.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import Avatar from "$lib/hosted/Avatar.svelte";
   import HostedSessionErrorPanel from "$lib/hosted/HostedSessionErrorPanel.svelte";
   import {
@@ -193,16 +194,10 @@
                 <span class="min-w-0 truncate text-left">
                   {activeOrg?.display_name ?? activeOrg?.slug ?? "—"}
                 </span>
-                <svg
+                <Icon
+                  name="chevronDown"
                   class="h-3 w-3 shrink-0 text-fg-subtle"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  aria-hidden="true"
-                >
-                  <path d="M3 4.5l3 3 3-3" />
-                </svg>
+                />
               </button>
               {#if orgPickerOpen}
                 <div

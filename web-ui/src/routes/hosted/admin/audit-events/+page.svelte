@@ -3,6 +3,7 @@
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
 
+  import ActorLabel from "$lib/components/ActorLabel.svelte";
   import Button from "$lib/components/Button.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
@@ -202,7 +203,9 @@
         </thead>
         <tbody>
           {#each events as event (event.id)}
-            <tr class="border-b border-line/60 last:border-b-0">
+            <tr
+              class="border-b border-line/60 last:border-b-0 transition-colors hover:bg-panel-hover"
+            >
               <td class="whitespace-nowrap px-4 py-2 text-fg-subtle">
                 {formatDateTime(event.occurred_at)}
               </td>
@@ -228,10 +231,17 @@
                     "unknown"}
                 </div>
               </td>
-              <td class="max-w-[14rem] px-3 py-2 font-mono text-fg-subtle">
-                <span class="truncate"
-                  >{event.actor_account_id || "system"}</span
-                >
+              <td class="max-w-[14rem] px-3 py-2 text-fg-subtle">
+                {#if event.actor_account_id}
+                  <ActorLabel
+                    label={event.actor_account_id}
+                    seed={event.actor_account_id}
+                    size="xs"
+                    nameClass="truncate font-mono text-micro text-fg-subtle"
+                  />
+                {:else}
+                  <span class="truncate font-mono text-micro">system</span>
+                {/if}
               </td>
               <td class="max-w-[24rem] px-4 py-2">
                 {#if event.metadata && Object.keys(event.metadata).length}

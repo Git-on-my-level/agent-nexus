@@ -122,7 +122,7 @@ describe("artifact detail route state", () => {
       return Promise.reject(new Error(`unexpected artifact ${id}`));
     });
 
-    const { getByRole, getByText, queryByText } = render(ArtifactDetailPage);
+    const { getByText, queryByText } = render(ArtifactDetailPage);
 
     await waitFor(() => {
       expect(coreClientMock.getArtifactContent).toHaveBeenCalledWith(
@@ -133,7 +133,7 @@ describe("artifact detail route state", () => {
     setArtifactRoute("artifact-second");
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Second artifact" })).toBeTruthy();
+      expect(getByText("Second artifact")).toBeTruthy();
     });
     await waitFor(() => {
       expect(getByText("second artifact content")).toBeTruthy();

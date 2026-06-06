@@ -7,6 +7,7 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import ActorLabel from "$lib/components/ActorLabel.svelte";
   import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
@@ -133,9 +134,13 @@
       >
       {#if topic.created_by}
         <span aria-hidden="true">·</span>
-        <span class="min-w-0 whitespace-nowrap"
-          >by {actorName(topic.created_by)}</span
-        >
+        <ActorLabel
+          label={actorName(topic.created_by)}
+          seed={topic.created_by}
+          size="xs"
+          prefix="by"
+          nameClass="text-micro text-fg-subtle"
+        />
       {/if}
     </p>
   {/if}
@@ -203,10 +208,21 @@
       {#if topic.trash_reason}
         <p class="mt-2">Reason: {topic.trash_reason}</p>
       {/if}
-      <p class="mt-1 text-micro text-danger-text">
-        Trashed {#if topic.trashed_by}by {actorName(topic.trashed_by)}{/if}
+      <p
+        class="mt-1 flex flex-wrap items-center gap-x-1 text-micro text-danger-text"
+      >
+        <span>Trashed</span>
+        {#if topic.trashed_by}
+          <ActorLabel
+            label={actorName(topic.trashed_by)}
+            seed={topic.trashed_by}
+            size="xs"
+            prefix="by"
+            nameClass="text-micro text-danger-text"
+          />
+        {/if}
         {#if topic.trashed_at}
-          at {formatTimestamp(topic.trashed_at)}
+          <span>at {formatTimestamp(topic.trashed_at)}</span>
         {/if}
       </p>
     </div>
@@ -230,22 +246,33 @@
   <div
     class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
   >
-    <p class="min-w-0 flex-1">
-      This {detailAsTopic ? "topic" : "thread"} was archived on {formatTimestamp(
-        topic.archived_at,
-      ) || "—"}{#if topic.archived_by}{" by "}{actorName(
-          topic.archived_by,
-        )}{/if}.
+    <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+      <span class="text-warn-text">
+        This {detailAsTopic ? "topic" : "thread"} was archived on {formatTimestamp(
+          topic.archived_at,
+        ) || "—"}
+      </span>
+      {#if topic.archived_by}
+        <ActorLabel
+          label={actorName(topic.archived_by)}
+          seed={topic.archived_by}
+          size="xs"
+          prefix="by"
+          nameClass="text-micro text-warn-text"
+        />
+      {/if}
+      <span class="text-warn-text">.</span>
     </p>
     {#if detailAsTopic}
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
+      <Button
+        variant="secondary"
+        size="compact"
+        class="border-warn text-warn-text hover:bg-warn-soft"
         disabled={lifecycleBusy}
         onclick={handleUnarchive}
-        type="button"
       >
         {lifecycleBusy ? "…" : "Unarchive"}
-      </button>
+      </Button>
     {:else}
       <p class="shrink-0 max-w-xs text-micro text-warn-text">
         Unarchive from the topic route; thread views here are read-only.

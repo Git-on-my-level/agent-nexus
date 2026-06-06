@@ -3,9 +3,12 @@
   import { page } from "$app/stores";
 
   import ActorAvatar from "$lib/components/ActorAvatar.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import RowActionBar from "$lib/components/RowActionBar.svelte";
   import ContextMenuHost from "$lib/components/ContextMenuHost.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
+  import { truncateActorDisplayName } from "$lib/avatarModel.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import MessageActions from "$lib/components/timeline/MessageActions.svelte";
   import { scrollAndHighlightTarget } from "$lib/deepLinkTargets";
@@ -290,17 +293,7 @@
   let quoteIsStale = $derived(anchorStatus === "stale");
 
   let actorLine = $derived(actorName(message.actor_id));
-  let actorDisplayLine = $derived.by(() => {
-    const name = actorLine;
-    if (name.length <= 24 || name.includes(" ")) return name;
-    const dotIdx = name.indexOf(".");
-    if (dotIdx > 0 && dotIdx < name.length - 1) {
-      const prefix = name.slice(0, dotIdx);
-      const suffix = name.slice(dotIdx + 1, dotIdx + 9);
-      return `${prefix}.${suffix}…`;
-    }
-    return `${name.slice(0, 20)}…`;
-  });
+  let actorDisplayLine = $derived(truncateActorDisplayName(actorLine));
 
   let messageHref = $derived.by(() => {
     const org = String(
@@ -357,9 +350,7 @@
           drawn over the panel background so it reads over message content,
           including grouped rows that have no header to host actions.
         -->
-        <div
-          class="msg-toolbar absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-md border border-line bg-panel/95 px-0.5 opacity-0 shadow-sm transition-opacity duration-150 focus-within:opacity-100 group-hover/msg:opacity-100"
-        >
+        <RowActionBar groupName="msg">
           <CopyButton
             value={messageHref}
             iconOnly
@@ -368,7 +359,7 @@
             size="sm"
           />
           {@render visibleActions()}
-        </div>
+        </RowActionBar>
 
         {#if replyTo}
           <button
@@ -378,20 +369,10 @@
             title={truncateReplyText(replyTo.text, 500)}
             aria-label={`Jump to message from ${actorName(replyTo.authorActorId)}: ${truncateReplyText(replyTo.text, 80)}`}
           >
-            <svg
+            <Icon
+              name="replyTo"
               class="h-3 w-3 shrink-0 text-fg-subtle transition-colors group-hover/msg:text-accent"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5h-3"
-              />
-            </svg>
+            />
             <span class="shrink-0 font-medium text-fg-muted">
               {actorName(replyTo.authorActorId)}
             </span>
@@ -589,14 +570,3 @@
     </ContextMenuHost>
   {/snippet}
 </MessageActions>
-
-<style>
-  /* Touch devices have no hover state: keep the action toolbar (reply,
-     archive, trash, copy link) visible so it stays reachable, since there is
-     no overflow-menu fallback for these primary row actions. */
-  @media (hover: none) {
-    .msg-toolbar {
-      opacity: 1;
-    }
-  }
-</style>

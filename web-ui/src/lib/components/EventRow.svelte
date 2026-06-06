@@ -4,11 +4,12 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
+  import ActorLabel from "$lib/components/ActorLabel.svelte";
   import { formatTimestamp } from "$lib/formatDate";
 
   let { row } = $props();
 
-  let actorName = $derived(
+  let actorLine = $derived(
     lookupActorDisplayName(row?.actorId, $actorRegistry, $principalRegistry) ||
       row?.actorId ||
       "System",
@@ -17,14 +18,18 @@
 
 <a
   id={row?.id}
-  class="block px-3 py-2.5 transition-colors hover:bg-line-subtle sm:px-4"
+  class="group/row relative block px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
   href={row?.href || "#"}
 >
   <div class="min-w-0">
     <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-      <span class="truncate text-meta font-medium text-fg">
-        {actorName}
-      </span>
+      <ActorLabel
+        label={actorLine}
+        seed={String(row?.actorId ?? actorLine)}
+        size="xs"
+        truncate={false}
+        nameClass="truncate text-meta font-medium text-fg group-hover/row:text-accent-text transition-colors"
+      />
       <span class="text-micro text-fg-muted">·</span>
       <span class="text-micro font-medium text-fg-muted">
         {formatTimestamp(row?.ts) || "—"}

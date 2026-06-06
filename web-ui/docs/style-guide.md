@@ -56,6 +56,31 @@ new markup. Use arbitrary `var()` utilities only where Tailwind cannot express
 the property, or while touching legacy code that has not yet been migrated. The
 unification plan tracks a migration away from mixed idioms.
 
+### Class names must be statically literal
+
+Tailwind's JIT scanner extracts class names by **text matching** the source;
+it does not evaluate JavaScript. A class assembled by interpolation — e.g.
+`` `group-hover/${name}:opacity-100` `` or `` `bg-${tone}-soft` `` — is never
+seen, so the rule is never generated and the style silently does nothing (no
+build error). This is how the hover-revealed `RowActionBar` shipped revealing
+only on focus, never on hover.
+
+Always write the full class as a literal somewhere the scanner can find it. When
+a value must be dynamic, map the input to complete literal strings rather than
+building the class with string concatenation:
+
+```js
+// Good — both literals are scannable
+const HOVER = { row: "group-hover/row:opacity-100", msg: "group-hover/msg:opacity-100" };
+let cls = HOVER[name] ?? HOVER.row;
+
+// Bad — interpolated variant never compiles
+let cls = `group-hover/${name}:opacity-100`;
+```
+
+When in doubt, compile and confirm: `npx tailwindcss -c tailwind.config.cjs -i
+src/app.css -o /tmp/out.css` then grep `/tmp/out.css` for the exact rule.
+
 ### Focus rings and `:focus-visible`
 
 - **Base layer:** `app.css` `@layer base` sets the default focus-visible outline
@@ -144,9 +169,21 @@ Prefer the project font-size keys (`text-micro`, `text-meta`, `text-body`,
 
 Use semantic colors only when the color carries state. The Tailwind config
 currently exposes a deliberately small palette in addition to runtime tokens:
-`danger`, `warn`, `ok`, `info`, `orange.400`, and `blue.400`. Existing code also
-contains a limited set of opacity utilities for semantic Tailwind defaults; keep
-new usage consistent with surrounding files until a shared primitive exists.
+`danger`, `warn`, `ok`, `info`, `orange.400`, `blue.400`, and the avatar
+identity tints (`sky`, `rose`, `violet`, `teal`, `fuchsia` at `300`/`500`, used
+only by `avatarModel.js`). Existing code also contains a limited set of opacity
+utilities for semantic Tailwind defaults; keep new usage consistent with
+surrounding files until a shared primitive exists.
+
+> **Closed palette — Tailwind colors that "look standard" may not exist.**
+> `tailwind.config.cjs` defines colors under `theme.colors`, which **replaces**
+> Tailwind's default palette rather than extending it. Only the families listed
+> above are generated. Referencing a stock color such as `bg-sky-500` or
+> `text-violet-300` that isn't declared produces **no CSS and no error** — the
+> element silently renders with no color. This is exactly how five of the eight
+> avatar palette slots shipped invisible. If you need a new hue, add the
+> specific shades to `theme.colors` first (and document them here), then use
+> them. Do not assume the default Tailwind palette is available.
 
 | Purpose | Preferred classes |
 | --- | --- |
@@ -268,8 +305,37 @@ Until a shared `InlineAlert`/`Banner` primitive exists, prefer these shapes:
 
 ### Hover States
 
-Hover should brighten or raise contrast. On `bg-panel`, use `hover:bg-panel-hover`
-or `hover:bg-line-subtle`; on `bg-bg-soft`, use `hover:bg-line-subtle`.
+Hover should brighten or raise contrast. On list rows inside `bg-panel`
+containers, prefer **`hover:bg-panel-hover`** (not `hover:bg-line-subtle`) so
+rows read consistently across Topics, Boards, Docs, Artifacts, Trash, Access,
+Events, and hosted admin tables.
+
+### Actor identity (`ActorLabel`, `ActorAvatar`)
+
+Show **avatar + display name** wherever an actor or principal appears in the
+operator UI. Use `ActorLabel` for the standard row/header pattern (optional
+`prefix="by"`, optional `timestamp`). Use bare `ActorAvatar` when space is
+tight. Both share `avatarModel.js` with hosted `Avatar` for identical palette
+and initials.
+
+Reserve `font-mono` IDs for raw technical subjects (audit tables, hash columns)
+—not for human actor identity when a display name is available.
+
+### Row actions (`RowActionBar`, `WorkspaceListRowShell`)
+
+Secondary row actions (copy ref, open-in-new) use a **hover/focus-revealed**
+`RowActionBar` pinned top-right. On touch devices the bar stays visible
+(`@media (hover: none)`).
+
+For clickable list rows (`<a>`), wrap with `WorkspaceListRowShell` or an
+equivalent `group/row relative` container and place `RowActionBar` as a
+**sibling** of the link—not nested inside it (no nested interactives).
+
+Lifecycle actions (archive, trash) stay in bulk toolbars and detail headers
+(`ArchiveButton`, `TrashButton`), not per-row hover bars.
+
+Bulk-select mode (`LeadingSelectionGlyph` + `WorkspaceListBulkToolbar`) remains
+the primary multi-item interaction; hover quick-actions are light supplements.
 
 ### Links
 
@@ -415,6 +481,10 @@ item belongs to.
 - No `bg-white` or light-theme surface assumptions.
 - No arbitrary `gray-*` classes in new code; they are not part of the active
   Tailwind theme.
+- No stock Tailwind colors that aren't declared in `theme.colors` (the palette
+  is closed; undeclared colors emit no CSS silently).
+- No interpolated/dynamically-built class names; Tailwind only sees literal
+  class strings, so map to full literals instead.
 - No `--ui-*` variables in new code or docs.
 - No color on zero-count badges.
 - No deep card nesting.

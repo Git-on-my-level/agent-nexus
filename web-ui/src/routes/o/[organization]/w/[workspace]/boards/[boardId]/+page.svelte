@@ -7,7 +7,11 @@
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
+  import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
+  import TrashButton from "$lib/components/TrashButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
@@ -564,40 +568,61 @@
         {#if board.trash_reason}
           <p class="mt-2">Reason: {board.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-micro text-danger-text">
-          Trashed {#if board.trashed_by}by {actorName(board.trashed_by)}{/if}
+        <p
+          class="mt-1 flex flex-wrap items-center gap-x-1 text-micro text-danger-text"
+        >
+          <span>Trashed</span>
+          {#if board.trashed_by}
+            <ActorLabel
+              label={actorName(board.trashed_by)}
+              seed={board.trashed_by}
+              size="xs"
+              prefix="by"
+              nameClass="text-micro text-danger-text"
+            />
+          {/if}
           {#if board.trashed_at}
-            at {formatTimestamp(board.trashed_at)}
+            <span>at {formatTimestamp(board.trashed_at)}</span>
           {/if}
         </p>
       </div>
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-danger bg-danger-soft px-2 py-1 text-micro font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
+      <Button
+        variant="destructive"
+        size="compact"
         disabled={boardLifecycleBusy}
         onclick={handleRestoreBoard}
-        type="button"
       >
         {boardLifecycleBusy ? "…" : "Restore"}
-      </button>
+      </Button>
     </div>
   {:else if board.archived_at}
     <div
       class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
-      <p class="min-w-0 flex-1">
-        This board was archived on {formatTimestamp(board.archived_at) ||
-          "—"}{#if board.archived_by}{" by "}{actorName(
-            board.archived_by,
-          )}{/if}.
+      <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+        <span class="text-warn-text">
+          This board was archived on {formatTimestamp(board.archived_at) || "—"}
+        </span>
+        {#if board.archived_by}
+          <ActorLabel
+            label={actorName(board.archived_by)}
+            seed={board.archived_by}
+            size="xs"
+            prefix="by"
+            nameClass="text-micro text-warn-text"
+          />
+        {/if}
+        <span class="text-warn-text">.</span>
       </p>
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
+      <Button
+        variant="secondary"
+        size="compact"
+        class="border-warn text-warn-text hover:bg-warn-soft"
         disabled={boardLifecycleBusy}
         onclick={handleUnarchiveBoard}
-        type="button"
       >
         {boardLifecycleBusy ? "…" : "Unarchive"}
-      </button>
+      </Button>
     </div>
   {/if}
 
@@ -648,11 +673,22 @@
       <span>Board updated {formatTimestamp(board.updated_at) || "—"}</span>
       {#if board.owners?.length > 0}
         <span class="text-fg-subtle">·</span>
-        <span
-          >Owners {board.owners
-            .map((owner) => actorName(owner))
-            .join(", ")}</span
-        >
+        <span class="inline-flex flex-wrap items-center gap-1">
+          <span class="text-fg-muted">Owners</span>
+          {#each board.owners.slice(0, 3) as owner (owner)}
+            <ActorLabel
+              label={actorName(owner)}
+              seed={owner}
+              size="xs"
+              nameClass="text-micro text-fg-muted"
+            />
+          {/each}
+          {#if board.owners.length > 3}
+            <span class="text-micro text-fg-muted"
+              >+{board.owners.length - 3}</span
+            >
+          {/if}
+        </span>
       {/if}
     </div>
   {/snippet}
@@ -716,6 +752,19 @@
               >
                 Add card
               </Button>
+              {#if !board.archived_at}
+                <ArchiveButton
+                  busy={boardLifecycleBusy}
+                  size="sm"
+                  onarchive={() =>
+                    (confirmModal = { open: true, action: "archive" })}
+                />
+              {/if}
+              <TrashButton
+                busy={boardLifecycleBusy}
+                size="sm"
+                ontrash={() => (confirmModal = { open: true, action: "trash" })}
+              />
               <div bind:this={boardMoreRoot} class="relative">
                 <button
                   type="button"
@@ -726,16 +775,7 @@
                   disabled={boardLifecycleBusy}
                   onclick={toggleBoardMore}
                 >
-                  <svg
-                    class="h-4 w-4"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="5" r="1.75" />
-                    <circle cx="12" cy="12" r="1.75" />
-                    <circle cx="12" cy="19" r="1.75" />
-                  </svg>
+                  <Icon name="kebab" class="h-4 w-4" />
                 </button>
                 {#if boardMoreOpen}
                   <div
@@ -744,7 +784,7 @@
                   >
                     <a
                       role="menuitem"
-                      class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
+                      class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover"
                       href={workspaceHref(
                         `/boards/${encodeURIComponent(boardRouteSegment)}/edit`,
                       )}
@@ -752,32 +792,6 @@
                     >
                       Settings
                     </a>
-                    {#if !board.archived_at}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle disabled:opacity-50"
-                        disabled={boardLifecycleBusy}
-                        onclick={() => {
-                          closeBoardMore();
-                          confirmModal = { open: true, action: "archive" };
-                        }}
-                      >
-                        {boardLifecycleBusy ? "…" : "Archive"}
-                      </button>
-                    {/if}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-line-subtle disabled:opacity-50"
-                      disabled={boardLifecycleBusy}
-                      onclick={() => {
-                        closeBoardMore();
-                        confirmModal = { open: true, action: "trash" };
-                      }}
-                    >
-                      {boardLifecycleBusy ? "…" : "Move to trash"}
-                    </button>
                   </div>
                 {/if}
               </div>

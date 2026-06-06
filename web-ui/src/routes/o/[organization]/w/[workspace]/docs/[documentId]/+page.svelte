@@ -1,8 +1,12 @@
 <script>
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import TrashButton from "$lib/components/TrashButton.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
@@ -1073,12 +1077,21 @@
         {#if document.trash_reason}
           <p class="mt-2">Reason: {document.trash_reason}</p>
         {/if}
-        <p class="mt-1 text-micro text-danger-text">
-          Trashed {#if document.trashed_by}by {actorName(
-              document.trashed_by,
-            )}{/if}
+        <p
+          class="mt-1 flex flex-wrap items-center gap-x-1 text-micro text-danger-text"
+        >
+          <span>Trashed</span>
+          {#if document.trashed_by}
+            <ActorLabel
+              label={actorName(document.trashed_by)}
+              seed={document.trashed_by}
+              size="xs"
+              prefix="by"
+              nameClass="text-micro text-danger-text"
+            />
+          {/if}
           {#if document.trashed_at}
-            at {formatTimestamp(document.trashed_at)}
+            <span>at {formatTimestamp(document.trashed_at)}</span>
           {/if}
         </p>
       </div>
@@ -1096,20 +1109,32 @@
     <div
       class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
-      <p class="min-w-0 flex-1">
-        This document was archived on {formatTimestamp(document.archived_at) ||
-          "—"}{#if document.archived_by}{" by "}{actorName(
-            document.archived_by,
-          )}{/if}.
+      <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
+        <span class="text-warn-text">
+          This document was archived on {formatTimestamp(
+            document.archived_at,
+          ) || "—"}
+        </span>
+        {#if document.archived_by}
+          <ActorLabel
+            label={actorName(document.archived_by)}
+            seed={document.archived_by}
+            size="xs"
+            prefix="by"
+            nameClass="text-micro text-warn-text"
+          />
+        {/if}
+        <span class="text-warn-text">.</span>
       </p>
-      <button
-        class="shrink-0 cursor-pointer rounded-md border border-warn bg-warn-soft px-2 py-1 text-micro font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
+      <Button
+        variant="secondary"
+        size="compact"
+        class="border-warn text-warn-text hover:bg-warn-soft"
         disabled={docLifecycleBusy}
         onclick={handleUnarchiveDocument}
-        type="button"
       >
         {docLifecycleBusy ? "…" : "Unarchive"}
-      </button>
+      </Button>
     </div>
   {/if}
 
@@ -1143,8 +1168,17 @@
               <p class="text-meta font-medium text-fg">
                 {#if isHead}Current version{:else}Version {rev.revision_number}{/if}
               </p>
-              <p class="text-micro text-fg-muted">
-                {formatTimestamp(rev.created_at)} · {actorName(rev.created_by)}
+              <p
+                class="flex flex-wrap items-center gap-x-1 text-micro text-fg-muted"
+              >
+                <span>{formatTimestamp(rev.created_at)}</span>
+                <span aria-hidden="true">·</span>
+                <ActorLabel
+                  label={actorName(rev.created_by)}
+                  seed={rev.created_by}
+                  size="xs"
+                  nameClass="text-micro text-fg-muted"
+                />
               </p>
               {#if rev.revision_hash}
                 <p class="mt-0.5 truncate font-mono text-micro text-fg-muted">
@@ -1332,19 +1366,7 @@
                     onclick={openEdit}
                     type="button"
                   >
-                    <svg
-                      class="h-3.5 w-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
+                    <Icon name="pencil" class="h-3.5 w-3.5" />
                     Edit
                   </Button>
                 {:else}
@@ -1352,22 +1374,24 @@
                     class="inline-flex max-w-[5rem] items-center gap-1 truncate rounded-md border border-line px-1.5 py-1 text-[10px] text-fg-muted sm:max-w-none sm:px-2.5 sm:py-1.5 sm:text-micro lg:inline-flex"
                     title="Content type '{headContentType}' can only be updated via the CLI or API"
                   >
-                    <svg
-                      class="h-3.5 w-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <Icon name="info" class="h-3.5 w-3.5 shrink-0" />
                     {headContentType} — edit via CLI
                   </span>
                 {/if}
+                {#if !document.archived_at}
+                  <ArchiveButton
+                    busy={docLifecycleBusy}
+                    size="sm"
+                    onarchive={() =>
+                      (confirmModal = { open: true, action: "archive" })}
+                  />
+                {/if}
+                <TrashButton
+                  busy={docLifecycleBusy}
+                  size="sm"
+                  ontrash={() =>
+                    (confirmModal = { open: true, action: "trash" })}
+                />
                 <div bind:this={moreActionsRoot} class="relative">
                   <button
                     type="button"
@@ -1378,16 +1402,7 @@
                     disabled={docLifecycleBusy}
                     onclick={toggleMoreActions}
                   >
-                    <svg
-                      class="h-4 w-4"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="5" r="1.75" />
-                      <circle cx="12" cy="12" r="1.75" />
-                      <circle cx="12" cy="19" r="1.75" />
-                    </svg>
+                    <Icon name="kebab" class="h-4 w-4" />
                   </button>
                   {#if moreActionsOpen}
                     <div
@@ -1396,7 +1411,7 @@
                     >
                       <a
                         role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
+                        class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover"
                         href={workspaceHref(
                           `/docs/${encodeURIComponent(documentRouteSegment)}/edit`,
                         )}
@@ -1408,7 +1423,7 @@
                         <button
                           type="button"
                           role="menuitem"
-                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
+                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover"
                           onclick={() => {
                             closeMoreActions();
                             void openRevisionHistoryNoThread();
@@ -1417,32 +1432,6 @@
                           Revision history
                         </button>
                       {/if}
-                      {#if !document.archived_at}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle disabled:opacity-50"
-                          disabled={docLifecycleBusy}
-                          onclick={() => {
-                            closeMoreActions();
-                            confirmModal = { open: true, action: "archive" };
-                          }}
-                        >
-                          Archive
-                        </button>
-                      {/if}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-line-subtle disabled:opacity-50"
-                        disabled={docLifecycleBusy}
-                        onclick={() => {
-                          closeMoreActions();
-                          confirmModal = { open: true, action: "trash" };
-                        }}
-                      >
-                        Move to trash
-                      </button>
                     </div>
                   {/if}
                 </div>

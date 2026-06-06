@@ -701,7 +701,7 @@
       {@const selected = trashSel.selectedIds.has(String(artifact.id).trim())}
       {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div class="transition-colors hover:bg-line-subtle {borderTop}">
+        <div class="transition-colors hover:bg-panel-hover {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${rowHeading(artifact)}`}
             aria-pressed={selected}
@@ -765,7 +765,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(
             `/artifacts/${encodeURIComponent(resourceRouteSegment(artifact, "artifact"))}`,
           )}
@@ -817,7 +817,7 @@
       {@const selected = trashSel.selectedIds.has(String(doc.id).trim())}
       {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div class="transition-colors hover:bg-line-subtle {borderTop}">
+        <div class="transition-colors hover:bg-panel-hover {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${documentTitle(doc)}`}
             aria-pressed={selected}
@@ -880,7 +880,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(
             `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
           )}
@@ -931,7 +931,7 @@
       {@const selected = trashSel.selectedIds.has(String(thread.id).trim())}
       {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div class="transition-colors hover:bg-line-subtle {borderTop}">
+        <div class="transition-colors hover:bg-panel-hover {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(thread)}`}
             aria-pressed={selected}
@@ -1002,7 +1002,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(
             `/topics/${encodeURIComponent(resourceRouteSegment(thread, "topic"))}`,
           )}
@@ -1060,7 +1060,7 @@
       {@const selected = trashSel.selectedIds.has(String(board.id).trim())}
       {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div class="transition-colors hover:bg-line-subtle {borderTop}">
+        <div class="transition-colors hover:bg-panel-hover {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(board)}`}
             aria-pressed={selected}
@@ -1122,7 +1122,7 @@
         </div>
       {:else}
         <a
-          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
+          class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0 {borderTop}"
           href={workspaceHref(
             `/boards/${encodeURIComponent(resourceRouteSegment(board, "board"))}`,
           )}
@@ -1172,7 +1172,7 @@
       {@const selected = trashSel.selectedIds.has(String(card.id).trim())}
       {@const borderTop = i > 0 ? "border-t border-line" : ""}
       {#if trashSel.selectMode}
-        <div class="transition-colors hover:bg-line-subtle {borderTop}">
+        <div class="transition-colors hover:bg-panel-hover {borderTop}">
           <div
             aria-label={`${selected ? "Deselect" : "Select"} ${resourceDisplayLabel(card)}`}
             aria-pressed={selected}
@@ -1285,7 +1285,7 @@
       {:else}
         <div class="flex flex-col {borderTop}">
           <a
-            class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-line-subtle focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0"
+            class="group block px-4 py-2.5 text-left outline-none transition-colors hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset focus-visible:ring-offset-0"
             href={cardTrashNavigateHref(card)}
           >
             <div class="flex flex-wrap items-center gap-2">

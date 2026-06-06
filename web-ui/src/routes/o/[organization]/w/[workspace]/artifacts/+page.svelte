@@ -27,13 +27,18 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
+  import RowActionBar from "$lib/components/RowActionBar.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
-  import { resourceRouteSegment } from "$lib/resourceIdentity.js";
+  import {
+    resourceCopyValue,
+    resourceRouteSegment,
+  } from "$lib/resourceIdentity.js";
 
   let artifacts = $state([]);
   let loading = $state(false);
@@ -592,95 +597,113 @@
           </div>
         </div>
       {:else}
-        <div
-          class="px-3 py-2 transition-colors hover:bg-line-subtle sm:px-4 {borderTop}"
-        >
-          <div class="flex items-start justify-between gap-3">
-            {#if isAttachmentListRow(artifact)}
-              <div class="min-w-0 flex-1">
-                <AttachmentChip
-                  resolved={listAttachmentResolved(artifact)}
-                  size="compact"
-                />
-                {#if isArtifactArchived(artifact)}
-                  <span
-                    class="mt-1 inline-flex rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
-                    >Archived</span
-                  >
-                {/if}
-                <p class="mt-1 text-micro text-fg-muted">
-                  Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
-                    artifact.created_by,
-                  )}
-                </p>
-              </div>
-            {:else}
+        <div class={borderTop}>
+          <div
+            class="group/row relative px-3 py-2 pr-12 transition-colors hover:bg-panel-hover sm:px-4 sm:pr-14"
+          >
+            {#if !isAttachmentListRow(artifact)}
               <a
-                class="min-w-0 flex-1 outline-none rounded-sm focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-soft"
+                aria-label={`Open artifact ${rowHeading(artifact)}`}
+                class="absolute inset-0 z-0"
                 href={workspaceHref(
                   `/artifacts/${encodeURIComponent(resourceRouteSegment(artifact, "artifact"))}`,
                 )}
-              >
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="truncate text-meta font-medium text-fg">
-                    {rowHeading(artifact)}
-                  </p>
+              ></a>
+            {/if}
+            <div
+              class="pointer-events-none relative z-10 flex items-start justify-between gap-3"
+            >
+              {#if isAttachmentListRow(artifact)}
+                <div class="pointer-events-auto min-w-0 flex-1">
+                  <AttachmentChip
+                    resolved={listAttachmentResolved(artifact)}
+                    size="compact"
+                  />
                   {#if isArtifactArchived(artifact)}
                     <span
-                      class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                      class="mt-1 inline-flex rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
                       >Archived</span
                     >
                   {/if}
+                  <p class="mt-1 text-micro text-fg-muted">
+                    Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                      artifact.created_by,
+                    )}
+                  </p>
                 </div>
-                <p class="text-micro text-fg-muted">
-                  <span class="font-medium">{kindLabel(artifact.kind)}</span>
-                  · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
-                    artifact.created_by,
-                  )}
-                </p>
-              </a>
-            {/if}
-            <span
-              class="shrink-0 tabular-nums text-micro text-fg-muted"
-              aria-hidden="true"
-            >
-              {artifactRefCount}
-              {artifactRefCount === 1 ? "ref" : "refs"}
-            </span>
-          </div>
-
-          {#if refPreview(artifact).length > 0 || artifact.thread_id}
-            <div
-              class="mt-1.5 hidden flex-wrap items-center gap-1.5 text-micro sm:flex"
-            >
-              {#if artifact.thread_id}
-                <RefLink
-                  variant="compact"
-                  humanize
-                  labelHints={{
-                    [`thread:${artifact.thread_id}`]: "Thread (timeline)",
-                  }}
-                  refValue={`thread:${artifact.thread_id}`}
-                  showRaw={false}
-                  threadId={artifact.thread_id}
-                />
+              {:else}
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p
+                      class="truncate text-meta font-medium text-fg group-hover/row:text-accent-text transition-colors"
+                    >
+                      {rowHeading(artifact)}
+                    </p>
+                    {#if isArtifactArchived(artifact)}
+                      <span
+                        class="rounded bg-warn-soft px-1.5 py-0.5 text-micro font-medium text-warn-text"
+                        >Archived</span
+                      >
+                    {/if}
+                  </div>
+                  <p class="text-micro text-fg-muted">
+                    <span class="font-medium">{kindLabel(artifact.kind)}</span>
+                    · Created {formatTimestamp(artifact.created_at) || "—"} by {actorName(
+                      artifact.created_by,
+                    )}
+                  </p>
+                </div>
               {/if}
-              {#each refPreview(artifact) as refValue}
-                <RefLink
-                  variant="compact"
-                  humanize
-                  {refValue}
-                  showRaw={false}
-                  threadId={artifact.thread_id}
-                />
-              {/each}
-              {#if artifactRefCount > 3}
-                <span class="text-micro text-fg-muted"
-                  >+{artifact.refs.length - 3} more</span
-                >
-              {/if}
+              <span
+                class="shrink-0 tabular-nums text-micro text-fg-muted"
+                aria-hidden="true"
+              >
+                {artifactRefCount}
+                {artifactRefCount === 1 ? "ref" : "refs"}
+              </span>
             </div>
-          {/if}
+
+            {#if refPreview(artifact).length > 0 || artifact.thread_id}
+              <div
+                class="pointer-events-auto relative z-10 mt-1.5 hidden flex-wrap items-center gap-1.5 text-micro sm:flex"
+              >
+                {#if artifact.thread_id}
+                  <RefLink
+                    variant="compact"
+                    humanize
+                    labelHints={{
+                      [`thread:${artifact.thread_id}`]: "Thread (timeline)",
+                    }}
+                    refValue={`thread:${artifact.thread_id}`}
+                    showRaw={false}
+                    threadId={artifact.thread_id}
+                  />
+                {/if}
+                {#each refPreview(artifact) as refValue}
+                  <RefLink
+                    variant="compact"
+                    humanize
+                    {refValue}
+                    showRaw={false}
+                    threadId={artifact.thread_id}
+                  />
+                {/each}
+                {#if artifactRefCount > 3}
+                  <span class="text-micro text-fg-muted"
+                    >+{artifact.refs.length - 3} more</span
+                  >
+                {/if}
+              </div>
+            {/if}
+            <RowActionBar groupName="row" class="top-2 z-20">
+              <CopyButton
+                value={resourceCopyValue("artifact", artifact)}
+                iconOnly
+                label="Copy artifact ref"
+                size="sm"
+              />
+            </RowActionBar>
+          </div>
         </div>
       {/if}
     {/each}

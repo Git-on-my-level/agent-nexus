@@ -13,6 +13,8 @@
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
+  import WorkspaceListRowShell from "$lib/components/WorkspaceListRowShell.svelte";
   import WorkspaceResourceListRow from "$lib/components/WorkspaceResourceListRow.svelte";
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
@@ -22,6 +24,7 @@
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
   import {
+    resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
@@ -609,50 +612,62 @@
         </div>
       </div>
     {:else}
-      <div
-        class="flex items-stretch {showBorderTop ? 'border-t border-line' : ''}"
+      <WorkspaceListRowShell
+        class={showBorderTop ? "border-t border-line" : ""}
       >
-        <a
-          class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-line-subtle sm:px-4"
-          href={workspaceHref(
-            `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
-          )}
-        >
-          <div class="min-w-0 flex-1">
-            <div class="flex min-w-0 items-start justify-between gap-3">
-              <WorkspaceResourceListRow
-                title={resourceDisplayLabel(doc)}
-                description={doc.summary ?? ""}
-                titleClass="group-hover/row:text-accent-text transition-colors"
-              >
-                {#snippet badges()}
-                  <LifecycleBadge
-                    state={doc.state}
-                    label={DOC_STATE_LABELS[doc.state]}
-                    forceShow={docsHaveMixedLifecycle}
-                  />
-                  {#if doc.head_revision_number != null}
-                    <span
-                      class="font-mono text-micro tabular-nums text-fg-subtle"
-                      title="Head revision"
-                    >
-                      v{doc.head_revision_number}
-                    </span>
-                  {/if}
-                {/snippet}
-              </WorkspaceResourceListRow>
-              <div
-                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
-              >
-                <span class="w-14 text-right text-fg-muted"
-                  >{formatTimestamp(doc.updated_at) || "—"}</span
+        {#snippet row()}
+          <a
+            class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 pr-12 transition-colors hover:bg-panel-hover sm:px-4"
+            href={workspaceHref(
+              `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+            )}
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 items-start justify-between gap-3">
+                <WorkspaceResourceListRow
+                  title={resourceDisplayLabel(doc)}
+                  description={doc.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
                 >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={doc.state}
+                      label={DOC_STATE_LABELS[doc.state]}
+                      forceShow={docsHaveMixedLifecycle}
+                    />
+                    {#if doc.head_revision_number != null}
+                      <span
+                        class="font-mono text-micro tabular-nums text-fg-subtle"
+                        title="Head revision"
+                      >
+                        v{doc.head_revision_number}
+                      </span>
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
+                <div
+                  class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+                >
+                  <span class="w-14 text-right text-fg-muted"
+                    >{formatTimestamp(doc.updated_at) || "—"}</span
+                  >
+                </div>
               </div>
+              <InlineWorkspaceMetricStrip
+                items={documentListMetricItems(doc)}
+              />
             </div>
-            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
-          </div>
-        </a>
-      </div>
+          </a>
+        {/snippet}
+        {#snippet actions()}
+          <CopyButton
+            value={resourceCopyValue("document", doc)}
+            iconOnly
+            label="Copy document ref"
+            size="sm"
+          />
+        {/snippet}
+      </WorkspaceListRowShell>
     {/if}
   {/snippet}
 
