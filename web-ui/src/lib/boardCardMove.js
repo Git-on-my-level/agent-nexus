@@ -1,4 +1,8 @@
-import { boardCardStableId, sortedColumnPeersStableIds } from "./boardUtils.js";
+import {
+  boardCardPlacementAnchorId,
+  boardCardStableId,
+  sortedColumnPeersStableIds,
+} from "./boardUtils.js";
 import { resourceRouteSegment } from "./resourceIdentity.js";
 import { validateEventRefRule } from "./eventRefRules.js";
 
@@ -91,6 +95,57 @@ export function beforeCardIdForInsert(peerStableIds, insertIndex) {
 }
 
 /**
+ * Resolve a UI card key (handle/public segment) to a cards.move placement anchor.
+ * @param {{ items?: unknown[] } | null | undefined} cardsSection
+ * @param {string} token
+ */
+export function resolveBoardCardPlacementAnchor(cardsSection, token) {
+  const needle = String(token ?? "").trim();
+  if (!needle) return "";
+  for (const item of cardsSection?.items ?? []) {
+    const membership = item?.membership;
+    if (!membership) continue;
+    const anchor = boardCardPlacementAnchorId(membership);
+    if (needle === anchor || boardCardStableId(membership) === needle) {
+      return anchor;
+    }
+  }
+  return needle;
+}
+
+/**
+ * Normalize cards.move placement anchors to canonical card row ids.
+ * @param {{ items?: unknown[] } | null | undefined} cardsSection
+ * @param {Record<string, unknown>} payload
+ */
+export function normalizeBoardMovePlacementAnchors(cardsSection, payload) {
+  const next = { ...payload };
+  if ("before_card_id" in next) {
+    next.before_card_id = resolveBoardCardPlacementAnchor(
+      cardsSection,
+      next.before_card_id,
+    );
+  }
+  if ("after_card_id" in next) {
+    next.after_card_id = resolveBoardCardPlacementAnchor(
+      cardsSection,
+      next.after_card_id,
+    );
+  }
+  return next;
+}
+
+/** @param {object | null | undefined} item @param {string} token */
+function cardMatchesMoveToken(item, token) {
+  const membership = item?.membership;
+  if (!membership) return false;
+  return (
+    boardCardStableId(membership) === token ||
+    boardCardPlacementAnchorId(membership) === token
+  );
+}
+
+/**
  * @param {object | null | undefined} workspace
  * @param {string} cardStableId
  * @param {{ column_key: string, before_card_id?: string }} move
@@ -102,9 +157,7 @@ export function applyOptimisticCardMove(workspace, cardStableId, move) {
   if (!columnKey) return workspace;
 
   const items = [...workspace.cards.items];
-  const fromIdx = items.findIndex(
-    (c) => boardCardStableId(c?.membership) === cardStableId,
-  );
+  const fromIdx = items.findIndex((c) => cardMatchesMoveToken(c, cardStableId));
   if (fromIdx < 0) return workspace;
 
   const [card] = items.splice(fromIdx, 1);
@@ -129,8 +182,8 @@ export function applyOptimisticCardMove(workspace, cardStableId, move) {
   const beforeId = String(move.before_card_id ?? "").trim();
   let insertIdx = items.length;
   if (beforeId) {
-    const beforeItemIdx = items.findIndex(
-      (c) => boardCardStableId(c?.membership) === beforeId,
+    const beforeItemIdx = items.findIndex((c) =>
+      cardMatchesMoveToken(c, beforeId),
     );
     if (beforeItemIdx >= 0) insertIdx = beforeItemIdx;
   } else if (columnPeers.length > 0) {
@@ -167,6 +220,14 @@ export function insertOptimisticCard(workspace, cardItem) {
 }
 
 const RISK_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+
+/** @type {{ value: "rank" | "updated" | "due" | "risk", label: string }[]} */
+export const BOARD_CARD_SORT_OPTIONS = [
+  { value: "rank", label: "Manual" },
+  { value: "updated", label: "Updated" },
+  { value: "due", label: "Due" },
+  { value: "risk", label: "Priority" },
+];
 
 /**
  * @param {object[]} cards
@@ -297,21 +358,108 @@ export function writeCollapsedColumns(boardId, state) {
 }
 
 /**
- * Drop index from pointer Y relative to column card list.
- * @param {HTMLElement} columnEl
- * @param {number} clientY
+ * Column cards excluding the card being dragged (peer-space ordering).
+ * @param {object[]} columnCards
  * @param {string} draggingCardId
  */
-export function computeDropIndex(columnEl, clientY, draggingCardId) {
-  const slots = [...columnEl.querySelectorAll("[data-board-card-slot]")].filter(
-    (slot) => (slot.getAttribute("data-card-id") ?? "") !== draggingCardId,
+export function columnCardsExcludingDrag(columnCards, draggingCardId) {
+  const dragId = String(draggingCardId ?? "").trim();
+  return (columnCards ?? []).filter(
+    (card) => boardCardStableId(card?.membership) !== dragId,
   );
+}
+
+/**
+ * @param {HTMLElement[]} slots
+ * @param {number} fullInsertIndex
+ * @param {string} draggingCardId
+ */
+export function peerInsertIndexFromSlotElements(
+  slots,
+  fullInsertIndex,
+  draggingCardId,
+) {
+  const dragId = String(draggingCardId ?? "").trim();
+  let peerIndex = 0;
+  const bound = Math.max(0, Math.min(fullInsertIndex, slots.length));
+  for (let i = 0; i < bound; i++) {
+    const id = slots[i]?.getAttribute("data-card-id") ?? "";
+    if (id !== dragId) peerIndex++;
+  }
+  return peerIndex;
+}
+
+/**
+ * @param {object[]} columnCards
+ * @param {number} fullInsertIndex
+ */
+export function dropBeforeCardIdAtFullInsert(columnCards, fullInsertIndex) {
+  const cards = columnCards ?? [];
+  const idx = Math.max(0, Math.min(fullInsertIndex, cards.length));
+  if (idx >= cards.length) return "";
+  return boardCardStableId(cards[idx]?.membership);
+}
+
+/**
+ * @param {object[]} columnCards
+ * @param {number} fullInsertIndex
+ */
+export function dropAfterCardIdAtFullInsert(columnCards, fullInsertIndex) {
+  const cards = columnCards ?? [];
+  if (fullInsertIndex < cards.length) return "";
+  const last = cards[cards.length - 1];
+  return last ? boardCardStableId(last.membership) : "";
+}
+
+/**
+ * @param {HTMLElement} columnEl
+ * @param {number} clientY
+ * @returns {number}
+ */
+export function computeDropFullInsertIndex(columnEl, clientY) {
+  const slots = [...columnEl.querySelectorAll("[data-board-card-slot]")];
   for (let i = 0; i < slots.length; i++) {
     const rect = slots[i].getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
     if (clientY < mid) return i;
   }
   return slots.length;
+}
+
+/**
+ * @param {HTMLElement} columnEl
+ * @param {number} clientY
+ * @param {string} draggingCardId
+ * @returns {{ fullInsertIndex: number, peerInsertIndex: number }}
+ */
+export function computeDropPlacement(columnEl, clientY, draggingCardId) {
+  const slots = [...columnEl.querySelectorAll("[data-board-card-slot]")];
+  let fullInsertIndex = slots.length;
+  for (let i = 0; i < slots.length; i++) {
+    const rect = slots[i].getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (clientY < mid) {
+      fullInsertIndex = i;
+      break;
+    }
+  }
+  const peerInsertIndex = peerInsertIndexFromSlotElements(
+    slots,
+    fullInsertIndex,
+    draggingCardId,
+  );
+  return { fullInsertIndex, peerInsertIndex };
+}
+
+/**
+ * Drop index from pointer Y relative to column card list (peer-space).
+ * @param {HTMLElement} columnEl
+ * @param {number} clientY
+ * @param {string} draggingCardId
+ */
+export function computeDropIndex(columnEl, clientY, draggingCardId) {
+  return computeDropPlacement(columnEl, clientY, draggingCardId)
+    .peerInsertIndex;
 }
 
 /** @param {object} workspace @param {string} columnKey @param {string} excludeCardId */

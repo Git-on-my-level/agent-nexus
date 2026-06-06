@@ -8,11 +8,12 @@
   } from "$lib/boardUtils";
   import {
     beforeCardIdForInsert,
-    computeDropIndex,
+    computeDropPlacement,
+    dropAfterCardIdAtFullInsert,
+    dropBeforeCardIdAtFullInsert,
     filterBoardCardItems,
     sortColumnCards,
   } from "$lib/boardCardMove.js";
-  import Icon from "$lib/components/Icon.svelte";
 
   let {
     workspace,
@@ -21,6 +22,7 @@
     currentActorId = "",
     disabled = false,
     filters = { q: "", mineOnly: false, dueFilter: "", risk: [] },
+    sortMode = "rank",
     onopencard = () => {},
     oncarddrop = async () => {},
     oninlinecreate = async () => {},
@@ -28,21 +30,9 @@
   } = $props();
 
   const DRAG_THRESHOLD_PX = 6;
-
-  const SORT_OPTIONS = [
-    { value: "rank", label: "Manual" },
-    { value: "updated", label: "Updated" },
-    { value: "due", label: "Due" },
-    { value: "risk", label: "Priority" },
-  ];
-
-  /** @type {Record<string, "rank" | "updated" | "due" | "risk">} */
-  let columnSortModes = $state({});
-  /** @type {string} */
-  let openSortColumn = $state("");
   /** @type {{ cardId: string, cardItem: object, pointerId: number, startX: number, startY: number } | null} */
   let dragSession = $state(null);
-  /** @type {{ columnKey: string, insertIndex: number } | null} */
+  /** @type {{ columnKey: string, fullInsertIndex: number, insertIndex: number } | null} */
   let dropTarget = $state(null);
   let dragGhost = $state({ x: 0, y: 0, visible: false });
   let pointerMoved = $state(false);
@@ -68,43 +58,9 @@
   );
   const boardIsEmpty = $derived((workspace?.cards?.items ?? []).length === 0);
 
-  $effect(() => {
-    if (!openSortColumn) return;
-    function onDocPointerDown(/** @type {PointerEvent} */ e) {
-      const target = e.target;
-      if (target instanceof Element && target.closest("[data-board-sort]")) {
-        return;
-      }
-      openSortColumn = "";
-    }
-    window.addEventListener("pointerdown", onDocPointerDown, true);
-    return () =>
-      window.removeEventListener("pointerdown", onDocPointerDown, true);
-  });
-
-  /** @param {string} columnKey */
-  function columnSortMode(columnKey) {
-    return columnSortModes[columnKey] ?? "rank";
-  }
-
-  /** @param {string} columnKey */
-  function columnSortLabel(columnKey) {
-    const mode = columnSortMode(columnKey);
-    return SORT_OPTIONS.find((o) => o.value === mode)?.label ?? "Manual";
-  }
-
-  /** @param {string} columnKey @param {string} mode */
-  function setColumnSort(columnKey, mode) {
-    columnSortModes = { ...columnSortModes, [columnKey]: mode };
-    openSortColumn = "";
-  }
-
   /** @param {string} columnKey @returns {object[]} */
   function sortedColumnCards(columnKey) {
-    return sortColumnCards(
-      cardsByColumn[columnKey] ?? [],
-      columnSortMode(columnKey),
-    );
+    return sortColumnCards(cardsByColumn[columnKey] ?? [], sortMode);
   }
 
   /** @param {string} columnKey @returns {string[]} */
@@ -212,8 +168,16 @@
       dropTarget = null;
       return;
     }
-    const insertIndex = computeDropIndex(columnEl, y, dragSession.cardId);
-    dropTarget = { columnKey, insertIndex };
+    const { fullInsertIndex, peerInsertIndex } = computeDropPlacement(
+      columnEl,
+      y,
+      dragSession.cardId,
+    );
+    dropTarget = {
+      columnKey,
+      fullInsertIndex,
+      insertIndex: peerInsertIndex,
+    };
   }
 
   /** @param {PointerEvent} e */
@@ -409,47 +373,6 @@
               </span>
             </div>
 
-            <div class="relative shrink-0" data-board-sort>
-              <button
-                type="button"
-                class="inline-flex h-6 items-center gap-1 rounded px-1.5 text-[10px] font-medium text-fg-subtle transition-colors hover:bg-line-subtle hover:text-fg-muted"
-                aria-haspopup="menu"
-                aria-expanded={openSortColumn === columnKey}
-                aria-label={`Sort ${column.title || columnKey}`}
-                onclick={() =>
-                  (openSortColumn =
-                    openSortColumn === columnKey ? "" : columnKey)}
-              >
-                {columnSortLabel(columnKey)}
-                <Icon name="chevronDown" class="h-3 w-3" />
-              </button>
-              {#if openSortColumn === columnKey}
-                <div
-                  class="absolute right-0 z-30 mt-1 min-w-[7.5rem] rounded-md border border-line bg-panel py-1 shadow-lg"
-                  role="menu"
-                >
-                  {#each SORT_OPTIONS as option (option.value)}
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={columnSortMode(columnKey) === option.value}
-                      class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-micro hover:bg-panel-hover {columnSortMode(
-                        columnKey,
-                      ) === option.value
-                        ? 'text-fg'
-                        : 'text-fg-muted'}"
-                      onclick={() => setColumnSort(columnKey, option.value)}
-                    >
-                      {option.label}
-                      {#if columnSortMode(columnKey) === option.value}
-                        <Icon name="check" class="h-3 w-3 text-accent-text" />
-                      {/if}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-
             <button
               type="button"
               class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-line-subtle hover:text-fg"
@@ -490,14 +413,24 @@
                     {@const isDragging = dragSession?.cardId === cardId}
                     {@const showDropBefore =
                       dropTarget?.columnKey === columnKey &&
-                      dropTarget?.insertIndex === cardIndex &&
-                      !isDragging}
+                      !isDragging &&
+                      dropBeforeCardIdAtFullInsert(
+                        cards,
+                        dropTarget?.fullInsertIndex ?? -1,
+                      ) === cardId}
+                    {@const showDropAfter =
+                      dropTarget?.columnKey === columnKey &&
+                      dropAfterCardIdAtFullInsert(
+                        cards,
+                        dropTarget?.fullInsertIndex ?? -1,
+                      ) === cardId}
                     <li>
                       <BoardCard
                         {cardItem}
                         {boardId}
                         dragging={isDragging}
                         dropBefore={showDropBefore}
+                        dropAfter={showDropAfter}
                         onclick={() => handleCardClick(cardItem)}
                         ondragstart={(e) => handleCardPointerDown(e, cardItem)}
                         onboardkeydown={(e) =>
@@ -512,12 +445,6 @@
                     </li>
                   {/each}
                 </ul>
-                {#if dropTarget?.columnKey === columnKey && dropTarget.insertIndex >= cards.length}
-                  <div
-                    class="h-0.5 rounded-full bg-accent"
-                    aria-hidden="true"
-                  ></div>
-                {/if}
               {/if}
             </div>
 

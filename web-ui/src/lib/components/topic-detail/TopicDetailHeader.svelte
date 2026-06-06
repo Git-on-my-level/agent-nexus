@@ -8,11 +8,10 @@
     principalRegistry,
   } from "$lib/actorSession";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
@@ -42,6 +41,15 @@
 
   let confirmModal = $state({ open: false, action: "" });
   let lifecycleBusy = $state(false);
+  let moreActionsOpen = $state(false);
+  let moreActionsRoot = $state(null);
+
+  function toggleMoreActions() {
+    moreActionsOpen = !moreActionsOpen;
+  }
+  function closeMoreActions() {
+    moreActionsOpen = false;
+  }
 
   async function refreshThread() {
     if (!threadId) return;
@@ -109,6 +117,32 @@
   $effect(() => {
     threadId;
     confirmModal = { open: false, action: "" };
+  });
+
+  $effect(() => {
+    if (!moreActionsOpen) return;
+    function onDocPointerDown(e) {
+      if (
+        moreActionsRoot &&
+        e.target instanceof Node &&
+        !moreActionsRoot.contains(e.target)
+      ) {
+        moreActionsOpen = false;
+      }
+    }
+    function onDocKey(e) {
+      if (e.key === "Escape") moreActionsOpen = false;
+    }
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
+    };
   });
 </script>
 
@@ -180,18 +214,52 @@
       />
     {/if}
     {#if topic && detailAsTopic && !topic.trashed_at && threadId}
-      {#if !topic.archived_at}
-        <ArchiveButton
-          busy={lifecycleBusy}
-          size="sm"
-          onarchive={() => (confirmModal = { open: true, action: "archive" })}
-        />
-      {/if}
-      <TrashButton
-        busy={lifecycleBusy}
-        size="sm"
-        ontrash={() => (confirmModal = { open: true, action: "trash" })}
-      />
+      <div bind:this={moreActionsRoot} class="relative">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="More actions"
+          aria-haspopup="menu"
+          aria-expanded={moreActionsOpen}
+          disabled={lifecycleBusy}
+          onclick={toggleMoreActions}
+        >
+          <Icon name="kebab" class="h-4 w-4" />
+        </button>
+        {#if moreActionsOpen}
+          <div
+            class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-1 shadow-lg"
+            role="menu"
+          >
+            {#if !topic.archived_at}
+              <button
+                type="button"
+                role="menuitem"
+                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={lifecycleBusy}
+                onclick={() => {
+                  closeMoreActions();
+                  confirmModal = { open: true, action: "archive" };
+                }}
+              >
+                Archive
+              </button>
+            {/if}
+            <button
+              type="button"
+              role="menuitem"
+              class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={lifecycleBusy}
+              onclick={() => {
+                closeMoreActions();
+                confirmModal = { open: true, action: "trash" };
+              }}
+            >
+              Move to trash
+            </button>
+          </div>
+        {/if}
+      </div>
     {/if}
   {/snippet}
 </WorkspaceResourceTopRow>

@@ -10,6 +10,7 @@
     boardCardStableId,
     sortedColumnPeersStableIds,
   } from "$lib/boardUtils";
+  import { normalizeBoardMovePlacementAnchors } from "$lib/boardCardMove.js";
   import CardDetailModalInner from "$lib/components/CardDetailModalInner.svelte";
   import { coreClient } from "$lib/coreClient";
   import { resourceRouteSegment } from "$lib/resourceIdentity.js";
@@ -189,10 +190,10 @@
     if (!workspace?.board) return;
 
     const id = boardCardStableId(cardItem.membership);
-    const nextPayload = {
+    const nextPayload = normalizeBoardMovePlacementAnchors(workspace?.cards, {
       if_board_updated_at: workspace.board.updated_at,
       ...payload,
-    };
+    });
     const columnKey = String(nextPayload.column_key ?? "").trim();
     if (columnKey === "done") {
       const memb = cardItem?.membership ?? {};

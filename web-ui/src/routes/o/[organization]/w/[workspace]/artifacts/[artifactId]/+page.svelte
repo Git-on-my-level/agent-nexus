@@ -2,9 +2,8 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
 
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import AttachmentPreview from "$lib/components/AttachmentPreview.svelte";
   import { coreClient } from "$lib/coreClient";
@@ -42,7 +41,16 @@
   let loadedArtifactId = $state("");
   let confirmModal = $state({ open: false, action: "" });
   let lifecycleBusy = $state(false);
+  let moreActionsOpen = $state(false);
+  let moreActionsRoot = $state(null);
   let artifactLoadRequestId = 0;
+
+  function toggleMoreActions() {
+    moreActionsOpen = !moreActionsOpen;
+  }
+  function closeMoreActions() {
+    moreActionsOpen = false;
+  }
 
   $effect(() => {
     const id = artifactId;
@@ -52,6 +60,32 @@
   $effect(() => {
     artifactId;
     confirmModal = { open: false, action: "" };
+  });
+
+  $effect(() => {
+    if (!moreActionsOpen) return;
+    function onDocPointerDown(e) {
+      if (
+        moreActionsRoot &&
+        e.target instanceof Node &&
+        !moreActionsRoot.contains(e.target)
+      ) {
+        moreActionsOpen = false;
+      }
+    }
+    function onDocKey(e) {
+      if (e.key === "Escape") moreActionsOpen = false;
+    }
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
+    };
   });
   let artifactTopicRef = $derived.by(() => {
     const candidates = [
@@ -436,18 +470,52 @@
     {/snippet}
     {#snippet actions()}
       {#if !artifact.trashed_at}
-        {#if !artifact.archived_at}
-          <ArchiveButton
-            busy={lifecycleBusy}
-            size="sm"
-            onarchive={() => (confirmModal = { open: true, action: "archive" })}
-          />
-        {/if}
-        <TrashButton
-          busy={lifecycleBusy}
-          size="sm"
-          ontrash={() => (confirmModal = { open: true, action: "trash" })}
-        />
+        <div bind:this={moreActionsRoot} class="relative">
+          <button
+            type="button"
+            class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            aria-expanded={moreActionsOpen}
+            disabled={lifecycleBusy}
+            onclick={toggleMoreActions}
+          >
+            <Icon name="kebab" class="h-4 w-4" />
+          </button>
+          {#if moreActionsOpen}
+            <div
+              class="absolute right-0 z-50 mt-1 min-w-[10rem] rounded-md border border-line bg-panel py-1 shadow-lg"
+              role="menu"
+            >
+              {#if !artifact.archived_at}
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={lifecycleBusy}
+                  onclick={() => {
+                    closeMoreActions();
+                    confirmModal = { open: true, action: "archive" };
+                  }}
+                >
+                  Archive
+                </button>
+              {/if}
+              <button
+                type="button"
+                role="menuitem"
+                class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={lifecycleBusy}
+                onclick={() => {
+                  closeMoreActions();
+                  confirmModal = { open: true, action: "trash" };
+                }}
+              >
+                Move to trash
+              </button>
+            </div>
+          {/if}
+        </div>
       {/if}
     {/snippet}
   </WorkspaceResourceTopRow>

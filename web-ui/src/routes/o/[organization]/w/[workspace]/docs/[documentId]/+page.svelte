@@ -2,11 +2,9 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
@@ -1378,20 +1376,6 @@
                     {headContentType} — edit via CLI
                   </span>
                 {/if}
-                {#if !document.archived_at}
-                  <ArchiveButton
-                    busy={docLifecycleBusy}
-                    size="sm"
-                    onarchive={() =>
-                      (confirmModal = { open: true, action: "archive" })}
-                  />
-                {/if}
-                <TrashButton
-                  busy={docLifecycleBusy}
-                  size="sm"
-                  ontrash={() =>
-                    (confirmModal = { open: true, action: "trash" })}
-                />
                 <div bind:this={moreActionsRoot} class="relative">
                   <button
                     type="button"
@@ -1432,6 +1416,32 @@
                           Revision history
                         </button>
                       {/if}
+                      {#if !document.archived_at}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={docLifecycleBusy}
+                          onclick={() => {
+                            closeMoreActions();
+                            confirmModal = { open: true, action: "archive" };
+                          }}
+                        >
+                          Archive
+                        </button>
+                      {/if}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={docLifecycleBusy}
+                        onclick={() => {
+                          closeMoreActions();
+                          confirmModal = { open: true, action: "trash" };
+                        }}
+                      >
+                        Move to trash
+                      </button>
                     </div>
                   {/if}
                 </div>

@@ -5,10 +5,18 @@ import {
   beforeCardIdForInsert,
   buildCardResolvedAttestationEvent,
   cardHasTerminalEvidence,
+  dropAfterCardIdAtFullInsert,
+  dropBeforeCardIdAtFullInsert,
+  peerInsertIndexFromSlotElements,
   filterBoardCardItems,
+  normalizeBoardMovePlacementAnchors,
+  resolveBoardCardPlacementAnchor,
   sortColumnCards,
 } from "../../src/lib/boardCardMove.js";
-import { boardCardStableId } from "../../src/lib/boardUtils.js";
+import {
+  boardCardPlacementAnchorId,
+  boardCardStableId,
+} from "../../src/lib/boardUtils.js";
 
 describe("boardCardMove", () => {
   it("detects terminal evidence refs", () => {
@@ -51,6 +59,63 @@ describe("boardCardMove", () => {
     expect(beforeCardIdForInsert(["a", "b", "c"], 0)).toBe("a");
     expect(beforeCardIdForInsert(["a", "b", "c"], 1)).toBe("b");
     expect(beforeCardIdForInsert(["a", "b", "c"], 3)).toBe("");
+  });
+
+  it("maps full-list drop indices to indicator cards", () => {
+    const cards = [
+      { membership: { id: "a", handle: "a" } },
+      { membership: { id: "b", handle: "b" } },
+      { membership: { id: "c", handle: "c" } },
+    ];
+    expect(dropBeforeCardIdAtFullInsert(cards, 1)).toBe("b");
+    expect(dropBeforeCardIdAtFullInsert(cards, 2)).toBe("c");
+    expect(dropAfterCardIdAtFullInsert(cards, 3)).toBe("c");
+    expect(dropAfterCardIdAtFullInsert(cards, 2)).toBe("");
+  });
+
+  it("converts full insert index to peer insert index", () => {
+    const slots = [
+      { getAttribute: () => "a" },
+      { getAttribute: () => "b" },
+      { getAttribute: () => "c" },
+    ];
+    expect(peerInsertIndexFromSlotElements(slots, 2, "a")).toBe(1);
+    expect(peerInsertIndexFromSlotElements(slots, 3, "a")).toBe(2);
+    expect(peerInsertIndexFromSlotElements(slots, 3, "c")).toBe(2);
+  });
+
+  it("resolves placement anchors from public card handles", () => {
+    const cards = {
+      items: [
+        {
+          membership: {
+            id: "550e8400-e29b-41d4-a716-446655440000",
+            handle: "doing",
+            title: "Doing",
+          },
+        },
+        {
+          membership: {
+            id: "660e8400-e29b-41d4-a716-446655440001",
+            handle: "hello",
+            title: "Hello",
+          },
+        },
+      ],
+    };
+    expect(boardCardStableId(cards.items[0].membership)).toBe("doing");
+    expect(boardCardPlacementAnchorId(cards.items[0].membership)).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    expect(resolveBoardCardPlacementAnchor(cards, "doing")).toBe(
+      "550e8400-e29b-41d4-a716-446655440000",
+    );
+    expect(
+      normalizeBoardMovePlacementAnchors(cards, {
+        column_key: "in_progress",
+        before_card_id: "hello",
+      }).before_card_id,
+    ).toBe("660e8400-e29b-41d4-a716-446655440001");
   });
 
   it("applies optimistic column moves", () => {

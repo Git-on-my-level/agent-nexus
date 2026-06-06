@@ -9,10 +9,8 @@
   import MarkDoneModal from "$lib/components/MarkDoneModal.svelte";
   import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
-  import ArchiveButton from "$lib/components/ArchiveButton.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
-  import TrashButton from "$lib/components/TrashButton.svelte";
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import {
@@ -23,8 +21,10 @@
   } from "$lib/actorSession";
   import {
     applyOptimisticCardMove,
+    BOARD_CARD_SORT_OPTIONS,
     buildCardResolvedAttestationEvent,
     cardHasTerminalEvidence,
+    normalizeBoardMovePlacementAnchors,
   } from "$lib/boardCardMove.js";
   import { getAuthenticatedActorId } from "$lib/authSession";
   import { coreClient } from "$lib/coreClient";
@@ -82,6 +82,10 @@
 
   let filtersOpen = $state(false);
   let filterRoot = $state(/** @type {HTMLDivElement | null} */ (null));
+  let sortOpen = $state(false);
+  let sortRoot = $state(/** @type {HTMLDivElement | null} */ (null));
+  /** @type {"rank" | "updated" | "due" | "risk"} */
+  let boardSortMode = $state("rank");
   const emptyFilters = () => ({
     q: "",
     mineOnly: false,
@@ -96,6 +100,11 @@
       Boolean(filterApplied.dueFilter) ||
       filterApplied.risk.length > 0,
   );
+  let boardSortLabel = $derived(
+    BOARD_CARD_SORT_OPTIONS.find((o) => o.value === boardSortMode)?.label ??
+      "Manual",
+  );
+  let hasCustomSort = $derived(boardSortMode !== "rank");
 
   let previousBoardId = $state("");
   let previousCardUrlParam = $state("");
@@ -284,10 +293,10 @@
 
   function buildMovePayload(cardItem, payload) {
     if (!workspace?.board) return null;
-    const nextPayload = {
+    const nextPayload = normalizeBoardMovePlacementAnchors(workspace?.cards, {
       if_board_updated_at: workspace.board.updated_at,
       ...payload,
-    };
+    });
     const columnKey = String(nextPayload.column_key ?? "").trim();
     if (columnKey === "done") {
       const memb = cardItem?.membership ?? {};
@@ -619,6 +628,16 @@
   let reviewInboxCount = $derived(enrichedInboxItems.length);
   let boardMoreBadgeCount = $derived(docsCount + reviewInboxCount);
 
+  function toggleSort() {
+    sortOpen = !sortOpen;
+  }
+
+  /** @param {"rank" | "updated" | "due" | "risk"} mode */
+  function setBoardSort(mode) {
+    boardSortMode = mode;
+    sortOpen = false;
+  }
+
   function toggleFilters() {
     if (!filtersOpen)
       filterDraft = { ...filterApplied, risk: [...filterApplied.risk] };
@@ -643,6 +662,32 @@
     else set.add(value);
     filterDraft = { ...filterDraft, risk: [...set] };
   }
+
+  $effect(() => {
+    if (!sortOpen) return;
+    function onDocPointerDown(/** @type {PointerEvent} */ e) {
+      if (
+        sortRoot &&
+        e.target instanceof Node &&
+        !sortRoot.contains(e.target)
+      ) {
+        sortOpen = false;
+      }
+    }
+    function onDocKey(/** @type {KeyboardEvent} */ e) {
+      if (e.key === "Escape") sortOpen = false;
+    }
+    window.document.addEventListener("pointerdown", onDocPointerDown, true);
+    window.document.addEventListener("keydown", onDocKey, true);
+    return () => {
+      window.document.removeEventListener(
+        "pointerdown",
+        onDocPointerDown,
+        true,
+      );
+      window.document.removeEventListener("keydown", onDocKey, true);
+    };
+  });
 
   $effect(() => {
     if (!filtersOpen) return;
@@ -921,6 +966,51 @@
           {/snippet}
           {#snippet actions()}
             {#if !board.trashed_at}
+              <div bind:this={sortRoot} class="relative">
+                <button
+                  type="button"
+                  class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasCustomSort
+                    ? 'border-accent bg-accent-soft text-accent-text'
+                    : 'border-line bg-transparent text-fg-muted hover:bg-panel-hover hover:text-fg'}"
+                  aria-haspopup="menu"
+                  aria-expanded={sortOpen}
+                  aria-label="Sort cards"
+                  onclick={toggleSort}
+                  data-testid="board-sort-toggle"
+                >
+                  <Icon name="sort" class="h-3.5 w-3.5" />
+                  {hasCustomSort ? boardSortLabel : "Sort"}
+                </button>
+                {#if sortOpen}
+                  <div
+                    class="absolute right-0 z-50 mt-1 min-w-[8.5rem] rounded-md border border-line bg-panel py-1 shadow-lg"
+                    role="menu"
+                    aria-label="Sort cards"
+                    data-testid="board-sort-menu"
+                  >
+                    {#each BOARD_CARD_SORT_OPTIONS as option (option.value)}
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={boardSortMode === option.value}
+                        class="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-micro hover:bg-panel-hover {boardSortMode ===
+                        option.value
+                          ? 'text-fg'
+                          : 'text-fg-muted'}"
+                        onclick={() => setBoardSort(option.value)}
+                      >
+                        {option.label}
+                        {#if boardSortMode === option.value}
+                          <Icon
+                            name="check"
+                            class="h-3.5 w-3.5 text-accent-text"
+                          />
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
               <div bind:this={filterRoot} class="relative">
                 <button
                   type="button"
@@ -1031,19 +1121,6 @@
               >
                 Add card
               </Button>
-              {#if !board.archived_at}
-                <ArchiveButton
-                  busy={boardLifecycleBusy}
-                  size="sm"
-                  onarchive={() =>
-                    (confirmModal = { open: true, action: "archive" })}
-                />
-              {/if}
-              <TrashButton
-                busy={boardLifecycleBusy}
-                size="sm"
-                ontrash={() => (confirmModal = { open: true, action: "trash" })}
-              />
               <div bind:this={boardMoreRoot} class="relative">
                 <button
                   type="button"
@@ -1181,6 +1258,35 @@
                       {/if}
                     </div>
 
+                    <div class="border-t border-line py-1">
+                      {#if !board.archived_at}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={boardLifecycleBusy}
+                          onclick={() => {
+                            closeBoardMore();
+                            confirmModal = { open: true, action: "archive" };
+                          }}
+                        >
+                          Archive
+                        </button>
+                      {/if}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="block w-full px-3 py-2 text-left text-micro text-danger-text hover:bg-panel-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={boardLifecycleBusy}
+                        onclick={() => {
+                          closeBoardMore();
+                          confirmModal = { open: true, action: "trash" };
+                        }}
+                      >
+                        Move to trash
+                      </button>
+                    </div>
+
                     <div class="border-t border-line p-2">
                       <IdsIntegrityDisclosure
                         rows={[
@@ -1229,6 +1335,7 @@
           {boardId}
           {currentActorId}
           filters={filterApplied}
+          sortMode={boardSortMode}
           disabled={mutating || Boolean(board.trashed_at)}
           createCardHref={workspaceHref(
             `/boards/${encodeURIComponent(boardRouteSegment)}/cards/new`,

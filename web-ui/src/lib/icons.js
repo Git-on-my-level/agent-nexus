@@ -88,4 +88,8 @@ export const ICONS = {
     d: "M3.75 5.25h16.5M6.75 12h10.5m-7.5 6.75h4.5",
     stroke: true,
   },
+  sort: {
+    d: "M3 7.5 7.5 3m0 0 4.5 4.5M7.5 3v13.5m13.5 0L16.5 21m0 0-4.5-4.5m4.5 4.5V7.5",
+    stroke: true,
+  },
 };

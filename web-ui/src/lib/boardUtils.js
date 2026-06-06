@@ -103,6 +103,14 @@ export function boardCardStableId(membership) {
   return "anon:board-card";
 }
 
+/**
+ * Canonical card row id for `before_card_id` / `after_card_id` on cards.move.
+ * Differs from {@link boardCardStableId}: handles and thread ids are not valid anchors.
+ */
+export function boardCardPlacementAnchorId(membership) {
+  return String(membership?.id ?? "").trim();
+}
+
 /** Card row title: membership title, else backing thread title, else stable id. */
 export function boardCardHeaderTitle(membership, thread) {
   const cardTitle = String(membership?.title ?? "").trim();

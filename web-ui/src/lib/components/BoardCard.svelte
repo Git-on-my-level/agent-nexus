@@ -27,6 +27,7 @@
    * @property {(e: KeyboardEvent) => void} [onboardkeydown]
    * @property {boolean} [dragging]
    * @property {boolean} [dropBefore]
+   * @property {boolean} [dropAfter]
    * @property {import("svelte").Snippet} [footer]
    */
 
@@ -39,6 +40,7 @@
     onboardkeydown = undefined,
     dragging = false,
     dropBefore = false,
+    dropAfter = false,
     footer,
   } = $props();
 
@@ -146,11 +148,19 @@
   data-board-card-slot
   data-card-id={cardRowId}
   data-board-id={boardId || undefined}
-  class="relative {dropBefore ? 'board-card-drop-before' : ''}"
+  class="relative {dropBefore ? 'board-card-drop-before' : ''} {dropAfter
+    ? 'board-card-drop-after'
+    : ''}"
 >
   {#if dropBefore}
     <div
       class="pointer-events-none absolute -top-1 left-0 right-0 z-10 h-0.5 rounded-full bg-accent"
+      aria-hidden="true"
+    ></div>
+  {/if}
+  {#if dropAfter}
+    <div
+      class="pointer-events-none absolute -bottom-1 left-0 right-0 z-10 h-0.5 rounded-full bg-accent"
       aria-hidden="true"
     ></div>
   {/if}
@@ -262,5 +272,9 @@
 <style>
   .board-card-drop-before {
     padding-top: 0.25rem;
+  }
+
+  .board-card-drop-after {
+    padding-bottom: 0.25rem;
   }
 </style>

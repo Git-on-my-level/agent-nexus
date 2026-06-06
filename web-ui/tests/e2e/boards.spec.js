@@ -1108,7 +1108,9 @@ test("board supports pointer drag-and-drop between columns", async ({
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(buildWorkspace(board, cards, threads, documents, [])),
+      body: JSON.stringify(
+        buildWorkspace(board, cards, threads, documents, []),
+      ),
     });
   });
 
