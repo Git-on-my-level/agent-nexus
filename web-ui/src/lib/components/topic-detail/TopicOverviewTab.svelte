@@ -1,53 +1,15 @@
 <script>
   import { topicDetailStore } from "$lib/topicDetailStore";
-  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import Button from "$lib/components/Button.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import ProvenanceBadge from "$lib/components/ProvenanceBadge.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import { splitTypedRef } from "$lib/inboxUtils";
   import { buildTopicPatch } from "$lib/topicPatch";
   import { buildPrimitiveRefRoutes } from "$lib/refLinkModel";
-  import { isInternalUuid, resourceCopyValue } from "$lib/resourceIdentity.js";
 
   let { threadId, onSave, conflictWarning = "", editNotice = "" } = $props();
 
   let topic = $derived($topicDetailStore.topic);
-  let topicIntegrityRows = $derived.by(() => {
-    if (!topic) return [];
-    const topicRef = String(topic.ref ?? topic.topic_ref ?? "").trim();
-    const p = splitTypedRef(topicRef);
-    const rows = [];
-    if (p.prefix === "topic" && p.id) {
-      rows.push({
-        label: "Topic ref",
-        value: topicRef || resourceCopyValue("topic", topic),
-        copyLabel: "Copy topic ref",
-      });
-    }
-    if (topic.id) {
-      const topicThreadId = String(topic.id ?? "").trim();
-      rows.push({
-        label: "Thread ref",
-        value:
-          String(topic.thread_ref ?? "").trim() ||
-          (topicThreadId && !isInternalUuid(topicThreadId)
-            ? `thread:${topicThreadId}`
-            : ""),
-        copyLabel: "Copy thread ref",
-      });
-    }
-    if (topicRef) {
-      rows.push({
-        label: "topic_ref",
-        value: topicRef,
-        copyLabel: "Copy topic ref",
-        mono: true,
-      });
-    }
-    return rows;
-  });
-  let topicRawJson = $derived(topic ? JSON.stringify(topic, null, 2) : "");
 
   let editOpen = $state(false);
   let editDraft = $state(null);
@@ -232,14 +194,6 @@
 
     <div class="border-t border-line-subtle px-4 py-2.5">
       <ProvenanceBadge provenance={topic.provenance} />
-    </div>
-
-    <div class="border-t border-line-subtle p-3">
-      <IdsIntegrityDisclosure
-        rows={topicIntegrityRows}
-        rawJson={topicRawJson}
-        rawJsonCopyLabel="Copy topic JSON"
-      />
     </div>
   </div>
 

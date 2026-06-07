@@ -715,46 +715,6 @@
       </div>
     </details>
   {/if}
-
-  {#if artifact.content_hash}
-    <details class="mt-2 rounded-md border border-line bg-bg-soft">
-      <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
-        >Content hash</summary
-      >
-      <p class="break-all px-4 pb-3 pt-1 font-mono text-micro text-fg-muted">
-        {artifact.content_hash}
-      </p>
-    </details>
-  {/if}
-
-  <details class="mt-2 rounded-md border border-line bg-bg-soft">
-    <summary
-      class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
-      >Raw metadata — {resourceCopyValue("artifact", artifact)}</summary
-    >
-    <pre
-      class="overflow-auto px-4 pb-3 text-micro text-fg-muted">{JSON.stringify(
-        artifact,
-        null,
-        2,
-      )}</pre>
-  </details>
-
-  {#if artifactContent && !textContent && artifact.kind !== "attachment"}
-    <details class="mt-2 rounded-md border border-line bg-bg-soft">
-      <summary
-        class="cursor-pointer px-4 py-2.5 text-micro text-fg-muted hover:text-fg"
-        >Raw content JSON</summary
-      >
-      <pre
-        class="overflow-auto px-4 pb-3 text-micro text-fg-muted">{JSON.stringify(
-          artifactContent,
-          null,
-          2,
-        )}</pre>
-    </details>
-  {/if}
 {:else}
   <div class="mt-8 text-center text-meta text-fg-muted">
     Artifact not found.

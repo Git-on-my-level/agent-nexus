@@ -4,18 +4,10 @@
 
   import Button from "$lib/components/Button.svelte";
 
-  /**
-   * @typedef {Record<string, unknown> | null | undefined} JsonRecord
-   */
-
   let {
     /** Public resource ref/handle shown in the page URL / API. */
     resourceId = "",
     resourceLabel = "ref",
-    /** Serialized with JSON.stringify for "Copy raw JSON". */
-    rawRecord = /** @type {JsonRecord} */ (null),
-    /** Head revision content hash (document detail only). */
-    contentHash = "",
     /** When set, used instead of `window.location.href` for Share. */
     shareUrl = "",
   } = $props();
@@ -27,7 +19,7 @@
    * brief visible label change inside the menu — `aria-live` text alone is
    * easy to miss.
    */
-  let menuItemCopied = $state(/** @type {""|"ref"|"hash"|"json"} */ (""));
+  let menuItemCopied = $state(/** @type {""|"ref"} */ (""));
   let liveStatus = $state("");
   let shareTimer;
   let menuItemTimer;
@@ -42,7 +34,7 @@
     }, 1600);
   }
 
-  function flashMenuItem(/** @type {"ref"|"hash"|"json"} */ which) {
+  function flashMenuItem(/** @type {"ref"} */ which) {
     menuItemCopied = which;
     clearTimeout(menuItemTimer);
     menuItemTimer = setTimeout(() => {
@@ -85,29 +77,6 @@
     }
   }
 
-  async function copyHash() {
-    const h = String(contentHash ?? "").trim();
-    if (!h) return;
-    try {
-      await navigator.clipboard.writeText(h);
-      flashStatus("Content hash copied");
-      flashMenuItem("hash");
-    } catch {
-      flashStatus("Could not copy hash");
-    }
-  }
-
-  async function copyJson() {
-    if (rawRecord == null || typeof rawRecord !== "object") return;
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(rawRecord, null, 2));
-      flashStatus("JSON copied");
-      flashMenuItem("json");
-    } catch {
-      flashStatus("Could not copy JSON");
-    }
-  }
-
   function toggleMenu() {
     menuOpen = !menuOpen;
   }
@@ -125,15 +94,11 @@
   });
 
   let refCopyable = $derived(Boolean(String(resourceId ?? "").trim()));
-  let hashCopyable = $derived(Boolean(String(contentHash ?? "").trim()));
-  let jsonCopyable = $derived(
-    rawRecord != null && typeof rawRecord === "object",
-  );
   /**
-   * Hide-when-absent: if there are no copy-to-clipboard extras, the chevron
-   * segment is omitted so we only show a single Share control.
+   * Hide-when-absent: if there's no ref to copy, the chevron segment is
+   * omitted so we only show a single Share control.
    */
-  let hasMenuItems = $derived(refCopyable || hashCopyable || jsonCopyable);
+  let hasMenuItems = $derived(refCopyable);
 </script>
 
 <div bind:this={rootEl} class="relative inline-flex shrink-0">
@@ -152,7 +117,7 @@
         <button
           type="button"
           class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-r-md border-0 border-l border-line bg-transparent text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
-          aria-label="Copy ref, content hash, or raw JSON"
+          aria-label={`Copy ${resourceLabel}`}
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           onclick={toggleMenu}
@@ -185,26 +150,6 @@
                 onclick={() => void copyResourceRef()}
               >
                 {menuItemCopied === "ref" ? "Copied" : `Copy ${resourceLabel}`}
-              </button>
-            {/if}
-            {#if hashCopyable}
-              <button
-                type="button"
-                role="menuitem"
-                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
-                onclick={() => void copyHash()}
-              >
-                {menuItemCopied === "hash" ? "Copied" : "Copy content hash"}
-              </button>
-            {/if}
-            {#if jsonCopyable}
-              <button
-                type="button"
-                role="menuitem"
-                class="block w-full px-3 py-2 text-left text-micro text-fg hover:bg-line-subtle"
-                onclick={() => void copyJson()}
-              >
-                {menuItemCopied === "json" ? "Copied" : "Copy raw JSON"}
               </button>
             {/if}
           </div>

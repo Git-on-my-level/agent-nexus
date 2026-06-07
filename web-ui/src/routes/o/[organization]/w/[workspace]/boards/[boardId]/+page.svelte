@@ -7,7 +7,6 @@
   import WorkspaceResourceTopRow from "$lib/components/WorkspaceResourceTopRow.svelte";
   import CardDetailModal from "$lib/components/CardDetailModal.svelte";
   import MarkDoneModal from "$lib/components/MarkDoneModal.svelte";
-  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
@@ -1135,7 +1134,6 @@
               <ResourceShareMenu
                 resourceId={resourceCopyValue("board", board)}
                 resourceLabel="board ref"
-                rawRecord={board}
               />
               <Button
                 variant="primary"
@@ -1320,20 +1318,6 @@
                       >
                         Move to trash
                       </button>
-                    </div>
-
-                    <div class="border-t border-line p-2">
-                      <IdsIntegrityDisclosure
-                        rows={[
-                          {
-                            label: "Board ref",
-                            value: resourceCopyValue("board", board),
-                            copyLabel: "Copy board ref",
-                          },
-                        ]}
-                        rawJson={JSON.stringify(board, null, 2)}
-                        rawJsonCopyLabel="Copy board JSON"
-                      />
                     </div>
                   </div>
                 {/if}

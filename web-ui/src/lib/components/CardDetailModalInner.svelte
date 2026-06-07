@@ -44,7 +44,6 @@
   } from "$lib/timelineContext";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
-  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
@@ -139,20 +138,9 @@
     cardDiscussionSurface({ threadId: linkedThreadId, cardKey }),
   );
   let cardPublicRef = $derived(typedResourceRef("card", membership));
-  let boardPublicRef = $derived(
-    typedResourceRef("board", board) ||
-      (String(boardId ?? "").trim() && !isInternalUuid(boardId)
-        ? `board:${String(boardId).trim()}`
-        : ""),
-  );
   let cardShareRef = $derived(
     cardPublicRef ||
       (cardKey && !isInternalUuid(cardKey) ? `card:${cardKey}` : ""),
-  );
-  let linkedThreadPublicRef = $derived(
-    linkedThreadId && !isInternalUuid(linkedThreadId)
-      ? `thread:${linkedThreadId}`
-      : "",
   );
 
   $effect(() => {
@@ -887,37 +875,6 @@
 
   let showSummary = $derived(Boolean(summaryText));
 
-  let cardIntegrityRows = $derived.by(() => {
-    const m = membership;
-    if (!m) return [];
-    const rows = [];
-    const cid = boardCardStableId(m);
-    if (cid) {
-      rows.push({
-        label: "Card ref",
-        value: cardShareRef,
-        copyLabel: "Copy card ref",
-      });
-    }
-    const bid = String(boardId ?? "").trim();
-    if (bid) {
-      rows.push({
-        label: "Board ref",
-        value: boardPublicRef,
-        copyLabel: "Copy board ref",
-      });
-    }
-    if (linkedThreadId) {
-      rows.push({
-        label: "Thread ref",
-        value: linkedThreadPublicRef,
-        copyLabel: "Copy thread ref",
-      });
-    }
-    return rows;
-  });
-  let cardRawJson = $derived(cardItem ? JSON.stringify(cardItem, null, 2) : "");
-
   let nonZeroDerivedCounts = $derived.by(() => {
     if (!derivedSummary || typeof derivedSummary !== "object") return [];
     const entries = [
@@ -1131,7 +1088,6 @@
             <ResourceShareMenu
               resourceId={cardShareRef}
               resourceLabel="card ref"
-              rawRecord={cardItem}
               {shareUrl}
             />
           {/if}
@@ -1531,11 +1487,6 @@
                     {fieldErrors.thread}
                   </p>
                 {/if}
-                <IdsIntegrityDisclosure
-                  rows={cardIntegrityRows}
-                  rawJson={cardRawJson}
-                  rawJsonCopyLabel="Copy card JSON"
-                />
               </div>
             </details>
 

@@ -5,7 +5,6 @@
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
-  import IdsIntegrityDisclosure from "$lib/components/IdsIntegrityDisclosure.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -35,7 +34,6 @@
     docCommentBodyHover,
   } from "$lib/stores/docCommentBodyRailSync.js";
   import {
-    isInternalUuid,
     resourceCopyValue,
     resourceDisplayLabel,
     resourceRouteSegment,
@@ -222,69 +220,6 @@
     selectedRevision &&
       selectedRevision.revision_id !== headRevision?.revision_id,
   );
-
-  let docIntegrityRows = $derived.by(() => {
-    const d = document;
-    const rev = displayedRevision;
-    if (!d) return [];
-    const rows = [];
-    if (rev?.content_hash) {
-      rows.push({
-        label: "Content hash",
-        value: String(rev.content_hash),
-        copyLabel: "Copy content hash",
-      });
-    }
-    if (rev?.revision_hash) {
-      rows.push({
-        label: "Revision hash",
-        value: String(rev.revision_hash),
-        copyLabel: "Copy revision hash",
-      });
-    }
-    if (d.id) {
-      rows.push({
-        label: "Document ref",
-        value: resourceCopyValue("document", d),
-        copyLabel: "Copy document ref",
-      });
-    }
-    if (rev?.revision_id || rev?.ref || rev?.handle) {
-      rows.push({
-        label: "Revision ref",
-        value:
-          String(rev?.ref ?? "").trim() ||
-          (String(rev?.handle ?? "").trim()
-            ? `document_revision:${String(rev.handle).trim()}`
-            : !isInternalUuid(rev?.revision_id)
-              ? `document_revision:${String(rev.revision_id ?? "").trim()}`
-              : ""),
-        copyLabel: "Copy revision ref",
-      });
-    }
-    const threadId = String(d.thread_id ?? "").trim();
-    if (threadId) {
-      rows.push({
-        label: "Thread ref",
-        value:
-          String(d.thread_ref ?? "").trim() ||
-          (threadId && !isInternalUuid(threadId) ? `thread:${threadId}` : ""),
-        copyLabel: "Copy thread ref",
-      });
-    }
-    const subjectRef = String(d.subject_ref ?? "").trim();
-    if (subjectRef) {
-      rows.push({
-        label: "Subject ref",
-        value: subjectRef,
-        copyLabel: "Copy subject ref",
-        mono: true,
-      });
-    }
-    return rows;
-  });
-
-  let docRawJson = $derived(document ? JSON.stringify(document, null, 2) : "");
 
   // Only text documents can be edited in the textarea-based editor.
   // Structured and binary revisions must be updated via CLI/API.
@@ -1473,10 +1408,6 @@
                 <ResourceShareMenu
                   resourceId={resourceCopyValue("document", document)}
                   resourceLabel="document ref"
-                  rawRecord={document}
-                  contentHash={headRevision?.content_hash
-                    ? String(headRevision.content_hash)
-                    : ""}
                 />
                 {#if isTextEditable}
                   <Button
@@ -1751,14 +1682,6 @@
               {/if}
             </div>
           {/if}
-
-          <div class="mt-6 border-t border-line pt-4">
-            <IdsIntegrityDisclosure
-              rows={docIntegrityRows}
-              rawJson={docRawJson}
-              rawJsonCopyLabel="Copy document JSON"
-            />
-          </div>
         </div>
 
         {#if historyOpen && !document.thread_id}

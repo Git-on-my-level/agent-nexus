@@ -206,7 +206,6 @@
       <ResourceShareMenu
         resourceId={resourceCopyValue("topic", topic)}
         resourceLabel="topic ref"
-        rawRecord={topic}
       />
     {/if}
     {#if topic && detailAsTopic && !topic.trashed_at && threadId}
