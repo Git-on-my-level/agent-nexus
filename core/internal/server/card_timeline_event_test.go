@@ -61,6 +61,10 @@ func TestCardTimelineEventMatches(t *testing.T) {
 		t.Fatal("expected match via payload.card_id")
 	}
 
+	// Intentional split: the card timeline is the lifecycle/audit log. Card
+	// Discussion messages live on the backing thread and are served by
+	// GET /threads/{thread_id}/timeline, so message_posted must not match here
+	// even when it carries a card:<id> ref. See cardTimelineEventMatches.
 	msg := map[string]any{
 		"type": "message_posted",
 		"refs": []any{"thread:t1"},

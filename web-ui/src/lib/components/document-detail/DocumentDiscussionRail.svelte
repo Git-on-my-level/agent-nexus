@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
 
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
+  import { documentDiscussionSurface } from "$lib/discussionSurface";
 
   const LS_OPEN_KEY_LEGACY = "doc-discussion-rail-open";
 
@@ -33,9 +34,9 @@
     prepareRevisionHistory = undefined,
   } = $props();
 
-  let threadId = $derived(String(doc?.thread_id ?? "").trim());
+  let surface = $derived(documentDiscussionSurface(doc));
+  let threadId = $derived(surface.threadId);
   let docId = $derived(String(doc?.id ?? "").trim());
-  let documentRef = $derived(docId ? `document:${docId}` : "");
 
   /**
    * Migrate legacy per-doc / global open keys to `discussion-drawer:doc-discussion:{id}`
@@ -56,13 +57,6 @@
     }
   });
 
-  // Empty-state copy that doubles as a discoverability hint: the operator
-  // sees the floating "Comment" pill on the doc body only after they make a
-  // selection, so a text-anchored mention here teaches the gesture before
-  // they need it. Mod+Opt+M matches Google Docs' comment shortcut.
-  const DOC_DISCUSSION_EMPTY =
-    "No comments yet. Select text in the doc and press ⌘⌥M (Ctrl+Alt+M) to comment, or write a freeform note below.";
-
   let drawerSideTab = $derived(
     docSidePanel === "revisions" ? "secondary" : "messages",
   );
@@ -70,27 +64,17 @@
 
 {#if threadId && docId}
   <DiscussionDrawer
-    layout="rail"
-    {threadId}
+    {...surface}
     postRouteScopeId={docId}
     {workspaceId}
     {workspaceSlug}
-    label="Discussion"
-    storageKey={`doc-discussion:${docId}`}
-    emptyMessage={DOC_DISCUSSION_EMPTY}
-    subjectRefFilter={documentRef}
-    extraPostRefs={[documentRef]}
-    archiveLabelKind="resolve"
     {pendingDocumentComment}
     {onPendingDocumentPostConsumed}
     {onClearPendingDocumentPost}
     {currentDocumentContent}
     {onDocumentTextAnchorContextChange}
     {openSignal}
-    expandFillsParent
-    narrowEdgeToEdge
     secondaryPanel={revisionPanel}
-    secondaryTabLabel="Revisions"
     sideTab={drawerSideTab}
     onSideTabChange={(t) => {
       docSidePanel = t === "secondary" ? "revisions" : "discussion";

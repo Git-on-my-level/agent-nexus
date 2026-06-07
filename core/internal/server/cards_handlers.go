@@ -94,8 +94,17 @@ func handleGetCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, 
 	handleGetBoardCard(w, r, opts, "", cardID)
 }
 
-// cardTimelineEventMatches returns true if the event belongs to the card's lifecycle
-// (refs include card:<id> or payload.card_id matches).
+// cardTimelineEventMatches returns true if the event belongs to the card's
+// lifecycle/audit log (refs include card:<id> or payload.card_id matches, and
+// the type is a card_* event).
+//
+// Intentional split: this matcher deliberately excludes message_posted, even
+// when the message carries a card:<id> ref. GET /cards/{card_id}/timeline is
+// the card's lifecycle/audit view (it backs the card detail "Timeline" tab),
+// not its Discussion. Card Discussion messages live on the card's backing
+// thread and are served by GET /threads/{thread_id}/timeline (the card
+// Discussion dock loads them from there). Folding message_posted in here would
+// conflate the audit log with the conversation. See card_timeline_event_test.go.
 func cardTimelineEventMatches(event map[string]any, cardID string) bool {
 	cardID = strings.TrimSpace(cardID)
 	if event == nil || cardID == "" {
@@ -163,6 +172,9 @@ func handleGetCardTimeline(w http.ResponseWriter, r *http.Request, opts handlerO
 	}
 
 	cardID = strings.TrimSpace(cardID)
+	// Lifecycle/audit only. Discussion messages on this card's backing thread
+	// are intentionally not included here; clients load them from
+	// GET /threads/{thread_id}/timeline. See cardTimelineEventMatches.
 	filtered := make([]map[string]any, 0, len(events))
 	for _, event := range events {
 		if cardTimelineEventMatches(event, cardID) {

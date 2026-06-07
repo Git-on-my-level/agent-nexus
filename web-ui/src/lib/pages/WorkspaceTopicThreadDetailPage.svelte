@@ -18,6 +18,7 @@
   import TopicBoardsPanel from "$lib/components/topic-detail/TopicBoardsPanel.svelte";
   import TopicDocumentsPanel from "$lib/components/topic-detail/TopicDocumentsPanel.svelte";
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
+  import { topicDiscussionSurface } from "$lib/discussionSurface";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
 
   const TOPIC_DETAIL_TABS = [
@@ -439,16 +440,13 @@
     {#if activeTab === "messages"}
       <div class="page-dock-feed" role="tabpanel" tabindex="0">
         <DiscussionDrawer
-          layout="primary"
-          threadId={String(topic.id)}
+          {...topicDiscussionSurface(topic)}
           postRouteScopeId={threadId}
           workspaceId={data?.workspaceId ?? ""}
           {workspaceSlug}
           useParentTimelineContext={true}
           onMessagePost={handleMessagePost}
           pinComposerAlignThreadEnd={false}
-          narrowEdgeToEdge
-          emptyMessage={`Everything about ${topic.title || "this topic"} lives here. Post a message to start the conversation. Docs and Boards you link to this topic appear in their tabs.`}
         />
       </div>
     {/if}

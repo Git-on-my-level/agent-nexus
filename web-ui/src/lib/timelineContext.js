@@ -124,7 +124,67 @@ export function createTimelineContext(coreClient) {
     return loadTimeline(lastScopeId, lastLoadOpts);
   }
 
-  return { store, loadTimeline, refreshTimeline };
+  /**
+   * Subscribe to live thread events over SSE and refresh the timeline whenever
+   * a new event arrives. Mirrors the topic detail page's stream-with-reconnect
+   * so every isolated Discussion surface (board, card, doc) can opt into the
+   * same live behavior the topic Messages tab already has.
+   *
+   * @param {string} scopeId thread id to stream
+   * @param {{ lastEventId?: string, reconnectDelayMs?: number }} [opts]
+   * @returns {() => void} stop function
+   */
+  function startLiveUpdates(scopeId, opts = {}) {
+    const threadId = String(scopeId ?? "").trim();
+    if (!threadId || typeof coreClient.streamThreadEvents !== "function") {
+      return () => {};
+    }
+
+    let stopped = false;
+    let controller = /** @type {AbortController | null} */ (null);
+    let reconnectTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (
+      null
+    );
+    let lastEventId = String(opts.lastEventId ?? "").trim();
+    const reconnectDelayMs = Number(opts.reconnectDelayMs) || 1_500;
+
+    const connect = async () => {
+      if (stopped) return;
+      controller = new AbortController();
+      try {
+        await coreClient.streamThreadEvents({
+          threadId,
+          lastEventId,
+          signal: controller.signal,
+          onEvent: async (message) => {
+            if (message?.id) {
+              lastEventId = message.id;
+            }
+            if (message?.event !== "event") {
+              return;
+            }
+            await refreshTimeline();
+          },
+        });
+      } catch (err) {
+        if (stopped || err?.name === "AbortError") return;
+        if (err?.status === 401 || err?.status === 403) return;
+      }
+      if (!stopped) {
+        reconnectTimer = setTimeout(connect, reconnectDelayMs);
+      }
+    };
+
+    void connect();
+
+    return () => {
+      stopped = true;
+      controller?.abort();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }
+
+  return { store, loadTimeline, refreshTimeline, startLiveUpdates };
 }
 
 export function setTimelineContext(ctx) {

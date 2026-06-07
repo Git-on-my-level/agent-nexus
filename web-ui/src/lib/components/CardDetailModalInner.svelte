@@ -48,6 +48,7 @@
   import GuidedTypedRefsInput from "$lib/components/GuidedTypedRefsInput.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
+  import { cardDiscussionSurface } from "$lib/discussionSurface";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import SearchableEntityPicker from "$lib/components/SearchableEntityPicker.svelte";
@@ -134,6 +135,9 @@
     cardDiscussionDockHostEnabled(presentation, linkedThreadId),
   );
   let cardKey = $derived(boardCardStableId(membership));
+  let cardSurface = $derived(
+    cardDiscussionSurface({ threadId: linkedThreadId, cardKey }),
+  );
   let cardPublicRef = $derived(typedResourceRef("card", membership));
   let boardPublicRef = $derived(
     typedResourceRef("board", board) ||
@@ -1931,17 +1935,12 @@
     {#if linkedThreadId}
       <div class="page-dock-feed">
         <DiscussionDrawer
-          layout="dock"
+          {...cardSurface}
           dockPlacement={discussionDockPlacement}
-          threadId={linkedThreadId}
           {workspaceId}
           {workspaceSlug}
-          label="Discussion"
           prefetchedMessageCount={derived?.timeline_message_count}
-          storageKey={`card-discussion:${cardKey}`}
           resizeStorageKey={`card-discussion-v2:${cardKey}`}
-          expandFillsParent
-          narrowEdgeToEdge
         />
       </div>
     {/if}

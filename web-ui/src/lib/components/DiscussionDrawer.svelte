@@ -18,6 +18,11 @@
     setTimelineContext,
   } from "$lib/timelineContext";
   import MessagesTab from "$lib/components/timeline/MessagesTab.svelte";
+  import {
+    DISCUSSION_TITLE,
+    REVISIONS_TITLE,
+    messageCountLabel,
+  } from "$lib/discussionVocabulary";
 
   const RAIL_WIDTH_LS_LEGACY = "doc-discussion-rail-width";
   const RAIL_W_MIN = 280;
@@ -26,23 +31,32 @@
   const RAIL_W_COLLAPSED = 64;
 
   /**
-   * A self-contained discussion panel (optionally collapsible on narrow viewports).
-   * Manages its own isolated timelineContext by default; topic Messages uses
-   * `useParentTimelineContext` to keep the page-level topic detail store.
+   * A self-contained Discussion panel for one primitive (board, card, topic,
+   * document). Manages its own isolated timelineContext by default; topic
+   * Messages uses `useParentTimelineContext` to keep the page-level topic
+   * detail store.
    *
-   * `layout`:
-   * - `dock` — bottom collapsible strip (default).
-   * - `rail` — full shell (`lg`+) right aside with width resize; below uses dock chrome.
-   * - `primary` — full pane, always expanded (topic Messages).
+   * There are exactly three formal layout modes (see `discussionSurface.js`):
+   * - `primary` — the Discussion *is* the artifact (Topic). Always open,
+   *   non-collapsible, fills its pane.
+   * - `rail` — Discussion beside a primary artifact on desktop (Document).
+   *   Resizable right aside on `lg`+, collapsible dock chrome below.
+   * - `dock` — Discussion docked under/within an artifact (Board, Card).
+   *   Collapsible, with an "N messages" count badge.
+   *
+   * Prefer passing a descriptor built by `discussionSurface.js`:
+   *   <DiscussionDrawer {...boardDiscussionSurface(board)} {workspaceId} … />
    */
   let {
+    /** Surface kind for descriptors (board|card|topic|document). Documentation only. */
+    kind = "",
     threadId,
     /** Forwarded to MessagesTab; refresh/list scope (e.g. topic URL id vs thread id). */
     postRouteScopeId = "",
     workspaceId = "",
     workspaceSlug = "",
     /** Header label shown in the collapsed/expanded toggle bar. */
-    label = "Discussion",
+    label = DISCUSSION_TITLE,
     /**
      * Used to namespace the localStorage open/close preference.
      * E.g. "board-feed:thread-abc" or "doc-discussion:doc-xyz".
@@ -132,7 +146,7 @@
      * Discussion vs this tab; only one panel is visible at a time.
      */
     secondaryPanel = undefined,
-    secondaryTabLabel = "Revisions",
+    secondaryTabLabel = REVISIONS_TITLE,
     /** @type {DiscussionSideTab} */
     sideTab = "messages",
     onSideTabChange = undefined,
@@ -147,7 +161,26 @@
      * the header badge can render before the timeline fetch completes.
      */
     prefetchedMessageCount = undefined,
+    /**
+     * Where the isolated timeline is sourced from: `thread` (default; board,
+     * card, doc) or `topic`. Ignored when `useParentTimelineContext` is set.
+     */
+    timelineSource = "thread",
+    /**
+     * Subscribe to live thread events over SSE and refresh on new messages.
+     * Applies only to the isolated timeline; surfaces that use
+     * `useParentTimelineContext` (topic) manage their own live updates.
+     */
+    liveUpdates = false,
   } = $props();
+
+  let timelineLoadOpts = $derived(
+    timelineSource === "topic"
+      ? { asTopic: true }
+      : timelineSource === "card"
+        ? { asCard: true }
+        : {},
+  );
 
   let hasSecondaryPanel = $derived(typeof secondaryPanel === "function");
 
@@ -362,7 +395,18 @@
     }
     if (tid === lastIsolatedTimelineThreadId) return;
     lastIsolatedTimelineThreadId = tid;
-    void isolatedTimelineApi.loadTimeline(tid);
+    void isolatedTimelineApi.loadTimeline(tid, timelineLoadOpts);
+  });
+
+  // Live updates: stream thread events and refresh on new messages so every
+  // isolated surface behaves like the topic Messages tab. Restarts when the
+  // thread identity changes; topic uses its own parent-store SSE instead.
+  $effect(() => {
+    if (useParentTimelineContext || !liveUpdates) return;
+    const tid = String(threadId ?? "").trim();
+    if (!tid) return;
+    const stop = isolatedTimelineApi.startLiveUpdates(tid);
+    return () => stop();
   });
   // Hydrate open state from localStorage once the key is known.
   $effect(() => {
@@ -643,6 +687,7 @@
         ? 'lg:w-[var(--dd-rail-w)]'
         : 'lg:w-16'}"
       style={open ? `--dd-rail-w:${railWidth}px` : undefined}
+      data-discussion-kind={kind || undefined}
     >
       {#if !open}
         {#if hasSecondaryPanel}
@@ -654,7 +699,7 @@
             <button
               type="button"
               class="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 px-2 py-3 text-fg-muted transition-colors hover:bg-panel-hover hover:text-fg"
-              aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}` : ""}`}
+              aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${messageCountLabel(displayMessageCount)}` : ""}`}
               title={label}
               onclick={() => openRailCollapsed("messages")}
             >
@@ -728,7 +773,7 @@
           <button
             type="button"
             class="hidden lg:flex lg:h-dvh lg:min-h-[20rem] lg:w-full lg:cursor-pointer lg:flex-col lg:items-center lg:justify-start lg:gap-3 lg:px-2 lg:py-4 lg:text-fg-muted lg:transition-colors lg:hover:bg-panel-hover lg:hover:text-fg"
-            aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}` : ""}`}
+            aria-label={`Show ${label.toLowerCase()}${displayMessageCount > 0 ? `, ${messageCountLabel(displayMessageCount)}` : ""}`}
             title={`Show ${label.toLowerCase()}`}
             onclick={() => setOpen(true)}
           >
@@ -754,7 +799,7 @@
             <span
               class="mt-1 min-h-0 [writing-mode:vertical-rl] rotate-180 text-micro font-semibold tracking-normal text-fg"
             >
-              Comments
+              {label}
             </span>
             {#if railBadgeText}
               <span
@@ -902,6 +947,7 @@
         : ''} {layout === 'rail' ? 'lg:hidden' : ''}"
       data-mobile-chat-expanded={showOpen ? "" : undefined}
       data-discussion-dock-placement={dockPlacementEff}
+      data-discussion-kind={kind || undefined}
     >
       {#if collapsibleEff}
         {#if hasSecondaryPanel}
@@ -976,7 +1022,7 @@
                 role="tab"
                 aria-selected={sideTab === "messages"}
                 aria-label={displayMessageCount > 0
-                  ? `${label}, ${displayMessageCount} ${displayMessageCount === 1 ? "comment" : "comments"}`
+                  ? `${label}, ${messageCountLabel(displayMessageCount)}`
                   : label}
                 class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
                 'messages'
@@ -1043,10 +1089,10 @@
               : ''}"
             aria-expanded={open}
             aria-label={showResizeGrip
-              ? `${label}. Tap to collapse, or drag vertically to resize.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`
+              ? `${label}. Tap to collapse, or drag vertically to resize.${displayMessageCount > 0 ? ` ${messageCountLabel(displayMessageCount)}.` : ""}`
               : open
-                ? `${label}. Tap to collapse.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`
-                : `${label}. Tap to expand.${displayMessageCount > 0 ? ` ${displayMessageCount} comments.` : ""}`}
+                ? `${label}. Tap to collapse.${displayMessageCount > 0 ? ` ${messageCountLabel(displayMessageCount)}.` : ""}`
+                : `${label}. Tap to expand.${displayMessageCount > 0 ? ` ${messageCountLabel(displayMessageCount)}.` : ""}`}
             onclick={onHeaderClick}
             onpointerdown={onHeaderPointerDown}
             onpointermove={onHeaderPointerMove}

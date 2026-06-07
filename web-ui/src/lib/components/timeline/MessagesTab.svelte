@@ -34,6 +34,16 @@
   } from "$lib/threadMentionUtils.js";
   import { getTimelineContext } from "$lib/timelineContext";
   import { workspacePath } from "$lib/workspacePaths";
+  import {
+    COMMENT_SEND_LABEL,
+    COMPOSER_COMMENT_PLACEHOLDER,
+    COMPOSER_PLACEHOLDER,
+    EMPTY_ALL_ARCHIVED,
+    EMPTY_DEFAULT,
+    LOADING_MESSAGES,
+    SEND_LABEL,
+    SENDING_LABEL,
+  } from "$lib/discussionVocabulary";
 
   let {
     threadId,
@@ -385,9 +395,9 @@
 
   let postSubmitButtonText = $derived(
     postingMessage
-      ? "Posting..."
+      ? SENDING_LABEL
       : String(postButtonLabel ?? "").trim() ||
-          (hasPendingDocumentComment ? "Comment" : "Post message"),
+          (hasPendingDocumentComment ? COMMENT_SEND_LABEL : SEND_LABEL),
   );
 
   let pendingSelectedQuote = $derived(
@@ -931,16 +941,16 @@
         {timelineError}
       </p>
     {:else if timelineLoading && !hasAnyNonTrashedMessage}
-      <p class="text-meta text-fg-muted">Loading messages...</p>
+      <p class="text-meta text-fg-muted">{LOADING_MESSAGES}</p>
     {:else if !hasAnyNonTrashedMessage}
       <p class="py-6 text-center text-meta text-fg-muted">
         {String(discussionEmptyMessage ?? "").trim()
           ? String(discussionEmptyMessage)
-          : "No messages yet. Post a message below to start the conversation."}
+          : EMPTY_DEFAULT}
       </p>
     {:else if !hasMessages}
       <p class="text-meta text-fg-muted">
-        No messages in view. Turn on Show archived to see archived messages.
+        {EMPTY_ALL_ARCHIVED}
       </p>
     {:else}
       <div
@@ -1094,8 +1104,8 @@
         onkeyup={updateMentionFromTextarea}
         onkeydown={handleMessageKeydown}
         placeholder={hasPendingDocumentComment
-          ? "Add a comment, or @mention an agent…"
-          : "Write a message..."}
+          ? COMPOSER_COMMENT_PLACEHOLDER
+          : COMPOSER_PLACEHOLDER}
         rows="2"
       ></textarea>
       {#if mentionOpen}
