@@ -992,7 +992,7 @@
                 </p>
               </div>
             {/if}
-            <div class="flex items-end md:col-span-2 lg:col-span-1">
+            <div class="flex items-end md:col-span-2 lg:col-span-1 lg:pt-5">
               <Button
                 variant="primary"
                 size="compact"
