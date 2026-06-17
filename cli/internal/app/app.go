@@ -227,6 +227,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 		verboseFlag trackedBool
 		headersFlag trackedBool
 		timeoutFlag trackedDuration
+		versionFlag trackedBool
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
@@ -235,6 +236,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
 	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
 	fs.Var(&timeoutFlag, "timeout", "HTTP timeout duration")
+	fs.Var(&versionFlag, "version", "Print CLI/runtime version details")
 
 	var helpRequested bool
 	if err := fs.Parse(args); err != nil {
@@ -270,6 +272,9 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	remaining, err := normalizeTrailingGlobalFlags(fs.Args(), &overrides)
 	if err != nil {
 		return overrides, nil, false, err
+	}
+	if versionFlag.set && versionFlag.value && len(remaining) == 0 {
+		remaining = []string{"version"}
 	}
 	return overrides, remaining, helpRequested, nil
 }

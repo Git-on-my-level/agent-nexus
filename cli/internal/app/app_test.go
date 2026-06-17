@@ -47,6 +47,57 @@ func TestRunVersionJSON(t *testing.T) {
 	}
 }
 
+func TestRunVersionFlag(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"--version"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "CLI version:") {
+		t.Fatalf("expected version output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunVersionFlagFalseShowsRootHelp(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := New()
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return "/home/tester", nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"--version=false"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Usage:") || !strings.Contains(stdout.String(), "anx [global flags] <command>") {
+		t.Fatalf("expected root help output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "CLI version:") {
+		t.Fatalf("did not expect version output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
 	// Not parallel: clears process env so inherited ANX_BASE_URL does not override profile.
 	t.Setenv("ANX_BASE_URL", "")
