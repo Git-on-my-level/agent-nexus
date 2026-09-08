@@ -67,6 +67,8 @@
   let createOpen = $state(false);
   let creating = $state(false);
   let createError = $state("");
+  let searchQuery = $state("");
+  let searchDraft = $state("");
 
   let draft = $state({
     title: "",
@@ -165,6 +167,8 @@
       const filters = {
         state: f.states ?? ["active"],
       };
+      const q = String(searchQuery ?? "").trim();
+      if (q) filters.q = q;
       const threadFromUrl = String(scopedThreadId ?? "").trim();
       if (threadFromUrl) filters.thread_id = threadFromUrl;
       const data = await coreClient.listDocuments(filters);
@@ -312,7 +316,7 @@
   let confirmModalBusy = $derived(lifecycle.confirmBusy());
 </script>
 
-<WorkspacePageShell>
+<WorkspacePageShell data-tour="docs">
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
       <button
@@ -383,6 +387,25 @@
       </button>
     {/snippet}
   </WorkspacePageHeader>
+
+  <form
+    class="flex max-w-md gap-2"
+    onsubmit={(event) => {
+      event.preventDefault();
+      searchQuery = String(searchDraft ?? "").trim();
+      void loadDocuments();
+    }}
+  >
+    <label class="sr-only" for="docs-search">Search documents</label>
+    <input
+      id="docs-search"
+      class="ui-input min-w-0 flex-1"
+      type="search"
+      bind:value={searchDraft}
+      placeholder="Search documents…"
+    />
+    <button class="ui-btn-secondary" type="submit">Search</button>
+  </form>
 
   {#if scopedThreadId}
     <p class="-mt-2 mb-1 hidden text-micro text-fg-muted sm:block">

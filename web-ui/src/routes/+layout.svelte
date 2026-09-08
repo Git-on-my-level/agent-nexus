@@ -569,16 +569,14 @@
   /** @param {string} href */
   function dataTourForNav(href) {
     switch (String(href)) {
-      case "/":
-        return "home";
       case "/inbox":
         return "inbox";
-      case "/topics":
-        return "topics";
-      case "/boards":
-        return "boards";
+      case "/tasks":
+        return "tasks";
       case "/docs":
         return "docs";
+      case "/pm":
+        return "pm";
       case "/access":
         return "access";
       default:

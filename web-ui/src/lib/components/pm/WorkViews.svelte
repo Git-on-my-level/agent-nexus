@@ -7,6 +7,7 @@
     sourceLabel,
     workFreshness,
     workKey,
+    taskDetailPath,
   } from "$lib/pm/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   let {
@@ -14,6 +15,8 @@
     view = "table",
     workspaceHref,
     now = Date.now(),
+    requested = {},
+    onMove,
   } = $props();
   let groups = $derived(
     phaseGroups(records).filter(
@@ -24,10 +27,48 @@
         ),
     ),
   );
-  const href = (work) =>
-    workspaceHref(`/work/${encodeURIComponent(workKey(work))}`);
+  const href = (work) => workspaceHref(taskDetailPath(work));
   const phaseTone = (phase) =>
     phase === "blocked" ? "warn" : phase === "done" ? "ok" : "neutral";
+  let focusedKey = $state("");
+
+  function orderedPhases() {
+    return groups.map((group) => group.key);
+  }
+
+  function handleDragStart(event, work) {
+    event.dataTransfer.setData("text/plain", workKey(work));
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDrop(event, phase) {
+    event.preventDefault();
+    const key = event.dataTransfer.getData("text/plain");
+    const work = records.find((item) => workKey(item) === key);
+    if (work && onMove) onMove(work, phase);
+  }
+
+  function handleCardKey(event, work) {
+    if (event.key === "Enter") {
+      const link = event.currentTarget.querySelector("a[href]");
+      if (link) {
+        event.preventDefault();
+        link.click();
+      }
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const keys = orderedPhases();
+    const current = work.phase || "unknown";
+    const index = keys.indexOf(current);
+    const nextIndex =
+      event.key === "ArrowRight"
+        ? Math.min(keys.length - 1, Math.max(0, index) + 1)
+        : Math.max(0, (index < 0 ? 0 : index) - 1);
+    const nextPhase = keys[nextIndex];
+    if (nextPhase && nextPhase !== current && onMove) onMove(work, nextPhase);
+  }
 </script>
 
 {#if view === "board"}
@@ -36,13 +77,15 @@
   <div
     class="flex gap-3 overflow-x-auto pb-3"
     role="region"
-    aria-label="Work board grouped by phase"
+    aria-label="Task board grouped by phase"
     tabindex="0"
   >
     {#each groups as group (group.key)}
       <section
         class="w-72 shrink-0 rounded-md bg-bg-soft p-2"
         aria-label={group.label}
+        ondragover={(event) => event.preventDefault()}
+        ondrop={(event) => handleDrop(event, group.key)}
       >
         <div class="mb-2 flex items-baseline justify-between px-1 py-1">
           <h2
@@ -54,7 +97,26 @@
         </div>
         <div class="space-y-2">
           {#each group.items as work (workKey(work))}
-            <WorkCard {work} href={href(work)} {now} />
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <div
+              class="outline-none {focusedKey === workKey(work)
+                ? 'ring-1 ring-accent'
+                : ''}"
+              draggable="true"
+              tabindex="0"
+              role="listitem"
+              ondragstart={(event) => handleDragStart(event, work)}
+              onfocus={() => (focusedKey = workKey(work))}
+              onkeydown={(event) => handleCardKey(event, work)}
+            >
+              <WorkCard {work} href={href(work)} {now} />
+              {#if requested[workKey(work)]}
+                <p class="mt-1 px-1">
+                  <SignalBadge tone="warn">Requested</SignalBadge>
+                </p>
+              {/if}
+            </div>
           {:else}
             <p class="px-2 py-6 text-center text-micro text-fg-subtle">
               Nothing here
@@ -70,18 +132,18 @@
   <div
     class="overflow-x-auto rounded-md border border-line"
     role="region"
-    aria-label="Work table"
+    aria-label="Task table"
     tabindex="0"
   >
     <table class="w-full border-collapse text-left text-meta">
       <caption class="sr-only"
-        >Tracked work with source status, next step and evidence freshness</caption
+        >Tracked tasks with source status, next step and evidence freshness</caption
       >
       <thead
         class="text-micro font-medium uppercase tracking-wide text-fg-subtle"
       >
         <tr>
-          {#each ["Work", "Status", "Next", "Evidence"] as heading}
+          {#each ["Task", "Status", "Next", "Evidence"] as heading}
             <th
               scope="col"
               class="whitespace-nowrap border-b border-line px-3 py-2 font-medium"
@@ -97,7 +159,7 @@
             <th scope="row" class="min-w-56 max-w-96 px-3 py-2.5 font-normal">
               <a
                 class="break-words font-medium text-fg hover:text-accent-text"
-                href={href(work)}>{work.title || "Untitled work"}</a
+                href={href(work)}>{work.title || "Untitled task"}</a
               >
               <p class="mt-0.5 truncate text-micro text-fg-muted">
                 {sourceLabel(work.source)}{#if work.source?.native_id}

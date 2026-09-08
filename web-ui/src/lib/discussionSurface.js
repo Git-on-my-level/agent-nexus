@@ -103,6 +103,7 @@ export function documentDiscussionSurface(doc) {
     archiveLabelKind: "resolve",
     expandFillsParent: true,
     narrowEdgeToEdge: true,
+    defaultOpen: true,
   };
 }
 

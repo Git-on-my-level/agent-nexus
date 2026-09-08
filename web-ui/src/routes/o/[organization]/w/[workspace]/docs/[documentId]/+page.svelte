@@ -1333,6 +1333,19 @@
         />
       </p>
     {/if}
+    {#if String(document.subject_ref ?? "").trim()}
+      <p
+        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-fg-muted"
+      >
+        <span>Source</span>
+        <RefLink
+          refValue={String(document.subject_ref).trim()}
+          threadId={document.thread_id}
+          humanize
+          showRaw
+        />
+      </p>
+    {/if}
   {/snippet}
 
   <!--

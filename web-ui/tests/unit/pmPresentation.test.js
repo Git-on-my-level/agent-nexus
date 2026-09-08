@@ -74,14 +74,34 @@ describe("PM evidence presentation", () => {
       "https://example.test/issues/1",
     );
   });
-  it("never treats delivery, acknowledgement, or an unknown receipt as outcome verification", () => {
-    expect(receiptSignal("delivered").verified).toBe(false);
+  it("shows four primary receipt states and folds the rest", () => {
+    expect(receiptSignal("awaiting_answer")).toMatchObject({
+      label: "Needs you",
+      primary: true,
+      verified: false,
+    });
+    expect(receiptSignal("delivered")).toMatchObject({
+      label: "Delivered",
+      primary: true,
+      verified: false,
+    });
+    expect(receiptSignal("verified")).toMatchObject({
+      label: "Done",
+      primary: true,
+      verified: true,
+    });
+    expect(receiptSignal("failed")).toMatchObject({
+      label: "Failed",
+      primary: true,
+      verified: false,
+    });
     expect(receiptSignal("acknowledged").verified).toBe(false);
     expect(receiptSignal("applied").verified).toBe(false);
-    expect(receiptSignal("verified").verified).toBe(true);
+    expect(receiptSignal("pending_delivery").primary).toBe(false);
     expect(receiptSignal("new_remote_state")).toMatchObject({
       label: "new_remote_state",
       verified: false,
+      primary: false,
     });
   });
   it("board and table retain the same records and unfamiliar phases", () => {

@@ -12,7 +12,7 @@
   data-work-ref={work.ref}
 >
   <h3 class="break-words text-meta font-medium leading-snug text-fg">
-    {work.title || "Untitled work"}
+    {work.title || "Untitled task"}
   </h3>
   <p class="mt-1 truncate text-micro text-fg-muted">
     {sourceLabel(work.source)}{#if work.source?.native_status}
