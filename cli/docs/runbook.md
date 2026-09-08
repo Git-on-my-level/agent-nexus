@@ -362,3 +362,109 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
 - omit `--follow` (default drains and exits)
 
 1. Verify server-side poll cadence and stream health in core logs.
+
+## Unified work and remote observations
+
+`anx work` reads the central work projection of existing cards. Projects are
+existing topics (`anx topics list`); boards and native card workflow commands keep
+their existing meaning. Select the workspace with the existing `--agent` profile
+and `--base-url`; reports reuse its key/token identity. No local tracker store or
+remote daemon is required.
+
+```sh
+anx work capabilities
+anx work list --project-ref topic:launch --source github --freshness stale --limit 50
+anx --json work list --limit 50 --cursor '<opaque next_cursor>'
+anx work get card:launch
+anx work context card:launch --limit 10
+anx work freshness card:launch
+anx work observations list card:launch --limit 10
+anx work observations submit card:launch --from-file report.json
+anx work refresh request card:launch
+anx work refresh get card:launch
+```
+
+Lists return a single bounded page and preserve `next_cursor`. Pass the cursor
+unchanged with the same filters; the CLI does not silently crawl all projects.
+`context` performs three read-only calls (work, observations, refresh), preserving
+the observation page boundary. This is a composed view, not an atomic snapshot.
+Freshness distinguishes last observation, source activity and meaningful progress.
+A queued refresh is not a successful read; failed reads retain their error status.
+
+Observation input is the API request object:
+
+```json
+{
+  "observation": {
+    "idempotency_key": "synthetic-report-42",
+    "reader_id": "approved-reader",
+    "reader_revision": "v1",
+    "observed_at": "2026-09-08T00:00:00Z",
+    "source_sequence": 42,
+    "status": "reported",
+    "facts": {"native_status": "in_progress"},
+    "evidence": [{"ref": "artifact:synthetic-check", "summary": "Synthetic example only"}],
+    "uncertainty": ["Deployment not verified"],
+    "coverage": {"complete": false}
+  }
+}
+```
+
+Preserve the idempotency key and original observation on retry. Core owns duplicate
+and out-of-order handling; the CLI prints the actual server result without hiding
+`duplicate`, uncertainty, coverage or freshness. The server supplies received time
+and authenticated actor; remote claims cannot grant themselves verified authority.
+The CLI never retries a failed observation write automatically.
+
+`work create --from-file <path|->` registers work using an existing `board_ref`.
+`work patch <ref> --from-file <path|->` requires the API's `if_version` and `patch`
+object. Read the version with `work get`; external source status/title/owner remain
+source-owned and update through observations. These commands do not mutate the
+external source.
+
+All commands are noninteractive and support the existing single `--json` envelope.
+Malformed flags and resource selectors fail with exit 2 before profile resolution.
+API denial/conflict/rate-limit errors retain the shared machine-readable error
+contract. `anx help work` and `anx help work observations submit` work offline.
+
+### PM decisions and receipt reporting
+
+```sh
+anx pm context --work-ref card:launch --limit 20
+anx pm conversations list
+anx pm conversations create --from-file conversation.json
+anx pm conversations message <conversation-id> --from-file message.json
+anx pm decisions list
+anx pm decisions get <decision-id>
+anx pm decisions create --from-file instruction.json
+anx pm decisions answer <decision-id> --from-file answer.json
+anx pm decisions dispatch <decision-id>
+anx pm actions list
+anx pm actions get <action-id>
+anx pm actions reconcile <action-id>
+```
+
+An instruction body contains `request_key`, `work_ref`, `instruction`, `scope` and
+`target_revision`. An answer body contains the current decision `revision`,
+`approve` and `text`. Agent keys may propose, but cannot inherit human approval
+permissions; core enforces the current principal and scope. A successful answer
+records intent, not delivery. `pm actions get` reports the actual action attempts
+and receipt, including `source_reported`, `unknown` and
+`receipt.independently_verified`. `reconcile` requests read-back, never a resend.
+There is no client command to manufacture a verified receipt.
+
+Conversation creation uses `request_key`, `title` and optional `work_ref`; messages
+use `request_key` and `text`. Preserve request keys on retry. A queued turn is not
+an assistant response or completed work. The selected PM agent can use
+`pm turns context <turn-id>`, `pm turns propose <turn-id> --from-file ...`, and
+`pm turns complete <turn-id> --from-file ...`; other agents cannot impersonate it.
+
+PM context is bounded to 1..50 items. PM conversation/decision/action lists are
+currently bounded to 200 and expose `has_more`; they do not yet support cursor
+continuation or server-side project filtering. The CLI preserves that limitation
+and rejects unsupported flags. Use `work list` for full cursor-based work queries.
+
+For cross-lane validation only, the real-binary harness accepts
+`ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the
+harness builds this checkout's core. This is not a mock backend; record the core
+source revision when using the override.

@@ -604,7 +604,16 @@ func buildBinaries(t *testing.T) (string, string) {
 			binaries.err = err
 			return
 		}
-		if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/anx-core", corePath); err != nil {
+		if supplied := strings.TrimSpace(os.Getenv("ANX_INTEGRATION_CORE_BINARY")); supplied != "" {
+			// Explicit cross-lane integration artifact. The default always builds
+			// this checkout's real core; never substitute an HTTP fixture server.
+			absolute, err := filepath.Abs(supplied)
+			if err != nil {
+				binaries.err = err
+				return
+			}
+			corePath = absolute
+		} else if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/anx-core", corePath); err != nil {
 			binaries.err = err
 			return
 		}

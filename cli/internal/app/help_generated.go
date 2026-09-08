@@ -29,6 +29,8 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
+	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Register, inspect, and manage auth state"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
@@ -827,6 +829,8 @@ Core Commands:
   human         Surface ask, review, or escalation items to the human Inbox
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
+  work          Query commitments, context, freshness, refresh and capabilities
+  pm            Query PM context, decisions, conversations and action receipts
   workspace     Summarize workspace boards and counts for first-run orientation
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
@@ -873,6 +877,9 @@ Global Flags:
 
 func helpTopicText(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
+	if text, ok := workHelpText(topic); ok {
+		return text, true
+	}
 	if dotConverted := strings.ReplaceAll(topic, ".", " "); dotConverted != topic {
 		if text, ok := helpTopicText(dotConverted); ok {
 			return text, true
@@ -1720,7 +1727,7 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 }
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
-	return []subcommandSpec{
+	specs := []subcommandSpec{
 		{
 			command:  "auth",
 			valid:    []string{"register"},
@@ -1753,6 +1760,23 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		},
 		metaOpsSubcommandSpec,
 	}
+	groups := map[string][]string{}
+	for name := range workCommands {
+		parts := strings.Fields(name)
+		group := strings.Join(parts[:len(parts)-1], " ")
+		groups[group] = append(groups[group], parts[len(parts)-1])
+	}
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		sort.Strings(groups[name])
+		specs = append(specs, subcommandSpec{command: name, valid: groups[name]})
+	}
+	return specs
+
 }
 
 func runtimeGeneratedRegistryPaths() []string {
@@ -1849,17 +1873,19 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"events tail":           "events stream",
-		"inbox tail":            "inbox stream",
-		"threads get":           "threads inspect",
-		"artifacts get":         "artifacts inspect",
-		"artifacts content get": "artifacts content",
-		"artifacts download":    "artifacts content",
-		"secret get":            "secret get --reveal",
-		"meta commands":         "meta commands list",
-		"meta command":          "meta commands get",
-		"meta concepts":         "meta concepts list",
-		"meta concept":          "meta concepts get",
+		"pm conversations message": "pm conversations messages create",
+		"pm turns propose":         "pm turns decisions create",
+		"events tail":              "events stream",
+		"inbox tail":               "inbox stream",
+		"threads get":              "threads inspect",
+		"artifacts get":            "artifacts inspect",
+		"artifacts content get":    "artifacts content",
+		"artifacts download":       "artifacts content",
+		"secret get":               "secret get --reveal",
+		"meta commands":            "meta commands list",
+		"meta command":             "meta commands get",
+		"meta concepts":            "meta concepts list",
+		"meta concept":             "meta concepts get",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten
@@ -1875,11 +1901,13 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"auth agents register": "auth register",
-		"meta commands list":   "meta commands",
-		"meta commands get":    "meta command",
-		"meta concepts list":   "meta concepts",
-		"meta concepts get":    "meta concept",
+		"pm conversations messages create": "pm conversations message",
+		"pm turns decisions create":        "pm turns propose",
+		"auth agents register":             "auth register",
+		"meta commands list":               "meta commands",
+		"meta commands get":                "meta command",
+		"meta concepts list":               "meta concepts",
+		"meta concepts get":                "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten

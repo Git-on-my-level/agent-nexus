@@ -11,6 +11,13 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 	if len(args) == 0 || hasHelpToken(args) {
 		return "", nil
 	}
+	if isWorkCommandRoot(args[0]) {
+		if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
+			return topic, nil
+		}
+		parsed, err := parseWorkCommand(args)
+		return parsed.name, err
+	}
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
 		args = rewritten
 	}

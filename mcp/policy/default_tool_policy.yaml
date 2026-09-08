@@ -55,6 +55,19 @@ hosted_default_commands:
   - "topics.list"
   - "topics.timeline"
   - "topics.workspace"
+  - "pm.actions.get"
+  - "pm.actions.list"
+  - "pm.context"
+  - "pm.conversations.get"
+  - "pm.conversations.list"
+  - "pm.decisions.get"
+  - "pm.decisions.list"
+  - "pm.turns.context"
+  - "work.capabilities"
+  - "work.get"
+  - "work.list"
+  - "work.observations.list"
+  - "work.refresh.get"
 commands:
   "actors.create":
     classification: unsupported_bootstrap_auth
@@ -425,3 +438,81 @@ commands:
   "usage.summary.v1":
     classification: gated_admin
     reason: "versioned usage summary is quota/billing telemetry"
+  "pm.actions.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.actions.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.actions.reconcile":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.bindings.create":
+    classification: gated_admin
+    reason: "Binds an external channel user to a workspace principal; requires explicit human administration."
+  "pm.context":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.conversations.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.messages.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.decisions.answer":
+    classification: gated_sensitive
+    reason: "Human approval or consequential source handoff; explicit exposure never bypasses core authorization."
+  "pm.decisions.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.decisions.dispatch":
+    classification: gated_sensitive
+    reason: "Human approval or consequential source handoff; explicit exposure never bypasses core authorization."
+  "pm.decisions.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.decisions.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.complete":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.context":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.decisions.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.capabilities":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.observations.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.observations.submit":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.patch":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.refresh.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.refresh.request":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."

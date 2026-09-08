@@ -145,3 +145,17 @@ are deliberately not exposed or are gated:
 Tool results are redacted before returning through MCP. Raw access tokens,
 refresh tokens, invite tokens, private keys, secret values, authorization
 headers, and environment payloads should not appear in normal responses.
+
+## Unified work and PM receipts
+
+The generated catalog includes workspace-scoped `work.*` reads and observation
+submission, plus `pm.*` context, conversations, decisions and action receipt reads.
+Hosted defaults include only reads. Standalone defaults additionally expose durable
+requests such as observation submission and receipt reconciliation; core still
+validates workspace identity, replay keys and selected-PM-agent permissions.
+
+`pm.decisions.answer` and `pm.decisions.dispatch` are gated sensitive tools, while
+`pm.bindings.create` is gated administration. Making a tool visible never grants
+human approval, source-write permission, or a new channel identity. Receipt
+reconciliation reads back authoritative outcomes; it must not resend actions.
+Generated readers and remote observations cannot self-certify accepted completion.
