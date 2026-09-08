@@ -42,7 +42,16 @@ type isolatedExecutor interface {
 	Run(context.Context, string, []byte, IsolationLimits) ([]byte, error)
 }
 
-// BubblewrapRunner is the only production executable backend. No shell fallback.
+// NewIsolatedRunner selects the enforced host sandbox. Linux uses bubblewrap;
+// Darwin uses Seatbelt. Any other OS fails closed. A directory is not a sandbox.
+func NewIsolatedRunner() isolatedExecutor {
+	if runtime.GOOS == "darwin" {
+		return NewSeatbeltRunner()
+	}
+	return NewBubblewrapRunner()
+}
+
+// BubblewrapRunner is the Linux production executable backend. No shell fallback.
 // A rootless Linux host with user namespaces, bubblewrap and prlimit is required.
 type BubblewrapRunner struct {
 	bwrap   string

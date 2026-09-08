@@ -15,7 +15,7 @@ type IsolatedInvestigator interface {
 
 // InvestigationRuntime evaluates saved investigation specs. Saving a spec is
 // not dispatch. It never repairs sources, never falls back to host model
-// execution, and fails closed when Linux bubblewrap isolation is unavailable
+// execution, and fails closed when the host isolation runner is unavailable
 // or no approved isolated executor is configured.
 type InvestigationRuntime struct {
 	store  *InvestigationStore
@@ -27,7 +27,7 @@ func NewInvestigationRuntime(store *InvestigationStore) (*InvestigationRuntime, 
 	if store == nil {
 		return nil, failure(ErrConfiguration, "investigation runtime requires saved specifications")
 	}
-	return &InvestigationRuntime{store: store, runner: NewBubblewrapRunner()}, nil
+	return &InvestigationRuntime{store: store, runner: NewIsolatedRunner()}, nil
 }
 
 func (r *InvestigationRuntime) Run(ctx context.Context, workspaceID, id string, source Reader) (Report, error) {

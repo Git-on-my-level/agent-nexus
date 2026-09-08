@@ -210,7 +210,7 @@ func (r jitBoundReader) Capabilities() observation.Capabilities {
 	if r.source != nil {
 		c = r.source.Capabilities()
 	}
-	c.Limitations = append(append([]string{}, c.Limitations...), "Generated executable readers require Linux bubblewrap and prlimit; no host-execution fallback")
+	c.Limitations = append(append([]string{}, c.Limitations...), "Generated executable readers require an enforced host sandbox; no host-execution fallback")
 	return c
 }
 
