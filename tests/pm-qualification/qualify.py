@@ -341,7 +341,7 @@ def main():
         build_env.pop("GOROOT", None)
         build_env["GOCACHE"] = str(Path(temp) / "go-cache")
         for module, package in (("core", "./cmd/anx-core"), ("cli", "./cmd/anx")):
-            built = subprocess.run(["go", "build", "-o", str(binaries[module]), package],
+            built = subprocess.run(["go", "build", "-mod=readonly", "-o", str(binaries[module]), package],
                                    cwd=root / module, env=build_env, capture_output=True, text=True, timeout=240)
             if built.returncode:
                 print(f"BUILD FAIL: {module}; compiler output withheld from report")
