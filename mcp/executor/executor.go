@@ -102,6 +102,16 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 	ctx, cancel := context.WithTimeout(ctx, e.requestTimeout)
 	defer cancel()
 
+	// Populate canonical request keys before required-body validation. Never
+	// invent root request_key fields on nested observations or CAS-only actions.
+	if key, ok := req.Arguments["idempotency_key"].(string); ok && isUnifiedCommand(req.Tool.Metadata.CommandID) {
+		body, err := withUnifiedIdempotencyKey(req.Tool.Metadata.CommandID, req.Arguments["body"], strings.TrimSpace(key))
+		if err != nil {
+			return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
+		}
+		req.Arguments = copyMap(req.Arguments)
+		req.Arguments["body"] = body
+	}
 	arguments, err := validateArguments(req.Tool, req.Arguments, e.maxListLimit)
 	if err != nil {
 		return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
@@ -113,7 +123,11 @@ func (e *WorkspaceExecutor) CallTool(ctx context.Context, req protocol.ToolCallR
 	}
 	body := arguments.Body
 	headers := e.requestHeaders(arguments.IdempotencyKey)
-	body, err = withIdempotencyKey(body, arguments.IdempotencyKey)
+	if isUnifiedCommand(req.Tool.Metadata.CommandID) {
+		body, err = withUnifiedIdempotencyKey(req.Tool.Metadata.CommandID, body, arguments.IdempotencyKey)
+	} else {
+		body, err = withIdempotencyKey(body, arguments.IdempotencyKey)
+	}
 	if err != nil {
 		return protocol.ToolCallResult{}, toolError("invalid_arguments", err.Error(), protocol.ErrInvalidParams)
 	}
@@ -223,8 +237,8 @@ func validateArguments(tool catalog.Tool, args map[string]any, maxListLimit int)
 		if key == "" {
 			return out, errors.New("idempotency_key must not be empty when provided")
 		}
-		if isReadMethod(tool.Metadata.Method) {
-			return out, errors.New("idempotency_key is only accepted for write operations")
+		if !catalog.SupportsIdempotencyKey(tool.Metadata.CommandID, tool.Metadata.Method) {
+			return out, errors.New("idempotency_key is not supported by this command")
 		}
 		out.IdempotencyKey = key
 	}
@@ -587,8 +601,17 @@ func validateBodyFieldType(tool catalog.Tool, field string, value any) error {
 	switch typ {
 	case "", "object":
 		if typ == "object" {
-			if _, ok := value.(map[string]any); !ok && value != nil {
+			object, ok := value.(map[string]any)
+			if !ok && value != nil {
 				return fmt.Errorf("body.%s must be an object", field)
+			}
+			if object != nil {
+				nested := tool
+				nested.InputSchema = map[string]any{"properties": map[string]any{"body": fieldSchema}}
+				var checked validatedArguments
+				if err := validateBody(nested, map[string]any{"body": object}, &checked); err != nil {
+					return fmt.Errorf("body.%s: %w", field, err)
+				}
 			}
 		}
 	case "string":
@@ -698,4 +721,37 @@ func copyMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func isUnifiedCommand(id string) bool {
+	return strings.HasPrefix(id, "work.") || strings.HasPrefix(id, "pm.")
+}
+func withUnifiedIdempotencyKey(id string, body any, key string) (any, error) {
+	if key == "" {
+		return body, nil
+	}
+	if !catalog.SupportsIdempotencyKey(id, "POST") {
+		return nil, errors.New("idempotency_key is not supported by this command; use its version or action identity")
+	}
+	object, ok := body.(map[string]any)
+	if !ok {
+		return nil, errors.New("body must be an object")
+	}
+	out := copyMap(object)
+	target := out
+	field := "request_key"
+	if id == "work.observations.submit" {
+		observation, ok := out["observation"].(map[string]any)
+		if !ok {
+			return nil, errors.New("body.observation must be an object")
+		}
+		target = copyMap(observation)
+		out["observation"] = target
+		field = "idempotency_key"
+	}
+	if existing, ok := target[field]; ok && existing != key {
+		return nil, fmt.Errorf("body %s conflicts with idempotency_key", field)
+	}
+	target[field] = key
+	return out, nil
 }

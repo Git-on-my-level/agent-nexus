@@ -459,10 +459,11 @@ an assistant response or completed work. The selected PM agent can use
 `pm turns context <turn-id>`, `pm turns propose <turn-id> --from-file ...`, and
 `pm turns complete <turn-id> --from-file ...`; other agents cannot impersonate it.
 
-PM context is bounded to 1..50 items. PM conversation/decision/action lists are
-currently bounded to 200 and expose `has_more`; they do not yet support cursor
-continuation or server-side project filtering. The CLI preserves that limitation
-and rejects unsupported flags. Use `work list` for full cursor-based work queries.
+PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
+`--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are
+bound to the current workspace, principal and record kind; do not reuse one after
+switching profiles. Lists do not support server-side project filtering; use
+`work list --project-ref` for project-scoped work queries.
 
 For cross-lane validation only, the real-binary harness accepts
 `ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the

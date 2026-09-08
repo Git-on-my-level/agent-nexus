@@ -262,7 +262,7 @@ func TestWorkGroupHelpDoesNotRequireProfileSelection(t *testing.T) {
 
 func TestPMRejectsUnsupportedScopeAndPaginationFlags(t *testing.T) {
 	for _, args := range [][]string{
-		{"pm", "decisions", "list", "--cursor", "invented"},
+		{"pm", "decisions", "list", "--project-ref", "invented"},
 		{"pm", "actions", "get", "action-1", "--actor-id", "human"},
 		{"pm", "context", "--workspace-id", "other"},
 		{"pm", "context", "--limit", "51"},
@@ -273,5 +273,46 @@ func TestPMRejectsUnsupportedScopeAndPaginationFlags(t *testing.T) {
 		if code != "invalid_flags" && code != "invalid_request" {
 			t.Errorf("unexpected local failure %s: %v", code, payload)
 		}
+	}
+}
+
+func TestPMPaginationCarriesOpaqueCursor(t *testing.T) {
+	for _, kind := range []string{"conversations", "decisions", "actions"} {
+		t.Run(kind, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/pm/"+kind || r.URL.Query().Get("cursor") != "bound+opaque" || r.URL.Query().Get("limit") != "200" {
+					t.Errorf("request=%s", r.URL)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, `{"items":[],"has_more":true,"next_cursor":"next-page"}`)
+			}))
+			defer server.Close()
+			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", kind, "list", "--limit", "200", "--cursor", "bound+opaque"}))
+			if asMap(payload["data"])["next_cursor"] != "next-page" {
+				t.Errorf("cursor lost: %v", payload)
+			}
+		})
+	}
+}
+
+func TestWorkRejectsNonObjectSuccessResponse(t *testing.T) {
+	for _, body := range []string{`<html>proxy login</html>`, `null`, `[]`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) }))
+		payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "work", "capabilities"}))
+		if asMap(payload["error"])["code"] != "invalid_response" {
+			t.Errorf("not a protocol error: %v", payload)
+		}
+		server.Close()
+	}
+}
+
+func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
+	work := formatWorkCommandText("work list", map[string]any{"work": []any{map[string]any{"ref": "card:example", "title": "Synthetic", "phase": "done", "freshness": map[string]any{"status": "unknown"}}}, "next_cursor": "next"})
+	if !strings.Contains(work, "card:example") || !strings.Contains(work, "freshness=unknown") || !strings.Contains(work, "next_cursor: next") {
+		t.Errorf("lost work semantics: %s", work)
+	}
+	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
+	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
+		t.Errorf("lost receipt uncertainty: %s", pm)
 	}
 }

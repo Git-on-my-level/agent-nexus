@@ -11,6 +11,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/registry"
 )
 
 // The central API owns work, ordering, authorization and evidence. This table only
@@ -34,16 +35,16 @@ var workCommands = map[string]workCommandSpec{
 	"work observations list":   {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
 	"work observations submit": {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
 	"pm context":               {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit"}},
-	"pm conversations list":    {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations (bounded; inspect has_more)."},
+	"pm conversations list":    {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm conversations create":  {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
 	"pm conversations get":     {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
 	"pm conversations message": {path: "/pm/conversations/{id}/messages", method: "POST", idFlag: "conversation-id", body: true, summary: "Queue a PM message using request_key and text; an accepted turn is not a completed outcome."},
-	"pm decisions list":        {path: "/pm/decisions", method: "GET", summary: "List durable decisions (bounded; inspect has_more)."},
+	"pm decisions list":        {path: "/pm/decisions", method: "GET", summary: "List durable decisions with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm decisions get":         {path: "/pm/decisions/{id}", method: "GET", idFlag: "decision-id", summary: "Read an instruction, authorization scope, revision and answer status."},
 	"pm decisions create":      {path: "/pm/decisions", method: "POST", body: true, summary: "Propose an instruction bound to work, scope and target_revision; never approves it."},
 	"pm decisions answer":      {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
 	"pm decisions dispatch":    {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
-	"pm actions list":          {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses (bounded; inspect has_more)."},
+	"pm actions list":          {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit"}},
@@ -140,7 +141,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	if limit.set {
 		maxLimit := 200
-		if strings.HasPrefix(out.name, "pm ") {
+		if out.name == "pm context" || out.name == "pm turns context" {
 			maxLimit = 50
 		}
 		if limit.value < 1 || limit.value > maxLimit {
@@ -205,6 +206,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if err != nil {
 		return result, parsed.name, err
 	}
+	if commandResultBody(result) == nil {
+		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
+	}
 	if parsed.name == "work context" {
 		observationPath := path + "/observations"
 		if len(parsed.query) > 0 {
@@ -244,7 +248,13 @@ func workHelpText(topic string) (string, bool) {
 		return "", false
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Unified work: %s\n\n", topic)
+	meta, _ := registry.LoadEmbedded()
+	if cmd, found := commandByCLIPath(meta.Commands, mapRuntimePathToRegistryPath(topic)); found && exact {
+		b.WriteString(formatGeneratedCommandHelp(topic, cmd, false))
+		b.WriteString("\n\n")
+	} else {
+		fmt.Fprintf(&b, "Local Help: %s\n\n", topic)
+	}
 	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.\n\n")
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
@@ -277,7 +287,7 @@ func workHelpText(topic string) (string, bool) {
 		}
 	}
 	if strings.HasPrefix(topic, "pm") {
-		b.WriteString("\nPM list endpoints return at most 200 entries; has_more=true means incomplete coverage, not an empty continuation. They do not yet accept cursors. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.\n")
+		b.WriteString("\nPM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.\n")
 	} else {
 		b.WriteString("\nLists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.\n")
 	}
@@ -292,6 +302,47 @@ func formatWorkCommandText(name string, body any) string {
 		lines := []string{fmt.Sprintf("Work: %d", len(rows))}
 		for _, row := range rows {
 			lines = append(lines, renderWorkLine(asMap(row)))
+		}
+		if cursor := anyString(root["next_cursor"]); cursor != "" {
+			lines = append(lines, "next_cursor: "+cursor)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if name == "work observations list" {
+		rows, _ := root["observations"].([]any)
+		lines := []string{fmt.Sprintf("Observations: %d", len(rows))}
+		for _, row := range rows {
+			observation := asMap(row)
+			lines = append(lines, fmt.Sprintf("%s  status=%s verification=%s observed=%s reader=%s", anyString(observation["id"]), anyString(observation["status"]), firstNonEmpty(anyString(observation["verification"]), "reported"), anyString(observation["observed_at"]), anyString(observation["reader_id"])))
+			for _, key := range []string{"uncertainty", "coverage", "error"} {
+				if value, ok := observation[key]; ok && value != nil {
+					raw, _ := json.Marshal(value)
+					lines = append(lines, "  "+key+": "+string(raw))
+				}
+			}
+		}
+		if cursor := anyString(root["next_cursor"]); cursor != "" {
+			lines = append(lines, "next_cursor: "+cursor)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if name == "pm decisions list" || name == "pm actions list" || name == "pm conversations list" {
+		rows, _ := root["items"].([]any)
+		lines := []string{fmt.Sprintf("%s: %d", strings.TrimPrefix(strings.TrimSuffix(name, " list"), "pm "), len(rows))}
+		for _, row := range rows {
+			item := asMap(row)
+			line := fmt.Sprintf("%s  %s  status=%s", anyString(item["id"]), anyString(item["work_ref"]), firstNonEmpty(anyString(item["status"]), "unknown"))
+			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"])); title != "" {
+				line += "  " + strings.Join(strings.Fields(title), " ")
+			}
+			if name == "pm actions list" {
+				receipt := asMap(item["receipt"])
+				line += fmt.Sprintf(" verified=%t", receipt["independently_verified"] == true)
+			}
+			lines = append(lines, line)
+		}
+		if more, _ := root["has_more"].(bool); more {
+			lines = append(lines, "has_more: true")
 		}
 		if cursor := anyString(root["next_cursor"]); cursor != "" {
 			lines = append(lines, "next_cursor: "+cursor)

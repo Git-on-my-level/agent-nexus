@@ -26,6 +26,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
 - `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
+- `work` (group): Query commitments, evidence, freshness and refresh state
+- `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Register, inspect, and manage auth state
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
@@ -177,6 +179,33 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
+- `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
+- `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
+- `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
+- `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
+- `pm conversations create` (command): Create a durable conversation using request_key, title and optional work_ref.
+- `pm conversations get` (command): Read a conversation and its durable turns.
+- `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
+- `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+- `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
+- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
+- `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+- `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
+- `pm decisions list` (command): List durable decisions with principal-bound pagination.
+- `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
+- `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
+- `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
+- `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
+- `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
+- `work create` (command): Register a native commitment or canonical external source on an existing board.
+- `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
+- `work get` (command): Read one work card, source authority, executions and current evidence.
+- `work list` (command): List work cards across sources in the authenticated workspace.
+- `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
+- `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
+- `work patch` (command): Update work metadata with if_version; external status remains source-owned.
+- `work refresh get` (command): Read refresh state without queueing work.
+- `work refresh request` (command): Request a bounded refresh; queued is not a successful observation.
 
 
 ## `onboarding`
@@ -1399,6 +1428,63 @@ Output conventions
 - `dedupe` writes `dedupe.json`.
 - `plan` writes `plan.json` and `plan-preview.md`.
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
+```
+
+## `work`
+
+Query commitments, evidence, freshness and refresh state
+
+```text
+Local Help: work
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+  anx work capabilities        Read capabilities actually advertised by the authenticated central API.
+  anx work context             Compose work, a bounded observation page and refresh status using read-only requests.
+  anx work create              Register a native commitment or canonical external source on an existing board.
+  anx work freshness           Inspect last observed, source activity and meaningful progress independently.
+  anx work get                 Read one work card, source authority, executions and current evidence.
+  anx work list                List work cards across sources in the authenticated workspace.
+  anx work observations list   Read append-only evidence for a work card, preserving pagination and uncertainty.
+  anx work observations submit Submit an authenticated remote observation; preserve its idempotency key on retry.
+  anx work patch               Update work metadata with if_version; external status remains source-owned.
+  anx work refresh get         Read refresh state without queueing work.
+  anx work refresh request     Request a bounded refresh; queued is not a successful observation.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm`
+
+Read and operate durable PM conversations, decisions and action receipts
+
+```text
+Local Help: pm
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+  anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
+  anx pm actions list          Report durable action and receipt statuses with principal-bound pagination.
+  anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
+  anx pm context               Read bounded authorized PM context; partial coverage stays explicit.
+  anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
+  anx pm conversations get     Read a conversation and its durable turns.
+  anx pm conversations list    List durable PM conversations with principal-bound pagination.
+  anx pm conversations message Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+  anx pm decisions answer      Answer with revision, approve and text; the server requires an authorized human principal.
+  anx pm decisions create      Propose an instruction bound to work, scope and target_revision; never approves it.
+  anx pm decisions dispatch    Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+  anx pm decisions get         Read an instruction, authorization scope, revision and answer status.
+  anx pm decisions list        List durable decisions with principal-bound pagination.
+  anx pm turns complete        Selected PM agent records response text and evidence_refs; does not complete work.
+  anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
+  anx pm turns propose         Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
 ```
 
 ## `auth`
@@ -6260,4 +6346,533 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm actions get`
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+```text
+Local Help: pm actions get
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+Usage: anx pm actions get <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions list`
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+```text
+Local Help: pm actions list
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+Usage: anx pm actions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions reconcile`
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+```text
+Local Help: pm actions reconcile
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+Usage: anx pm actions reconcile <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm context`
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+```text
+Local Help: pm context
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+Usage: anx pm context
+  --work-ref <value>
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations create`
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+```text
+Local Help: pm conversations create
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+Usage: anx pm conversations create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations get`
+
+Read a conversation and its durable turns.
+
+```text
+Local Help: pm conversations get
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read a conversation and its durable turns.
+
+Usage: anx pm conversations get <ref> (or --conversation-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations list`
+
+List durable PM conversations with principal-bound pagination.
+
+```text
+Local Help: pm conversations list
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable PM conversations with principal-bound pagination.
+
+Usage: anx pm conversations list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations message`
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+```text
+Local Help: pm conversations message
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions answer`
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+```text
+Local Help: pm decisions answer
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions create`
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+```text
+Local Help: pm decisions create
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+Usage: anx pm decisions create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions dispatch`
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+```text
+Local Help: pm decisions dispatch
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+Usage: anx pm decisions dispatch <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions get`
+
+Read an instruction, authorization scope, revision and answer status.
+
+```text
+Local Help: pm decisions get
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read an instruction, authorization scope, revision and answer status.
+
+Usage: anx pm decisions get <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions list`
+
+List durable decisions with principal-bound pagination.
+
+```text
+Local Help: pm decisions list
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable decisions with principal-bound pagination.
+
+Usage: anx pm decisions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns complete`
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+```text
+Local Help: pm turns complete
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns context`
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+```text
+Local Help: pm turns context
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+Usage: anx pm turns context <ref> (or --turn-id <ref>)
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns propose`
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+```text
+Local Help: pm turns propose
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work capabilities`
+
+Read capabilities actually advertised by the authenticated central API.
+
+```text
+Local Help: work capabilities
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read capabilities actually advertised by the authenticated central API.
+
+Usage: anx work capabilities
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work context`
+
+Compose work, a bounded observation page and refresh status using read-only requests.
+
+```text
+Local Help: work context
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Compose work, a bounded observation page and refresh status using read-only requests.
+
+Usage: anx work context <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work create`
+
+Register a native commitment or canonical external source on an existing board.
+
+```text
+Local Help: work create
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Register a native commitment or canonical external source on an existing board.
+
+Usage: anx work create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work freshness`
+
+Inspect last observed, source activity and meaningful progress independently.
+
+```text
+Local Help: work freshness
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Inspect last observed, source activity and meaningful progress independently.
+
+Usage: anx work freshness <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work get`
+
+Read one work card, source authority, executions and current evidence.
+
+```text
+Local Help: work get
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read one work card, source authority, executions and current evidence.
+
+Usage: anx work get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work list`
+
+List work cards across sources in the authenticated workspace.
+
+```text
+Local Help: work list
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List work cards across sources in the authenticated workspace.
+
+Usage: anx work list
+  --project-ref <value>
+  --source <value>
+  --owner <value>
+  --phase <value>
+  --freshness <value>
+  --q <value>
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations list`
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+```text
+Local Help: work observations list
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+Usage: anx work observations list <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations submit`
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+```text
+Local Help: work observations submit
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
+Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work patch`
+
+Update work metadata with if_version; external status remains source-owned.
+
+```text
+Local Help: work patch
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Update work metadata with if_version; external status remains source-owned.
+
+Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh get`
+
+Read refresh state without queueing work.
+
+```text
+Local Help: work refresh get
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read refresh state without queueing work.
+
+Usage: anx work refresh get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh request`
+
+Request a bounded refresh; queued is not a successful observation.
+
+```text
+Local Help: work refresh request
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request a bounded refresh; queued is not a successful observation.
+
+Usage: anx work refresh request <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
 ```

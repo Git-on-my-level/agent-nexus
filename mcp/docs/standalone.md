@@ -159,3 +159,11 @@ validates workspace identity, replay keys and selected-PM-agent permissions.
 human approval, source-write permission, or a new channel identity. Receipt
 reconciliation reads back authoritative outcomes; it must not resend actions.
 Generated readers and remote observations cannot self-certify accepted completion.
+
+Request bodies use nested canonical JSON objects (for example
+`body.observation.idempotency_key` denotes an `observation` object, not a literal
+key containing dots). The optional MCP `idempotency_key` is mapped to the
+observation's nested key or the PM creation request's `request_key`; conflicting
+keys fail locally. Versioned annotations, refresh, approval, dispatch and receipt
+reconciliation use their documented version/action identity and do not advertise
+a generic replay-key option.
