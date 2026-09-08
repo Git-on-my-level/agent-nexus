@@ -53,7 +53,7 @@ func (s *Service) ListDecisions(ctx context.Context, p Principal) ([]Decision, e
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return nil, err
 	}
-	ds, err := listRecords[Decision](ctx, s.store, "decision", p.WorkspaceID, p.ActorID, "")
+	ds, err := listRecords[Decision](ctx, s.store, "decision", p.WorkspaceID, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (s *Service) ListActions(ctx context.Context, p Principal) ([]Action, error
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
 		return nil, err
 	}
-	as, err := listRecords[Action](ctx, s.store, "action", p.WorkspaceID, p.ActorID, "")
+	as, err := listRecords[Action](ctx, s.store, "action", p.WorkspaceID, "", "")
 	if err != nil {
 		return nil, err
 	}

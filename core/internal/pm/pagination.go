@@ -50,7 +50,11 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 			return out, ErrInvalid
 		}
 	}
-	rows, err := s.store.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND actor_id=? AND rowid>? ORDER BY rowid LIMIT ?`, kind, p.WorkspaceID, p.ActorID, after, limit+1)
+	owner := p.ActorID
+	if kind == "decision" || kind == "action" {
+		owner = ""
+	}
+	rows, err := s.store.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND rowid>? ORDER BY rowid LIMIT ?`, kind, p.WorkspaceID, owner, owner, after, limit+1)
 	if err != nil {
 		return out, err
 	}

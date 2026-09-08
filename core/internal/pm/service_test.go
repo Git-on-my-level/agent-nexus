@@ -193,3 +193,33 @@ func TestApprovalReplayRetainsOneActionIntent(t *testing.T) {
 		t.Fatalf("changed answer replay %v", err)
 	}
 }
+
+func TestAgentProposalHumanDiscoveryAndAgentReceiptDiscovery(t *testing.T) {
+	s, _, human, _ := fixture(t)
+	ctx := context.Background()
+	agent := Principal{WorkspaceID: "ws", ActorID: "worker"}
+	d, err := s.ProposeDecision(ctx, agent, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ds, err := s.ListDecisions(ctx, human)
+	if err != nil || len(ds) != 1 || ds[0].ID != d.ID {
+		t.Fatalf("human cannot discover authorized agent decision: %+v %v", ds, err)
+	}
+	page, err := s.DecisionPage(ctx, human, 50, "")
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("paged human discovery: %+v %v", page, err)
+	}
+	answered, err := s.AnswerDecision(ctx, human, d.ID, AnswerInput{Revision: 1, Approve: true, Text: "Assign owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	as, err := s.ListActions(ctx, agent)
+	if err != nil || len(as) != 1 || as[0].ID != answered.ActionID {
+		t.Fatalf("agent cannot discover handoff receipt: %+v %v", as, err)
+	}
+	ap, err := s.ActionPage(ctx, agent, 50, "")
+	if err != nil || len(ap.Items) != 1 {
+		t.Fatalf("paged receipt discovery: %+v %v", ap, err)
+	}
+}

@@ -101,7 +101,7 @@ func (s *Service) AnswerFromChannel(ctx context.Context, o Origin, decisionID st
 	}
 	// Explicit origin binding prevents decisions copied to another chat/user from
 	// becoming bearer approval tokens.
-	if d.Origin == nil || *d.Origin != o {
+	if d.Origin == nil || *d.Origin != o || d.ActorID != b.ActorID {
 		return Decision{}, ErrForbidden
 	}
 	return s.AnswerDecision(ctx, Principal{WorkspaceID: b.WorkspaceID, ActorID: b.ActorID, Human: true}, decisionID, in)
@@ -140,6 +140,7 @@ func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (D
 	}
 	old := d.Revision
 	d.Status = Sending
+	d.Attempts = append(d.Attempts, Attempt{StartedAt: time.Now().UTC(), Status: Sending})
 	d.Revision++
 	if err = s.store.cas(ctx, "delivery", id, old, d); err != nil {
 		return Delivery{}, err
@@ -153,6 +154,10 @@ func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (D
 	old = d.Revision
 	d.Status = receipt.Status
 	d.Receipt = receipt
+	now := time.Now().UTC()
+	d.Attempts[len(d.Attempts)-1].FinishedAt = &now
+	d.Attempts[len(d.Attempts)-1].Status = d.Status
+	d.Attempts[len(d.Attempts)-1].Receipt = receipt
 	d.Revision++
 	if err = s.store.cas(context.WithoutCancel(ctx), "delivery", id, old, d); err != nil {
 		return Delivery{}, err
@@ -182,7 +187,7 @@ func (s *Service) ReconcileDelivery(ctx context.Context, p Principal, id string,
 	if r.Status != Delivered && r.Status != Failed {
 		return Delivery{}, ErrInvalid
 	}
-	if len(r.EvidenceRefs) == 0 || r.ExternalID == "" {
+	if len(r.EvidenceRefs) == 0 || r.ExternalID == "" || (r.Status == Failed && !r.IndependentlyVerified) {
 		return Delivery{}, ErrInvalid
 	}
 	old := d.Revision

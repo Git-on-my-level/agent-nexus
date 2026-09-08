@@ -159,14 +159,15 @@ type Receipt struct {
 	Detail                string   `json:"detail,omitempty"`
 }
 type Delivery struct {
-	ID          string  `json:"id"`
-	WorkspaceID string  `json:"workspace_id"`
-	ActorID     string  `json:"actor_id"`
-	Origin      Origin  `json:"origin"`
-	Text        string  `json:"text"`
-	Status      Status  `json:"status"`
-	Receipt     Receipt `json:"receipt"`
-	Revision    int     `json:"revision"`
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"workspace_id"`
+	ActorID     string    `json:"actor_id"`
+	Origin      Origin    `json:"origin"`
+	Text        string    `json:"text"`
+	Status      Status    `json:"status"`
+	Receipt     Receipt   `json:"receipt"`
+	Revision    int       `json:"revision"`
+	Attempts    []Attempt `json:"attempts"`
 }
 
 type Config struct {

@@ -75,7 +75,12 @@ Use the same workspace SQLite connection:
    channel replies. It is bounded, replay-safe and starts no watcher. It also
    recovers a persisted assistant response whose outbox was not yet created.
 
-PM history is scoped to the originating actor/conversation. A PM agent can use
+PM history is scoped to the originating actor/conversation. Decisions and
+receipts instead enumerate currently authorized work across requesting and
+approving actors, so an agent's proposal is discoverable by its human approver.
+Generic Nexus thread/event/artifact routes must enforce equivalent PM privacy,
+or this must remain a dedicated single-operator workspace: protecting only
+`/pm/` does not hide the canonical bridge thread from other native read routes. A PM agent can use
 `GET /pm/turns/{id}/context` to query bounded current evidence on behalf of the
 requester. The callback must apply that requester's current authorization; the
 PM agent's broader ambient privileges are not used for that query. Proposals
@@ -165,7 +170,13 @@ writes need their own authorization; tests do not supply that authorization.
 return verified only with an external ID, evidence refs and
 `independently_verified=true`. A source completion report cannot promote itself
 to verified. `ReconcileDelivery` records an authorized human's inspected
-transport evidence and does not silently reopen a send.
+transport evidence and does not silently reopen a send. Conclusive non-delivery
+requires independently verified evidence. The exported operator method
+`RetryFailedDelivery` then accepts an exact reviewed revision and a request key,
+records a separate immutable retry approval, and preserves all attempt history.
+It permits at most three attempts per delivery and never accepts unknown or
+sending state. Its integration is an explicit operator action; no new automatic
+retry loop or uncontracted HTTP endpoint is installed.
 
 ## API summary
 

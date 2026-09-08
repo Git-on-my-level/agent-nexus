@@ -266,3 +266,55 @@ func TestLongReplyOutboxIsAtomicOrderedAndNeverResendsUnknown(t *testing.T) {
 		t.Fatalf("missing/duplicate fragment %d want %d", calls, len(fragments))
 	}
 }
+
+func TestExplicitDeliveryRetryRequiresVerifiedNonDelivery(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	o := Origin{Transport: "telegram", TenantID: "bot", ChannelID: "chat", ExternalUserID: "42"}
+	bind(t, s, p, o, false)
+	turn, err := s.ReceiveChannel(ctx, o, "one", "Status?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.QueueTurnDelivery(ctx, turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err = s.SendDelivery(ctx, d.ID, sendFunc(func(context.Context, Delivery) (Receipt, error) { return Receipt{}, errors.New("lost response") }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.RetryFailedDelivery(ctx, p, d.ID, d.Revision, "retry"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("unknown retried %v", err)
+	}
+	r := Receipt{Status: Failed, ExternalID: "lookup-1", EvidenceRefs: []string{"artifact:delivery-absent"}}
+	if _, err = s.ReconcileDelivery(ctx, p, d.ID, r); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unverified absence %v", err)
+	}
+	r.IndependentlyVerified = true
+	d, err = s.ReconcileDelivery(ctx, p, d.ID, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision := d.Revision
+	d, err = s.RetryFailedDelivery(ctx, p, d.ID, revision, "retry")
+	if err != nil || d.Status != Pending {
+		t.Fatalf("explicit retry %+v %v", d, err)
+	}
+	d, err = s.SendDelivery(ctx, d.ID, sendFunc(func(context.Context, Delivery) (Receipt, error) {
+		return Receipt{Status: Delivered, ExternalID: "remote-2"}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Attempts) != 2 || d.Attempts[0].Status != Unknown || d.Attempts[1].Status != Delivered {
+		t.Fatalf("attempt history lost %+v", d)
+	}
+	replay, err := s.RetryFailedDelivery(ctx, p, d.ID, revision, "retry")
+	if err != nil || replay.Status != Delivered {
+		t.Fatalf("retry approval replay reopened send %+v %v", replay, err)
+	}
+}

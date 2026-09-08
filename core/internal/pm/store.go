@@ -76,7 +76,7 @@ func (s *Store) cas(ctx context.Context, kind, id string, revision int, value an
 	return nil
 }
 func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent string) ([]T, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind=? AND workspace_id=? AND actor_id=? AND (?='' OR parent_id=?) ORDER BY rowid LIMIT 200`, kind, ws, actor, parent, parent)
+	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent)
 	if err != nil {
 		return nil, err
 	}
