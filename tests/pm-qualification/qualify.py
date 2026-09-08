@@ -263,14 +263,35 @@ def outage(core, other):
     require(again["latest_observation"]["id"] == good["id"], "restart lost retained last-good evidence")
 
 
+def attempt_ordering(core, other):
+    work = register_work(core, core.board(), native_id="attempt-ordering")
+    good = submit(core, work, observation("synthetic-sequenced-good", 10))["observation"]
+    failure = observation("synthetic-unsequenced-outage", 11, status="error", facts={}, evidence=[],
+                          error={"code": "source_unreachable", "message": "Synthetic outage has no source revision"})
+    failure.pop("source_sequence")
+    failure.pop("source_revision")
+    submit(core, work, failure)
+    current = core.api("GET", item_path(work))["work"]
+    require(current["latest_observation"]["id"] == good["id"], "unsequenced failure replaced good source state")
+    require(current["freshness"]["status"] == "error" and current["refresh"].get("last_error"),
+            "outage without source sequence was hidden after sequenced success")
+    core.restart(crash=True)
+    current = core.api("GET", item_path(work))["work"]
+    require(current["freshness"]["status"] == "error", "restart lost unsequenced outage visibility")
+
+
 def completion(core, other):
     work = register_work(core, core.board(), native_id="run-not-work")
-    submit(core, work, observation("synthetic-run-completed", 1, status="verified",
-                                 facts={"phase": "done", "native_status": "OPEN", "run_status": "completed"},
-                                 evidence=[]))
+    status, _ = core.http("POST", item_path(work) + "/observations", {"observation":
+        observation("synthetic-run-completed", 1, status="verified",
+                    facts={"phase": "done", "native_status": "OPEN", "run_status": "completed"}, evidence=[])})
+    require(status in (200, 201, 400, 422), "completion gate returned unexpected response")
     current = core.api("GET", item_path(work))["work"]
     require(current["phase"] != "done", "successful run or self-attestation completed unaccepted work")
-    latest = current["latest_observation"]
+    # A rejected empty completion is valid enforcement. Independently test that
+    # an otherwise valid observation cannot promote its own verification label.
+    submit(core, work, observation("synthetic-self-attestation", 2, status="verified"))
+    latest = core.api("GET", item_path(work))["work"]["latest_observation"]
     require(latest.get("verification") != "verified", "untrusted reporter self-upgraded verification")
 
 
@@ -292,7 +313,8 @@ def views(core, other):
 
 
 SCENARIOS = {"baseline": baseline, "authority": authority, "replay": replay,
-             "outage": outage, "completion": completion, "views": views}
+             "outage": outage, "attempt_ordering": attempt_ordering,
+             "completion": completion, "views": views}
 
 
 def main():
