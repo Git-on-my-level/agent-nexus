@@ -83,7 +83,7 @@ func (r *BubblewrapRunner) Run(ctx context.Context, artifact string, input []byt
 	}
 	// No mounts of host root, home, credentials, sockets or runtime libraries.
 	// Static ELF only is enforced again by the manager before every invocation.
-	args := []string{"--as=" + strconv.FormatInt(l.MemoryBytes, 10), "--cpu=" + strconv.Itoa(l.CPUSeconds), "--nproc=" + strconv.Itoa(l.Processes), "--fsize=" + strconv.FormatInt(l.FileBytes, 10), "--nofile=32", "--", r.bwrap, "--unshare-all", "--unshare-user", "--disable-userns", "--assert-userns-disabled", "--die-with-parent", "--new-session", "--clearenv", "--cap-drop", "ALL", "--size", "1048576", "--tmpfs", "/", "--ro-bind", artifact, "/reader", "--dir", "/dev", "--ro-bind", "/dev/null", "/dev/null", "--ro-bind", "/dev/urandom", "/dev/urandom", "--dir", "/tmp", "--remount-ro", "/", "--chdir", "/tmp", "--setenv", "PATH", "/", "--setenv", "LANG", "C", "--", "/reader"}
+	args := []string{"--as=" + strconv.FormatInt(l.MemoryBytes, 10), "--cpu=" + strconv.Itoa(l.CPUSeconds), "--nproc=" + strconv.Itoa(l.Processes), "--fsize=" + strconv.FormatInt(l.FileBytes, 10), "--nofile=32", "--core=0", "--", r.bwrap, "--unshare-all", "--unshare-user", "--disable-userns", "--assert-userns-disabled", "--die-with-parent", "--new-session", "--clearenv", "--cap-drop", "ALL", "--size", "1048576", "--tmpfs", "/", "--ro-bind", artifact, "/reader", "--dir", "/dev", "--ro-bind", "/dev/null", "/dev/null", "--ro-bind", "/dev/urandom", "/dev/urandom", "--dir", "/tmp", "--remount-ro", "/", "--chdir", "/tmp", "--setenv", "PATH", "/", "--setenv", "LANG", "C", "--", "/reader"}
 	ctx, cancel := context.WithTimeout(ctx, l.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.prlimit, args...)
