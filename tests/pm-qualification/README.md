@@ -43,6 +43,7 @@ prior failure scenarios.
 | attempt_ordering | An unreachable-source error with no source sequence remains visible after sequenced evidence |
 | completion | Completed run with no acceptance evidence does not complete work; client cannot self-verify |
 | views | Work appears in card board and work list, inbox read does not mutate it, dates/relations survive |
+| pm_boundaries | Real core/CLI durable PM proposal replay, agent approval denial, pending restart, explicit missing-provider error |
 
 An assertion failure is a finding to investigate, not permission to weaken the
 assertion. First distinguish a contract-shape mismatch from a product invariant
@@ -107,3 +108,10 @@ temporary tracker. Source titles/bodies and credentials are omitted from the
 report. The target is fingerprinted; retain the private operator configuration
 separately for exact provenance. This is real-source import into a synthetic
 local workspace, not a production deployment or remote-CLI/browser proof.
+
+For an SSH source, add `--controlled-ssh-outage` to repeat the read using a
+temporary empty known-hosts file. The host/path and strict verification remain
+unchanged, and operator files are untouched. The runner requires that read to
+fail, maps a labeled failure observation into temporary core, and verifies
+last-good evidence plus visible failure survive restart. Failure mapping is
+performed by the harness; this does not certify the production scheduler.
