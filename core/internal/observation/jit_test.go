@@ -213,3 +213,27 @@ func TestGeneratedOutputCannotInventReferencesOrOverwriteAuthority(t *testing.T)
 		t.Fatal("unknown executable output field accepted")
 	}
 }
+
+func TestJITStageRecoversArtifactPublishedBeforeStateCommit(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "managed")
+	manager, err := NewJITManager(root, fixtureJITPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{AdapterID: "fixture", Target: fixtureTarget(), Limits: fixtureJITPolicy().Limits}
+	first, err := manager.Stage(manifest, minimalStaticELF(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a crash after publishing immutable files but before recording state.
+	if err := os.Remove(filepath.Join(root, "fixture", "state.json")); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := manager.Stage(manifest, minimalStaticELF(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Revision != first.Revision || recovered.State != "staged" {
+		t.Fatal("orphan recovery invented validation")
+	}
+}

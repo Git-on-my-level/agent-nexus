@@ -285,6 +285,23 @@ func (m *JITManager) Stage(manifest Manifest, artifact []byte) (v Version, err e
 		if e = os.MkdirAll(parent, 0700); e != nil {
 			return e
 		}
+		// Recover the narrow crash window between artifact publication and state
+		// commit. Existing bytes must match; never invent fixture/canary success.
+		v = Version{Revision: rev, ArtifactDigest: hash, Manifest: manifest, State: "staged", CreatedAt: time.Now().UTC()}
+		if _, statErr := os.Lstat(filepath.Join(parent, rev)); statErr == nil {
+			if _, verifyErr := m.artifact(v); verifyErr != nil {
+				return verifyErr
+			}
+			raw, readErr := os.ReadFile(filepath.Join(parent, rev, "manifest.json"))
+			want, _ := json.Marshal(manifest)
+			if readErr != nil || !bytes.Equal(raw, want) {
+				return failure(ErrPolicy, "orphan artifact manifest differs from staged revision")
+			}
+			state.Versions[rev] = v
+			return m.save(manifest.AdapterID, state)
+		} else if !os.IsNotExist(statErr) {
+			return statErr
+		}
 		dir, e := os.MkdirTemp(parent, ".stage-")
 		if e != nil {
 			return e
