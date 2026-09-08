@@ -223,3 +223,28 @@ func TestAgentProposalHumanDiscoveryAndAgentReceiptDiscovery(t *testing.T) {
 		t.Fatalf("paged receipt discovery: %+v %v", ap, err)
 	}
 }
+
+func TestContextCannotExceedRequestedBound(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.ReadContext = func(context.Context, Principal, string, string, int) (ContextPage, error) {
+		return ContextPage{Items: []any{"one", "two"}}, nil
+	}
+	if _, err := s.QueryContext(context.Background(), p, "work:1", "", 1); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unbounded context accepted %v", err)
+	}
+}
+
+func TestContextPaginationUsesRequestingPrincipalAndBounds(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	s.deps.ReadContextPage = func(_ context.Context, got Principal, work, query, cursor string, limit int) (ContextPage, error) {
+		if got.ActorID != p.ActorID || cursor != "next" || limit != 2 {
+			t.Fatalf("context scope changed %+v %q %d", got, cursor, limit)
+		}
+		return ContextPage{Items: []any{"evidence"}}, nil
+	}
+	page, err := s.QueryContextPage(ctx, p, "work:1", "", "next", 2)
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("context page %+v %v", page, err)
+	}
+}

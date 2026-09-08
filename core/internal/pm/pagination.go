@@ -106,3 +106,65 @@ func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, curs
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
 	return recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
 }
+
+// ConversationHistory reads newest history by default, in chronological display
+// order, with a cursor for older turns. A long-lived chat cannot lose visibility
+// of its newest reply when it passes the bounded history window.
+func (s *Service) ConversationHistory(ctx context.Context, p Principal, id string, limit int, cursor string) (ConversationDetail, error) {
+	c, err := s.conversation(ctx, p, id)
+	if err != nil {
+		return ConversationDetail{}, err
+	}
+	out := ConversationDetail{Conversation: c, Turns: make([]Turn, 0)}
+	if limit < 1 || limit > 200 {
+		return out, ErrInvalid
+	}
+	scope := stableID("history", p.WorkspaceID, p.ActorID, id)
+	before := int64(9223372036854775807)
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil {
+			return out, ErrInvalid
+		}
+		parts := strings.Split(string(raw), ":")
+		if len(parts) != 2 || parts[0] != scope {
+			return out, ErrInvalid
+		}
+		before, err = strconv.ParseInt(parts[1], 10, 64)
+		if err != nil || before < 1 {
+			return out, ErrInvalid
+		}
+	}
+	rows, err := s.store.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind='turn' AND workspace_id=? AND actor_id=? AND parent_id=? AND rowid<? ORDER BY rowid DESC LIMIT ?`, p.WorkspaceID, p.ActorID, id, before, limit+1)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row int64
+		var b []byte
+		if err = rows.Scan(&row, &b); err != nil {
+			return out, err
+		}
+		if len(out.Turns) == limit {
+			out.HasMore = true
+			break
+		}
+		var turn Turn
+		if err = json.Unmarshal(b, &turn); err != nil {
+			return out, err
+		}
+		out.Turns = append(out.Turns, turn)
+		before = row
+	}
+	if err = rows.Err(); err != nil {
+		return out, err
+	}
+	if out.HasMore {
+		out.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(scope + ":" + strconv.FormatInt(before, 10)))
+	}
+	for left, right := 0, len(out.Turns)-1; left < right; left, right = left+1, right-1 {
+		out.Turns[left], out.Turns[right] = out.Turns[right], out.Turns[left]
+	}
+	return out, nil
+}

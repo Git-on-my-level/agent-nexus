@@ -182,8 +182,12 @@ retry loop or uncontracted HTTP endpoint is installed.
 
 All routes require the existing authenticated workspace principal. Lists use
 `limit` (default 50, maximum 200) and opaque `cursor`; responses include `items`,
-`next_cursor`, and `has_more`. Conversation history is bounded to 200 turns;
-context queries accept a maximum of 50 records. Partial coverage is not health.
+`next_cursor`, and `has_more`. Conversation history defaults to the newest 200 turns in chronological display
+order, with `cursor` and `limit` to retrieve older turns. Context queries accept
+a maximum of 50 records and 128 KB serialized output. Supply the optional
+`ReadContextPage` callback to support tracker cursors; the older `ReadContext`
+callback remains compatible and explicitly reports missing paging capability.
+Partial coverage is not health.
 
 - `/pm/conversations`: list/create; `/{id}` detail;
   `/{id}/messages` creates a replay-safe asynchronous turn.

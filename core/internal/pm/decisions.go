@@ -249,6 +249,9 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 // GetTurnContext lets the selected PM bridge actor query evidence on behalf of
 // the request's actor, with current permissions, never ambient PM privileges.
 func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query string, limit int) (ContextPage, error) {
+	return s.GetTurnContextPage(ctx, p, turnID, query, "", limit)
+}
+func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, query, cursor string, limit int) (ContextPage, error) {
 	var t Turn
 	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
 		return ContextPage{}, err
@@ -263,7 +266,7 @@ func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
 		return ContextPage{}, err
 	}
-	return s.QueryContext(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, c.WorkRef, query, limit)
+	return s.QueryContextPage(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, c.WorkRef, query, cursor, limit)
 }
 
 // ProposeForTurn records a proposal under the requesting actor so that it is

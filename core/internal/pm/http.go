@@ -54,7 +54,15 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusCreated
 		}
 	case len(path) == 2 && path[0] == "conversations" && r.Method == http.MethodGet:
-		out, err = s.GetConversation(ctx, p, path[1])
+		var limit int
+		var cursor string
+		limit, cursor, err = pageParams(r)
+		if r.URL.Query().Get("limit") == "" {
+			limit = 200
+		}
+		if err == nil {
+			out, err = s.ConversationHistory(ctx, p, path[1], limit, cursor)
+		}
 	case len(path) == 3 && path[0] == "conversations" && path[2] == "messages" && r.Method == http.MethodPost:
 		var in MessageInput
 		if err = decode(&in); err == nil {
@@ -65,7 +73,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var limit int
 		limit, err = queryLimit(r)
 		if err == nil {
-			out, err = s.QueryContext(ctx, p, r.URL.Query().Get("work_ref"), r.URL.Query().Get("query"), limit)
+			out, err = s.QueryContextPage(ctx, p, r.URL.Query().Get("work_ref"), r.URL.Query().Get("query"), r.URL.Query().Get("cursor"), limit)
 		}
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodGet:
 		var limit int
@@ -115,7 +123,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var limit int
 		limit, err = queryLimit(r)
 		if err == nil {
-			out, err = s.GetTurnContext(ctx, p, path[1], r.URL.Query().Get("query"), limit)
+			out, err = s.GetTurnContextPage(ctx, p, path[1], r.URL.Query().Get("query"), r.URL.Query().Get("cursor"), limit)
 		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "decisions" && r.Method == http.MethodPost:
 		var in DecisionInput

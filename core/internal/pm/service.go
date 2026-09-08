@@ -107,12 +107,7 @@ func (s *Service) conversation(ctx context.Context, p Principal, id string) (Con
 	return c, s.authorize(ctx, p, "pm.read", c.WorkRef)
 }
 func (s *Service) GetConversation(ctx context.Context, p Principal, id string) (ConversationDetail, error) {
-	c, err := s.conversation(ctx, p, id)
-	if err != nil {
-		return ConversationDetail{}, err
-	}
-	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, p.ActorID, id)
-	return ConversationDetail{Conversation: c, Turns: turns}, err
+	return s.ConversationHistory(ctx, p, id, 200, "")
 }
 func (s *Service) ListConversations(ctx context.Context, p Principal) ([]Conversation, error) {
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
@@ -131,16 +126,39 @@ func (s *Service) ListConversations(ctx context.Context, p Principal) ([]Convers
 	return out, nil
 }
 func (s *Service) QueryContext(ctx context.Context, p Principal, workRef, query string, limit int) (ContextPage, error) {
+	return s.QueryContextPage(ctx, p, workRef, query, "", limit)
+}
+func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, query, cursor string, limit int) (ContextPage, error) {
 	if err := s.authorize(ctx, p, "pm.read", workRef); err != nil {
 		return ContextPage{}, err
 	}
-	if limit < 1 || limit > 50 || len(query) > 2000 {
+	if limit < 1 || limit > 50 || len(query) > 2000 || len(cursor) > 2000 {
 		return ContextPage{}, ErrInvalid
 	}
-	if s.deps.ReadContext == nil {
+	var page ContextPage
+	var err error
+	if s.deps.ReadContextPage != nil {
+		page, err = s.deps.ReadContextPage(ctx, p, workRef, query, cursor, limit)
+	} else if cursor == "" && s.deps.ReadContext != nil {
+		page, err = s.deps.ReadContext(ctx, p, workRef, query, limit)
+		if page.NextCursor != "" {
+			page.NextCursor = ""
+			page.Limitations = append(page.Limitations, "Context is partial; paginated tracker callback is not configured")
+		}
+	} else {
 		return ContextPage{}, ErrUnavailable
 	}
-	return s.deps.ReadContext(ctx, p, workRef, query, limit)
+	if err != nil {
+		return ContextPage{}, err
+	}
+	if len(page.Items) > limit || len(page.NextCursor) > 2000 || len(page.Limitations) > 50 {
+		return ContextPage{}, ErrInvalid
+	}
+	raw, err := json.Marshal(page)
+	if err != nil || len(raw) > 128*1024 {
+		return ContextPage{}, ErrInvalid
+	}
+	return page, nil
 }
 func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID string, in MessageInput) (Turn, error) {
 	c, err := s.conversation(ctx, p, conversationID)

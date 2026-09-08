@@ -94,6 +94,8 @@ type Turn struct {
 type ConversationDetail struct {
 	Conversation Conversation `json:"conversation"`
 	Turns        []Turn       `json:"turns"`
+	NextCursor   string       `json:"next_cursor"`
+	HasMore      bool         `json:"has_more"`
 }
 type ContextPage struct {
 	Items       []any    `json:"items"`
@@ -197,6 +199,7 @@ type Dependencies struct {
 	Authorize       func(context.Context, Principal, string, string) error
 	EnsureThread    func(context.Context, Principal, string, string) (string, error)
 	ReadContext     func(context.Context, Principal, string, string, int) (ContextPage, error)
+	ReadContextPage func(context.Context, Principal, string, string, string, int) (ContextPage, error)
 	Dispatch        func(context.Context, DispatchRequest) error
 	CurrentRevision func(context.Context, Principal, string) (string, error)
 	Execute         func(context.Context, Action) (Receipt, error)

@@ -77,3 +77,33 @@ func TestPagedConversationsBoundCursorToPrincipalAndKind(t *testing.T) {
 		t.Fatalf("incomplete pagination %d %q", len(seen), cursor)
 	}
 }
+
+func TestConversationShowsNewestHistoryAndPagesBackward(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "history", Title: "History"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 205; i++ {
+		turn := Turn{ID: fmt.Sprintf("turn-%03d", i), ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: fmt.Sprint(i), Status: Delivered, Revision: 1}
+		if _, err = s.store.insert(ctx, "turn", turn.ID, p.WorkspaceID, p.ActorID, c.ID, turn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	detail, err := s.GetConversation(ctx, p, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Turns) != 200 || detail.Turns[len(detail.Turns)-1].Text != "204" {
+		t.Fatalf("newest response is invisible: %d %s", len(detail.Turns), detail.Turns[len(detail.Turns)-1].Text)
+	}
+
+	older, err := s.ConversationHistory(ctx, p, c.ID, 200, detail.NextCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !detail.HasMore || len(older.Turns) != 5 || older.HasMore || older.Turns[0].Text != "0" || older.Turns[4].Text != "4" {
+		t.Fatalf("older history missing %+v", older)
+	}
+}
