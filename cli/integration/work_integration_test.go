@@ -140,3 +140,32 @@ func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 		}
 	}
 }
+
+func TestSecondMachineCLIObservationDedupSurvivesRestart(t *testing.T) {
+	h := newLiveCoreHarness(t)
+	h.registerAgentBootstrap(t, "machine-a", "machine-a."+runToken())
+	h.registerAgentBootstrap(t, "machine-b", "machine-b."+runToken())
+	board := h.runCLIExpectOK(t, "machine-a", map[string]any{"board": map[string]any{"title": "Synthetic second machine", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
+	boardRef := mustStringPath(t, board.Payload, "data.board.ref")
+	work := h.runCLIExpectOK(t, "machine-a", map[string]any{"board_ref": boardRef, "title": "Remote CLI commitment", "source": map[string]any{"authority": "github", "connection_id": "synthetic", "native_id": "fixture/repository/issues/second-machine"}}, "work", "create", "--from-file", "-")
+	ref := mustStringPath(t, work.Payload, "data.work.ref")
+	obs := map[string]any{"observation": map[string]any{"idempotency_key": "second-machine-cli", "reader_id": "synthetic-remote-cli", "reader_revision": "v1", "source_sequence": 4, "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"phase": "in_progress", "native_status": "OPEN"}, "evidence": []any{map[string]any{"url": "https://example.test/fixture", "summary": "Synthetic remote CLI report"}}}}
+	first := h.runCLIExpectOK(t, "machine-b", obs, "work", "observations", "submit", ref, "--from-file", "-")
+	if got := mustStringPath(t, first.Payload, "data.observation.verification"); got != "reported" {
+		t.Fatalf("second-machine CLI self-certified: %s", first.Stdout)
+	}
+	restartCoreForWorkTest(t, h)
+	dup := h.runCLIExpectOK(t, "machine-b", obs, "work", "observations", "submit", ref, "--from-file", "-")
+	if got, _ := getPathValue(dup.Payload, "data.duplicate"); got != true {
+		t.Fatalf("restart lost second-machine CLI idempotency: %s", dup.Stdout)
+	}
+	listed := h.runCLIExpectOK(t, "machine-a", nil, "work", "observations", "list", ref, "--limit", "5")
+	raw, ok := getPathValue(listed.Payload, "data.observations")
+	rows, _ := raw.([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("central work lost remote CLI evidence: %s", listed.Stdout)
+	}
+	if fmt.Sprint(rows[0].(map[string]any)["id"]) != mustStringPath(t, first.Payload, "data.observation.id") {
+		t.Fatalf("central work lost remote CLI evidence: %s", listed.Stdout)
+	}
+}

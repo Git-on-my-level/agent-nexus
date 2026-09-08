@@ -335,9 +335,28 @@ def pm_boundaries(core, other):
     core.cli("pm", "decisions", "list")
 
 
+def second_machine(core, other):
+    work = register_work(core, core.board(), native_id="second-machine")
+    body = {"observation": observation("second-machine-cli", 7)}
+    first = core.cli("work", "observations", "submit", ref(work), "--from-file", "-", body=body)
+    require(first["ok"] is True, "second-machine CLI submit failed")
+    data = first.get("data") or {}
+    require((data.get("observation") or {}).get("verification") != "verified", "CLI self-certified verification")
+    replayed = core.cli("work", "observations", "submit", ref(work), "--from-file", "-", body=body)
+    require((replayed.get("data") or {}).get("duplicate") is True, "second-machine CLI replay was not deduped")
+    core.restart(crash=True)
+    after = core.cli("work", "observations", "submit", ref(work), "--from-file", "-", body=body)
+    require((after.get("data") or {}).get("duplicate") is True, "restart lost second-machine CLI idempotency")
+    listed = core.cli("work", "observations", "list", ref(work), "--limit", "5")
+    require(listed["ok"] is True, "second-machine CLI could not read back evidence")
+    require(core.http("GET", item_path(work), token=other.token)[0] in (401, 403),
+            "second-machine evidence leaked across workspace")
+
+
 SCENARIOS = {"baseline": baseline, "authority": authority, "replay": replay,
              "outage": outage, "attempt_ordering": attempt_ordering,
-             "completion": completion, "views": views, "pm_boundaries": pm_boundaries}
+             "completion": completion, "views": views, "pm_boundaries": pm_boundaries,
+             "second_machine": second_machine}
 
 
 def main():
