@@ -117,6 +117,31 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
+- `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
+- `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
+- `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
+- `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
+- `pm conversations create` (command): Create a durable conversation using request_key, title and optional work_ref.
+- `pm conversations get` (command): Read a conversation and its durable turns.
+- `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
+- `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+- `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
+- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
+- `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+- `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
+- `pm decisions list` (command): List durable decisions with principal-bound pagination.
+- `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
+- `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
+- `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
+- `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
+- `work create` (command): Register a native commitment or canonical external source on an existing board.
+- `work get` (command): Read one work card, source authority, executions and current evidence.
+- `work list` (command): List work cards across sources in the authenticated workspace.
+- `work patch` (command): Update work metadata with if_version; external status remains source-owned.
+- `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
+- `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
+- `work refresh get` (command): Read refresh state without queueing work.
+- `work refresh request` (command): Request a bounded refresh; queued is not a successful observation.
 - `secret list` (command): List secrets
 - `secret create` (command): Create secret
 - `secret delete` (command): Delete secret
@@ -179,33 +204,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
-- `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
-- `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
-- `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
-- `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
-- `pm conversations create` (command): Create a durable conversation using request_key, title and optional work_ref.
-- `pm conversations get` (command): Read a conversation and its durable turns.
-- `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
-- `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
-- `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
-- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
-- `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
-- `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
-- `pm decisions list` (command): List durable decisions with principal-bound pagination.
-- `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
-- `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
-- `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
-- `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
-- `work create` (command): Register a native commitment or canonical external source on an existing board.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
-- `work get` (command): Read one work card, source authority, executions and current evidence.
-- `work list` (command): List work cards across sources in the authenticated workspace.
-- `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
-- `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
-- `work patch` (command): Update work metadata with if_version; external status remains source-owned.
-- `work refresh get` (command): Read refresh state without queueing work.
-- `work refresh request` (command): Request a bounded refresh; queued is not a successful observation.
 
 
 ## `onboarding`
@@ -4064,6 +4064,955 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `pm context`
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+```text
+Generated Help: pm context
+
+- Command ID: `pm.context`
+- CLI path: `pm context`
+- HTTP: `GET /pm/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read bounded authorized PM context.
+- Output: Returns `PMContextResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+Usage: anx pm context
+  --work-ref <value>
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions get`
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+```text
+Generated Help: pm actions get
+
+- Command ID: `pm.actions.get`
+- CLI path: `pm actions get`
+- HTTP: `GET /pm/actions/{action_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read an action and its receipts.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `action_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+Usage: anx pm actions get <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions list`
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+```text
+Generated Help: pm actions list
+
+- Command ID: `pm.actions.list`
+- CLI path: `pm actions list`
+- HTTP: `GET /pm/actions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List action receipts and attempts.
+- Output: Returns `PMActionListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+Usage: anx pm actions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions reconcile`
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+```text
+Generated Help: pm actions reconcile
+
+- Command ID: `pm.actions.reconcile`
+- CLI path: `pm actions reconcile`
+- HTTP: `POST /pm/actions/{action_id}/reconcile`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Read back an action outcome without resending.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `action_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+Usage: anx pm actions reconcile <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations create`
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+```text
+Generated Help: pm conversations create
+
+- Command ID: `pm.conversations.create`
+- CLI path: `pm conversations create`
+- HTTP: `POST /pm/conversations`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a durable PM conversation.
+- Output: Returns `PMConversation`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - body `request_key` (string)
+  - body `title` (string)
+  Optional:
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+Usage: anx pm conversations create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations get`
+
+Read a conversation and its durable turns.
+
+```text
+Generated Help: pm conversations get
+
+- Command ID: `pm.conversations.get`
+- CLI path: `pm conversations get`
+- HTTP: `GET /pm/conversations/{conversation_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read PM conversation and turns.
+- Output: Returns `PMConversationDetailResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `conversation_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read a conversation and its durable turns.
+
+Usage: anx pm conversations get <ref> (or --conversation-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations list`
+
+List durable PM conversations with principal-bound pagination.
+
+```text
+Generated Help: pm conversations list
+
+- Command ID: `pm.conversations.list`
+- CLI path: `pm conversations list`
+- HTTP: `GET /pm/conversations`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List PM conversations.
+- Output: Returns `PMConversationListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable PM conversations with principal-bound pagination.
+
+Usage: anx pm conversations list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations message`
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+```text
+Generated Help: pm conversations message
+
+- Command ID: `pm.conversations.messages.create`
+- CLI path: `pm conversations message`
+- HTTP: `POST /pm/conversations/{conversation_id}/messages`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Queue a contextual PM turn.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `conversation_id`
+  - body `request_key` (string)
+  - body `text` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions answer`
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+```text
+Generated Help: pm decisions answer
+
+- Command ID: `pm.decisions.answer`
+- CLI path: `pm decisions answer`
+- HTTP: `POST /pm/decisions/{decision_id}/answer`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Answer and authorize a scoped decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `decision_id`
+  - body `approve` (boolean)
+  - body `revision` (integer)
+  - body `text` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions create`
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+```text
+Generated Help: pm decisions create
+
+- Command ID: `pm.decisions.create`
+- CLI path: `pm decisions create`
+- HTTP: `POST /pm/decisions`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Propose a scoped PM decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - body `instruction` (string)
+  - body `request_key` (string)
+  - body `scope` (string)
+  - body `target_revision` (string)
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+Usage: anx pm decisions create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions dispatch`
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+```text
+Generated Help: pm decisions dispatch
+
+- Command ID: `pm.decisions.dispatch`
+- CLI path: `pm decisions dispatch`
+- HTTP: `POST /pm/decisions/{decision_id}/dispatch`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hand off an authorized source action.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `decision_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+Usage: anx pm decisions dispatch <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions get`
+
+Read an instruction, authorization scope, revision and answer status.
+
+```text
+Generated Help: pm decisions get
+
+- Command ID: `pm.decisions.get`
+- CLI path: `pm decisions get`
+- HTTP: `GET /pm/decisions/{decision_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a PM decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `decision_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read an instruction, authorization scope, revision and answer status.
+
+Usage: anx pm decisions get <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions list`
+
+List durable decisions with principal-bound pagination.
+
+```text
+Generated Help: pm decisions list
+
+- Command ID: `pm.decisions.list`
+- CLI path: `pm decisions list`
+- HTTP: `GET /pm/decisions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List durable PM decisions.
+- Output: Returns `PMDecisionListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable decisions with principal-bound pagination.
+
+Usage: anx pm decisions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns complete`
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+```text
+Generated Help: pm turns complete
+
+- Command ID: `pm.turns.complete`
+- CLI path: `pm turns complete`
+- HTTP: `POST /pm/turns/{turn_id}/complete`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Record a selected PM agent response.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `text` (string)
+  Optional:
+  - body `evidence_refs` (list<string>)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns context`
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+```text
+Generated Help: pm turns context
+
+- Command ID: `pm.turns.context`
+- CLI path: `pm turns context`
+- HTTP: `GET /pm/turns/{turn_id}/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read requesting principal context as selected PM agent.
+- Output: Returns `PMContextResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `turn_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+Usage: anx pm turns context <ref> (or --turn-id <ref>)
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns propose`
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+```text
+Generated Help: pm turns propose
+
+- Command ID: `pm.turns.decisions.create`
+- CLI path: `pm turns propose`
+- HTTP: `POST /pm/turns/{turn_id}/decisions`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Record a selected PM agent proposal.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `instruction` (string)
+  - body `request_key` (string)
+  - body `scope` (string)
+  - body `target_revision` (string)
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work capabilities`
+
+Read capabilities actually advertised by the authenticated central API.
+
+```text
+Generated Help: work capabilities
+
+- Command ID: `work.capabilities`
+- CLI path: `work capabilities`
+- HTTP: `GET /work/capabilities`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect work tracking capabilities.
+- Output: Returns `WorkCapabilitiesResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read capabilities actually advertised by the authenticated central API.
+
+Usage: anx work capabilities
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work create`
+
+Register a native commitment or canonical external source on an existing board.
+
+```text
+Generated Help: work create
+
+- Command ID: `work.create`
+- CLI path: `work create`
+- HTTP: `POST /work`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Register a card-backed commitment.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - body `board_ref` (string)
+  - body `title` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `blockers` (list<string>)
+  - body `definition_of_done` (list<string>)
+  - body `due_at` (string)
+  - body `executions` (list<object>)
+  - body `next_action` (string)
+  - body `next_actor` (string)
+  - body `owner` (string)
+  - body `phase` (string)
+  - body `priority` (string)
+  - body `project_ref` (string)
+  - body `relations` (list<object>)
+  - body `source.authority` (string)
+  - body `source.connection_id` (string)
+  - body `source.native_id` (string)
+  - body `source.native_status` (string)
+  - body `source.revision` (string)
+  - body `source.url` (string)
+  - body `start_at` (string)
+  - body `summary` (string)
+  - body `wake_condition` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Register a native commitment or canonical external source on an existing board.
+
+Usage: anx work create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work get`
+
+Read one work card, source authority, executions and current evidence.
+
+```text
+Generated Help: work get
+
+- Command ID: `work.get`
+- CLI path: `work get`
+- HTTP: `GET /work/{card_ref}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a commitment and its evidence.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read one work card, source authority, executions and current evidence.
+
+Usage: anx work get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work list`
+
+List work cards across sources in the authenticated workspace.
+
+```text
+Generated Help: work list
+
+- Command ID: `work.list`
+- CLI path: `work list`
+- HTTP: `GET /work`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List heterogeneous commitments.
+- Output: Returns `WorkListResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List work cards across sources in the authenticated workspace.
+
+Usage: anx work list
+  --project-ref <value>
+  --source <value>
+  --owner <value>
+  --phase <value>
+  --freshness <value>
+  --q <value>
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work patch`
+
+Update work metadata with if_version; external status remains source-owned.
+
+```text
+Generated Help: work patch
+
+- Command ID: `work.patch`
+- CLI path: `work patch`
+- HTTP: `PATCH /work/{card_ref}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Update local commitment annotations.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
+  - body `actor_id` (string)
+  - body `patch.blockers` (list<string>)
+  - body `patch.due_at` (string)
+  - body `patch.executions` (list<object>)
+  - body `patch.next_action` (string)
+  - body `patch.next_actor` (string)
+  - body `patch.priority` (string)
+  - body `patch.project_ref` (string)
+  - body `patch.relations` (list<object>)
+  - body `patch.start_at` (string)
+  - body `patch.wake_condition` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Update work metadata with if_version; external status remains source-owned.
+
+Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations list`
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+```text
+Generated Help: work observations list
+
+- Command ID: `work.observations.list`
+- CLI path: `work observations list`
+- HTTP: `GET /work/{card_ref}/observations`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List append-only work observations.
+- Output: Returns `WorkObservationListResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+Usage: anx work observations list <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations submit`
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+```text
+Generated Help: work observations submit
+
+- Command ID: `work.observations.submit`
+- CLI path: `work observations submit`
+- HTTP: `POST /work/{card_ref}/observations`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Submit an attributed source observation.
+- Output: Returns `WorkObservationResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `observation.idempotency_key` (string)
+  - body `observation.observed_at` (string)
+  - body `observation.reader_id` (string)
+  - body `observation.reader_revision` (string)
+  - body `observation.status` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `observation.actor_id` (string)
+  - body `observation.coverage` (object)
+  - body `observation.error.code` (string)
+  - body `observation.error.message` (string)
+  - body `observation.evidence` (list<object>)
+  - body `observation.facts` (object)
+  - body `observation.id` (string)
+  - body `observation.meaningful_progress_at` (string)
+  - body `observation.received_at` (string)
+  - body `observation.source_activity_at` (string)
+  - body `observation.source_revision` (string)
+  - body `observation.source_sequence` (integer)
+  - body `observation.stale_after_seconds` (integer)
+  - body `observation.uncertainty` (list<string>)
+  - body `observation.verification` (string)
+  - body `observation.work_ref` (string)
+  Enum values: observation.status: error, reported, uncertain, verified; observation.verification: reported
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
+Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh get`
+
+Read refresh state without queueing work.
+
+```text
+Generated Help: work refresh get
+
+- Command ID: `work.refresh.get`
+- CLI path: `work refresh get`
+- HTTP: `GET /work/{card_ref}/refresh`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect durable refresh lifecycle.
+- Output: Returns `WorkRefreshResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read refresh state without queueing work.
+
+Usage: anx work refresh get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh request`
+
+Request a bounded refresh; queued is not a successful observation.
+
+```text
+Generated Help: work refresh request
+
+- Command ID: `work.refresh.request`
+- CLI path: `work refresh request`
+- HTTP: `POST /work/{card_ref}/refresh`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Queue or coalesce a read-only refresh.
+- Output: Returns `WorkRefreshResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  Optional:
+  - body `actor_id` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request a bounded refresh; queued is not a successful observation.
+
+Usage: anx work refresh request <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `secret list`
 
 List secrets
@@ -6348,335 +7297,6 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `pm actions get`
-
-Read authorization, attempts and receipt; source_reported is not verified.
-
-```text
-Local Help: pm actions get
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read authorization, attempts and receipt; source_reported is not verified.
-
-Usage: anx pm actions get <ref> (or --action-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm actions list`
-
-Report durable action and receipt statuses with principal-bound pagination.
-
-```text
-Local Help: pm actions list
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Report durable action and receipt statuses with principal-bound pagination.
-
-Usage: anx pm actions list
-  --limit <value>
-  --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm actions reconcile`
-
-Request authoritative read-back of an action receipt; does not resend the action.
-
-```text
-Local Help: pm actions reconcile
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Request authoritative read-back of an action receipt; does not resend the action.
-
-Usage: anx pm actions reconcile <ref> (or --action-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm context`
-
-Read bounded authorized PM context; partial coverage stays explicit.
-
-```text
-Local Help: pm context
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read bounded authorized PM context; partial coverage stays explicit.
-
-Usage: anx pm context
-  --work-ref <value>
-  --query <value>
-  --limit <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations create`
-
-Create a durable conversation using request_key, title and optional work_ref.
-
-```text
-Local Help: pm conversations create
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Create a durable conversation using request_key, title and optional work_ref.
-
-Usage: anx pm conversations create --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations get`
-
-Read a conversation and its durable turns.
-
-```text
-Local Help: pm conversations get
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read a conversation and its durable turns.
-
-Usage: anx pm conversations get <ref> (or --conversation-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations list`
-
-List durable PM conversations with principal-bound pagination.
-
-```text
-Local Help: pm conversations list
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-List durable PM conversations with principal-bound pagination.
-
-Usage: anx pm conversations list
-  --limit <value>
-  --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations message`
-
-Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
-
-```text
-Local Help: pm conversations message
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
-
-Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm decisions answer`
-
-Answer with revision, approve and text; the server requires an authorized human principal.
-
-```text
-Local Help: pm decisions answer
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Answer with revision, approve and text; the server requires an authorized human principal.
-
-Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm decisions create`
-
-Propose an instruction bound to work, scope and target_revision; never approves it.
-
-```text
-Local Help: pm decisions create
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Propose an instruction bound to work, scope and target_revision; never approves it.
-
-Usage: anx pm decisions create --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm decisions dispatch`
-
-Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
-
-```text
-Local Help: pm decisions dispatch
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
-
-Usage: anx pm decisions dispatch <ref> (or --decision-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm decisions get`
-
-Read an instruction, authorization scope, revision and answer status.
-
-```text
-Local Help: pm decisions get
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read an instruction, authorization scope, revision and answer status.
-
-Usage: anx pm decisions get <ref> (or --decision-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm decisions list`
-
-List durable decisions with principal-bound pagination.
-
-```text
-Local Help: pm decisions list
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-List durable decisions with principal-bound pagination.
-
-Usage: anx pm decisions list
-  --limit <value>
-  --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns complete`
-
-Selected PM agent records response text and evidence_refs; does not complete work.
-
-```text
-Local Help: pm turns complete
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Selected PM agent records response text and evidence_refs; does not complete work.
-
-Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns context`
-
-Read context as the requesting actor; only the selected PM agent may call this.
-
-```text
-Local Help: pm turns context
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read context as the requesting actor; only the selected PM agent may call this.
-
-Usage: anx pm turns context <ref> (or --turn-id <ref>)
-  --query <value>
-  --limit <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns propose`
-
-Selected PM agent proposes an instruction for the requesting actor, never approval.
-
-```text
-Local Help: pm turns propose
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Selected PM agent proposes an instruction for the requesting actor, never approval.
-
-Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work capabilities`
-
-Read capabilities actually advertised by the authenticated central API.
-
-```text
-Local Help: work capabilities
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read capabilities actually advertised by the authenticated central API.
-
-Usage: anx work capabilities
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
 ## `work context`
 
 Compose work, a bounded observation page and refresh status using read-only requests.
@@ -6697,26 +7317,6 @@ Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not re
 Use --json for one machine-readable envelope.
 ```
 
-## `work create`
-
-Register a native commitment or canonical external source on an existing board.
-
-```text
-Local Help: work create
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Register a native commitment or canonical external source on an existing board.
-
-Usage: anx work create --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
 ## `work freshness`
 
 Inspect last observed, source activity and meaningful progress independently.
@@ -6729,148 +7329,6 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Inspect last observed, source activity and meaningful progress independently.
 
 Usage: anx work freshness <ref> (or --work-id <ref>)
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work get`
-
-Read one work card, source authority, executions and current evidence.
-
-```text
-Local Help: work get
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read one work card, source authority, executions and current evidence.
-
-Usage: anx work get <ref> (or --work-id <ref>)
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work list`
-
-List work cards across sources in the authenticated workspace.
-
-```text
-Local Help: work list
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-List work cards across sources in the authenticated workspace.
-
-Usage: anx work list
-  --project-ref <value>
-  --source <value>
-  --owner <value>
-  --phase <value>
-  --freshness <value>
-  --q <value>
-  --limit <value>
-  --cursor <value>
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work observations list`
-
-Read append-only evidence for a work card, preserving pagination and uncertainty.
-
-```text
-Local Help: work observations list
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read append-only evidence for a work card, preserving pagination and uncertainty.
-
-Usage: anx work observations list <ref> (or --work-id <ref>)
-  --limit <value>
-  --cursor <value>
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work observations submit`
-
-Submit an authenticated remote observation; preserve its idempotency key on retry.
-
-```text
-Local Help: work observations submit
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Submit an authenticated remote observation; preserve its idempotency key on retry.
-
-Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
-Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work patch`
-
-Update work metadata with if_version; external status remains source-owned.
-
-```text
-Local Help: work patch
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Update work metadata with if_version; external status remains source-owned.
-
-Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work refresh get`
-
-Read refresh state without queueing work.
-
-```text
-Local Help: work refresh get
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Read refresh state without queueing work.
-
-Usage: anx work refresh get <ref> (or --work-id <ref>)
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work refresh request`
-
-Request a bounded refresh; queued is not a successful observation.
-
-```text
-Local Help: work refresh request
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-Request a bounded refresh; queued is not a successful observation.
-
-Usage: anx work refresh request <ref> (or --work-id <ref>)
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
