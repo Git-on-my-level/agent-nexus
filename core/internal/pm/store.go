@@ -130,3 +130,26 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 	}
 	return tx.Commit()
 }
+
+// insertTurn enforces capacity and session serialization in the same SQLite
+// statement as admission, including across multiple Service instances.
+func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool, error) {
+	b, err := json.Marshal(t)
+	if err != nil {
+		return false, err
+	}
+	r, err := s.db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body)
+ SELECT 'turn',?,?,?,?,1,? WHERE
+ (SELECT count(*) FROM pm_records WHERE kind='turn' AND workspace_id=?
+ AND json_extract(body,'$.status') IN ('pending_delivery','sending')
+ AND julianday(json_extract(body,'$.deadline'))>julianday('now')) < ?
+ AND NOT EXISTS(SELECT 1 FROM pm_records WHERE kind='turn' AND workspace_id=? AND parent_id=?
+ AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown')
+ AND julianday(json_extract(body,'$.deadline'))>julianday('now'))
+ ON CONFLICT(kind,id) DO NOTHING`, t.ID, t.WorkspaceID, t.ActorID, t.ConversationID, b, t.WorkspaceID, maxConcurrent, t.WorkspaceID, t.ConversationID)
+	if err != nil {
+		return false, err
+	}
+	n, err := r.RowsAffected()
+	return n == 1, err
+}

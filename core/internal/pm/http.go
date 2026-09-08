@@ -41,9 +41,12 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	decode := func(v any) error { return decodeBody(w, r, v) }
 	switch {
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodGet:
-		var items []Conversation
-		items, err = s.ListConversations(ctx, p)
-		out = listEnvelope(items)
+		var limit int
+		var cursor string
+		limit, cursor, err = pageParams(r)
+		if err == nil {
+			out, err = s.ConversationPage(ctx, p, limit, cursor)
+		}
 	case len(path) == 1 && path[0] == "conversations" && r.Method == http.MethodPost:
 		var in CreateConversation
 		if err = decode(&in); err == nil {
@@ -65,9 +68,12 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out, err = s.QueryContext(ctx, p, r.URL.Query().Get("work_ref"), r.URL.Query().Get("query"), limit)
 		}
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodGet:
-		var items []Decision
-		items, err = s.ListDecisions(ctx, p)
-		out = listEnvelope(items)
+		var limit int
+		var cursor string
+		limit, cursor, err = pageParams(r)
+		if err == nil {
+			out, err = s.DecisionPage(ctx, p, limit, cursor)
+		}
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodPost:
 		var in DecisionInput
 		if err = decode(&in); err == nil {
@@ -87,9 +93,12 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out, err = s.DispatchDecision(ctx, p, path[1])
 		}
 	case len(path) == 1 && path[0] == "actions" && r.Method == http.MethodGet:
-		var items []Action
-		items, err = s.ListActions(ctx, p)
-		out = listEnvelope(items)
+		var limit int
+		var cursor string
+		limit, cursor, err = pageParams(r)
+		if err == nil {
+			out, err = s.ActionPage(ctx, p, limit, cursor)
+		}
 	case len(path) == 2 && path[0] == "actions" && r.Method == http.MethodGet:
 		out, err = s.action(ctx, p, path[1], "pm.read")
 	case len(path) == 3 && path[0] == "actions" && path[2] == "reconcile" && r.Method == http.MethodPost:
@@ -130,12 +139,6 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(out)
-}
-func listEnvelope[T any](items []T) map[string]any {
-	if items == nil {
-		items = make([]T, 0)
-	}
-	return map[string]any{"items": items, "has_more": len(items) >= 200}
 }
 func queryLimit(r *http.Request) (int, error) {
 	s := r.URL.Query().Get("limit")

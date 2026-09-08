@@ -165,24 +165,21 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 	if s.deps.Dispatch == nil || s.cfg.AgentActorID == "" || s.cfg.AgentHandle == "" {
 		return Turn{}, ErrUnavailable
 	}
-	// A queued/sending turn remains occupied until completion or timeout. Durable
-	// rows, rather than an in-memory semaphore, preserve this across restarts.
-	var active int
-	err = s.store.db.QueryRowContext(ctx, `SELECT count(*) FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('pending_delivery','sending') AND json_extract(body,'$.deadline')>?`, p.WorkspaceID, time.Now().UTC().Format(time.RFC3339Nano)).Scan(&active)
-	if err != nil {
-		return Turn{}, err
-	}
-	if active >= s.cfg.MaxConcurrent {
-		return Turn{}, ErrBusy
-	}
 	now := time.Now().UTC()
 	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
-	inserted, err := s.store.insert(ctx, "turn", id, p.WorkspaceID, p.ActorID, c.ID, t)
+	inserted, err := s.store.insertTurn(ctx, t, s.cfg.MaxConcurrent)
 	if err != nil {
 		return Turn{}, err
 	}
 	if !inserted {
-		return Turn{}, ErrConflict
+		var replay Turn
+		if readErr := s.store.get(ctx, "turn", id, &replay); readErr == nil {
+			if replay.Text != in.Text {
+				return Turn{}, ErrConflict
+			}
+			return replay, nil
+		}
+		return Turn{}, ErrBusy
 	}
 	// Mark sending before I/O. A crash leaves an inspectable, non-replayed turn.
 	t.Status = Sending

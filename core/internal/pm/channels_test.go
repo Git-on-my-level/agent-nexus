@@ -217,3 +217,52 @@ func TestTransportPayloadReceiptsAndNoCredentialErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestLongReplyOutboxIsAtomicOrderedAndNeverResendsUnknown(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	o := Origin{Transport: "discord", TenantID: "app/guild", ChannelID: "channel", ExternalUserID: "42"}
+	bind(t, s, p, o, false)
+	turn, err := s.ReceiveChannel(ctx, o, "event", "Status?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, strings.Repeat("Evidence 🌍. ", 400), nil); err != nil {
+		t.Fatal(err)
+	}
+	fragments, err := s.QueueTurnDeliveries(ctx, turn.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fragments) < 2 {
+		t.Fatal("reply not fragmented")
+	}
+	calls := 0
+	sender := sendFunc(func(context.Context, Delivery) (Receipt, error) { calls++; return Receipt{}, errors.New("uncertain") })
+	drained, err := s.DeliverPending(ctx, sender, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || len(drained) != 1 || drained[0].Status != Unknown {
+		t.Fatalf("continued after uncertain fragment: %d %+v", calls, drained)
+	}
+	if _, err = s.DeliverPending(ctx, sender, 50); err != nil || calls != 1 {
+		t.Fatalf("resent unknown: %d %v", calls, err)
+	}
+	if _, err = s.ReconcileDelivery(ctx, p, fragments[0].ID, Receipt{Status: Delivered, ExternalID: "message-1", EvidenceRefs: []string{"artifact:readback"}}); err != nil {
+		t.Fatal(err)
+	}
+	sender = sendFunc(func(_ context.Context, d Delivery) (Receipt, error) {
+		calls++
+		if len(d.Text) > 1900 {
+			t.Fatal("unbounded fragment")
+		}
+		return Receipt{Status: Delivered, ExternalID: d.ID}, nil
+	})
+	if _, err = s.DeliverPending(ctx, sender, 50); err != nil {
+		t.Fatal(err)
+	}
+	if calls != len(fragments) {
+		t.Fatalf("missing/duplicate fragment %d want %d", calls, len(fragments))
+	}
+}

@@ -111,34 +111,17 @@ type Sender interface {
 	Send(context.Context, Delivery) (Receipt, error)
 }
 
+// QueueTurnDelivery returns the first fragment; all fragments are persisted
+// atomically. Use DeliverPending to drain the complete reply in order.
 func (s *Service) QueueTurnDelivery(ctx context.Context, turnID string) (Delivery, error) {
-	var t Turn
-	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
-		return Delivery{}, err
-	}
-	if t.Status != Delivered {
-		return Delivery{}, ErrConflict
-	}
-	var c Conversation
-	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
-		return Delivery{}, err
-	}
-	if c.Origin == nil {
-		return Delivery{}, ErrInvalid
-	}
-	b, err := s.ResolveBinding(ctx, *c.Origin)
-	if err != nil || b.ActorID != c.ActorID {
-		return Delivery{}, ErrForbidden
-	}
-	d := Delivery{ID: stableID("delivery", t.ID), WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Origin: *c.Origin, Text: t.Response, Status: Pending, Revision: 1}
-	inserted, err := s.store.insert(ctx, "delivery", d.ID, d.WorkspaceID, d.ActorID, t.ID, d)
+	ds, err := s.QueueTurnDeliveries(ctx, turnID)
 	if err != nil {
 		return Delivery{}, err
 	}
-	if !inserted {
-		err = s.store.get(ctx, "delivery", d.ID, &d)
+	if len(ds) == 0 {
+		return Delivery{}, ErrInvalid
 	}
-	return d, err
+	return ds[0], nil
 }
 func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (Delivery, error) {
 	if sender == nil {

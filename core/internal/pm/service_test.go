@@ -141,3 +141,55 @@ func TestSourceReportedResolutionIsNotVerification(t *testing.T) {
 		t.Fatalf("readback: %v %+v", err, a)
 	}
 }
+
+func TestOneActiveTurnPerConversationAcrossServices(t *testing.T) {
+	s, st, p, count := fixture(t)
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "concurrent", Title: "One session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _ := NewService(st, s.cfg, s.deps)
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "1", Text: "First"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = second.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "2", Text: "Second"}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("overlapping session: %v", err)
+	}
+	if *count != 1 {
+		t.Fatalf("overlap dispatched %d", *count)
+	}
+	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "First reply", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = second.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "2", Text: "Second"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApprovalReplayRetainsOneActionIntent(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "approval-replay", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer := AnswerInput{Revision: d.Revision, Approve: true, Text: "Assign owner"}
+	first, err := s.AnswerDecision(ctx, p, d.ID, answer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.AnswerDecision(ctx, p, d.ID, answer)
+	if err != nil || first.ActionID != second.ActionID {
+		t.Fatalf("approval replay %v", err)
+	}
+	actions, err := s.ListActions(ctx, p)
+	if err != nil || len(actions) != 1 {
+		t.Fatalf("duplicate intent %v %+v", err, actions)
+	}
+	answer.Text = "Different instruction"
+	if _, err = s.AnswerDecision(ctx, p, d.ID, answer); !errors.Is(err, ErrConflict) {
+		t.Fatalf("changed answer replay %v", err)
+	}
+}

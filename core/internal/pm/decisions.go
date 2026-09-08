@@ -73,6 +73,14 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if err != nil {
 		return d, err
 	}
+	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Superseded)) {
+		if in.Approve {
+			if err = s.authorize(ctx, p, "pm.action."+d.Scope, d.WorkRef); err != nil {
+				return Decision{}, err
+			}
+		}
+		return d, nil
+	}
 	if d.Revision != in.Revision || d.Status != AwaitingAnswer {
 		return Decision{}, ErrConflict
 	}
