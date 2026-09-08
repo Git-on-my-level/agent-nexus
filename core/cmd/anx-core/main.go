@@ -22,6 +22,7 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/heartbeat"
+	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
@@ -435,6 +436,27 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize observation runtime: %v\n", err)
 		os.Exit(1)
+	}
+	if observationRuntime != nil {
+		invStore, invErr := observation.NewInvestigationStore(workspace.DB(), func(_ context.Context, preset string) error {
+			preset = strings.TrimSpace(preset)
+			allowed := envString("ANX_INVESTIGATION_PRESET", "")
+			handle := envString("ANX_PM_AGENT_HANDLE", "")
+			if preset != "" && ((allowed != "" && preset == allowed) || (handle != "" && preset == handle)) {
+				return nil
+			}
+			return fmt.Errorf("existing investigation preset is unavailable; no model fallback")
+		})
+		if invErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize investigation runtime: %v\n", invErr)
+			os.Exit(1)
+		}
+		invRuntime, invErr := observation.NewInvestigationRuntime(invStore)
+		if invErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize investigation runtime: %v\n", invErr)
+			os.Exit(1)
+		}
+		observationRuntime.BindInvestigations(invRuntime)
 	}
 	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
 		PM: pm.Config{

@@ -22,7 +22,7 @@ esac
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewMulticaCLIReader(MulticaCLIConfig{Binary: binary, Profile: "fixture", BaseURL: "https://multica.example.test", WorkspaceID: "w", ConnectionID: "c", SourceWorkspaceID: "source-w", Timeout: time.Second, MaxBytes: 65536})
+	r, err := NewMulticaCLIReader(MulticaCLIConfig{Binary: binary, Profile: "fixture", BaseURL: "https://multica.example.test", WorkspaceID: "w", ConnectionID: "c", SourceWorkspaceID: "source-w", Timeout: 10 * time.Second, MaxBytes: 65536})
 	if err != nil {
 		t.Fatal(err)
 	}

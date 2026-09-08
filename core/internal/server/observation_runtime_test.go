@@ -4,6 +4,7 @@ import (
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/primitives"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -128,5 +129,49 @@ func TestObservationConfigSupportsExplicitTrustedMulticaCLI(t *testing.T) {
 	}
 	if _, err := LoadObservationRuntime(path, "ws_main", h.primitiveStore.(*primitives.Store)); err == nil {
 		t.Fatal("writable operator configuration accepted")
+	}
+}
+
+func TestJITAndInvestigationTransportsFailClosedWithoutSandbox(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	root := filepath.Join(t.TempDir(), "jit")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(resolved, 0700); err != nil {
+		t.Fatal(err)
+	}
+	policy := observation.JITPolicy{MaxArtifactBytes: 16 << 20, Limits: observation.IsolationLimits{Timeout: time.Second, MemoryBytes: 128 << 20, OutputBytes: 65536, InputBytes: 65536, CPUSeconds: 1, Processes: 8, FileBytes: 65536}, FailureThreshold: 2}
+	rawPolicy, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "readers.json")
+	config := fmt.Sprintf(`{"targets":[{"work_ref":"card:tracked","source_native_id":"1","target":{"source":"github","connection_id":"c","kind":"issue","native_id":"1","repository":"o/r"},"transport":"jit","base_url":"https://api.github.com","jit_state_root":%q,"jit_adapter_id":"fixture","jit_policy":%s}]}`, resolved, rawPolicy)
+	if err = os.WriteFile(path, []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := LoadObservationRuntime(path, "ws_main", h.primitiveStore.(*primitives.Store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rt.bindings[0].Reader.Read(context.Background(), rt.bindings[0].Target); err == nil {
+		t.Fatal("JIT reader executed without an isolation envelope")
+	}
+	invPath := filepath.Join(t.TempDir(), "investigation.json")
+	invConfig := `{"targets":[{"work_ref":"card:tracked","source_native_id":"1","target":{"source":"github","connection_id":"c","kind":"issue","native_id":"1","repository":"o/r"},"transport":"investigation","investigation_id":"investigation-1","base_url":"https://api.github.com"}]}`
+	if err = os.WriteFile(invPath, []byte(invConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+	invRuntime, err := LoadObservationRuntime(invPath, "ws_main", h.primitiveStore.(*primitives.Store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = invRuntime.bindings[0].Reader.Read(context.Background(), invRuntime.bindings[0].Target); err == nil {
+		t.Fatal("investigation ran without a bound isolated executor")
 	}
 }

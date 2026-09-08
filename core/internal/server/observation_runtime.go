@@ -27,29 +27,34 @@ type ObservationBinding struct {
 	Policy         observation.RefreshPolicy
 }
 type ObservationRuntime struct {
-	store    *primitives.Store
-	bindings []ObservationBinding
-	worker   string
+	store          *primitives.Store
+	bindings       []ObservationBinding
+	worker         string
+	investigations *observation.InvestigationRuntime
 }
 type observationConfig struct {
 	Targets []struct {
-		WorkRef           string             `json:"work_ref"`
-		SourceNativeID    string             `json:"source_native_id"`
-		Target            observation.Target `json:"target"`
-		Transport         string             `json:"transport"`
-		CLIBinary         string             `json:"cli_binary"`
-		CLIProfile        string             `json:"cli_profile"`
-		BaseURL           string             `json:"base_url"`
-		SourceWorkspaceID string             `json:"source_workspace_id"`
-		CredentialEnv     string             `json:"credential_env"`
-		AllowedNetworks   []string           `json:"allowed_networks"`
-		KnownHostsFile    string             `json:"known_hosts_file"`
-		IdentityFile      string             `json:"identity_file"`
-		SSHPort           int                `json:"ssh_port"`
-		IntervalSeconds   int                `json:"interval_seconds"`
-		StaleAfterSeconds int                `json:"stale_after_seconds"`
-		TimeoutSeconds    int                `json:"timeout_seconds"`
-		MaxBackoffSeconds int                `json:"max_backoff_seconds"`
+		WorkRef           string                 `json:"work_ref"`
+		SourceNativeID    string                 `json:"source_native_id"`
+		Target            observation.Target     `json:"target"`
+		Transport         string                 `json:"transport"`
+		CLIBinary         string                 `json:"cli_binary"`
+		CLIProfile        string                 `json:"cli_profile"`
+		BaseURL           string                 `json:"base_url"`
+		SourceWorkspaceID string                 `json:"source_workspace_id"`
+		CredentialEnv     string                 `json:"credential_env"`
+		AllowedNetworks   []string               `json:"allowed_networks"`
+		KnownHostsFile    string                 `json:"known_hosts_file"`
+		IdentityFile      string                 `json:"identity_file"`
+		SSHPort           int                    `json:"ssh_port"`
+		IntervalSeconds   int                    `json:"interval_seconds"`
+		StaleAfterSeconds int                    `json:"stale_after_seconds"`
+		TimeoutSeconds    int                    `json:"timeout_seconds"`
+		MaxBackoffSeconds int                    `json:"max_backoff_seconds"`
+		InvestigationID   string                 `json:"investigation_id"`
+		JITStateRoot      string                 `json:"jit_state_root"`
+		JITAdapterID      string                 `json:"jit_adapter_id"`
+		JITPolicy         *observation.JITPolicy `json:"jit_policy"`
 	} `json:"targets"`
 }
 
@@ -103,7 +108,7 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 		}
 		policy := observation.RefreshPolicy{Interval: time.Duration(c.IntervalSeconds) * time.Second, StaleAfter: time.Duration(c.StaleAfterSeconds) * time.Second, Timeout: time.Duration(c.TimeoutSeconds) * time.Second, MaxBackoff: time.Duration(c.MaxBackoffSeconds) * time.Second}
 		var reader observation.Reader
-		if c.Transport != "" && c.Transport != "http" && c.Transport != "multica_cli" {
+		if c.Transport != "" && c.Transport != "http" && c.Transport != "multica_cli" && c.Transport != "jit" && c.Transport != "investigation" {
 			return nil, fmt.Errorf("unsupported reader transport")
 		}
 		if c.Transport == "multica_cli" && c.Target.Source != "multica" {
@@ -156,10 +161,90 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 		if err != nil {
 			return nil, fmt.Errorf("invalid reader configuration: %w", err)
 		}
+		switch c.Transport {
+		case "jit":
+			if c.JITStateRoot == "" || c.JITAdapterID == "" || c.JITPolicy == nil {
+				return nil, fmt.Errorf("JIT transport requires state root, adapter id and approved policy")
+			}
+			manager, e := observation.NewJITManager(c.JITStateRoot, *c.JITPolicy)
+			if e != nil {
+				return nil, fmt.Errorf("invalid reader configuration: %w", e)
+			}
+			reader = jitBoundReader{manager: manager, adapter: c.JITAdapterID, source: reader}
+		case "investigation":
+			if c.InvestigationID == "" {
+				return nil, fmt.Errorf("investigation transport requires investigation_id")
+			}
+			reader = investigationBoundReader{workspaceID: workspaceID, id: c.InvestigationID, source: reader}
+		}
 		bindings = append(bindings, ObservationBinding{WorkRef: c.WorkRef, SourceNativeID: c.SourceNativeID, Target: c.Target, Reader: reader, Policy: policy})
 	}
 	return NewObservationRuntime(store, bindings)
 }
+
+// BindInvestigations attaches the fail-closed investigation executor used by
+// investigation-transport bindings. Missing isolation still denies every Run.
+func (rt *ObservationRuntime) BindInvestigations(runtime *observation.InvestigationRuntime) {
+	if rt == nil {
+		return
+	}
+	rt.investigations = runtime
+	for i, b := range rt.bindings {
+		inv, ok := b.Reader.(investigationBoundReader)
+		if !ok {
+			continue
+		}
+		inv.parent = rt
+		rt.bindings[i].Reader = inv
+	}
+}
+
+type jitBoundReader struct {
+	manager *observation.JITManager
+	adapter string
+	source  observation.Reader
+}
+
+func (r jitBoundReader) Capabilities() observation.Capabilities {
+	c := observation.Capabilities{ReadOne: true}
+	if r.source != nil {
+		c = r.source.Capabilities()
+	}
+	c.Limitations = append(append([]string{}, c.Limitations...), "Generated executable readers require Linux bubblewrap and prlimit; no host-execution fallback")
+	return c
+}
+
+func (r jitBoundReader) Read(ctx context.Context, target observation.Target) (observation.Report, error) {
+	if r.manager == nil {
+		return observation.Report{}, fmt.Errorf("generated reader has no isolation manager")
+	}
+	return r.manager.Read(ctx, r.adapter, r.source)
+}
+
+type investigationBoundReader struct {
+	parent      *ObservationRuntime
+	workspaceID string
+	id          string
+	source      observation.Reader
+}
+
+func (r investigationBoundReader) Capabilities() observation.Capabilities {
+	c := observation.Capabilities{ReadOne: true}
+	if r.source != nil {
+		c = r.source.Capabilities()
+	}
+	c.Limitations = append(append([]string{}, c.Limitations...), "Investigators require an isolated model runner; unsupported hosts fail closed")
+	return c
+}
+
+func (r investigationBoundReader) Read(ctx context.Context, target observation.Target) (observation.Report, error) {
+	_ = target
+	if r.parent == nil || r.parent.investigations == nil {
+		return observation.Report{}, fmt.Errorf("investigation runtime is not configured")
+	}
+	return r.parent.investigations.Run(ctx, r.workspaceID, r.id, r.source)
+}
+
 func NewObservationRuntime(store *primitives.Store, bindings []ObservationBinding) (*ObservationRuntime, error) {
 	if store == nil || len(bindings) > 200 {
 		return nil, fmt.Errorf("observation runtime requires store and at most 200 targets")
