@@ -1,0 +1,143 @@
+package pm
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+func fixture(t *testing.T) (*Service, *Store, Principal, *int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "pm.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+	st, err := NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	deps := Dependencies{
+		Authorize: func(_ context.Context, p Principal, permission, ref string) error {
+			if p.ActorID == "other" {
+				return ErrForbidden
+			}
+			return nil
+		},
+		EnsureThread: func(_ context.Context, p Principal, id, ref string) (string, error) { return "thread-" + id, nil },
+		ReadContext: func(context.Context, Principal, string, string, int) (ContextPage, error) {
+			return ContextPage{Items: []any{"current evidence"}}, nil
+		},
+		Dispatch:        func(context.Context, DispatchRequest) error { count++; return nil },
+		CurrentRevision: func(context.Context, Principal, string) (string, error) { return "r1", nil },
+		Execute: func(context.Context, Action) (Receipt, error) {
+			return Receipt{Status: Delivered, ExternalID: "remote-1"}, nil
+		},
+	}
+	s, err := NewService(st, Config{WorkspaceID: "ws", AgentActorID: "pm-agent", AgentHandle: "pm", TurnTimeout: time.Minute, MaxOutputBytes: 8000, MaxConcurrent: 2}, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, st, Principal{WorkspaceID: "ws", ActorID: "human", Human: true}, &count
+}
+
+func TestDiscussionIsNotApprovalAndReplayIsStable(t *testing.T) {
+	s, _, p, count := fixture(t)
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "c1", Title: "Release", WorkRef: "work:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "m1", Text: "Maybe deploy it?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "m1", Text: "Maybe deploy it?"})
+	if err != nil || again.ID != turn.ID || *count != 1 {
+		t.Fatalf("replay %v %d", err, *count)
+	}
+	if _, err = s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "m1", Text: "different"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("changed replay: %v", err)
+	}
+	ds, err := s.ListDecisions(ctx, p)
+	if err != nil || len(ds) != 0 {
+		t.Fatalf("discussion created decision: %v", ds)
+	}
+	if _, err = s.GetConversation(ctx, Principal{WorkspaceID: "ws", ActorID: "other"}, c.ID); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("cross actor: %v", err)
+	}
+}
+
+func TestDecisionAnswerRevisionAndUnknownDelivery(t *testing.T) {
+	s, st, p, _ := fixture(t)
+	ctx := context.Background()
+	d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "d1", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DispatchDecision(ctx, p, d.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("unapproved dispatch %v", err)
+	}
+	agent := p
+	agent.Human = false
+	if _, err = s.AnswerDecision(ctx, agent, d.ID, AnswerInput{Revision: 1, Approve: true}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("agent approval %v", err)
+	}
+	d, err = s.AnswerDecision(ctx, p, d.ID, AnswerInput{Revision: 1, Approve: true, Text: "Yes, assign owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.deps.CurrentRevision = func(context.Context, Principal, string) (string, error) { return "r2", nil }
+	if _, err = s.DispatchDecision(ctx, p, d.ID); !errors.Is(err, ErrStale) {
+		t.Fatalf("stale approval %v", err)
+	}
+	s.deps.CurrentRevision = func(context.Context, Principal, string) (string, error) { return "r1", nil }
+	calls := 0
+	s.deps.Execute = func(context.Context, Action) (Receipt, error) { calls++; return Receipt{}, errors.New("lost response") }
+	a, err := s.DispatchDecision(ctx, p, d.ID)
+	if err != nil || a.Status != Unknown {
+		t.Fatalf("unknown: %+v %v", a, err)
+	}
+	// Recreate service on the same durable database to prove restart safety.
+	restarted, err := NewService(st, s.cfg, s.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err = restarted.DispatchDecision(ctx, p, d.ID)
+	if err != nil || a.Status != Unknown || calls != 1 {
+		t.Fatalf("resent after restart: %v %d", err, calls)
+	}
+}
+
+func TestSourceReportedResolutionIsNotVerification(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	d, _ := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "d", WorkRef: "work:1", Instruction: "Change priority", Scope: "priority", TargetRevision: "r1"})
+	if _, err := s.AnswerDecision(ctx, p, d.ID, AnswerInput{Revision: 1, Approve: true, Text: "Change priority"}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.DispatchDecision(ctx, p, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.deps.Reconcile = func(context.Context, Action) (Receipt, error) {
+		return Receipt{Status: Verified, ExternalID: "remote", EvidenceRefs: []string{"source says done"}}, nil
+	}
+	if _, err = s.ReconcileAction(ctx, p, a.ID); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unverified source accepted: %v", err)
+	}
+	s.deps.Reconcile = func(context.Context, Action) (Receipt, error) {
+		return Receipt{Status: Verified, ExternalID: "remote", EvidenceRefs: []string{"artifact:readback"}, IndependentlyVerified: true}, nil
+	}
+	a, err = s.ReconcileAction(ctx, p, a.ID)
+	if err != nil || a.Status != Verified {
+		t.Fatalf("readback: %v %+v", err, a)
+	}
+}
