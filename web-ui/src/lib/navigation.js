@@ -12,16 +12,16 @@ export const navigationItems = [
     hint: "Needs attention",
   },
   {
-    label: "Topics",
-    href: "/topics",
-    icon: "topics",
-    hint: "Ongoing work",
+    label: "Work",
+    href: "/work",
+    icon: "boards",
+    hint: "Commitments, board and table",
   },
   {
-    label: "Boards",
-    href: "/boards",
-    icon: "boards",
-    hint: "Kanban boards",
+    label: "PM",
+    href: "/pm",
+    icon: "topics",
+    hint: "Review work and decisions",
   },
   {
     label: "Docs",
@@ -33,6 +33,30 @@ export const navigationItems = [
 
 /** Secondary destinations grouped with the identity panel (sidebar bottom). */
 export const settingsNavItems = [
+  {
+    label: "Decisions & receipts",
+    href: "/decisions",
+    icon: "inbox",
+    hint: "Answers, delivery and verified outcomes",
+  },
+  {
+    label: "Integration health",
+    href: "/integrations",
+    icon: "events",
+    hint: "Source freshness and coverage",
+  },
+  {
+    label: "Topics",
+    href: "/topics",
+    icon: "topics",
+    hint: "Workspace projects and discussions",
+  },
+  {
+    label: "Boards",
+    href: "/boards",
+    icon: "boards",
+    hint: "Organize workspace cards",
+  },
   {
     label: "Events",
     href: "/events",
@@ -66,6 +90,11 @@ export const settingsNavItems = [
 ];
 
 const SHELL_CONTENT_RULES = [
+  {
+    match: /^\/(work|pm|decisions|integrations)(\/|$)/,
+    mode: "fluid",
+    maxWidth: "112rem",
+  },
   {
     match: /^\/$/,
     mode: "wide",

@@ -18,6 +18,10 @@
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
 
   const navIconPathByType = {
+    topics:
+      "M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 01-9 9H3l3-3a9 9 0 1115-6z",
+    boards: "M3 6h4v12H3V6zm7 0h4v12h-4V6zm7 0h4v12h-4V6z",
+    inbox: "M4 4h16v16H4V4zm0 9h5l1 2h4l1-2h5",
     events: "M12 6v6l4 2m5-2a9 9 0 11-18 0a9 9 0 0118 0z",
     artifacts:
       "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",

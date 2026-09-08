@@ -13,14 +13,18 @@ describe("navigation model", () => {
     expect(navigationItems.map((item) => item.label)).toEqual([
       "Home",
       "Inbox",
-      "Topics",
-      "Boards",
+      "Work",
+      "PM",
       "Docs",
     ]);
   });
 
   it("includes settings nav labels", () => {
     expect(settingsNavItems.map((item) => item.label)).toEqual([
+      "Decisions & receipts",
+      "Integration health",
+      "Topics",
+      "Boards",
       "Events",
       "Artifacts",
       "Trash",

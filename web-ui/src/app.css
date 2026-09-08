@@ -1777,6 +1777,41 @@
     color: var(--fg-subtle);
   }
 
+  .ui-btn-secondary,
+  .ui-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    min-height: 2.25rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--bg-soft);
+    color: var(--fg);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .ui-btn-secondary:hover {
+    background: var(--panel-hover);
+  }
+  .ui-btn-primary {
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: white;
+  }
+  .ui-btn-primary:hover {
+    background: var(--accent-solid);
+    filter: brightness(1.15);
+  }
+  .ui-btn-secondary:disabled,
+  .ui-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
   .ui-btn-ghost {
     border-radius: var(--radius);
     border: 1px solid var(--line);

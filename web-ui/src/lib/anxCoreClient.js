@@ -285,6 +285,72 @@ const pb = (pathParams, body) => ({
 const p = (pathParams) => ({ pathParams });
 
 const adapterCommandTable = [
+  ["listWork", "work.list", (filters) => ({ options: q(filters) })],
+  ["getWork", "work.get", (ref) => p(pathParams({ card_ref: ref }))],
+  ["createWork", "work.create", (payload) => ({ options: b(payload) }), true],
+  [
+    "patchWork",
+    "work.patch",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
+  [
+    "listWorkObservations",
+    "work.observations.list",
+    (ref, filters) => pq(pathParams({ card_ref: ref }), filters),
+  ],
+  [
+    "getWorkRefresh",
+    "work.refresh.get",
+    (ref) => p(pathParams({ card_ref: ref })),
+  ],
+  [
+    "requestWorkRefresh",
+    "work.refresh.request",
+    (ref) => pb(pathParams({ card_ref: ref }), {}),
+    true,
+  ],
+  ["getWorkCapabilities", "work.capabilities"],
+  ["listPmConversations", "pm.conversations.list"],
+  [
+    "createPmConversation",
+    "pm.conversations.create",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
+    "getPmConversation",
+    "pm.conversations.get",
+    (id) => p(pathParams({ conversation_id: id })),
+  ],
+  [
+    "sendPmMessage",
+    "pm.conversations.messages.create",
+    (id, payload) => pb(pathParams({ conversation_id: id }), payload),
+  ],
+  ["getPmContext", "pm.context", (filters) => ({ options: q(filters) })],
+  ["listPmDecisions", "pm.decisions.list"],
+  [
+    "getPmDecision",
+    "pm.decisions.get",
+    (id) => p(pathParams({ decision_id: id })),
+  ],
+  [
+    "answerPmDecision",
+    "pm.decisions.answer",
+    (id, payload) => pb(pathParams({ decision_id: id }), payload),
+  ],
+  [
+    "dispatchPmDecision",
+    "pm.decisions.dispatch",
+    (id) => pb(pathParams({ decision_id: id }), {}),
+  ],
+  ["listPmActions", "pm.actions.list"],
+  ["getPmAction", "pm.actions.get", (id) => p(pathParams({ action_id: id }))],
+  [
+    "reconcilePmAction",
+    "pm.actions.reconcile",
+    (id) => pb(pathParams({ action_id: id }), {}),
+  ],
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],
   ["createActor", "actors.create", (payload) => ({ options: b(payload) })],

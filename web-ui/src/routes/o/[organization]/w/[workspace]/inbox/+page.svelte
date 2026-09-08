@@ -616,7 +616,11 @@
       </span>
     {/if}
   </div>
-  <div class="flex items-center gap-1.5 sm:gap-2">
+  <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+    <a
+      class="rounded-md border border-line px-2.5 py-1 text-micro text-fg-muted hover:bg-panel-hover"
+      href={workspaceHref("/decisions")}>Decisions & receipts</a
+    >
     <button
       class="cursor-pointer inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-micro font-medium transition-colors {hasActiveFilters ||
       inboxTab === 'completed'
@@ -923,7 +927,7 @@
   {:else if totalItems === 0 && !error}
     <StateEmpty
       title="Inbox is clear"
-      helper="Nothing needs attention right now."
+      helper="No pending inbox items. Work and source health are tracked separately."
     />
   {:else if !hasFilteredItems && totalItems > 0}
     <div class="mt-8 text-center py-12" data-testid="inbox-filter-empty-state">
