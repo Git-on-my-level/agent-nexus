@@ -312,9 +312,32 @@ def views(core, other):
     core.cli("work", "list", "--limit", "1")
 
 
+def pm_boundaries(core, other):
+    work = register_work(core, core.board(), native_id="pm-context")
+    proposal = {"request_key": "synthetic-decision", "work_ref": ref(work),
+                "instruction": "Discuss the synthetic acceptance gap", "scope": "work.annotate", "target_revision": "r1"}
+    decision = core.api("POST", "/pm/decisions", proposal, (201,))
+    replayed = core.api("POST", "/pm/decisions", proposal, (201,))
+    require(replayed["id"] == decision["id"], "PM proposal replay created duplicate decision")
+    path = "/pm/decisions/" + decision["id"]
+    status, _ = core.http("POST", path + "/answer", {"revision": decision["revision"], "approve": True, "text": "Synthetic agent approval"})
+    require(status == 403, "agent principal approved a human decision")
+    require(core.http("POST", path + "/dispatch", {})[0] == 409, "unanswered decision dispatched")
+    require(core.http("GET", path, token=other.token)[0] in (401, 403), "PM decision leaked across workspace auth")
+    conversation = core.api("POST", "/pm/conversations", {
+        "request_key": "synthetic-conversation", "title": "Acceptance discussion", "work_ref": ref(work)}, (201,))
+    messages = "/pm/conversations/" + conversation["id"] + "/messages"
+    require(core.http("POST", messages, {"request_key": "synthetic-message", "text": "What evidence is missing?"})[0] == 503,
+            "unconfigured PM bridge fabricated a response or hid unavailability")
+    core.restart(crash=True)
+    require(core.api("GET", path)["status"] == "awaiting_answer", "PM restart lost pending decision")
+    require(not core.api("GET", "/pm/actions")["items"], "discussion/unapproved decision created action")
+    core.cli("pm", "decisions", "list")
+
+
 SCENARIOS = {"baseline": baseline, "authority": authority, "replay": replay,
              "outage": outage, "attempt_ordering": attempt_ordering,
-             "completion": completion, "views": views}
+             "completion": completion, "views": views, "pm_boundaries": pm_boundaries}
 
 
 def main():
