@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -25,7 +25,11 @@
     partial = $state(false),
     answer = $state(""),
     choice = $state("");
+  let decisionsCursor = $state("");
+  let actionsCursor = $state("");
   let requestId = 0;
+  let selectionRequest = 0;
+  let ready = $state(false);
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -67,7 +71,40 @@
       notice = "";
     }
   });
+  $effect(() => {
+    const id = selectedId;
+    if (ready && id) void untrack(() => loadSelected(id));
+  });
+  async function loadSelected(id) {
+    const ticket = ++selectionRequest;
+    try {
+      let item = decisions.find((entry) => entry.id === id);
+      if (!item) {
+        item = await coreClient.getPmDecision(id);
+        if (ticket !== selectionRequest || selectedId !== id) return;
+        decisions = [...decisions.filter((entry) => entry.id !== id), item];
+      }
+      if (
+        item?.action_id &&
+        !actions.some((entry) => entry.id === item.action_id)
+      ) {
+        const receipt = await coreClient.getPmAction(item.action_id);
+        if (ticket !== selectionRequest || selectedId !== id) return;
+        actions = [
+          ...actions.filter((entry) => entry.id !== receipt.id),
+          receipt,
+        ];
+      }
+    } catch (err) {
+      if (ticket === selectionRequest && selectedId === id)
+        actionError = errorMessage(err);
+    }
+  }
   beforeNavigate(({ cancel }) => {
+    if (busy) {
+      cancel();
+      return;
+    }
     if (
       answer.trim() &&
       !busy &&
@@ -95,23 +132,70 @@
         authDriver: "pm-decisions",
       });
       const results = await Promise.allSettled([
-        coreClient.listPmDecisions(),
-        coreClient.listPmActions(),
+        coreClient.listPmDecisions({ limit: 50 }),
+        coreClient.listPmActions({ limit: 50 }),
       ]);
       if (ticket !== requestId) return;
       if (results[0].status === "fulfilled") {
         decisions = results[0].value.items || [];
         partial = Boolean(results[0].value.has_more);
+        decisionsCursor = results[0].value.next_cursor || "";
       } else error = errorMessage(results[0].reason);
       if (results[1].status === "fulfilled") {
         actions = results[1].value.items || [];
         partial ||= Boolean(results[1].value.has_more);
+        actionsCursor = results[1].value.next_cursor || "";
       } else actionError = errorMessage(results[1].reason);
     } catch (err) {
       if (ticket === requestId) error = errorMessage(err);
     } finally {
-      if (ticket === requestId) loading = false;
+      if (ticket === requestId) {
+        loading = false;
+        ready = true;
+      }
     }
+  }
+  async function loadMore() {
+    if (loading) return;
+    const ticket = requestId;
+    loading = true;
+    error = "";
+    actionError = "";
+    const results = await Promise.allSettled([
+      decisionsCursor
+        ? coreClient.listPmDecisions({ limit: 50, cursor: decisionsCursor })
+        : Promise.resolve(null),
+      actionsCursor
+        ? coreClient.listPmActions({ limit: 50, cursor: actionsCursor })
+        : Promise.resolve(null),
+    ]);
+    if (ticket !== requestId) return;
+    if (results[0].status === "fulfilled" && results[0].value) {
+      decisions = [
+        ...new Map(
+          [...decisions, ...results[0].value.items].map((item) => [
+            item.id,
+            item,
+          ]),
+        ).values(),
+      ];
+      decisionsCursor = results[0].value.next_cursor || "";
+    } else if (results[0].status === "rejected")
+      error = errorMessage(results[0].reason);
+    if (results[1].status === "fulfilled" && results[1].value) {
+      actions = [
+        ...new Map(
+          [...actions, ...results[1].value.items].map((item) => [
+            item.id,
+            item,
+          ]),
+        ).values(),
+      ];
+      actionsCursor = results[1].value.next_cursor || "";
+    } else if (results[1].status === "rejected")
+      actionError = errorMessage(results[1].reason);
+    partial = Boolean(decisionsCursor || actionsCursor);
+    loading = false;
   }
   async function recordAnswer(event) {
     event.preventDefault();
@@ -191,6 +275,7 @@
     void load();
     return () => {
       requestId++;
+      selectionRequest++;
     };
   });
 </script>
@@ -533,4 +618,14 @@
           </p>{/if}
       </section>
     </div>{/if}
+  {#if decisionsCursor || actionsCursor}
+    <button
+      class="ui-btn-secondary"
+      onclick={loadMore}
+      disabled={loading || busy}
+      >{loading
+        ? "Loading more history…"
+        : "Load more decisions and receipts"}</button
+    >
+  {/if}
 </WorkspacePageShell>

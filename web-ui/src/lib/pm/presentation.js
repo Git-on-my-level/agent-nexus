@@ -81,6 +81,8 @@ export function receiptSignal(state) {
     delivered: ["Delivered", "neutral"],
     acknowledged: ["Acknowledged", "neutral"],
     applied: ["Applied; verification pending", "neutral"],
+    source_reported: ["Source reported; not independently verified", "neutral"],
+    sending: ["Delivery in progress", "neutral"],
     verified: ["Outcome verified", "ok"],
     failed: ["Failed", "danger"],
     unknown: ["Delivery uncertain", "warn"],

@@ -311,7 +311,11 @@ const adapterCommandTable = [
     true,
   ],
   ["getWorkCapabilities", "work.capabilities"],
-  ["listPmConversations", "pm.conversations.list"],
+  [
+    "listPmConversations",
+    "pm.conversations.list",
+    (filters) => ({ options: q(filters) }),
+  ],
   [
     "createPmConversation",
     "pm.conversations.create",
@@ -320,7 +324,7 @@ const adapterCommandTable = [
   [
     "getPmConversation",
     "pm.conversations.get",
-    (id) => p(pathParams({ conversation_id: id })),
+    (id, filters) => pq(pathParams({ conversation_id: id }), filters),
   ],
   [
     "sendPmMessage",
@@ -328,7 +332,11 @@ const adapterCommandTable = [
     (id, payload) => pb(pathParams({ conversation_id: id }), payload),
   ],
   ["getPmContext", "pm.context", (filters) => ({ options: q(filters) })],
-  ["listPmDecisions", "pm.decisions.list"],
+  [
+    "listPmDecisions",
+    "pm.decisions.list",
+    (filters) => ({ options: q(filters) }),
+  ],
   [
     "getPmDecision",
     "pm.decisions.get",
@@ -344,7 +352,7 @@ const adapterCommandTable = [
     "pm.decisions.dispatch",
     (id) => pb(pathParams({ decision_id: id }), {}),
   ],
-  ["listPmActions", "pm.actions.list"],
+  ["listPmActions", "pm.actions.list", (filters) => ({ options: q(filters) })],
   ["getPmAction", "pm.actions.get", (id) => p(pathParams({ action_id: id }))],
   [
     "reconcilePmAction",

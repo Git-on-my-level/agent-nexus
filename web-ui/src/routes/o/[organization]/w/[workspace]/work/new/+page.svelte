@@ -33,6 +33,10 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   beforeNavigate(({ cancel }) => {
+    if (saving && !created) {
+      cancel();
+      return;
+    }
     if (dirty && !window.confirm("Leave without saving this commitment?"))
       cancel();
   });

@@ -20,6 +20,11 @@
     error = $state(""),
     draft = $state(""),
     partial = $state(false);
+  let conversationsCursor = $state("");
+  let turnsCursor = $state("");
+  let loadingOlder = $state(false);
+  let loadingConversations = $state(false);
+  let olderLoaded = false;
   let creationKey, requestKey, requestText, createdConversationId;
   let requestId = 0;
   let pollInFlight = false;
@@ -31,6 +36,10 @@
   let selectedKey = $derived(`${selectedId}\n${workRef}`);
   let activeWorkRef = $derived(conversation?.work_ref || workRef);
   beforeNavigate(({ cancel }) => {
+    if (sending) {
+      cancel();
+      return;
+    }
     if (
       draft.trim() &&
       !sending &&
@@ -49,10 +58,55 @@
       void loadConversation(key.split("\n")[0]);
     }
   });
-  async function loadList() {
-    const result = await coreClient.listPmConversations();
-    conversations = result.items || [];
-    partial = Boolean(result.has_more);
+  async function loadList(append = false) {
+    loadingConversations = true;
+    try {
+      const result = await coreClient.listPmConversations({
+        limit: 50,
+        cursor: append ? conversationsCursor : undefined,
+      });
+      conversations = [
+        ...new Map(
+          [...(append ? conversations : []), ...(result.items || [])].map(
+            (item) => [item.id, item],
+          ),
+        ).values(),
+      ];
+      conversationsCursor = result.next_cursor || "";
+      partial = Boolean(result.has_more);
+    } finally {
+      loadingConversations = false;
+    }
+  }
+  async function moreConversations() {
+    try {
+      await loadList(true);
+    } catch (err) {
+      error = errorMessage(err);
+    }
+  }
+  async function olderTurns() {
+    if (!selectedId || !turnsCursor || loadingOlder) return;
+    const ticket = requestId;
+    loadingOlder = true;
+    try {
+      const result = await coreClient.getPmConversation(selectedId, {
+        limit: 100,
+        cursor: turnsCursor,
+      });
+      if (ticket !== requestId) return;
+      turns = [
+        ...new Map(
+          [...(result.turns || []), ...turns].map((turn) => [turn.id, turn]),
+        ).values(),
+      ];
+      turnsCursor = result.next_cursor || "";
+      olderLoaded = true;
+    } catch (err) {
+      if (ticket === requestId) error = errorMessage(err);
+    } finally {
+      loadingOlder = false;
+    }
   }
   async function loadConversation(id = selectedId, quiet = false) {
     const ticket = ++requestId;
@@ -60,14 +114,26 @@
       loading = true;
       conversation = null;
       turns = [];
+      turnsCursor = "";
+      olderLoaded = false;
     }
     error = "";
     try {
       if (id) {
-        const result = await coreClient.getPmConversation(id);
+        const result = await coreClient.getPmConversation(id, { limit: 100 });
         if (ticket !== requestId) return;
         conversation = result.conversation;
-        turns = result.turns || [];
+        turns = quiet
+          ? [
+              ...new Map(
+                [...turns, ...(result.turns || [])].map((turn) => [
+                  turn.id,
+                  turn,
+                ]),
+              ).values(),
+            ]
+          : result.turns || [];
+        if (!quiet || !olderLoaded) turnsCursor = result.next_cursor || "";
       }
     } catch (err) {
       if (ticket === requestId) error = errorMessage(err);
@@ -129,9 +195,10 @@
       requestKey = "";
       requestText = "";
       await loadList();
-      if (selectedId !== id)
+      if (selectedId !== id) {
+        sending = false;
         await goto(workspaceHref(`/pm?conversation=${encodeURIComponent(id)}`));
-      else await loadConversation(id, true);
+      } else await loadConversation(id, true);
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -147,7 +214,14 @@
   onMount(() => {
     void initialize();
     const timer = setInterval(async () => {
-      if (!selectedId || sending || loading || pollInFlight || document.hidden)
+      if (
+        !selectedId ||
+        sending ||
+        loading ||
+        loadingOlder ||
+        pollInFlight ||
+        document.hidden
+      )
         return;
       pollInFlight = true;
       try {
@@ -240,6 +314,16 @@
         >
           This is a partial conversation history.
         </p>{/if}
+      {#if conversationsCursor}<div class="border-t border-line p-3">
+          <button
+            class="ui-btn-secondary"
+            onclick={moreConversations}
+            disabled={loadingConversations}
+            >{loadingConversations
+              ? "Loading conversations…"
+              : "More conversations"}</button
+          >
+        </div>{/if}
     </aside>
     <section
       class="flex min-w-0 flex-col overflow-hidden rounded-md border border-line bg-panel"
@@ -291,7 +375,21 @@
                 >{/each}
             </div>
           </div>{/if}
-        <ol class="space-y-5" aria-label="Conversation messages">
+        {#if turnsCursor}<button
+            class="ui-btn-secondary"
+            onclick={olderTurns}
+            disabled={loadingOlder}
+            >{loadingOlder
+              ? "Loading older messages…"
+              : "Older messages"}</button
+          >{/if}
+        <ol
+          class="space-y-5"
+          aria-label="Conversation messages"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+        >
           {#each turns as turn (turn.id)}<li class="space-y-3">
               <div
                 class="ml-auto max-w-[94%] rounded-md border border-line bg-bg-soft p-3 sm:max-w-[85%]"

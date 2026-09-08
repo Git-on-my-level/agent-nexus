@@ -73,6 +73,29 @@ describe("canonical work and PM client", () => {
     );
     expect(JSON.parse(requests[0].init.body).revision).toBe(3);
   });
+  it("forwards PM list and history pagination without dropping opaque cursors", async () => {
+    const { client, requests } = setup();
+    await client.listPmDecisions({ cursor: "decision+/=", limit: 50 });
+    await client.listPmActions({ cursor: "action-next", limit: 50 });
+    await client.listPmConversations({
+      cursor: "conversation-next",
+      limit: 50,
+    });
+    await client.getPmConversation("conversation-1", {
+      cursor: "older-turns",
+      limit: 100,
+    });
+    expect(
+      requests.map((request) =>
+        new URL(request.url).searchParams.get("cursor"),
+      ),
+    ).toEqual([
+      "decision+/=",
+      "action-next",
+      "conversation-next",
+      "older-turns",
+    ]);
+  });
   it("surfaces source conflicts and provider unavailability as failures", async () => {
     const { client } = setup(409, {
       error: {

@@ -45,6 +45,8 @@
     loading = true;
     error = "";
     evidenceError = "";
+    refreshing = false;
+    notice = "";
     work = null;
     observations = [];
     nextCursor = "";
