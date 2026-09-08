@@ -214,9 +214,13 @@ var boardsCardsSubcommandSpec = subcommandSpec{
 
 var docsSubcommandSpec = subcommandSpec{
 	command: "docs",
-	valid:   []string{"list", "create", "revise", "get", "content", "message", "messages", "reply", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
+	valid:   []string{"list", "create", "put", "search", "revise", "get", "content", "comment", "comments", "message", "messages", "reply", "history", "revision", "trash", "archive", "unarchive", "restore", "purge"},
 	examples: []string{
 		"anx docs create --topic topic:launch --title \"Runbook\" --body-file runbook.md",
+		"anx docs put runbook.md --title \"Runbook\" --source https://example.invalid/runbook.md --tags knowledge",
+		"anx docs search \"alphawhiz\" --knowledge",
+		"anx docs comment doc:runbook \"Host B found this\"",
+		"anx docs comments doc:runbook",
 		"anx docs create --topic topic:launch --title \"Note\" --body \"one-liner\"",
 		"anx docs message doc:runbook --body-file note.md",
 		"anx docs messages doc:runbook",
@@ -237,6 +241,12 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 	command:  "docs revision",
 	valid:    []string{"get"},
 	examples: []string{"anx docs revision get doc:runbook <revision-id>"},
+}
+
+var docsCommentsSubcommandSpec = subcommandSpec{
+	command:  "docs comments",
+	valid:    []string{"reply"},
+	examples: []string{"anx docs comments reply doc:runbook <comment-id> --body \"Acknowledged\""},
 }
 
 var eventsSubcommandSpec = subcommandSpec{

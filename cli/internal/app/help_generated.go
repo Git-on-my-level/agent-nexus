@@ -253,6 +253,79 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "docs search",
+		Summary:     "Search documents by title, body, source, tags, and comments.",
+		JSONShape:   "GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.",
+		Composition: "Ranked case-insensitive substring match. Use `--knowledge` for agent-facing docs tagged `knowledge`.",
+		Examples: []string{
+			"anx docs search \"runbook\"",
+			"anx docs search \"alphawhiz\" --knowledge --limit 20",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<q>", Description: "Search query; also accepted as `--q`."},
+			{Name: "--q <text>", Description: "Search query over title, body, and comments."},
+			{Name: "--knowledge", Description: "Only documents tagged knowledge."},
+			{Name: "--tag <tag>", Description: "Restrict results to one tag."},
+			{Name: "--limit <n>", Description: "Page size; omit to return up to 50 hits."},
+			{Name: "--cursor <cursor>", Description: "Pagination cursor from a previous search response."},
+		},
+	},
+	{
+		Path:        "docs put",
+		Summary:     "Create or replace a document by handle from a local file or stdin.",
+		JSONShape:   "PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.",
+		Composition: "Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags.",
+		Examples: []string{
+			"anx docs put runbook.md --title \"Runbook\" --tags knowledge",
+			"anx docs put runbook.md --title \"Runbook\" --source https://example.invalid/runbook.md --tags knowledge",
+			"anx docs put - --handle kb-shared --title \"Note\"",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<path>", Description: "Markdown/text file, or `-` for stdin."},
+			{Name: "--title <text>", Description: "Document title."},
+			{Name: "--source <url-or-ref>", Description: "Canonical source URL or ref when this doc aggregates."},
+			{Name: "--tags <tag>", Description: "Tags, repeatable or comma-separated. Use `knowledge` for agent-facing docs."},
+			{Name: "--handle <handle>", Description: "Public handle used as the idempotency key."},
+			{Name: "--body <text>", Description: "Inline body when not passing a path."},
+			{Name: "--body-file <path>", Description: "Load body from a file or stdin with `-`."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs comment",
+		Summary:     "Post a document comment (or a reply with `--reply-to`).",
+		JSONShape:   "POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.",
+		Composition: "Writes a `message_posted` event on the document backing thread. Comment ids are stable event ids.",
+		Examples: []string{
+			"anx docs comment doc:runbook \"Host B found this\"",
+			"anx docs comment doc:runbook --body \"Acknowledged\" --reply-to <comment-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id."},
+			{Name: "<text>", Description: "Comment body; also accepted as `--body`."},
+			{Name: "--body <text>", Description: "Comment text."},
+			{Name: "--reply-to <comment-id>", Description: "Parent comment id for a reply."},
+			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs comments",
+		Summary:     "List document comments as a thread with stable ids.",
+		JSONShape:   "GET `/docs/{document_id}/comments` returning `{ comments, next_cursor? }`.",
+		Composition: "Reads `message_posted` events on the document backing thread.",
+		Examples: []string{
+			"anx docs comments doc:runbook",
+			"anx docs comments doc:runbook --limit 20",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id."},
+			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
+			{Name: "--limit <n>", Description: "Page size."},
+			{Name: "--cursor <cursor>", Description: "Pagination cursor from a previous comments response."},
+		},
+	},
+	{
 		Path:        "cards create",
 		Summary:     "Create a board work card from flags plus a local prose file, or from advanced JSON.",
 		JSONShape:   "Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.",
@@ -1266,11 +1339,15 @@ Lower-level helpers:
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
+  docs search              Search title, body, source, tags, and comments.
+  docs comments            List document comments with stable ids.
+  docs comment             Post a document comment (` + "`--reply-to`" + ` for a reply).
   docs message             Post a document conversation message.
   docs messages            List document conversation messages.
   docs reply               Reply to a specific document message.
   Mutation flow:
   docs create              Create durable context from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `, or from advanced JSON.
+  docs put                 Idempotent create-or-replace by handle from a local file.
   docs revise              Revise from ` + "`--body-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
    Tip: agents should draft Markdown locally and pass ` + "`--body-file <path>`" + `. ` + "`docs revise doc:<handle> --body-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
@@ -1745,6 +1822,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		boardsCardsSubcommandSpec,
 		docsSubcommandSpec,
 		docsRevisionSubcommandSpec,
+		docsCommentsSubcommandSpec,
 		cardsSubcommandSpec,
 		threadsSubcommandSpec,
 		eventsSubcommandSpec,

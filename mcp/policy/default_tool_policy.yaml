@@ -29,6 +29,8 @@ hosted_default_commands:
   - "cards.timeline"
   - "docs.get"
   - "docs.list"
+  - "docs.search"
+  - "docs.comments.list"
   - "docs.revisions.get"
   - "docs.revisions.list"
   - "events.get"
@@ -258,6 +260,15 @@ commands:
   "docs.archive":
     classification: exposed_write
     reason: "ordinary reversible document lifecycle write"
+  "docs.comments.create":
+    classification: exposed_write
+    reason: "ordinary document comment write for cross-host knowledge"
+  "docs.comments.list":
+    classification: exposed_read
+    reason: "document comment thread read"
+  "docs.comments.reply":
+    classification: exposed_write
+    reason: "ordinary document comment reply write"
   "docs.create":
     classification: exposed_write
     reason: "ordinary document creation"
@@ -270,6 +281,9 @@ commands:
   "docs.patch":
     classification: exposed_write
     reason: "ordinary document update with concurrency controls"
+  "docs.put":
+    classification: exposed_write
+    reason: "idempotent document create-or-replace by handle"
   "docs.purge":
     classification: gated_sensitive
     reason: "permanent deletion is destructive"
@@ -285,6 +299,9 @@ commands:
   "docs.revisions.list":
     classification: exposed_read
     reason: "document revision inventory read"
+  "docs.search":
+    classification: exposed_read
+    reason: "document full-text search over title, body, and comments"
   "docs.trash":
     classification: exposed_write
     reason: "ordinary reversible document lifecycle write"

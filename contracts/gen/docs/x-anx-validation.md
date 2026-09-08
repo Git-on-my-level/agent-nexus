@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `149`
+- Command operations: `154`
 - Baseline-allowed required-field gaps: `125`
-- Missing recommended examples: `149`
+- Missing recommended examples: `154`
 
 ## Baseline gap counts
 
@@ -209,15 +209,20 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.trash` `POST /cards/{card_id}/trash`
 - `derived.rebuild` `POST /derived/rebuild`
 - `docs.archive` `POST /docs/{document_id}/archive`
+- `docs.comments.create` `POST /docs/{document_id}/comments`
+- `docs.comments.list` `GET /docs/{document_id}/comments`
+- `docs.comments.reply` `POST /docs/{document_id}/comments/{comment_id}/replies`
 - `docs.create` `POST /docs`
 - `docs.get` `GET /docs/{document_id}`
 - `docs.list` `GET /docs`
 - `docs.patch` `PATCH /docs/{document_id}`
 - `docs.purge` `POST /docs/{document_id}/purge`
+- `docs.put` `PUT /docs/{document_id}`
 - `docs.restore` `POST /docs/{document_id}/restore`
 - `docs.revisions.create` `POST /docs/{document_id}/revisions`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
 - `docs.revisions.list` `GET /docs/{document_id}/revisions`
+- `docs.search` `GET /docs/search`
 - `docs.trash` `POST /docs/{document_id}/trash`
 - `docs.unarchive` `POST /docs/{document_id}/unarchive`
 - `events.archive` `POST /events/{event_id}/archive`

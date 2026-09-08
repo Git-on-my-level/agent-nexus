@@ -394,7 +394,12 @@ resources:
       Canonical mutable document lineage anchored to a typed subject ref. The
       contract surface is `subject_ref`, `head_revision_ref`, `state`, and
       `refs` plus standard lifecycle/provenance fields. `state` is the sole
-      document lifecycle field and uses enums.lifecycle_state.
+      document lifecycle field and uses enums.lifecycle_state. Docs are the
+      cross-machine knowledge base for agents: `source` points at the canonical
+      origin when a doc aggregates, and `tags` (including `knowledge`) mark
+      agent-facing entries. Comments are the backing-thread discussion, exposed
+      with stable event ids. Git-repo ingest/sync is a follow-up, not this
+      contract.
     fields:
       ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
       handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
@@ -406,6 +411,18 @@ resources:
         description: >
           Optional short blurb for list and detail headers; stored on the document row
           (distinct from per-revision artifact summary).
+      source:
+        type: string
+        required: false
+        description: >
+          Canonical origin this document aggregates: a URL or typed ref. Empty when
+          the document itself is the source of truth.
+      tags:
+        type: "list<string>"
+        required: false
+        description: >
+          Operator/agent labels. Tag `knowledge` marks docs meant for agents
+          (see `GET /docs?knowledge=true` and `tag=`).
       subject_ref: { type: typed_ref, required: true }
       head_revision_ref: { type: typed_ref, required: true }
       state:

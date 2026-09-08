@@ -55,10 +55,12 @@ type ArtifactListFilter struct {
 type DocumentListFilter struct {
 	States []string
 
-	ThreadID string
-	Query    string
-	Limit    *int
-	Cursor   string
+	ThreadID  string
+	Query     string
+	Tag       string
+	Knowledge bool
+	Limit     *int
+	Cursor    string
 }
 
 type ThreadListFilter struct {

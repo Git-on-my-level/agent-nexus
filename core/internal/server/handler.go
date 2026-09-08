@@ -86,6 +86,9 @@ type PrimitiveStore interface {
 	CreateDocument(ctx context.Context, actorID string, document map[string]any, content any, contentType string, refs []string) (map[string]any, map[string]any, error)
 	GetDocument(ctx context.Context, documentID string) (map[string]any, map[string]any, error)
 	PatchDocument(ctx context.Context, actorID string, documentID string, patch map[string]any, ifUpdatedAt *string) (map[string]any, map[string]any, error)
+	SearchDocuments(ctx context.Context, filter primitives.DocumentSearchFilter) ([]map[string]any, string, error)
+	ListDocumentComments(ctx context.Context, documentID string, limit *int, cursor string) ([]map[string]any, string, error)
+	CreateDocumentComment(ctx context.Context, actorID, documentID, text, parentID string) (map[string]any, error)
 	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string, revisionProvenance map[string]any) (map[string]any, map[string]any, error)
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
@@ -1423,6 +1426,14 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/docs/search", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
+			return
+		}
+		handleSearchDocuments(w, r, opts)
+	})
+
 	registerRoute("/docs/", func(r *http.Request) routeAccessRequirement {
 		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
 		if remainder == "" {
@@ -1469,9 +1480,19 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/comments"):
+			if r.Method == http.MethodGet || r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/replies") && strings.Contains(remainder, "/comments/"):
+			if r.Method == http.MethodPost {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
-		case r.Method == http.MethodGet, r.Method == http.MethodPatch:
+		case r.Method == http.MethodGet, r.Method == http.MethodPatch, r.Method == http.MethodPut:
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 		default:
 			return routeAccessRequirement{}
@@ -1607,6 +1628,46 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			return
 		}
 
+		if strings.HasSuffix(remainder, "/comments") {
+			documentID := strings.TrimSuffix(remainder, "/comments")
+			documentID = strings.TrimSuffix(documentID, "/")
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				handleListDocumentComments(w, r, opts, documentID)
+			case http.MethodPost:
+				handleCreateDocumentComment(w, r, opts, documentID, "")
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and POST are supported")
+			}
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/replies") {
+			without := strings.TrimSuffix(remainder, "/replies")
+			without = strings.TrimSuffix(without, "/")
+			idx := strings.Index(without, "/comments/")
+			if idx <= 0 {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			documentID := strings.TrimSpace(without[:idx])
+			commentID := strings.TrimSpace(without[idx+len("/comments/"):])
+			if documentID == "" || commentID == "" || strings.Contains(documentID, "/") || strings.Contains(commentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			if r.Method != http.MethodPost {
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
+				return
+			}
+			handleCreateDocumentComment(w, r, opts, documentID, commentID)
+			return
+		}
+
 		if strings.Contains(remainder, "/") {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 			return
@@ -1617,8 +1678,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			handleGetDocument(w, r, opts, remainder)
 		case http.MethodPatch:
 			handlePatchDocument(w, r, opts, remainder)
+		case http.MethodPut:
+			handlePutDocument(w, r, opts, remainder)
 		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET, PATCH, and PUT are supported")
 		}
 	})
 

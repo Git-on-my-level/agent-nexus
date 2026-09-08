@@ -134,18 +134,23 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `12`
+- Commands: `17`
 - Command IDs:
   - `docs.archive` (`docs archive`)
+  - `docs.comments.create` (`docs comment`)
+  - `docs.comments.list` (`docs comments`)
+  - `docs.comments.reply` (`docs comments reply`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.list` (`docs list`)
   - `docs.patch` (`docs patch`)
   - `docs.purge` (`docs purge`)
+  - `docs.put` (`docs put`)
   - `docs.restore` (`docs restore`)
   - `docs.revisions.create` (`docs revise`)
   - `docs.revisions.get` (`docs revision get`)
   - `docs.revisions.list` (`docs history`)
+  - `docs.search` (`docs search`)
   - `docs.trash` (`docs trash`)
   - `docs.unarchive` (`docs unarchive`)
 

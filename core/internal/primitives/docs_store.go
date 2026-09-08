@@ -26,6 +26,8 @@ type documentRow struct {
 	ThreadID                 sql.NullString
 	Title                    sql.NullString
 	Summary                  string
+	Source                   string
+	TagsJSON                 string
 	Slug                     sql.NullString
 	SupersedesJSON           string
 	RefsJSON                 string
@@ -55,7 +57,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.slug, d.supersedes_json,
+	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -75,6 +77,10 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		searchPattern := "%" + strings.ToLower(q) + "%"
 		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(COALESCE(d.handle, '')) LIKE ? OR LOWER('document:' || COALESCE(d.handle, '')) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
 		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+	if tagConditions, tagArgs := documentTagFilterSQL("d.tags_json", filter.Tag, filter.Knowledge); len(tagConditions) > 0 {
+		conditions = append(conditions, tagConditions...)
+		args = append(args, tagArgs...)
 	}
 	if len(conditions) > 0 {
 		inner += ` WHERE ` + strings.Join(conditions, ` AND `)
@@ -142,6 +148,8 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ThreadID,
 			&row.Title,
 			&row.Summary,
+			&row.Source,
+			&row.TagsJSON,
 			&row.Slug,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
@@ -403,6 +411,19 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 	docSummary := strings.TrimSpace(anyStringValue(document["summary"]))
+	source, err := optionalStringField(document, "source")
+	if err != nil {
+		return nil, nil, err
+	}
+	tags, err := normalizeDocumentTags(document["tags"], document, "tags")
+	if err != nil {
+		return nil, nil, err
+	}
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	requestedHandle := strings.TrimSpace(anyStringValue(document["handle"]))
 	if _, exists := document["labels"]; exists {
 		return nil, nil, invalidDocumentRequest("document.labels is not supported")
 	}
@@ -421,6 +442,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
+	searchText := documentSearchText(title, docSummary, source, tags, encodedContent, contentType)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	revisionNumber := 1
@@ -519,7 +541,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
 	}
-	documentHandle, err := uniqueHandleTx(ctx, tx, "document", firstNonEmpty(slug, title), "document-"+documentID)
+	documentHandle, err := allocateDocumentHandleTx(ctx, tx, requestedHandle, firstNonEmpty(slug, title), "document-"+documentID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document handle: %w", err)
@@ -558,16 +580,19 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, handle, thread_id, title, summary, slug, supersedes_json,
+			id, handle, thread_id, title, summary, source, tags_json, search_text, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		documentHandle,
 		nullableString(threadID),
 		nullableString(title),
 		docSummary,
+		source,
+		string(tagsJSON),
+		searchText,
 		nullableString(slug),
 		string(supersedesJSON),
 		string(docRefsJSON),
@@ -674,6 +699,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Summary:         docSummary,
+		Source:          source,
+		TagsJSON:        string(tagsJSON),
 		Slug:            nullableString(slug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -743,13 +770,11 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if patch == nil || len(patch) == 0 {
 		return nil, nil, invalidDocumentRequest("patch is required")
 	}
+	allowedPatch := map[string]struct{}{"summary": {}, "source": {}, "tags": {}, "title": {}}
 	for k := range patch {
-		if k != "summary" {
+		if _, ok := allowedPatch[k]; !ok {
 			return nil, nil, invalidDocumentRequest("unsupported document patch field: " + k)
 		}
-	}
-	if _, ok := patch["summary"]; !ok {
-		return nil, nil, invalidDocumentRequest("patch.summary is required")
 	}
 	documentID = strings.TrimSpace(documentID)
 	doc, err := s.loadDocumentRow(ctx, documentID)
@@ -759,12 +784,40 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if err := ensureUpdatedAtMatches(doc.UpdatedAt, ifUpdatedAt); err != nil {
 		return nil, nil, err
 	}
-	nextSummary := strings.TrimSpace(anyStringValue(patch["summary"]))
+	nextTitle := nullStringValue(doc.Title)
+	nextSummary := strings.TrimSpace(doc.Summary)
+	nextSource := strings.TrimSpace(doc.Source)
+	nextTags, err := decodeStoredJSONList(doc.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, nil, err
+	}
+	if value, exists := patch["title"]; exists {
+		nextTitle = strings.TrimSpace(anyStringValue(value))
+	}
+	if value, exists := patch["summary"]; exists {
+		nextSummary = strings.TrimSpace(anyStringValue(value))
+	}
+	if value, exists := patch["source"]; exists {
+		nextSource = strings.TrimSpace(anyStringValue(value))
+	}
+	if _, exists := patch["tags"]; exists {
+		nextTags, err = normalizeDocumentTags(patch["tags"], patch, "tags")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	tagsJSON, err := json.Marshal(nextTags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(
 		ctx,
-		`UPDATE documents SET summary = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		`UPDATE documents SET title = ?, summary = ?, source = ?, tags_json = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		nullableString(nextTitle),
 		nextSummary,
+		nextSource,
+		string(tagsJSON),
 		now,
 		actorID,
 		documentID,
@@ -825,6 +878,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
 	nextSummary := strings.TrimSpace(doc.Summary)
+	nextSource := strings.TrimSpace(doc.Source)
+	nextTags, err := decodeStoredJSONList(doc.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, nil, err
+	}
 	nextSupersedes, err := decodeStoredJSONList(doc.SupersedesJSON, "document.supersedes")
 	if err != nil {
 		return nil, nil, err
@@ -857,6 +915,16 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		if value, exists := documentPatch["summary"]; exists {
 			nextSummary = strings.TrimSpace(anyStringValue(value))
+		}
+		if value, exists := documentPatch["source"]; exists {
+			nextSource = strings.TrimSpace(anyStringValue(value))
+		}
+		if _, exists := documentPatch["tags"]; exists {
+			parsed, tagErr := normalizeDocumentTags(documentPatch["tags"], documentPatch, "tags")
+			if tagErr != nil {
+				return nil, nil, tagErr
+			}
+			nextTags = parsed
 		}
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
@@ -903,6 +971,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
+	nextTagsJSON, err := json.Marshal(nextTags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	searchText := documentSearchText(nextTitle, nextSummary, nextSource, nextTags, encodedContent, contentType)
 
 	nextRevisionNumber := doc.HeadRevisionNum + 1
 	artifactID := uuid.NewString()
@@ -1083,6 +1156,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			thread_id = ?,
 			title = ?,
 			summary = ?,
+			source = ?,
+			tags_json = ?,
+			search_text = ?,
 			slug = ?,
 			supersedes_json = ?,
 			refs_json = ?,
@@ -1095,6 +1171,9 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nextSummary,
+		nextSource,
+		string(nextTagsJSON),
+		searchText,
 		nullableString(nextSlug),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
@@ -1704,7 +1783,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, handle, thread_id, title, summary, slug, supersedes_json,
+		`SELECT id, handle, thread_id, title, summary, source, tags_json, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1717,6 +1796,8 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ThreadID,
 		&row.Title,
 		&row.Summary,
+		&row.Source,
+		&row.TagsJSON,
 		&row.Slug,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
@@ -1918,6 +1999,12 @@ func (r documentRow) toMap() (map[string]any, error) {
 		out["title"] = r.Title.String
 	}
 	out["summary"] = strings.TrimSpace(r.Summary)
+	out["source"] = strings.TrimSpace(r.Source)
+	tags, err := decodeStoredJSONList(r.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, err
+	}
+	out["tags"] = tags
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}

@@ -127,6 +127,9 @@ func preflightKnownCommandShape(args []string) error {
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return preflightSubcommand(args[2:], docsRevisionSubcommandSpec)
 		}
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" && docsCommentsSubcommandSpec.normalize(args[2]) == "reply" {
+			return preflightSubcommand(args[2:], docsCommentsSubcommandSpec)
+		}
 	case "events":
 		return preflightSubcommand(args[1:], eventsSubcommandSpec)
 	case "inbox":
@@ -205,6 +208,9 @@ func preflightShapeCommandName(args []string) string {
 	case "docs":
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return "docs revision"
+		}
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" && docsCommentsSubcommandSpec.normalize(args[2]) == "reply" {
+			return "docs comments"
 		}
 	case "meta":
 		if len(args) >= 3 && metaSubcommandSpec.normalize(args[1]) == "ops" {
@@ -472,6 +478,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"docs list": merge(map[string]preflightFlagSpec{
 			"thread-id": valueFlag,
 			"q":         valueFlag,
+			"tag":       valueFlag,
+			"knowledge": boolFlag,
 			"limit":     valueFlag,
 			"cursor":    valueFlag,
 		}, lifecycle),
@@ -525,6 +533,39 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"docs message":  {"document-id": valueFlag},
 		"docs messages": {"document-id": valueFlag},
 		"docs reply":    {"document-id": valueFlag},
+		"docs search": {
+			"q":         valueFlag,
+			"tag":       valueFlag,
+			"knowledge": boolFlag,
+			"limit":     valueFlag,
+			"cursor":    valueFlag,
+		},
+		"docs put": {
+			"title":     valueFlag,
+			"source":    valueFlag,
+			"tags":      valueFlag,
+			"handle":    valueFlag,
+			"body":      valueFlag,
+			"body-file": valueFlag,
+			"actor-id":  valueFlag,
+		},
+		"docs comment": {
+			"document-id": valueFlag,
+			"body":        valueFlag,
+			"reply-to":    valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments": {
+			"document-id": valueFlag,
+			"limit":       valueFlag,
+			"cursor":      valueFlag,
+		},
+		"docs comments reply": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
+			"body":        valueFlag,
+			"actor-id":    valueFlag,
+		},
 		"docs revise": {
 			"document-id": valueFlag,
 			"proposal-id": valueFlag,
