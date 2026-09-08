@@ -143,8 +143,8 @@
     >
     <a
       class={evidenceCount
-        ? "text-warn-text hover:underline"
-        : "text-fg-muted hover:underline"}
+        ? "text-warn-text underline underline-offset-2"
+        : "text-fg-muted underline underline-offset-2"}
       href={workspaceHref("/integrations")}
       >{evidenceCount} with stale, missing or failed evidence</a
     >
@@ -188,8 +188,11 @@
         </div></label
       >
     </form>
-    <label class="text-micro text-fg-muted"
-      >Source<select
+    <div>
+      <label class="text-micro text-fg-muted" for="work-filter-source"
+        >Source</label
+      ><select
+        id="work-filter-source"
         class="ui-input mt-1 block"
         value={filters.source}
         onchange={(event) => setFilter("source", event.currentTarget.value)}
@@ -204,20 +207,26 @@
                   ? "Multica"
                   : source}</option
           >{/each}</select
-      ></label
-    >
-    <label class="text-micro text-fg-muted"
-      >Phase<select
+      >
+    </div>
+    <div>
+      <label class="text-micro text-fg-muted" for="work-filter-phase"
+        >Phase</label
+      ><select
+        id="work-filter-phase"
         class="ui-input mt-1 block"
         value={filters.phase}
         onchange={(event) => setFilter("phase", event.currentTarget.value)}
         ><option value="">All phases</option>{#each PHASES as phase}<option
             value={phase}>{label(phase)}</option
           >{/each}</select
-      ></label
-    >
-    <label class="text-micro text-fg-muted"
-      >Freshness<select
+      >
+    </div>
+    <div>
+      <label class="text-micro text-fg-muted" for="work-filter-freshness"
+        >Freshness</label
+      ><select
+        id="work-filter-freshness"
         class="ui-input mt-1 block"
         value={filters.freshness}
         onchange={(event) => setFilter("freshness", event.currentTarget.value)}
@@ -226,8 +235,8 @@
         ><option value="stale">Stale</option><option value="error"
           >Refresh failed</option
         ><option value="unknown">Unknown</option></select
-      ></label
-    >
+      >
+    </div>
     <button class="ui-btn-secondary" onclick={() => load()} disabled={loading}
       >{loading ? "Loading work…" : "Reload"}</button
     >
@@ -271,7 +280,7 @@
     </div>
   </details>
   {#if activeFilters}<a
-      class="w-fit text-micro text-accent-text hover:underline"
+      class="ui-prose-link w-fit text-micro"
       href={workspaceHref(`/work?view=${view}`)}>Clear filters</a
     >{/if}
   {#if error}<StateError
@@ -303,7 +312,7 @@
           : "Create a Nexus commitment or register work from an authoritative source. Empty views do not establish integration health."}
       </p>
       <a
-        class="mt-4 inline-block text-accent-text hover:underline"
+        class="ui-prose-link mt-4 inline-block"
         href={activeFilters
           ? workspaceHref("/work")
           : workspaceHref("/work/new")}
@@ -325,7 +334,7 @@
   <p class="text-micro text-fg-muted">
     Board and table show the same work records. External workflows stay with
     their source; request changes through <a
-      class="text-accent-text hover:underline"
+      class="ui-prose-link"
       href={workspaceHref("/pm")}>PM</a
     >.
   </p>

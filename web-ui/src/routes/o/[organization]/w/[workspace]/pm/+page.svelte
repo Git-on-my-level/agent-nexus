@@ -47,16 +47,21 @@
     )
       cancel();
   });
+  let conversationScope;
   $effect(() => {
     const key = selectedKey;
-    if (ready) {
+    if (!ready) return;
+    const switched =
+      conversationScope !== undefined && conversationScope !== key;
+    conversationScope = key;
+    if (switched) {
       createdConversationId = "";
       creationKey = "";
       requestKey = "";
       requestText = "";
       draft = "";
-      void loadConversation(key.split("\n")[0]);
     }
+    void loadConversation(key.split("\n")[0]);
   });
   async function loadList(append = false) {
     loadingConversations = true;
@@ -160,7 +165,7 @@
   async function send(event) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || !ready) return;
     sending = true;
     error = "";
     if (!requestKey || text !== requestText) {
@@ -336,7 +341,7 @@
           {conversation?.title || "Review your work"}
         </h2>
         {#if activeWorkRef}<a
-            class="ml-auto break-words text-micro text-accent-text hover:underline"
+            class="ui-prose-link ml-auto break-words text-micro"
             href={workspaceHref(`/work/${encodeURIComponent(activeWorkRef)}`)}
             >{activeWorkRef}</a
           >{:else}<span class="ml-auto text-micro text-fg-muted"
@@ -425,7 +430,7 @@
                         class="break-all rounded bg-bg-soft px-2 py-1"
                       >
                         {#if ref.startsWith("card:")}<a
-                            class="text-accent-text hover:underline"
+                            class="ui-prose-link"
                             href={workspaceHref(
                               `/work/${encodeURIComponent(ref)}`,
                             )}>{ref}</a
@@ -452,7 +457,8 @@
         <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p class="max-w-lg text-micro text-fg-muted">
             Discussion does not authorize source changes. Decisions and delivery
-            receipts remain inspectable.
+            receipts remain inspectable.{#if !ready && error}
+              Sending stays disabled until PM is reachable.{/if}
           </p>
           <button
             class="ui-btn-primary"
