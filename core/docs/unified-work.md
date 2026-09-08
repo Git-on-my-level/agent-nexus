@@ -99,19 +99,32 @@ write executor, deployment tool, or shell action is enabled by default.
 
 PM conversation creation and context inspection work without a model. Messages
 require a configured existing PM bridge. `ANX_PM_BRIDGE_ENABLED` defaults false.
-Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and optionally
-`ANX_PM_BASE_URL`. Core checks the selected principal's current wake registration
-and online state. The deployment must separately provide an approved enforced
-read-only runtime envelope. A config flag, prompt, or bounded-process wrapper
-is not an isolation mechanism. Do not enable a general privileged coding actor
-as the PM runtime. Missing/unready providers return unavailable, not canned text.
+Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and
+`ANX_PM_RUNTIME_ENVELOPE_ENFORCED=true` only when an independently enforced
+read-only capability envelope already exists for that actor. The env flag is
+an operator attestation, not the envelope. Optionally `ANX_PM_BASE_URL`.
+Core checks the selected principal's current wake registration and online state.
+A prompt, directory, or bounded-process wrapper is not isolation. Missing or
+unready providers return unavailable, not canned text. GitHub/Multica/SSH source
+writes stay unavailable until a dedicated authorized executor is supplied.
+
+Native `/threads`, `/events`, `/artifacts`, and inbox routes hide PM conversation
+records from anyone who is not the conversation owner or the selected PM agent.
+Missing identity fails closed (the resource looks absent).
+
+Channel ingress is webhook/interaction only: `POST /pm/ingress/telegram` and
+`POST /pm/ingress/discord`. Configure `ANX_PM_TELEGRAM_WEBHOOK_SECRET` (at least
+32 characters), `ANX_PM_TELEGRAM_BOT_ID`, `ANX_PM_DISCORD_PUBLIC_KEY`, and
+`ANX_PM_DISCORD_APPLICATION_ID` from deployment secrets. Bot tokens
+(`ANX_PM_TELEGRAM_BOT_TOKEN`, `ANX_PM_DISCORD_BOT_TOKEN`) are env-only and never
+written to the tree. Ingress does not call `setWebhook`, poll `getUpdates`, or
+open a Discord gateway. Production bot streams must not be redirected here.
 
 The PM peer package owns channel authentication, exact identity mappings,
-durable outboxes, and source-action state machines. This core wiring does not
-configure Telegram/Discord webhooks, consume a gateway, or grant external
-credentials. Real channel delivery, a configured read-only PM actor, and
-integration-specific external source writes/read-back remain deployment and
-qualification requirements; fixture tests are not evidence of those capabilities.
+durable outboxes, and source-action state machines. Real channel delivery, a
+configured read-only PM actor, and integration-specific external source
+writes/read-back remain deployment and qualification requirements; fixture tests
+are not evidence of those capabilities.
 
 ## Checks and migration
 

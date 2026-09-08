@@ -196,6 +196,33 @@ func (rt *ObservationRuntime) Run(ctx context.Context) {
 		}
 	}
 }
+
+// ReadOne performs a bounded read-only source fetch for an already registered
+// work binding. It never writes to the source and is unavailable when no reader
+// is configured for the work ref.
+func (rt *ObservationRuntime) ReadOne(ctx context.Context, workRef string) (observation.Report, error) {
+	if rt == nil {
+		return observation.Report{}, fmt.Errorf("observation runtime is not configured")
+	}
+	for _, b := range rt.bindings {
+		if b.WorkRef != workRef {
+			continue
+		}
+		w, err := rt.store.GetWork(ctx, workRef)
+		if err != nil {
+			return observation.Report{}, err
+		}
+		source := workSourceMap(w)
+		if anyString(source["authority"]) != b.Target.Source || anyString(source["connection_id"]) != b.Target.ConnectionID || anyString(source["native_id"]) != b.SourceNativeID {
+			return observation.Report{}, fmt.Errorf("registered work/source binding mismatch")
+		}
+		bounded, cancel := context.WithTimeout(ctx, b.Policy.Timeout)
+		defer cancel()
+		return b.Reader.Read(bounded, b.Target)
+	}
+	return observation.Report{}, fmt.Errorf("no read-only reader is configured for this work")
+}
+
 func (rt *ObservationRuntime) Tick(ctx context.Context) error {
 	var failures []error
 	for _, b := range rt.bindings {

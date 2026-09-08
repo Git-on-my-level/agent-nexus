@@ -44,6 +44,9 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		threadID = resolved.ID
 		threadIDs = resolvedRefStorageCandidates(resolved)
+		if !requireAccessibleThreadFilter(w, r, opts, threadID, "thread") {
+			return
+		}
 	}
 	topicID := strings.TrimSpace(query.Get("topic_id"))
 	var topicIDs []string
@@ -102,6 +105,7 @@ func handleListEvents(w http.ResponseWriter, r *http.Request, opts handlerOption
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list events")
 		return
 	}
+	page.Events = filterAccessibleEvents(r, opts, page.Events)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events": page.Events,
 		"page_info": map[string]any{
@@ -173,6 +177,9 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 		threadID = resolved.ID
 		threadIDs = resolvedRefStorageCandidates(resolved)
+		if !requireAccessibleThreadFilter(w, r, opts, threadID, "thread") {
+			return
+		}
 	}
 	eventTypes, ok := parseEventTypeFilters(w, r, opts)
 	if !ok {
@@ -196,6 +203,7 @@ func handleEventsStream(w http.ResponseWriter, r *http.Request, opts handlerOpti
 			writeSSEErrorEvent(controller, w, flusher, "internal_error", "failed to load events for stream")
 			return
 		}
+		events = filterAccessibleEvents(r, opts, events)
 
 		events = eventsAfterID(events, cursorEventID)
 

@@ -160,6 +160,7 @@ type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
 	observationRuntime             *ObservationRuntime
+	pmRuntime                      *PMRuntime
 	pmHandler                      http.Handler
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
@@ -261,6 +262,15 @@ func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
 // its Principal to the same authenticated request and enforce PM permissions.
 func WithObservationRuntime(runtime *ObservationRuntime) HandlerOption {
 	return func(opts *handlerOptions) { opts.observationRuntime = runtime }
+}
+
+func WithPMRuntime(runtime *PMRuntime) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.pmRuntime = runtime
+		if runtime != nil {
+			opts.pmHandler = runtime
+		}
+	}
 }
 
 func WithPMHandler(handler http.Handler) HandlerOption {
@@ -670,6 +680,20 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeError(w, http.StatusNotFound, "stream_not_found", "stream endpoint not found")
 	})
 
+	registerRoute("/pm/ingress/telegram", exactRouteAccess(routeAccessAlwaysPublic, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if opts.pmRuntime == nil {
+			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM channel ingress is not configured")
+			return
+		}
+		opts.pmRuntime.Ingress.Telegram(w, r)
+	})
+	registerRoute("/pm/ingress/discord", exactRouteAccess(routeAccessAlwaysPublic, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		if opts.pmRuntime == nil {
+			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM channel ingress is not configured")
+			return
+		}
+		opts.pmRuntime.Ingress.Discord(w, r)
+	})
 	registerRoute("/pm/", pmRouteAccess, func(w http.ResponseWriter, r *http.Request) {
 		if opts.pmHandler == nil {
 			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM service is not configured")

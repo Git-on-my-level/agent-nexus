@@ -436,9 +436,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize observation runtime: %v\n", err)
 		os.Exit(1)
 	}
-	pmHandler, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
-		PM:            pm.Config{WorkspaceID: workspaceID, WorkspaceName: workspaceName, BaseURL: envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)), AgentActorID: envString("ANX_PM_AGENT_ACTOR_ID", ""), AgentHandle: envString("ANX_PM_AGENT_HANDLE", "")},
-		BridgeEnabled: envBool("ANX_PM_BRIDGE_ENABLED", false),
+	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
+		PM: pm.Config{
+			WorkspaceID:   workspaceID,
+			WorkspaceName: workspaceName,
+			BaseURL:       envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
+			AgentActorID:  envString("ANX_PM_AGENT_ACTOR_ID", ""),
+			AgentHandle:   envString("ANX_PM_AGENT_HANDLE", ""),
+		},
+		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
+		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),
+		Observation:             observationRuntime,
+		TelegramWebhookSecret:   envString("ANX_PM_TELEGRAM_WEBHOOK_SECRET", ""),
+		TelegramBotID:           envString("ANX_PM_TELEGRAM_BOT_ID", ""),
+		TelegramBotToken:        envString("ANX_PM_TELEGRAM_BOT_TOKEN", ""),
+		DiscordPublicKeyHex:     envString("ANX_PM_DISCORD_PUBLIC_KEY", ""),
+		DiscordApplicationID:    envString("ANX_PM_DISCORD_APPLICATION_ID", ""),
+		DiscordBotToken:         envString("ANX_PM_DISCORD_BOT_TOKEN", ""),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)
@@ -454,7 +468,7 @@ func main() {
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
-		server.WithPMHandler(pmHandler),
+		server.WithPMRuntime(pmRuntime),
 		server.WithObservationRuntime(observationRuntime),
 		server.WithSchemaContract(contract),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
@@ -503,6 +517,22 @@ func main() {
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)
+	}
+	if pmRuntime != nil {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-maintenanceCtx.Done():
+					return
+				case <-ticker.C:
+					if err := pmRuntime.Drain(maintenanceCtx); err != nil {
+						fmt.Fprintf(os.Stderr, "pm channel drain: %v\n", err)
+					}
+				}
+			}
+		}()
 	}
 	heartbeatURL := strings.TrimSpace(os.Getenv("ANX_HEARTBEAT_PUBLISHER_URL"))
 	if heartbeatURL == "" {

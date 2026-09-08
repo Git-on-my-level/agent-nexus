@@ -98,6 +98,65 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 503)
 }
 
+func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	_, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{
+		PM:            pm.Config{WorkspaceID: "ws_main", AgentActorID: "pm-agent", AgentHandle: "pm"},
+		BridgeEnabled: true,
+	})
+	if err != pm.ErrUnavailable {
+		t.Fatalf("bridge without independently enforced envelope started: %v", err)
+	}
+}
+
+func TestPMRuntimeSourceWriteStaysUnavailable(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	principal := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "pm-source", "pm-source-actor", "pm-source", "pm-source-token")
+	store := env.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, principal.ActorID, map[string]any{"title": "Source PM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateWork(ctx, principal.ActorID, asString(board["id"]), map[string]any{
+		"title":  "External issue",
+		"source": map[string]any{"authority": "github", "connection_id": "fixture", "native_id": "org/repo#1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+	post := func(path string, body map[string]any, status int) map[string]any {
+		t.Helper()
+		resp := postJSONExpectStatusWithAuth(t, srv.URL+path, body, principal.AccessToken, status)
+		defer resp.Body.Close()
+		var out map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	d := post("/pm/decisions", map[string]any{"request_key": "github-write", "work_ref": work["ref"], "instruction": "close", "scope": "github", "target_revision": "abc"}, 201)
+	answer := post("/pm/decisions/"+asString(d["id"])+"/answer", map[string]any{"revision": 1, "approve": true, "text": "Approved exact source write"}, 200)
+	if answer["status"] != "answered" {
+		t.Fatal(answer)
+	}
+	post("/pm/decisions/"+asString(d["id"])+"/dispatch", map[string]any{}, http.StatusServiceUnavailable)
+}
+
+func TestPMChannelIngressUnavailableUntilConfigured(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	resp := postJSONExpectStatusWithAuth(t, env.server.URL+"/pm/ingress/telegram", map[string]any{"update_id": 1}, "", http.StatusServiceUnavailable)
+	defer resp.Body.Close()
+	resp = postJSONExpectStatusWithAuth(t, env.server.URL+"/pm/ingress/discord", map[string]any{"type": 1}, "", http.StatusServiceUnavailable)
+	defer resp.Body.Close()
+}
+
 func TestPMRuntimeReplyUsesConversationAuthorization(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
