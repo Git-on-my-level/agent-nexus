@@ -92,3 +92,18 @@ reviewable, but excludes titles, descriptions, people, messages and tokens.
 Keep private source metadata in private evidence storage; review/redact before
 placing any report in a public PR. API connectivity probes do not prove the new
 Nexus collector imported the source or preserved its authority.
+
+For an actual built-reader -> disposable core -> built CLI import qualification:
+
+```sh
+python3 tests/pm-qualification/qualify_source.py --build-root <integrated-checkout> --config <approved-anx-observe-config.json> --report /tmp/real-source-import.local.json
+```
+
+This uses the observation lane's existing operator configuration format and
+credential handles. It performs one real read, registers the corresponding
+source-owned commitment only in temporary local core, checks API/CLI parity,
+duplicate replay, reported verification and crash persistence, then deletes the
+temporary tracker. Source titles/bodies and credentials are omitted from the
+report. The target is fingerprinted; retain the private operator configuration
+separately for exact provenance. This is real-source import into a synthetic
+local workspace, not a production deployment or remote-CLI/browser proof.
