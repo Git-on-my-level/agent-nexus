@@ -220,14 +220,32 @@ export function createLoginRedirectController() {
   };
 }
 
+const ORGANIZATION_SLUG_HEADER = "x-anx-organization-slug";
+
+function devRouteHeaders({ workspaceHeader, workspaceSlug, organizationSlug }) {
+  const headers = { [workspaceHeader]: workspaceSlug };
+  const org = String(organizationSlug ?? "").trim();
+  if (org) {
+    // Org-scoped session cookies: the server resolver needs both slugs when the
+    // request is not made from inside an /o/{org}/w/{workspace} route.
+    headers[ORGANIZATION_SLUG_HEADER] = org;
+  }
+  return headers;
+}
+
 export async function loadDevFixturePersonas({
   fetchFn = globalThis.fetch.bind(globalThis),
   workspaceSlug,
   workspaceHeader,
+  organizationSlug = "",
 }) {
   try {
     const response = await fetchFn(appPath("/auth/dev/identities"), {
-      headers: { [workspaceHeader]: workspaceSlug },
+      headers: devRouteHeaders({
+        workspaceHeader,
+        workspaceSlug,
+        organizationSlug,
+      }),
     });
     if (!response.ok) {
       return [];
@@ -243,6 +261,7 @@ export async function activateDevPersonaSession({
   personaId,
   workspaceSlug,
   workspaceHeader,
+  organizationSlug = "",
   fetchFn = globalThis.fetch.bind(globalThis),
   setBusy = () => {},
   onHydrate,
@@ -258,7 +277,11 @@ export async function activateDevPersonaSession({
       method: "POST",
       headers: {
         "content-type": "application/json",
-        [workspaceHeader]: workspaceSlug,
+        ...devRouteHeaders({
+          workspaceHeader,
+          workspaceSlug,
+          organizationSlug,
+        }),
       },
       body: JSON.stringify({ persona_id: trimmed }),
     });

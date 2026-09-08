@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -56,6 +57,10 @@ const (
 	defaultWriteRouteRateBurst                = 200
 )
 
+// Local-only marker that must exist in the workspace root before the passkey
+// dev bypass (synthetic human onboarding) is honored.
+const devPasskeyBypassMarkerName = ".anx-dev-insecure-auth"
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheckCLI())
@@ -90,6 +95,7 @@ func main() {
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		devRegisterLinkedActors     = envBool("ANX_DEV_REGISTER_LINKED_ACTORS", false)
+		allowPasskeyDevBypass       = envBool("ANX_ALLOW_PASSKEY_DEV_BYPASS", false)
 		enableDevActorMode          = envBool("ANX_ENABLE_DEV_ACTOR_MODE", false)
 		allowUnauthenticatedWrites  = envBool("ANX_ALLOW_UNAUTHENTICATED_WRITES", false)
 		allowLoopbackVerifyReads    = envBool("ANX_ALLOW_LOOPBACK_VERIFICATION_READS", false)
@@ -357,6 +363,17 @@ func main() {
 		accountStatusChecker = checker
 	}
 
+	// Passkey dev bypass (synthetic human onboarding without WebAuthn) is a
+	// local-only capability: it requires both the explicit env switch and a
+	// marker file inside the workspace root, and it is only honored alongside
+	// the loopback dev-mode gate below.
+	passkeyDevBypassMarkerPath := filepath.Join(workspace.Layout().RootDir, devPasskeyBypassMarkerName)
+	passkeyDevBypassMarkerPresent, err := fileExists(passkeyDevBypassMarkerPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to check passkey dev bypass marker: %v\n", err)
+		os.Exit(1)
+	}
+	passkeyDevBypassEffective := allowPasskeyDevBypass && passkeyDevBypassMarkerPresent && enableDevActorMode
 	authStoreOpts := []auth.Option{
 		auth.WithBootstrapToken(bootstrapToken),
 		auth.WithAllowDevRegisterLinkedActor(devRegisterLinkedActors),
@@ -489,6 +506,7 @@ func main() {
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
+		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
 		server.WithPrimitiveStore(primitiveStore),
 		server.WithPMRuntime(pmRuntime),
 		server.WithObservationRuntime(observationRuntime),
@@ -648,6 +666,11 @@ func main() {
 		fmt.Printf("  human auth mode: %s\n", humanAuthMode)
 		if enableDevActorMode {
 			fmt.Println("  WARNING: dev actor mode enabled (unauthenticated reads; legacy POST /actors)")
+			if passkeyDevBypassEffective {
+				fmt.Printf("  WARNING: passkey dev bypass enabled (marker=%s)\n", passkeyDevBypassMarkerPath)
+			} else if allowPasskeyDevBypass {
+				fmt.Printf("  WARNING: passkey dev bypass requested but inactive (missing marker %s)\n", passkeyDevBypassMarkerPath)
+			}
 		}
 		if allowUnauthenticatedWrites {
 			fmt.Println("  WARNING: unauthenticated writes enabled (actor_id in body; local dev only)")
@@ -910,4 +933,15 @@ func asMapAny(value any) map[string]any {
 		return map[string]any{}
 	}
 	return decoded
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }

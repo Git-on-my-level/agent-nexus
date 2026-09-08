@@ -1519,7 +1519,12 @@ async function seedDevFixtureIdentities() {
       );
     }
     if (reg?.tokens?.access_token) {
-      inviteIssuerAccess = reg.tokens.access_token;
+      // Invites require a human or auth-admin principal. The bootstrap
+      // principal (index 0) is the only one guaranteed to satisfy that, so
+      // keep issuing from it instead of the most recently registered agent.
+      if (inviteIssuerAccess == null) {
+        inviteIssuerAccess = reg.tokens.access_token;
+      }
       if (
         humanInviteIssuerAccess == null &&
         String(p.principal_kind).toLowerCase() === "human"
@@ -1545,7 +1550,7 @@ async function seedDevFixtureIdentities() {
         "PATCH",
         "/agents/me",
         { registration },
-        inviteIssuerAccess,
+        reg.tokens.access_token,
         [200],
       );
     }
