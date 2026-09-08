@@ -9,8 +9,8 @@
   import { errorMessage } from "$lib/pm/presentation.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
-  import StateError from "$lib/components/state/StateError.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+
   let conversations = $state([]),
     conversation = $state(null),
     turns = $state([]),
@@ -19,7 +19,8 @@
     ready = $state(false),
     error = $state(""),
     draft = $state(""),
-    partial = $state(false);
+    partial = $state(false),
+    historyOpen = $state(false);
   let conversationsCursor = $state("");
   let turnsCursor = $state("");
   let loadingOlder = $state(false);
@@ -35,6 +36,7 @@
   let workRef = $derived($page.url.searchParams.get("work_ref") || "");
   let selectedKey = $derived(`${selectedId}\n${workRef}`);
   let activeWorkRef = $derived(conversation?.work_ref || workRef);
+
   beforeNavigate(({ cancel }) => {
     if (sending) {
       cancel();
@@ -47,6 +49,7 @@
     )
       cancel();
   });
+
   let conversationScope;
   $effect(() => {
     const key = selectedKey;
@@ -54,6 +57,7 @@
     const switched =
       conversationScope !== undefined && conversationScope !== key;
     conversationScope = key;
+    historyOpen = false;
     if (switched) {
       createdConversationId = "";
       creationKey = "";
@@ -63,6 +67,7 @@
     }
     void loadConversation(key.split("\n")[0]);
   });
+
   async function loadList(append = false) {
     loadingConversations = true;
     try {
@@ -163,7 +168,7 @@
     }
   }
   async function send(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
     const text = draft.trim();
     if (!text || sending || !ready) return;
     sending = true;
@@ -210,6 +215,27 @@
       sending = false;
     }
   }
+  function onComposerKeydown(event) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void send();
+    }
+  }
+  function turnStatus(turn) {
+    switch (turn.status) {
+      case "sending":
+        return ["Message queued · awaiting PM response", "neutral"];
+      case "unknown":
+        return ["Dispatch uncertain · response not established", "warn"];
+      case "failed":
+        return ["PM response failed", "warn"];
+      default:
+        return [
+          `Response not available · ${turn.status || "unknown"}`,
+          "neutral",
+        ];
+    }
+  }
   const prompts = [
     "What changed since I last checked?",
     "What needs my decision?",
@@ -250,224 +276,325 @@
     }
   }}
 />
-<svelte:head><title>PM conversation · Agent Nexus</title></svelte:head>
-<WorkspacePageShell>
-  <WorkspacePageHeader title="Your project manager"
-    >{#snippet subtitle()}Review commitments, resolve decisions, and follow the
-      evidence.{/snippet}{#snippet actions()}<a
-        class="ui-btn-secondary"
-        href={workspaceHref("/decisions")}>Decisions & receipts</a
-      ><a class="ui-btn-secondary" href={workspaceHref("/pm")}
-        >New conversation</a
-      >{/snippet}</WorkspacePageHeader
-  >
-  <div class="grid min-h-[34rem] gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-    <aside
-      class="rounded-md border border-line bg-panel"
-      aria-label="PM conversations"
-    >
-      <details class="lg:hidden">
-        <summary
-          class="cursor-pointer px-3 py-2.5 text-meta font-medium text-fg"
-          >Conversations ({conversations.length})</summary
-        >
-        <nav
-          class="max-h-56 overflow-y-auto border-t border-line p-2"
-          aria-label="Conversation history"
-        >
-          {#each conversations as item}<a
-              class="block rounded px-2 py-2 text-meta {item.id === selectedId
-                ? 'bg-bg-soft text-fg'
-                : 'text-fg-muted hover:bg-panel-hover'}"
-              href={workspaceHref(
-                `/pm?conversation=${encodeURIComponent(item.id)}`,
-              )}
-              aria-current={item.id === selectedId ? "page" : undefined}
-              >{item.title}</a
-            >{/each}
-        </nav>
-      </details>
-      <div class="hidden lg:block">
-        <h2
-          class="border-b border-line px-3 py-3 text-micro font-semibold text-fg-muted"
-        >
-          CONVERSATIONS
-        </h2>
-        <nav
-          class="max-h-[38rem] overflow-y-auto p-2"
-          aria-label="Conversation history"
-        >
-          {#each conversations as item}<a
-              class="block rounded px-2 py-2.5 text-meta {item.id === selectedId
-                ? 'bg-bg-soft text-fg'
-                : 'text-fg-muted hover:bg-panel-hover'}"
-              href={workspaceHref(
-                `/pm?conversation=${encodeURIComponent(item.id)}`,
-              )}
-              aria-current={item.id === selectedId ? "page" : undefined}
-              ><span class="line-clamp-2 break-words">{item.title}</span><span
-                class="mt-1 block text-micro text-fg-muted"
-                >{formatTimestamp(item.created_at)}</span
-              ></a
-            >{:else}<p class="p-2 text-micro text-fg-muted">
-              Your conversations will appear here.
-            </p>{/each}
-        </nav>
-      </div>
-      {#if partial}<p
-          class="border-t border-line p-3 text-micro text-warn-text"
-        >
-          This is a partial conversation history.
-        </p>{/if}
-      {#if conversationsCursor}<div class="border-t border-line p-3">
-          <button
-            class="ui-btn-secondary"
-            onclick={moreConversations}
-            disabled={loadingConversations}
-            >{loadingConversations
-              ? "Loading conversations…"
-              : "More conversations"}</button
-          >
-        </div>{/if}
-    </aside>
-    <section
-      class="flex min-w-0 flex-col overflow-hidden rounded-md border border-line bg-panel"
-      aria-label="PM conversation"
-    >
-      <header
-        class="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3"
+<svelte:head><title>PM · Agent Nexus</title></svelte:head>
+<WorkspacePageShell class="pm-page">
+  <WorkspacePageHeader title="PM">
+    {#snippet subtitle()}{#if conversation}<span class="line-clamp-1"
+          >{conversation.title}</span
+        >{:else}Ask about progress, blockers and evidence. Decisions are
+        recorded separately.{/if}{/snippet}
+    {#snippet actions()}
+      <details
+        class="pm-history"
+        bind:open={historyOpen}
+        aria-label="PM conversations"
       >
-        <h2 class="text-meta font-semibold text-fg">
-          {conversation?.title || "Review your work"}
-        </h2>
-        {#if activeWorkRef}<a
-            class="ui-prose-link ml-auto break-words text-micro"
-            href={workspaceHref(`/work/${encodeURIComponent(activeWorkRef)}`)}
-            >{activeWorkRef}</a
-          >{:else}<span class="ml-auto text-micro text-fg-muted"
-            >Workspace context</span
-          >{/if}
-      </header>
-      <div class="flex-1 space-y-5 p-4 sm:p-5">
-        {#if error}<StateError
-            title="PM request could not be completed"
-            message={error}
-            onretry={() =>
-              ready ? loadConversation(selectedId, true) : initialize()}
-          />
-          <p class="text-micro text-warn-text">
-            Unsent text is retained. A queued message is not an answer or a
-            completed action.
-          </p>{/if}
-        {#if loading}<p class="text-fg-muted" role="status">
-            Loading conversation…
-          </p>{:else if !turns.length}<div class="py-6">
-            <h3 class="text-subtitle font-semibold text-fg">
-              What needs your attention?
-            </h3>
-            <p class="mt-2 max-w-xl text-meta text-fg-muted">
-              Ask about progress, blockers, priorities, or evidence. PM uses the
-              authorized workspace context and records decisions separately from
-              discussion.
-            </p>
-            <div class="mt-5 grid gap-2 sm:grid-cols-2">
-              {#each prompts as prompt}<button
-                  class="rounded-md border border-line p-3 text-left text-meta text-fg-muted hover:bg-panel-hover"
-                  onclick={() => {
-                    draft = prompt;
-                    document.getElementById("pm-message")?.focus();
-                  }}>{prompt}</button
-                >{/each}
-            </div>
-          </div>{/if}
-        {#if turnsCursor}<button
-            class="ui-btn-secondary"
-            onclick={olderTurns}
-            disabled={loadingOlder}
-            >{loadingOlder
-              ? "Loading older messages…"
-              : "Older messages"}</button
-          >{/if}
-        <ol
-          class="space-y-5"
-          aria-label="Conversation messages"
-          role="log"
-          aria-live="polite"
-          aria-relevant="additions text"
+        <summary class="ui-btn-secondary list-none"
+          >History{#if conversations.length}<span class="ml-1 text-fg-muted"
+              >{conversations.length}</span
+            >{/if}</summary
         >
-          {#each turns as turn (turn.id)}<li class="space-y-3">
-              <div
-                class="ml-auto max-w-[94%] rounded-md border border-line bg-bg-soft p-3 sm:max-w-[85%]"
+        <div class="pm-history-panel" role="presentation">
+          <nav aria-label="Conversation history">
+            {#each conversations as item (item.id)}
+              <a
+                class="pm-history-item {item.id === selectedId
+                  ? 'pm-history-item--active'
+                  : ''}"
+                href={workspaceHref(
+                  `/pm?conversation=${encodeURIComponent(item.id)}`,
+                )}
+                aria-current={item.id === selectedId ? "page" : undefined}
               >
-                <p class="mb-1 text-micro font-medium text-fg-muted">
-                  You · {formatTimestamp(turn.created_at)}
-                </p>
-                <p class="whitespace-pre-wrap break-words text-meta text-fg">
-                  {turn.text}
-                </p>
-              </div>
-              <div class="max-w-[96%] border-l-2 border-accent-solid pl-3">
-                <p class="mb-1 text-micro font-semibold text-fg-muted">PM</p>
-                {#if turn.response}<p
-                    class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
-                  >
-                    {turn.response}
-                  </p>{:else}<SignalBadge
-                    tone={turn.status === "unknown" || turn.status === "failed"
-                      ? "warn"
-                      : "neutral"}
-                    >{turn.status === "sending"
-                      ? "Message queued · awaiting PM response"
-                      : turn.status === "unknown"
-                        ? "Dispatch uncertain · response not established"
-                        : turn.status === "failed"
-                          ? "PM response failed"
-                          : `Response not available · ${turn.status || "unknown"}`}</SignalBadge
-                  >{/if}{#if turn.evidence_refs?.length}<ul
-                    class="mt-2 flex flex-wrap gap-2 text-micro text-fg-muted"
-                  >
-                    {#each turn.evidence_refs as ref}<li
-                        class="break-all rounded bg-bg-soft px-2 py-1"
-                      >
-                        {#if ref.startsWith("card:")}<a
-                            class="ui-prose-link"
-                            href={workspaceHref(
-                              `/work/${encodeURIComponent(ref)}`,
-                            )}>{ref}</a
-                          >{:else}{ref}{/if}
-                      </li>{/each}
-                  </ul>{/if}
-              </div>
-            </li>{/each}
-        </ol>
-      </div>
-      <form class="border-t border-line bg-bg-soft p-4" onsubmit={send}>
-        <label for="pm-message" class="text-micro font-medium text-fg-muted"
-          >Message PM</label
-        ><textarea
-          id="pm-message"
-          class="ui-input mt-2 min-h-24 resize-y"
-          rows="3"
-          bind:value={draft}
-          required
-          maxlength="16000"
-          placeholder="Ask a question or describe the decision you need to make…"
-          disabled={sending}
-        ></textarea>
-        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <p class="max-w-lg text-micro text-fg-muted">
-            Discussion does not authorize source changes. Decisions and delivery
-            receipts remain inspectable.{#if !ready && error}
-              Sending stays disabled until PM is reachable.{/if}
-          </p>
-          <button
-            class="ui-btn-primary"
-            type="submit"
-            disabled={sending || !draft.trim() || !ready}
-            >{sending ? "Sending message…" : "Send message"}</button
-          >
+                <span class="line-clamp-1 break-words">{item.title}</span>
+                <span class="text-micro text-fg-subtle"
+                  >{formatTimestamp(item.created_at)}</span
+                >
+              </a>
+            {:else}
+              <p class="px-3 py-3 text-micro text-fg-muted">
+                No conversations yet.
+              </p>
+            {/each}
+          </nav>
+          {#if partial || conversationsCursor}
+            <div class="border-t border-line px-3 py-2 text-micro">
+              {#if conversationsCursor}
+                <button
+                  class="ui-prose-link"
+                  onclick={moreConversations}
+                  disabled={loadingConversations}
+                  type="button"
+                  >{loadingConversations
+                    ? "Loading…"
+                    : "More conversations"}</button
+                >
+              {:else if partial}
+                <span class="text-warn-text">Partial history</span>
+              {/if}
+            </div>
+          {/if}
         </div>
-      </form>
-    </section>
-  </div>
+      </details>
+      <a class="ui-btn-secondary" href={workspaceHref("/pm")}>New</a>
+    {/snippet}
+  </WorkspacePageHeader>
+
+  {#if activeWorkRef}
+    <p class="text-micro text-fg-muted">
+      About <a
+        class="ui-prose-link font-mono"
+        href={workspaceHref(`/work/${encodeURIComponent(activeWorkRef)}`)}
+        >{activeWorkRef}</a
+      >
+    </p>
+  {/if}
+
+  <section class="pm-thread" aria-label="PM conversation">
+    {#if error}
+      <div
+        role="alert"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      >
+        <span class="min-w-0 flex-1 break-words">{error}</span>
+        <button
+          class="ui-prose-link text-micro"
+          type="button"
+          onclick={() =>
+            ready ? loadConversation(selectedId, true) : initialize()}
+          >Retry</button
+        >
+      </div>
+    {/if}
+
+    {#if loading}
+      <p class="py-8 text-meta text-fg-muted" role="status">Loading…</p>
+    {:else if !turns.length}
+      <div class="mt-auto pb-2 pt-10">
+        <h2 class="text-subtitle font-semibold text-fg">
+          What do you want to know?
+        </h2>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {#each prompts as prompt}
+            <button
+              class="pm-prompt"
+              type="button"
+              onclick={() => {
+                draft = prompt;
+                document.getElementById("pm-message")?.focus();
+              }}>{prompt}</button
+            >
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    {#if turnsCursor}
+      <button
+        class="ui-prose-link w-fit text-micro"
+        type="button"
+        onclick={olderTurns}
+        disabled={loadingOlder}
+        >{loadingOlder ? "Loading older messages…" : "Older messages"}</button
+      >
+    {/if}
+
+    <ol
+      class="space-y-7"
+      aria-label="Conversation messages"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
+      {#each turns as turn (turn.id)}
+        {@const [statusLabel, statusTone] = turnStatus(turn)}
+        <li class="space-y-3">
+          <div class="pm-turn pm-turn--you">
+            <p class="pm-turn-meta">
+              You <span class="text-fg-subtle"
+                >· {formatTimestamp(turn.created_at)}</span
+              >
+            </p>
+            <p class="whitespace-pre-wrap break-words text-meta text-fg">
+              {turn.text}
+            </p>
+          </div>
+          <div class="pm-turn pm-turn--pm">
+            <p class="pm-turn-meta">PM</p>
+            {#if turn.response}
+              <p
+                class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
+              >
+                {turn.response}
+              </p>
+            {:else}
+              <SignalBadge tone={statusTone}>{statusLabel}</SignalBadge>
+            {/if}
+            {#if turn.evidence_refs?.length}
+              <ul class="mt-2 flex flex-wrap gap-1.5 text-micro">
+                {#each turn.evidence_refs as ref}
+                  <li class="rounded bg-bg-soft px-1.5 py-0.5 font-mono">
+                    {#if ref.startsWith("card:")}
+                      <a
+                        class="ui-prose-link"
+                        href={workspaceHref(`/work/${encodeURIComponent(ref)}`)}
+                        >{ref}</a
+                      >
+                    {:else}{ref}{/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </li>
+      {/each}
+    </ol>
+  </section>
+
+  <form class="pm-composer" onsubmit={send}>
+    <label for="pm-message" class="sr-only">Message PM</label>
+    <textarea
+      id="pm-message"
+      class="pm-composer-input"
+      rows="3"
+      bind:value={draft}
+      required
+      maxlength="16000"
+      placeholder="Ask the PM… (⌘↵ to send)"
+      disabled={sending}
+      onkeydown={onComposerKeydown}
+    ></textarea>
+    <div class="flex items-center justify-between gap-3 px-3 pb-2.5">
+      <p class="text-micro text-fg-subtle">
+        {#if !ready && error}Sending is disabled until PM is reachable.{:else}Discussion
+          does not authorize changes.{/if}
+      </p>
+      <button
+        class="ui-btn-primary"
+        type="submit"
+        disabled={sending || !draft.trim() || !ready}
+        >{sending ? "Sending…" : "Send message"}</button
+      >
+    </div>
+  </form>
 </WorkspacePageShell>
+
+<style>
+  :global(.pm-page) {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 8rem);
+  }
+  .pm-thread {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .pm-turn {
+    min-width: 0;
+  }
+  .pm-turn--you {
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--line-strong);
+  }
+  .pm-turn--pm {
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--accent-solid);
+  }
+  .pm-turn-meta {
+    margin-bottom: 0.25rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+  .pm-prompt {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--motion-fast);
+  }
+  .pm-prompt:hover {
+    color: var(--fg);
+    border-color: var(--line-strong);
+    background: var(--bg-soft);
+  }
+  .pm-composer {
+    position: sticky;
+    bottom: 0;
+    margin-top: 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+    box-shadow: 0 -12px 24px -20px rgba(0, 0, 0, 0.8);
+  }
+  .pm-composer:focus-within {
+    border-color: var(--line-strong);
+  }
+  .pm-composer-input {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 0.875rem 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 4.5rem;
+  }
+  .pm-composer-input:focus {
+    outline: none;
+    box-shadow: none;
+  }
+  .pm-composer-input::placeholder {
+    color: var(--fg-subtle);
+  }
+  .pm-history {
+    position: relative;
+  }
+  .pm-history summary {
+    cursor: pointer;
+  }
+  .pm-history summary::-webkit-details-marker {
+    display: none;
+  }
+  .pm-history-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.375rem);
+    z-index: 30;
+    width: min(22rem, 90vw);
+    max-height: 24rem;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+    box-shadow: var(--shadow-menu);
+    padding: 0.25rem;
+  }
+  .pm-history-item {
+    display: grid;
+    gap: 0.125rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: var(--radius);
+    color: var(--fg-muted);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .pm-history-item:hover {
+    background: var(--panel-hover);
+    color: var(--fg);
+  }
+  .pm-history-item--active {
+    background: var(--bg-soft);
+    color: var(--fg);
+  }
+</style>

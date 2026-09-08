@@ -39,10 +39,10 @@
   );
   let filterKey = $derived(JSON.stringify(filters));
   let activeFilters = $derived(Object.values(filters).some(Boolean));
-  let attentionCount = $derived(
+  let blockedCount = $derived(
     records.filter((work) => work.phase === "blocked").length,
   );
-  let evidenceCount = $derived(
+  let staleCount = $derived(
     records.filter((work) => workFreshness(work, now).key !== "fresh").length,
   );
   let search = $state("");
@@ -114,61 +114,39 @@
       clearInterval(timer);
     };
   });
+  const SOURCES = [
+    ["nexus", "Nexus"],
+    ["github", "GitHub"],
+    ["multica", "Multica"],
+    ["git", "Git"],
+    ["other", "Other"],
+  ];
 </script>
 
 <svelte:head><title>Work · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <WorkspacePageHeader title="Work">
-    {#snippet subtitle()}<span class="hidden sm:inline"
-        >Commitments across your sources. Evidence beside every next step.</span
-      >{/snippet}
-    {#snippet actions()}<a class="ui-btn-secondary" href={workspaceHref("/pm")}
-        >Ask PM</a
-      ><a class="ui-btn-primary" href={workspaceHref("/work/new")}
-        >New commitment</a
-      >{/snippet}
+    {#snippet subtitle()}
+      {#if records.length}
+        <span class="text-fg-muted"
+          >{records.length}{nextCursor ? "+" : ""} tracked</span
+        >{#if blockedCount}
+          · <span class="text-warn-text">{blockedCount} blocked</span
+          >{/if}{#if staleCount}
+          · <a
+            class="text-fg-muted underline decoration-line-strong underline-offset-2 hover:text-fg"
+            href={workspaceHref("/integrations")}
+            >{staleCount} without fresh evidence</a
+          >{/if}
+      {/if}
+    {/snippet}
+    {#snippet actions()}
+      <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
+      <a class="ui-btn-primary" href={workspaceHref("/work/new")}>New work</a>
+    {/snippet}
   </WorkspacePageHeader>
-  <div
-    class="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-line py-3 text-meta"
-    aria-live="polite"
-  >
-    <span
-      ><strong class="text-fg">{records.length}</strong>
-      <span class="text-fg-muted"
-        >loaded{nextCursor ? "; more available" : ""}</span
-      ></span
-    >
-    <span class={attentionCount ? "text-warn-text" : "text-fg-muted"}
-      >{attentionCount} blocked</span
-    >
-    <a
-      class={evidenceCount
-        ? "text-warn-text underline underline-offset-2"
-        : "text-fg-muted underline underline-offset-2"}
-      href={workspaceHref("/integrations")}
-      >{evidenceCount} with stale, missing or failed evidence</a
-    >
-    <nav
-      class="ml-auto flex rounded-md border border-line bg-bg-soft p-0.5"
-      aria-label="Work view"
-    >
-      <a
-        class="rounded px-3 py-1.5 text-micro {view === 'table'
-          ? 'bg-panel text-fg'
-          : 'text-fg-muted'}"
-        href={queryHref({ view: "table" })}
-        aria-current={view === "table" ? "page" : undefined}>Table</a
-      >
-      <a
-        class="rounded px-3 py-1.5 text-micro {view === 'board'
-          ? 'bg-panel text-fg'
-          : 'text-fg-muted'}"
-        href={queryHref({ view: "board" })}
-        aria-current={view === "board" ? "page" : undefined}>Board</a
-      >
-    </nav>
-  </div>
-  <div class="flex flex-wrap items-end gap-2">
+
+  <div class="flex flex-wrap items-center gap-2">
     <form
       class="min-w-48 flex-1"
       onsubmit={(event) => {
@@ -176,78 +154,85 @@
         setFilter("q", search);
       }}
     >
-      <label class="text-micro text-fg-muted"
-        >Search work
-        <div class="mt-1 flex gap-1">
-          <input
-            class="ui-input w-full"
-            type="search"
-            bind:value={search}
-            placeholder="Title, source ID, or next action"
-          /><button class="ui-btn-secondary" type="submit">Search</button>
-        </div></label
-      >
+      <label class="sr-only" for="work-search">Search work</label>
+      <input
+        id="work-search"
+        class="ui-input"
+        type="search"
+        bind:value={search}
+        placeholder="Search title, source ID or next action…"
+      />
     </form>
-    <div>
-      <label class="text-micro text-fg-muted" for="work-filter-source"
-        >Source</label
-      ><select
-        id="work-filter-source"
-        class="ui-input mt-1 block"
-        value={filters.source}
-        onchange={(event) => setFilter("source", event.currentTarget.value)}
-        ><option value="">All sources</option
-        >{#each ["nexus", "github", "multica", "git", "other"] as source}<option
-            value={source}
-            >{source === "nexus"
-              ? "Nexus"
-              : source === "github"
-                ? "GitHub"
-                : source === "multica"
-                  ? "Multica"
-                  : source}</option
-          >{/each}</select
+    <label class="sr-only" for="work-filter-source">Source</label>
+    <select
+      id="work-filter-source"
+      class="ui-input w-auto"
+      value={filters.source}
+      onchange={(event) => setFilter("source", event.currentTarget.value)}
+    >
+      <option value="">All sources</option>
+      {#each SOURCES as [value, title]}<option {value}>{title}</option>{/each}
+    </select>
+    <label class="sr-only" for="work-filter-phase">Phase</label>
+    <select
+      id="work-filter-phase"
+      class="ui-input w-auto"
+      value={filters.phase}
+      onchange={(event) => setFilter("phase", event.currentTarget.value)}
+    >
+      <option value="">All phases</option>
+      {#each PHASES as phase}<option value={phase}>{label(phase)}</option
+        >{/each}
+    </select>
+    <label class="sr-only" for="work-filter-freshness">Freshness</label>
+    <select
+      id="work-filter-freshness"
+      class="ui-input w-auto"
+      value={filters.freshness}
+      onchange={(event) => setFilter("freshness", event.currentTarget.value)}
+    >
+      <option value="">Any freshness</option>
+      <option value="fresh">Fresh</option>
+      <option value="stale">Stale</option>
+      <option value="error">Refresh failed</option>
+      <option value="unknown">Unknown</option>
+    </select>
+    <nav
+      class="flex rounded-md border border-line bg-bg-soft p-0.5"
+      aria-label="Work view"
+    >
+      <a
+        class="rounded px-2.5 py-1 text-micro {view === 'table'
+          ? 'bg-panel text-fg'
+          : 'text-fg-muted'}"
+        href={queryHref({ view: "table" })}
+        aria-current={view === "table" ? "page" : undefined}>Table</a
       >
-    </div>
-    <div>
-      <label class="text-micro text-fg-muted" for="work-filter-phase"
-        >Phase</label
-      ><select
-        id="work-filter-phase"
-        class="ui-input mt-1 block"
-        value={filters.phase}
-        onchange={(event) => setFilter("phase", event.currentTarget.value)}
-        ><option value="">All phases</option>{#each PHASES as phase}<option
-            value={phase}>{label(phase)}</option
-          >{/each}</select
+      <a
+        class="rounded px-2.5 py-1 text-micro {view === 'board'
+          ? 'bg-panel text-fg'
+          : 'text-fg-muted'}"
+        href={queryHref({ view: "board" })}
+        aria-current={view === "board" ? "page" : undefined}>Board</a
       >
-    </div>
-    <div>
-      <label class="text-micro text-fg-muted" for="work-filter-freshness"
-        >Freshness</label
-      ><select
-        id="work-filter-freshness"
-        class="ui-input mt-1 block"
-        value={filters.freshness}
-        onchange={(event) => setFilter("freshness", event.currentTarget.value)}
-        ><option value="">Any freshness</option><option value="fresh"
-          >Fresh</option
-        ><option value="stale">Stale</option><option value="error"
-          >Refresh failed</option
-        ><option value="unknown">Unknown</option></select
-      >
-    </div>
-    <button class="ui-btn-secondary" onclick={() => load()} disabled={loading}
-      >{loading ? "Loading work…" : "Reload"}</button
+    </nav>
+    <button
+      class="ui-btn-secondary"
+      onclick={() => load()}
+      disabled={loading}
+      aria-label="Reload">{loading ? "Loading…" : "Reload"}</button
     >
   </div>
-  <details class="text-micro text-fg-muted">
-    <summary class="w-fit cursor-pointer"
-      >Project and owner filters{filters.project_ref || filters.owner
-        ? " · active"
-        : ""}</summary
-    >
-    <div class="mt-2 flex flex-wrap gap-3">
+
+  <div
+    class="flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-fg-muted"
+  >
+    <details class="text-micro text-fg-muted">
+      <summary class="w-fit cursor-pointer"
+        >Project and owner{filters.project_ref || filters.owner
+          ? " · active"
+          : ""}</summary
+      >
       <form
         onsubmit={(event) => {
           event.preventDefault();
@@ -259,7 +244,7 @@
             }),
           );
         }}
-        class="flex flex-wrap items-end gap-2"
+        class="mt-2 flex flex-wrap items-end gap-2"
       >
         <label
           >Project reference<input
@@ -277,65 +262,60 @@
           /></label
         ><button class="ui-btn-secondary" type="submit">Apply</button>
       </form>
-    </div>
-  </details>
-  {#if activeFilters}<a
-      class="ui-prose-link w-fit text-micro"
-      href={workspaceHref(`/work?view=${view}`)}>Clear filters</a
-    >{/if}
-  {#if error}<StateError
+    </details>
+    {#if activeFilters}
+      <a class="ui-prose-link" href={workspaceHref(`/work?view=${view}`)}
+        >Clear filters</a
+      >
+    {/if}
+  </div>
+
+  {#if error}
+    <StateError
       title="Work could not be refreshed"
       message={error}
       onretry={() => load()}
       retrying={loading}
-    />{#if records.length}<p class="text-micro text-warn-text">
+    />
+    {#if records.length}
+      <p class="text-micro text-warn-text">
         Showing the previously loaded records. They may no longer match current
         filters or source state.
-      </p>{/if}{/if}
-  {#if loading && !records.length}<div
-      class="rounded-md border border-line bg-panel px-4 py-12 text-center text-fg-muted"
-      role="status"
-    >
+      </p>
+    {/if}
+  {/if}
+
+  {#if loading && !records.length}
+    <p class="py-10 text-center text-meta text-fg-muted" role="status">
       Loading commitments and evidence…
-    </div>
-  {:else if !error && !records.length}<section
-      class="rounded-md border border-line bg-panel px-5 py-12 text-center"
-    >
+    </p>
+  {:else if !error && !records.length}
+    <section class="py-14 text-center">
       <h2 class="text-subtitle font-semibold text-fg">
-        {activeFilters
-          ? "No matching commitments"
-          : "Your commitments, in one place"}
+        {activeFilters ? "No matching work" : "Nothing tracked yet"}
       </h2>
-      <p class="mx-auto mt-2 max-w-lg text-meta text-fg-muted">
+      <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
         {activeFilters
-          ? "Change or clear your filters to see more work."
-          : "Create a Nexus commitment or register work from an authoritative source. Empty views do not establish integration health."}
+          ? "Change or clear the filters."
+          : "Create work here, or connect a source so its issues show up."}
       </p>
       <a
-        class="ui-prose-link mt-4 inline-block"
+        class="ui-prose-link mt-4 inline-block text-meta"
         href={activeFilters
           ? workspaceHref("/work")
           : workspaceHref("/work/new")}
-        >{activeFilters ? "Clear filters" : "Create a commitment"}</a
+        >{activeFilters ? "Clear filters" : "Create work"}</a
       >
     </section>
-  {:else if records.length}<WorkViews
-      {records}
-      {view}
-      {workspaceHref}
-      {now}
-    />{/if}
-  {#if nextCursor}<button
+  {:else if records.length}
+    <WorkViews {records} {view} {workspaceHref} {now} />
+  {/if}
+
+  {#if nextCursor}
+    <button
       class="ui-btn-secondary mx-auto"
       onclick={() => load(true)}
-      disabled={loading}
-      >{loading ? "Loading more work…" : "Load more work"}</button
-    >{/if}
-  <p class="text-micro text-fg-muted">
-    Board and table show the same work records. External workflows stay with
-    their source; request changes through <a
-      class="ui-prose-link"
-      href={workspaceHref("/pm")}>PM</a
-    >.
-  </p>
+      disabled={loading}>{loading ? "Loading…" : "Load more"}</button
+    >
+  {/if}
 </WorkspacePageShell>

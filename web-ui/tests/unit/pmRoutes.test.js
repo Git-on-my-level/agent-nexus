@@ -370,7 +370,7 @@ describe("PM operator interactions", () => {
     render(Decisions);
     await fireEvent.click(
       await screen.findByRole("button", {
-        name: "Load more decisions and receipts",
+        name: "Load more",
       }),
     );
     await screen.findByRole("heading", { name: "Later sample instruction" });

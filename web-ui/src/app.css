@@ -777,6 +777,20 @@
     gap: 1px;
   }
 
+  .shell-settings-group-label {
+    margin: 0.5rem 0 0.125rem;
+    padding: 0 0.125rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+  }
+
+  .shell-settings-group-label:first-child {
+    margin-top: 0;
+  }
+
   .shell-account-link {
     display: flex;
     align-items: flex-start;

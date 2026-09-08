@@ -79,16 +79,18 @@
   });
 </script>
 
-<svelte:head><title>Integration health · Agent Nexus</title></svelte:head>
+<svelte:head><title>Integrations · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
-  <WorkspacePageHeader title="Integration health"
-    >{#snippet subtitle()}Collection health and evidence coverage, separate from
-      work progress.{/snippet}{#snippet actions()}<button
+  <WorkspacePageHeader title="Integrations"
+    >{#snippet subtitle()}Source freshness and coverage across {work.length}{nextCursor
+        ? "+"
+        : ""} loaded work records. Connections with no tracked work do not appear
+      here.{/snippet}{#snippet actions()}<button
         class="ui-btn-secondary"
         onclick={() => load()}
         disabled={loading}
         >{loading ? "Loading health…" : "Reload health"}</button
-      ><a class="ui-btn-secondary" href={workspaceHref("/work")}>View work</a
+      ><a class="ui-btn-secondary" href={workspaceHref("/work")}>Work</a
       >{/snippet}</WorkspacePageHeader
   >
   {#if error}<StateError
@@ -97,55 +99,49 @@
       onretry={() => load()}
       retrying={loading}
     />{/if}
-  <div
-    class="rounded-md border border-line bg-bg-soft p-3 text-meta text-fg-muted"
-  >
-    Coverage of {work.length} loaded commitments{nextCursor
-      ? "; more records are available"
-      : ""}. Connections with no visible tracked work are not represented here.
-    An empty inbox does not establish source health.
-  </div>
-  {#if capabilities?.refresh_executor_configured === false}<div
-      class="rounded-md bg-warn-soft p-3 text-meta text-warn-text"
+  {#if capabilities?.refresh_executor_configured === false}<p
+      class="text-micro text-warn-text"
       role="status"
     >
-      A refresh reader is not configured. Requests may be queued, but no
-      successful source read has been established.
-    </div>{/if}
-  {#if loading && !work.length}<p class="py-8 text-fg-muted" role="status">
-      Loading source coverage…
-    </p>{:else if !groups.length && !error}<section
-      class="rounded-md border border-line bg-panel p-6"
+      No refresh reader is configured: refresh requests queue but nothing reads
+      sources.
+    </p>{/if}
+  {#if loading && !work.length}<p
+      class="py-8 text-center text-meta text-fg-muted"
+      role="status"
     >
-      <h2 class="text-subtitle text-fg">No external source coverage yet</h2>
-      <p class="mt-2 text-meta text-fg-muted">
-        Register source-owned work and an approved reader to begin collecting
-        observations. Native commitments remain available in Work.
+      Loading source coverage…
+    </p>{:else if !groups.length && !error}<section class="py-12 text-center">
+      <h2 class="text-subtitle font-semibold text-fg">
+        No external sources yet
+      </h2>
+      <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
+        Register source-owned work and an approved reader to start collecting
+        observations.
       </p>
     </section>{/if}
   {#each groups as group (group.key)}
     <section class="overflow-hidden rounded-md border border-line bg-panel">
       <header
-        class="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4"
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle px-4 py-3"
       >
-        <div>
+        <div class="min-w-0">
           <h2 class="text-meta font-semibold text-fg">{group.label}</h2>
-          <p class="mt-1 break-words text-micro text-fg-muted">
-            Connection: {group.source.connection_id || "not established"}
+          <p class="mt-0.5 truncate font-mono text-micro text-fg-muted">
+            {group.source.connection_id || "no connection id"}
           </p>
         </div>
-        <div class="flex flex-wrap gap-2">
-          {#each [["fresh", "fresh"], ["stale", "stale"], ["error", "failed"], ["unknown", "unknown"]] as [key, title]}{#if group.counts[key]}<SignalBadge
-                tone={key === "error" || key === "stale" ? "warn" : "neutral"}
-                >{group.counts[key]} {title}</SignalBadge
+        <div class="flex flex-wrap gap-1.5">
+          {#each [["fresh", "fresh", "ok"], ["stale", "stale", "warn"], ["error", "failed", "warn"], ["unknown", "unknown", "neutral"]] as [key, title, tone]}{#if group.counts[key]}<SignalBadge
+                {tone}>{group.counts[key]} {title}</SignalBadge
               >{/if}{/each}
         </div>
       </header>
-      <ul class="divide-y divide-line">
+      <ul class="divide-y divide-line-subtle">
         {#each group.items as item (workKey(item))}{@const signal =
             workFreshness(item, now)}
           <li
-            class="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]"
+            class="grid gap-2 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_11rem_13rem] sm:items-center"
           >
             <div class="min-w-0">
               <a
@@ -154,27 +150,25 @@
                   `/work/${encodeURIComponent(workKey(item))}`,
                 )}>{item.title || item.ref}</a
               >{#if item.refresh?.last_error}<p
-                  class="mt-1 break-words text-micro text-warn-text"
+                  class="mt-0.5 break-words text-micro text-warn-text"
                 >
                   {typeof item.refresh.last_error === "string"
                     ? item.refresh.last_error
                     : JSON.stringify(item.refresh.last_error)}
                 </p>{/if}
             </div>
-            <div>
-              <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
-              <p class="mt-1 text-micro text-fg-muted">
-                Observed {formatTimestamp(item.freshness?.last_observed_at) ||
-                  "never"}
-              </p>
-            </div>
             <div class="text-micro text-fg-muted">
-              <p>Refresh: {item.refresh?.state || "unknown"}</p>
-              <p class="mt-1">
-                Next due: {formatTimestamp(item.refresh?.next_due_at) ||
-                  "not scheduled"}
-              </p>
+              <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
+              <span class="ml-1.5"
+                >{formatTimestamp(item.freshness?.last_observed_at) ||
+                  "never"}</span
+              >
             </div>
+            <p class="text-micro text-fg-muted">
+              Refresh {item.refresh?.state || "unknown"} · next {formatTimestamp(
+                item.refresh?.next_due_at,
+              ) || "not scheduled"}
+            </p>
           </li>{/each}
       </ul>
     </section>
@@ -182,27 +176,21 @@
   {#if nextCursor}<button
       class="ui-btn-secondary mx-auto"
       disabled={loading}
-      onclick={() => load(true)}>Load more coverage</button
+      onclick={() => load(true)}>Load more</button
     >{/if}
-  <section class="rounded-md border border-line bg-panel p-4">
-    <h2 class="text-meta font-semibold text-fg">Available capabilities</h2>
+  <details class="text-micro text-fg-muted">
+    <summary class="cursor-pointer">Reported capabilities</summary>
     {#if capabilityError}<StateError
         message={capabilityError}
         onretry={() => load()}
-      />{:else if capabilities}<p class="mt-1 text-micro text-fg-muted">
-        Reported by this workspace. Capability support is separate from a
-        successful source connection.
-      </p>
-      <details class="mt-3 text-micro text-fg-muted">
-        <summary class="cursor-pointer">Inspect capability details</summary>
-        <pre
-          class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{JSON.stringify(
-            capabilities,
-            null,
-            2,
-          )}</pre>
-      </details>{:else}<p class="mt-2 text-micro text-fg-muted">
-        Capabilities have not been established.
+        class="mt-2"
+      />{:else if capabilities}<pre
+        class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{JSON.stringify(
+          capabilities,
+          null,
+          2,
+        )}</pre>{:else}<p class="mt-2">
+        Capabilities have not been reported.
       </p>{/if}
-  </section>
+  </details>
 </WorkspacePageShell>

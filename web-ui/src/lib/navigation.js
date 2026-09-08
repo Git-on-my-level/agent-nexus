@@ -1,9 +1,14 @@
+/**
+ * Primary navigation: the four places a person actually goes.
+ * Everything else lives in the secondary groups below (sidebar footer and
+ * the mobile More hub).
+ */
 export const navigationItems = [
   {
     label: "Home",
     href: "/",
     icon: "home",
-    hint: "Overview",
+    hint: "What changed",
   },
   {
     label: "Inbox",
@@ -15,83 +20,108 @@ export const navigationItems = [
     label: "Work",
     href: "/work",
     icon: "boards",
-    hint: "Commitments, board and table",
+    hint: "Table and board",
   },
   {
     label: "PM",
     href: "/pm",
     icon: "topics",
-    hint: "Review work and decisions",
-  },
-  {
-    label: "Docs",
-    href: "/docs",
-    icon: "docs",
-    hint: "Docs and versioned content",
+    hint: "Ask, decide, follow through",
   },
 ];
 
-/** Secondary destinations grouped with the identity panel (sidebar bottom). */
-export const settingsNavItems = [
+/** Secondary destinations, grouped. Rendered in the sidebar footer and on /more. */
+export const settingsNavGroups = [
   {
-    label: "Decisions & receipts",
-    href: "/decisions",
-    icon: "inbox",
-    hint: "Answers, delivery and verified outcomes",
+    label: "Follow-through",
+    items: [
+      {
+        label: "Decisions",
+        href: "/decisions",
+        icon: "inbox",
+        hint: "Answers, delivery, receipts",
+      },
+      {
+        label: "Integrations",
+        href: "/integrations",
+        icon: "events",
+        hint: "Source freshness and coverage",
+      },
+    ],
   },
   {
-    label: "Integration health",
-    href: "/integrations",
-    icon: "events",
-    hint: "Source freshness and coverage",
+    label: "Workspace",
+    items: [
+      {
+        label: "Topics",
+        href: "/topics",
+        icon: "topics",
+        hint: "Projects and discussions",
+      },
+      {
+        label: "Boards",
+        href: "/boards",
+        icon: "boards",
+        hint: "Card boards",
+      },
+      {
+        label: "Docs",
+        href: "/docs",
+        icon: "docs",
+        hint: "Versioned documents",
+      },
+      {
+        label: "Events",
+        href: "/events",
+        icon: "events",
+        hint: "Full workspace history",
+      },
+      {
+        label: "Artifacts",
+        href: "/artifacts",
+        icon: "artifacts",
+        hint: "Revision artifacts and payloads",
+      },
+    ],
   },
   {
-    label: "Topics",
-    href: "/topics",
-    icon: "topics",
-    hint: "Workspace projects and discussions",
-  },
-  {
-    label: "Boards",
-    href: "/boards",
-    icon: "boards",
-    hint: "Organize workspace cards",
-  },
-  {
-    label: "Events",
-    href: "/events",
-    icon: "events",
-    hint: "Full workspace history",
-  },
-  {
-    label: "Artifacts",
-    href: "/artifacts",
-    icon: "artifacts",
-    hint: "Revision artifacts and payloads",
-  },
-  {
-    label: "Trash",
-    href: "/trash",
-    icon: "trash",
-    hint: "Trashed and restorable items",
-  },
-  {
-    label: "Access",
-    href: "/access",
-    icon: "access",
-    hint: "Manage principals and invites",
-  },
-  {
-    label: "Secrets",
-    href: "/secrets",
-    icon: "secrets",
-    hint: "Manage workspace credentials",
+    label: "Admin",
+    items: [
+      {
+        label: "Access",
+        href: "/access",
+        icon: "access",
+        hint: "Principals and invites",
+      },
+      {
+        label: "Secrets",
+        href: "/secrets",
+        icon: "secrets",
+        hint: "Workspace credentials",
+      },
+      {
+        label: "Trash",
+        href: "/trash",
+        icon: "trash",
+        hint: "Trashed and restorable items",
+      },
+    ],
   },
 ];
+
+/** Flat view of the secondary destinations (kept for existing consumers). */
+export const settingsNavItems = settingsNavGroups.flatMap(
+  (group) => group.items,
+);
 
 const SHELL_CONTENT_RULES = [
   {
-    match: /^\/(work|pm|decisions|integrations)(\/|$)/,
+    match: /^\/pm(\/|$)/,
+    mode: "standard",
+    maxWidth: "56rem",
+  },
+  {
+    match: /^\/(work|decisions|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
   },

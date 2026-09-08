@@ -104,14 +104,14 @@
     }
   }}
 />
-<svelte:head><title>New commitment · Agent Nexus</title></svelte:head>
+<svelte:head><title>New work · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
     class="w-fit text-micro text-accent-text hover:underline"
-    href={workspaceHref("/work")}>← All work</a
+    href={workspaceHref("/work")}>← Work</a
   >
-  <WorkspacePageHeader title="New commitment"
-    >{#snippet subtitle()}Define the outcome and what will prove it is done.{/snippet}</WorkspacePageHeader
+  <WorkspacePageHeader title="New work"
+    >{#snippet subtitle()}Say what must be true when it is done.{/snippet}</WorkspacePageHeader
   >
   {#if error}<StateError message={error} />{/if}
   {#if loading}<p role="status" class="text-fg-muted">
@@ -136,10 +136,10 @@
       onsubmit={save}
       data-anx-save-scope
     >
-      <div class="rounded-md bg-bg-soft px-3 py-2 text-micro text-fg-muted">
-        Nexus will own this commitment. Register existing source-owned work
-        through an integration to preserve its authority.
-      </div>
+      <p class="text-micro text-fg-subtle">
+        Nexus will own this record. Work that lives in GitHub or Multica shows
+        up through its integration instead.
+      </p>
       <label class="block text-micro font-medium text-fg-muted"
         >Outcome<input
           class="ui-input mt-1"
@@ -173,9 +173,7 @@
           bind:value={criteria}
           required
           placeholder="One testable outcome per line"
-        ></textarea><span class="mt-1 block font-normal"
-          >A successful run alone does not complete this commitment.</span
-        ></label
+        ></textarea></label
       >
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="text-micro font-medium text-fg-muted"
@@ -211,8 +209,7 @@
           class="ui-btn-primary"
           type="submit"
           disabled={saving || !board || !title.trim() || !criteria.trim()}
-          data-anx-save-shortcut
-          >{saving ? "Creating commitment…" : "Create commitment"}</button
+          data-anx-save-shortcut>{saving ? "Creating…" : "Create work"}</button
         ><a
           class="text-meta text-fg-muted hover:text-fg"
           href={workspaceHref("/work")}>Cancel</a

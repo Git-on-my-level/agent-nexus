@@ -2,6 +2,7 @@
 
 Status: accepted implementation direction; implementation and qualification in progress.
 This document states the target, not a claim that the features below already work.
+The **Rulings (2026-09-08)** section at the end supersedes any earlier line it conflicts with.
 
 ## Product decision
 
@@ -138,3 +139,74 @@ No tokens, private transcripts or customer data in repository artifacts. Label
 synthetic data. Record actual commands, revisions, receipts and limitations;
 unavailable access is a qualification blocker, not a passing test. A draft PR or
 partial feature set does not satisfy these gates.
+
+## Rulings (2026-09-08)
+
+David's decisions after the first integrated review. These override earlier
+sections where they conflict. Nobody uses Agent Nexus yet, so deletions are cheap:
+prefer removing a surface over keeping it "for compatibility".
+
+### Three product primitives, nothing else in primary navigation
+
+1. **Inbox**: the only attention surface. Decisions awaiting an answer, blocked
+   or stale tasks, and material events, in three mailboxes: Needs you, Watching,
+   Handled. The workspace root routes here. The Home unread feed and the separate
+   Decisions page are removed; their content becomes Inbox rows.
+2. **Tasks**: the projection over heterogeneous trackers and sources of truth.
+   This is the former Work surface renamed. Table and board views over the same
+   records. The old Boards surface is deleted, but Tasks adopts its simple
+   ergonomics: drag a card between phases, keyboard moves, quick open. A drag on a
+   Nexus-owned task mutates the task; a drag on a source-owned task opens a PM
+   decision to request the change at the source. Never a silent source mutation.
+3. **Docs**: the global knowledge base for every agent with access to Agent
+   Nexus. Docs are the source of truth for meta knowledge and cross-machine
+   knowledge, and normally point at their canonical source when they aggregate.
+   Agents on one host use Docs to share what other hosts cannot see. Comments are
+   first-class and preserved, so a doc can organically become a discussion room.
+
+Topics, Boards, Events, Artifacts and Trash leave primary and secondary
+navigation. Their data and APIs stay until a lane deletes them deliberately;
+Events survive as an audit log under settings. Settings holds Access, Secrets,
+Integrations and the audit log.
+
+### PM stays an external agent, bridged through the existing harnesses
+
+The PM is not an in-process model call. It must run through the agent harnesses
+David already operates (omp, Hermes, Codex, opencode, Claude, Cursor) so it gains
+their tools (bash, python, ssh, git) and improves as they do. Simplify the bridge
+to one runner: `anx pm serve` claims queued turns, fetches the turn context, runs
+the configured harness through `agentctl` with the `anx` CLI as the PM's tools,
+and completes the turn. No wake-routing or online-handle prerequisite for this
+path. Authorization is enforced by anx-core per requesting principal; the PM
+process runs on a trusted host with that host's credentials.
+
+Dogfood order: `omp` with `glm-5.3` on the M4 Air first, then Hermes once stable.
+
+### JIT generated adapters stay, and must run on macOS and Linux
+
+Generated readers are kept. They must execute for real on this macOS host now
+and on Linux (Proxmox VMs) later. Linux keeps bubblewrap. macOS gets an equally
+enforced Apple Seatbelt profile (`sandbox-exec`): deny by default, read-only
+reader artifact, scratch only, no network. Generated code transforms data that
+trusted readers fetched; it never holds credentials. A directory or a prompt is
+still not a sandbox. Fail closed on any host without an enforced runner.
+
+### Channels
+
+Telegram and Discord ship together; CAR overfit to Telegram last time. Build both
+transports to test-readiness now. David supplies dedicated bot credentials last;
+until then, end-to-end proof and dogfood run on web and CLI.
+
+### Receipts
+
+Fourteen machine states remain in the record. The UI shows four: needs you,
+delivered, done, failed. Everything else sits behind a disclosure.
+
+### Order of work
+
+1. Web and CLI end to end on this host: a real PM answer to "what needs my
+   decision?" that names a seeded task, through `omp`/`glm-5.3`.
+2. JIT runner on macOS with a real read-only GitHub canary and negative tests.
+3. Inbox, Tasks and Docs as described; legacy surfaces removed.
+4. Telegram and Discord to test-readiness.
+5. Independent qualification against the rulings, not the original gate list.

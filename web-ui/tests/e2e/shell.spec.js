@@ -119,11 +119,11 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   const bottomNav = page.getByRole("navigation", {
     name: "Primary navigation",
   });
-  await bottomNav.getByRole("link", { name: "Topics" }).click();
+  await bottomNav.getByRole("link", { name: "Work" }).click();
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/topics$/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/work$/);
   await expect(
-    page.getByRole("heading", { name: "Topics", exact: true }),
+    page.getByRole("heading", { name: "Work", exact: true }),
   ).toBeVisible();
 
   await bottomNav.getByRole("button", { name: "Search workspace" }).click();

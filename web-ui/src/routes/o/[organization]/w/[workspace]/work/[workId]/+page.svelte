@@ -122,103 +122,100 @@
   });
 </script>
 
-<svelte:head
-  ><title>{work?.title || "Commitment"} · Agent Nexus</title></svelte:head
->
+<svelte:head><title>{work?.title || "Work"} · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <a
-    class="w-fit text-micro text-accent-text hover:underline"
-    href={workspaceHref("/work")}>← All work</a
+    class="w-fit text-micro text-fg-muted hover:text-fg"
+    href={workspaceHref("/work")}>← Work</a
   >
   {#if error}<StateError
-      title="Commitment unavailable"
+      title="Work unavailable"
       message={error}
       onretry={() => load()}
       retrying={loading}
     />{/if}
-  {#if loading && !work}<p class="py-10 text-fg-muted" role="status">
-      Loading commitment and evidence…
+  {#if loading && !work}<p class="py-10 text-meta text-fg-muted" role="status">
+      Loading…
     </p>{/if}
   {#if work}
-    <WorkspacePageHeader title={work.title || "Untitled commitment"}>
-      {#snippet subtitle()}<span class="font-mono text-micro">{work.ref}</span
-        >{/snippet}
+    <WorkspacePageHeader title={work.title || "Untitled work"}>
+      {#snippet subtitle()}
+        <span class="flex flex-wrap items-center gap-1.5">
+          <SignalBadge tone={work.phase === "blocked" ? "warn" : "neutral"}
+            >{label(work.phase)}</SignalBadge
+          >
+          {#if work.source?.authority !== "nexus"}
+            <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
+          {/if}
+          {#if work.source?.native_status}
+            <SignalBadge>{work.source.native_status}</SignalBadge>
+          {/if}
+          <span class="font-mono text-micro text-fg-subtle">{work.ref}</span>
+        </span>
+      {/snippet}
       {#snippet actions()}<button
           class="ui-btn-secondary"
           onclick={() => load()}
           disabled={loading}>{loading ? "Reloading…" : "Reload"}</button
-        ><a class="ui-btn-primary" href={pmHref}>Discuss with PM</a>{/snippet}
+        ><a class="ui-btn-primary" href={pmHref}>Ask PM</a>{/snippet}
     </WorkspacePageHeader>
-    <div class="flex flex-wrap gap-2">
-      <SignalBadge>{label(work.phase)}</SignalBadge><SignalBadge
-        tone={signal.tone}>{signal.label}</SignalBadge
-      >{#if work.source?.native_status}<SignalBadge
-          >Source: {work.source.native_status}</SignalBadge
-        >{/if}
-    </div>
-    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <div class="min-w-0 space-y-5">
-        <section class="rounded-md border border-line bg-panel p-4">
-          <h2 class="text-meta font-semibold text-fg">Commitment</h2>
-          <p
-            class="mt-2 whitespace-pre-wrap break-words text-meta text-fg-muted"
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div class="min-w-0 space-y-7">
+        <section>
+          {#if work.summary}
+            <p class="whitespace-pre-wrap break-words text-meta text-fg">
+              {work.summary}
+            </p>
+          {/if}
+          <h2
+            class="mt-4 text-micro font-semibold uppercase tracking-wide text-fg-muted"
           >
-            {work.summary || "No description has been recorded."}
-          </p>
-          <h3 class="mt-4 text-micro font-semibold text-fg">
             Acceptance criteria
-          </h3>
+          </h2>
           {#if work.definition_of_done?.length}<ul
-              class="mt-2 list-disc space-y-1 pl-5 text-meta text-fg-muted"
+              class="mt-2 list-disc space-y-1 pl-5 text-meta text-fg"
             >
               {#each work.definition_of_done as criterion}<li>
                   {criterion}
                 </li>{/each}
             </ul>{:else}<p class="mt-1 text-meta text-warn-text">
-              Acceptance criteria have not been established.
+              None recorded. A finished run cannot complete this work.
             </p>{/if}
         </section>
-        <section class="rounded-md border border-line bg-panel p-4">
-          <h2 class="text-meta font-semibold text-fg">What happens next</h2>
-          <div class="mt-3 grid gap-4 sm:grid-cols-2">
-            <div>
-              <p class="mb-1 text-micro text-fg-muted">Next actor</p>
-              {#if work.next_actor}<ActorLabel
-                  label={work.next_actor}
-                />{:else}<p class="text-fg-muted">Not assigned</p>{/if}
-            </div>
-            <div>
-              <p class="text-micro text-fg-muted">Next action</p>
-              <p class="mt-1 break-words text-meta text-fg">
-                {work.next_action || "Not established"}
-              </p>
-            </div>
-          </div>
-          {#if work.blockers?.length}<div
-              class="mt-4 border-t border-line pt-3"
+        <section>
+          <h2
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+          >
+            Next
+          </h2>
+          <p class="mt-2 text-meta text-fg">
+            {#if work.next_actor}<ActorLabel
+                label={work.next_actor}
+                size="xs"
+              />{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
+            {#if work.next_action}
+              <span class="ml-1">— {work.next_action}</span>
+            {/if}
+          </p>
+          {#if work.blockers?.length}
+            <ul class="mt-2 list-disc space-y-1 pl-5 text-meta text-warn-text">
+              {#each work.blockers as blocker}<li>{blocker}</li>{/each}
+            </ul>
+          {/if}
+          {#if work.wake_condition}<p class="mt-2 text-micro text-fg-muted">
+              Wakes when: {work.wake_condition}
+            </p>{/if}
+        </section>
+        <section>
+          <div class="flex flex-wrap items-end justify-between gap-2">
+            <h2
+              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
             >
-              <h3 class="text-micro font-semibold text-warn-text">Blockers</h3>
-              <ul class="mt-1 list-disc space-y-1 pl-5 text-meta text-fg-muted">
-                {#each work.blockers as blocker}<li>{blocker}</li>{/each}
-              </ul>
-            </div>{/if}
-          {#if work.wake_condition}<p class="mt-3 text-meta text-fg-muted">
-              <strong class="text-fg">Wake condition:</strong>
-              {work.wake_condition}
-            </p>{/if}
-        </section>
-        <section class="overflow-hidden rounded-md border border-line bg-panel">
-          <header class="border-b border-line p-4">
-            <h2 class="text-meta font-semibold text-fg">
-              Evidence and observations
+              Evidence
             </h2>
-            <p class="mt-1 text-micro text-fg-muted">
-              A recent check is not proof of progress. Agent reports remain
-              claims unless independently verified.
-            </p>
-            <div class="mt-4"><EvidenceTimes freshness={work.freshness} /></div>
-          </header>
-          {#if evidenceError}<div class="p-4">
+          </div>
+          <div class="mt-2"><EvidenceTimes freshness={work.freshness} /></div>
+          {#if evidenceError}<div class="mt-3">
               <StateError
                 title="Evidence history unavailable"
                 message={evidenceError}
@@ -226,14 +223,15 @@
               />
             </div>{/if}
           {#if !observations.length && !evidenceError}<p
-              class="p-4 text-meta text-fg-muted"
+              class="mt-3 text-meta text-fg-muted"
             >
-              No observations yet. Completion and source health are not
-              established by an empty history.
+              No observations yet.
             </p>{/if}
-          <ol class="divide-y divide-line">
+          <ol
+            class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
+          >
             {#each observations as observation, index (observation.id || index)}
-              <li class="p-4">
+              <li class="py-3">
                 <div class="flex flex-wrap items-center gap-2">
                   <SignalBadge
                     tone={observation.verification === "verified"
@@ -255,56 +253,52 @@
                     datetime={observation.observed_at}
                     title={formatAbsoluteDateTime(observation.observed_at)}
                     >{formatTimestamp(observation.observed_at) ||
-                      "Observation time unknown"}</time
+                      "time unknown"}</time
                   >
+                  <span class="text-micro text-fg-subtle">
+                    {observation.reader_id ||
+                      "unknown reader"}{#if observation.reader_revision}
+                      @{observation.reader_revision}{/if}{#if observation.source_revision}
+                      · <span class="font-mono"
+                        >{observation.source_revision}</span
+                      >{/if}
+                  </span>
                 </div>
-                <p class="mt-2 break-words text-micro text-fg-muted">
-                  Reader {observation.reader_id || "unknown"} · revision {observation.reader_revision ||
-                    "unknown"}{#if observation.source_revision}
-                    · source revision <span class="font-mono"
-                      >{observation.source_revision}</span
-                    >{/if}
-                </p>
                 {#if observation.error}<p
-                    class="mt-2 text-meta text-danger-text"
+                    class="mt-1.5 text-meta text-danger-text"
                   >
                     {typeof observation.error === "string"
                       ? observation.error
                       : observation.error.message || observation.error.code}
                   </p>{/if}
                 {#if observation.uncertainty?.length}<ul
-                    class="mt-2 list-disc pl-5 text-meta text-warn-text"
+                    class="mt-1.5 list-disc pl-5 text-meta text-warn-text"
                   >
                     {#each observation.uncertainty as item}<li>
                         {item}
                       </li>{/each}
                   </ul>{/if}
-                <ul class="mt-2 space-y-2">
-                  {#each observation.evidence || [] as evidence}{@const url =
-                      safeSourceHref(evidence.url)}
-                    <li class="break-words text-meta text-fg">
-                      {#if url}<a
-                          class="text-accent-text hover:underline"
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          >{evidence.summary ||
+                {#if observation.evidence?.length}
+                  <ul class="mt-1.5 space-y-1">
+                    {#each observation.evidence as evidence}{@const url =
+                        safeSourceHref(evidence.url)}
+                      <li class="break-words text-meta text-fg">
+                        {#if url}<a
+                            class="text-accent-text hover:underline"
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            >{evidence.summary ||
+                              evidence.ref ||
+                              "Open source evidence"} ↗</a
+                          >{:else}{evidence.summary ||
                             evidence.ref ||
-                            "Open source evidence"} ↗</a
-                        >{:else}{evidence.summary ||
-                          evidence.ref ||
-                          "Unlinked evidence"}{/if}
-                    </li>{/each}
-                </ul>
-                {#if !observation.evidence?.length}<p
-                    class="mt-2 text-micro text-fg-muted"
-                  >
-                    No supporting evidence attached.
-                  </p>{/if}
-                <details class="mt-3 text-micro text-fg-muted">
-                  <summary class="cursor-pointer"
-                    >Facts, coverage and provenance</summary
-                  >
+                            "Unlinked evidence"}{/if}
+                      </li>{/each}
+                  </ul>
+                {/if}
+                <details class="mt-2 text-micro text-fg-muted">
+                  <summary class="cursor-pointer">Facts and coverage</summary>
                   <pre
                     class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono text-micro">{JSON.stringify(
                       {
@@ -322,24 +316,20 @@
               </li>
             {/each}
           </ol>
-          {#if nextCursor}<div class="border-t border-line p-3">
-              <button
-                class="ui-btn-secondary"
-                disabled={loading}
-                onclick={loadMore}
-                >{loading ? "Loading evidence…" : "Older observations"}</button
-              >
-            </div>{/if}
+          {#if nextCursor}<button
+              class="ui-btn-secondary mt-3"
+              disabled={loading}
+              onclick={loadMore}
+              >{loading ? "Loading…" : "Older observations"}</button
+            >{/if}
         </section>
-        {#if work.executions?.length}<section
-            class="rounded-md border border-line bg-panel p-4"
-          >
-            <h2 class="text-meta font-semibold text-fg">Linked executions</h2>
-            <p class="mt-1 text-micro text-fg-muted">
-              A completed execution does not establish that acceptance criteria
-              were met.
-            </p>
-            <ul class="mt-3 divide-y divide-line">
+        {#if work.executions?.length}<section>
+            <h2
+              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+            >
+              Runs
+            </h2>
+            <ul class="mt-2 divide-y divide-line-subtle">
               {#each work.executions as execution}<li
                   class="py-2 text-meta text-fg"
                 >
@@ -350,7 +340,7 @@
                       rel="noreferrer"
                       >{execution.authority} · {execution.run_id} ↗</a
                     >{:else}{execution.authority} · {execution.run_id}{/if}
-                  <p class="mt-1 text-micro text-fg-muted">
+                  <p class="mt-0.5 text-micro text-fg-muted">
                     {[
                       execution.host,
                       execution.harness,
@@ -358,58 +348,62 @@
                       execution.model,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || "Execution context not reported"}
+                      .join(" · ") ||
+                      "Context not reported"}{#if execution.result_ref}
+                      · <span class="font-mono">{execution.result_ref}</span
+                      >{/if}
                   </p>
-                  {#if execution.result_ref}<p
-                      class="mt-1 break-words font-mono text-micro text-fg-muted"
-                    >
-                      Result: {execution.result_ref}
-                    </p>{/if}
                 </li>{/each}
             </ul>
           </section>{/if}
-        {#if work.relations?.length}<section
-            class="rounded-md border border-line bg-panel p-4"
-          >
-            <h2 class="text-meta font-semibold text-fg">
-              Related work and artifacts
+        {#if work.relations?.length}<section>
+            <h2
+              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+            >
+              Related
             </h2>
-            <ul class="mt-2 space-y-2 text-meta">
+            <ul class="mt-2 space-y-1 text-meta">
               {#each work.relations as relation}<li class="break-words">
-                  <span class="text-fg-muted"
-                    >{relation.kind}:
-                  </span>{#if relation.ref?.startsWith("card:")}<a
-                      class="text-accent-text hover:underline"
+                  <span class="text-fg-muted">{relation.kind}</span>
+                  {#if relation.ref?.startsWith("card:")}<a
+                      class="font-mono text-accent-text hover:underline"
                       href={workspaceHref(
                         `/work/${encodeURIComponent(relation.ref)}`,
                       )}>{relation.ref}</a
-                    >{:else}<span class="text-fg">{relation.ref}</span>{/if}
+                    >{:else}<span class="font-mono text-fg">{relation.ref}</span
+                    >{/if}
                 </li>{/each}
             </ul>
           </section>{/if}
       </div>
-      <aside class="space-y-4" aria-label="Authority and follow-through">
-        <section class="rounded-md border border-line bg-panel p-4">
-          <h2 class="text-meta font-semibold text-fg">Source authority</h2>
-          <p class="mt-3 font-semibold text-fg">{sourceLabel(work.source)}</p>
-          <p class="mt-1 break-words text-micro text-fg-muted">
-            {work.source?.native_id || work.ref}
-          </p>
-          {#if safeSourceHref(work.source?.url)}<a
-              class="mt-2 inline-block text-meta text-accent-text hover:underline"
-              href={safeSourceHref(work.source.url)}
-              target="_blank"
-              rel="noreferrer">Open authoritative record ↗</a
-            >{/if}
-          <p class="mt-3 text-micro text-fg-muted">
-            {work.source?.authority === "nexus"
-              ? "Nexus owns this commitment."
-              : "Source title, owner and workflow are managed by the authoritative source. Request changes through PM."}
-          </p>
-          <dl class="mt-4 space-y-3 text-micro">
+      <aside class="space-y-6 text-meta" aria-label="Source and follow-through">
+        <section>
+          <h2
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+          >
+            Source
+          </h2>
+          <dl class="mt-2 space-y-2">
             <div>
-              <dt class="text-fg-muted">Accountable owner</dt>
-              <dd class="mt-1">
+              <dt class="text-micro text-fg-subtle">Authority</dt>
+              <dd class="text-fg">
+                {sourceLabel(work.source)}{#if work.source?.native_id}
+                  <span class="font-mono text-fg-muted"
+                    >{work.source.native_id}</span
+                  >{/if}
+              </dd>
+              {#if safeSourceHref(work.source?.url)}<dd>
+                  <a
+                    class="text-accent-text hover:underline"
+                    href={safeSourceHref(work.source.url)}
+                    target="_blank"
+                    rel="noreferrer">Open source record ↗</a
+                  >
+                </dd>{/if}
+            </div>
+            <div>
+              <dt class="text-micro text-fg-subtle">Owner</dt>
+              <dd>
                 {#if work.owner}<ActorLabel
                     label={work.owner}
                     size="xs"
@@ -417,39 +411,49 @@
               </dd>
             </div>
             <div>
-              <dt class="text-fg-muted">Project</dt>
-              <dd class="mt-1 break-words text-fg">
-                {work.project_ref || "No project"}
+              <dt class="text-micro text-fg-subtle">Project</dt>
+              <dd class="break-words text-fg">
+                {work.project_ref || "—"}
               </dd>
             </div>
             {#each [["start_at", "Start"], ["due_at", "Due"]] as [field, title]}{#if work[field]}<div
                 >
-                  <dt class="text-fg-muted">{title}</dt>
-                  <dd class="mt-1 text-fg">
+                  <dt class="text-micro text-fg-subtle">{title}</dt>
+                  <dd class="text-fg">
                     {formatAbsoluteDateTime(work[field])}
                   </dd>
                 </div>{/if}{/each}
           </dl>
+          {#if work.source?.authority !== "nexus"}
+            <p class="mt-2 text-micro text-fg-subtle">
+              Status and workflow are owned by the source. Ask PM to request a
+              change.
+            </p>
+          {/if}
         </section>
-        <section class="rounded-md border border-line bg-panel p-4">
-          <h2 class="text-meta font-semibold text-fg">Collection health</h2>
-          <p class="mt-2 text-meta text-fg">
-            {work.refresh?.state || "Unknown"}
-          </p>
-          {#if work.refresh?.last_error}<p
-              class="mt-2 break-words text-micro text-warn-text"
-            >
-              {typeof work.refresh.last_error === "string"
-                ? work.refresh.last_error
-                : JSON.stringify(work.refresh.last_error)}
-            </p>{/if}
-          <dl class="mt-3 space-y-2 text-micro">
+        <section>
+          <h2
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+          >
+            Collection
+          </h2>
+          <dl class="mt-2 space-y-2">
+            <div>
+              <dt class="text-micro text-fg-subtle">State</dt>
+              <dd class="text-fg">{work.refresh?.state || "unknown"}</dd>
+              {#if work.refresh?.last_error}<dd
+                  class="break-words text-micro text-warn-text"
+                >
+                  {typeof work.refresh.last_error === "string"
+                    ? work.refresh.last_error
+                    : JSON.stringify(work.refresh.last_error)}
+                </dd>{/if}
+            </div>
             {#each [["last_attempt_at", "Last attempt"], ["last_success_at", "Last successful read"], ["next_due_at", "Next due"]] as [field, title]}<div
               >
-                <dt class="text-fg-muted">{title}</dt>
+                <dt class="text-micro text-fg-subtle">{title}</dt>
                 <dd class="text-fg">
-                  {formatTimestamp(work.refresh?.[field]) ||
-                    "Not scheduled / unknown"}
+                  {formatTimestamp(work.refresh?.[field]) || "—"}
                 </dd>
               </div>{/each}
           </dl>
@@ -467,18 +471,17 @@
               {notice}
             </p>{/if}
         </section>
-        <section class="rounded-md border border-line bg-panel p-4">
-          <h2 class="text-meta font-semibold text-fg">
-            Decisions and delivery
+        <section>
+          <h2
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+          >
+            Decisions
           </h2>
-          <p class="mt-2 text-micro text-fg-muted">
-            Follow instructions from answer to receipt and verified outcome.
-          </p>
           <a
-            class="mt-3 inline-block text-meta text-accent-text hover:underline"
+            class="mt-2 inline-block text-accent-text hover:underline"
             href={workspaceHref(
               `/decisions?work_ref=${encodeURIComponent(work.ref || workId)}`,
-            )}>View decisions and receipts →</a
+            )}>Decisions and receipts for this work →</a
           >
         </section>
       </aside>

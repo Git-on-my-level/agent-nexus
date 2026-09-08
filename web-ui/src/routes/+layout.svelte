@@ -34,6 +34,7 @@
     getShellContentConfig,
     isMoreHubActivePath,
     navigationItems,
+    settingsNavGroups,
     settingsNavItems,
   } from "$lib/navigation";
   import {
@@ -197,16 +198,17 @@
   );
   let selectedActorName = $derived.by(() => {
     const resolvedName = lookupActorDisplayName(
-      activeActorId,
+      activeActorId || $authenticatedAgent?.actor_id,
       $actorRegistry,
       $principalRegistry,
     );
-    if (
-      $authenticatedAgent?.username &&
-      ($authenticatedAgent?.actor_id === activeActorId ||
-        resolvedName === activeActorId ||
-        resolvedName === "Unknown actor")
-    ) {
+    // Prefer the human-readable actor name; fall back to the principal
+    // username only when the registry cannot name this actor.
+    const unresolved =
+      !resolvedName ||
+      resolvedName === activeActorId ||
+      resolvedName === "Unknown actor";
+    if ($authenticatedAgent?.username && unresolved) {
       return $authenticatedAgent.username;
     }
     return resolvedName || "Unknown identity";
@@ -364,6 +366,7 @@
     devFixturePersonas = await loadWorkspaceDevFixturePersonas({
       workspaceSlug,
       workspaceHeader: WORKSPACE_HEADER,
+      organizationSlug: activeOrganizationSlug,
     });
     return devFixturePersonas;
   }
@@ -378,6 +381,7 @@
       personaId,
       workspaceSlug: activeWorkspaceSlug,
       workspaceHeader: WORKSPACE_HEADER,
+      organizationSlug: activeOrganizationSlug,
       setBusy: (busy) => {
         devPersonaBusy = busy;
       },
@@ -941,40 +945,44 @@
               </div>
             {/if}
             <nav class="shell-secondary-nav" aria-label="Workspace">
-              <div class="shell-settings-links">
-                {#each settingsNavItems as item}
-                  {@const active = isActive(item.href)}
-                  {@const tour = dataTourForNav(item.href)}
-                  <a
-                    class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
-                    href={workspaceHref(item.href)}
-                    aria-label={item.label}
-                    data-tour={tour}
-                  >
-                    <svg
-                      class="shell-settings-icon"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      stroke-width="1.75"
-                      aria-hidden="true"
+              {#each settingsNavGroups as group}
+                <p class="shell-settings-group-label">{group.label}</p>
+                <div class="shell-settings-links">
+                  {#each group.items as item}
+                    {@const active = isActive(item.href)}
+                    {@const tour = dataTourForNav(item.href)}
+                    <a
+                      class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
+                      href={workspaceHref(item.href)}
+                      aria-label={item.label}
+                      data-tour={tour}
                     >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d={iconPath(item.icon)}
-                      />
-                    </svg>
-                    <span class="shell-settings-link-text">
-                      <span>{item.label}</span>
-                      {#if item.hint}
-                        <span class="shell-settings-link-hint">{item.hint}</span
-                        >
-                      {/if}
-                    </span>
-                  </a>
-                {/each}
-              </div>
+                      <svg
+                        class="shell-settings-icon"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="1.75"
+                        aria-hidden="true"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d={iconPath(item.icon)}
+                        />
+                      </svg>
+                      <span class="shell-settings-link-text">
+                        <span>{item.label}</span>
+                        {#if item.hint}
+                          <span class="shell-settings-link-hint"
+                            >{item.hint}</span
+                          >
+                        {/if}
+                      </span>
+                    </a>
+                  {/each}
+                </div>
+              {/each}
             </nav>
             {#if hostedMode}
               <a class="shell-account-link" href={hostedAccountPath}>

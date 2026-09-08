@@ -15,21 +15,21 @@ describe("navigation model", () => {
       "Inbox",
       "Work",
       "PM",
-      "Docs",
     ]);
   });
 
   it("includes settings nav labels", () => {
     expect(settingsNavItems.map((item) => item.label)).toEqual([
-      "Decisions & receipts",
-      "Integration health",
+      "Decisions",
+      "Integrations",
       "Topics",
       "Boards",
+      "Docs",
       "Events",
       "Artifacts",
-      "Trash",
       "Access",
       "Secrets",
+      "Trash",
     ]);
   });
 

@@ -288,11 +288,11 @@
     }
   }}
 />
-<svelte:head><title>Decisions & receipts · Agent Nexus</title></svelte:head>
+<svelte:head><title>Decisions · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
-  <WorkspacePageHeader title="Decisions & receipts"
-    >{#snippet subtitle()}What you decided, where it was delivered, and what
-      actually changed.{/snippet}{#snippet actions()}<a
+  <WorkspacePageHeader title="Decisions"
+    >{#snippet subtitle()}What you decided, whether it was delivered, and what
+      changed.{/snippet}{#snippet actions()}<a
         class="ui-btn-secondary"
         href={workspaceHref("/pm")}>Ask PM</a
       ><button
@@ -302,67 +302,60 @@
         >{loading ? "Loading decisions…" : "Reload"}</button
       >{/snippet}</WorkspacePageHeader
   >
-  <nav class="flex flex-wrap items-center gap-2" aria-label="Decision mailbox">
-    {#each [["needs-you", "Needs you"], ["watching", "Watching"], ["all", "All decisions"]] as [key, title]}<a
-        class="rounded-md px-3 py-2 text-meta {mailbox === key
-          ? 'bg-panel text-fg'
-          : 'text-fg-muted hover:bg-panel-hover'}"
+  <nav class="flex flex-wrap items-center gap-1" aria-label="Decision mailbox">
+    {#each [["needs-you", "Needs you"], ["watching", "Watching"], ["all", "All"]] as [key, title]}
+      {@const count = scoped.filter(
+        (item) =>
+          key === "all" ||
+          (key === "watching"
+            ? item.status !== "awaiting_answer"
+            : item.status === "awaiting_answer"),
+      ).length}
+      <a
+        class="rounded-md px-2.5 py-1.5 text-meta {mailbox === key
+          ? 'bg-bg-soft font-medium text-fg'
+          : 'text-fg-muted hover:bg-panel-hover hover:text-fg'}"
         href={href({ mailbox: key, decision: "" })}
         aria-current={mailbox === key ? "page" : undefined}
-        >{title}<span class="ml-2 text-micro text-fg-muted"
-          >{scoped.filter(
-            (item) =>
-              key === "all" ||
-              (key === "watching"
-                ? item.status !== "awaiting_answer"
-                : item.status === "awaiting_answer"),
-          ).length}</span
-        ></a
-      >{/each}{#if workRef}<span class="ml-auto text-micro text-fg-muted"
-        >{workRef}</span
-      ><a
-        class="text-micro text-accent-text"
-        href={href({ work_ref: "", decision: "" })}>Clear work filter</a
-      >{/if}
+        >{title}{#if count}<span class="ml-1.5 text-micro text-fg-subtle"
+            >{count}</span
+          >{/if}</a
+      >
+    {/each}
+    {#if workRef}
+      <span class="ml-auto flex items-center gap-2 text-micro text-fg-muted">
+        <span class="font-mono">{workRef}</span>
+        <a class="ui-prose-link" href={href({ work_ref: "", decision: "" })}
+          >Clear</a
+        >
+      </span>
+    {/if}
   </nav>
   {#if error}<StateError
       message={error}
       onretry={load}
       retrying={loading}
     />{/if}
-  {#if partial}<p class="rounded-md bg-warn-soft p-3 text-micro text-warn-text">
-      This is a partial history. Counts describe loaded records; older decisions
-      or receipts may not be included.
+  {#if partial}<p class="text-micro text-warn-text">
+      Partial history: counts describe loaded records only.
     </p>{/if}
-  {#if notice}<p
-      class="rounded-md bg-bg-soft p-3 text-meta text-fg"
-      role="status"
-    >
+  {#if notice}<p class="text-micro text-fg-muted" role="status">
       {notice}
     </p>{/if}
   {#if loading && !decisions.length}<p
-      class="py-10 text-fg-muted"
+      class="py-10 text-center text-meta text-fg-muted"
       role="status"
     >
       Loading decisions and delivery receipts…
     </p>{:else}
     <div
-      class="grid min-h-[32rem] overflow-hidden rounded-md border border-line bg-panel lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]"
+      class="grid min-h-[30rem] overflow-hidden rounded-md border border-line bg-panel lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.5fr)]"
     >
       <section
         class="border-line lg:border-r {selectedId ? 'hidden lg:block' : ''}"
         aria-label="Decision list"
       >
-        <h2
-          class="border-b border-line px-4 py-3 text-micro font-semibold text-fg-muted"
-        >
-          {mailbox === "watching"
-            ? "FOLLOW-THROUGH"
-            : mailbox === "all"
-              ? "DECISION HISTORY"
-              : "AWAITING YOUR ANSWER"}
-        </h2>
-        <ul class="divide-y divide-line">
+        <ul class="divide-y divide-line-subtle">
           {#each visible as item (item.id)}{@const state = receiptSignal(
               item.status,
             )}
@@ -373,39 +366,35 @@
                   : 'border-transparent hover:bg-panel-hover'}"
                 href={href({ decision: item.id })}
                 aria-current={selected?.id === item.id ? "page" : undefined}
-                ><div
-                  class="flex justify-between gap-2 text-micro text-fg-muted"
-                >
-                  <span class="truncate">{item.work_ref}</span><time
-                    datetime={item.created_at}
-                    >{formatTimestamp(item.created_at)}</time
-                  >
-                </div>
+              >
                 <p
-                  class="mt-2 line-clamp-2 break-words text-meta font-semibold text-fg"
+                  class="line-clamp-2 break-words text-meta font-medium text-fg"
                 >
                   {item.instruction}
                 </p>
-                <div class="mt-2">
+                <div
+                  class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
+                >
                   <SignalBadge tone={state.tone}>{state.label}</SignalBadge>
-                </div></a
-              >
-            </li>{:else}<li class="px-5 py-10">
-              <h3 class="text-meta font-semibold text-fg">
+                  <span class="truncate font-mono">{item.work_ref}</span>
+                  <time class="ml-auto" datetime={item.created_at}
+                    >{formatTimestamp(item.created_at)}</time
+                  >
+                </div>
+              </a>
+            </li>{:else}<li class="px-5 py-10 text-center">
+              <p class="text-meta font-medium text-fg">
                 {mailbox === "needs-you"
-                  ? "No decisions awaiting your answer"
+                  ? "Nothing needs your answer"
                   : "No decisions in this view"}
-              </h3>
-              <p class="mt-2 text-micro text-fg-muted">
-                {mailbox === "needs-you"
-                  ? "Answered decisions remain in Watching until their delivery and outcome are established."
-                  : "Change the mailbox or work filter to inspect other decisions."}
               </p>
-              <a
-                class="ui-prose-link mt-3 inline-block text-micro"
-                href={href({ mailbox: "watching", decision: "" })}
-                >View follow-through</a
-              >
+              {#if mailbox === "needs-you"}
+                <a
+                  class="ui-prose-link mt-2 inline-block text-micro"
+                  href={href({ mailbox: "watching", decision: "" })}
+                  >See what is in flight</a
+                >
+              {/if}
             </li>{/each}
         </ul>
       </section>
@@ -414,10 +403,10 @@
         aria-label="Selected decision"
       >
         <div
-          class="flex items-center gap-3 border-b border-line px-4 py-2.5 text-micro"
+          class="flex items-center gap-3 border-b border-line-subtle px-4 py-2 text-micro"
         >
           <a class="text-accent-text lg:hidden" href={href({ decision: "" })}
-            >← Decision list</a
+            >← List</a
           >{#if selectedIndex > 0}<a
               class="text-fg-muted hover:text-fg"
               href={href({ decision: visible[selectedIndex - 1].id })}
@@ -425,42 +414,44 @@
             >{/if}{#if selectedIndex >= 0 && selectedIndex < visible.length - 1}<a
               class="text-fg-muted hover:text-fg"
               href={href({ decision: visible[selectedIndex + 1].id })}>Next</a
-            >{/if}<span class="ml-auto text-fg-muted"
+            >{/if}<span class="ml-auto text-fg-subtle"
             >{selectedIndex >= 0
               ? `${selectedIndex + 1} of ${visible.length}`
-              : "Decision"}</span
+              : ""}</span
           >
         </div>
-        {#if selected}<div class="space-y-5 p-4 sm:p-5">
+        {#if selected}<div class="space-y-6 p-4 sm:p-5">
             <header>
               <a
-                class="ui-prose-link text-micro"
+                class="ui-prose-link font-mono text-micro"
                 href={workspaceHref(
                   `/work/${encodeURIComponent(selected.work_ref)}`,
                 )}>{selected.work_ref}</a
               >
               <h2
-                class="mt-2 whitespace-pre-wrap break-words text-subtitle font-semibold text-fg"
+                class="mt-1.5 whitespace-pre-wrap break-words text-subtitle font-semibold text-fg"
               >
                 {selected.instruction}
               </h2>
-              <dl class="mt-4 grid gap-3 text-micro sm:grid-cols-2">
-                <div>
-                  <dt class="text-fg-muted">Authorized scope requested</dt>
-                  <dd class="mt-1 break-words text-fg">
-                    {selected.scope || "Not established"}
+              <dl
+                class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-micro text-fg-muted"
+              >
+                <div class="flex gap-1.5">
+                  <dt>Scope</dt>
+                  <dd class="break-words text-fg">
+                    {selected.scope || "—"}
                   </dd>
                 </div>
-                <div>
-                  <dt class="text-fg-muted">Target source revision</dt>
-                  <dd class="mt-1 break-all font-mono text-fg">
-                    {selected.target_revision || "Not established"}
+                <div class="flex gap-1.5">
+                  <dt>Source revision</dt>
+                  <dd class="break-all font-mono text-fg">
+                    {selected.target_revision || "—"}
                   </dd>
                 </div>
               </dl>
             </header>
             {#if selected.status === "awaiting_answer"}<form
-                class="space-y-3 border-t border-line pt-4"
+                class="space-y-3 border-t border-line-subtle pt-4"
                 onsubmit={recordAnswer}
               >
                 <fieldset>
@@ -497,17 +488,19 @@
                     placeholder="State your decision and any boundaries…"
                   ></textarea></label
                 >
-                <p class="text-micro text-fg-muted">
-                  An answer records intent. Delivery rechecks the source
-                  revision, and verification requires read-back evidence.
-                </p>
-                <button
-                  class="ui-btn-primary"
-                  type="submit"
-                  disabled={busy || !choice || !answer.trim()}
-                  >{busy ? "Recording answer…" : "Record decision"}</button
-                >
-              </form>{:else}<section class="border-t border-line pt-4">
+                <div class="flex flex-wrap items-center gap-3">
+                  <button
+                    class="ui-btn-primary"
+                    type="submit"
+                    disabled={busy || !choice || !answer.trim()}
+                    >{busy ? "Recording answer…" : "Record decision"}</button
+                  >
+                  <span class="text-micro text-fg-subtle"
+                    >Recording does not deliver. Delivery rechecks the source
+                    revision.</span
+                  >
+                </div>
+              </form>{:else}<section class="border-t border-line-subtle pt-4">
                 <h3 class="text-meta font-semibold text-fg">Recorded answer</h3>
                 <p
                   class="mt-2 whitespace-pre-wrap break-words text-meta text-fg-muted"
@@ -515,18 +508,19 @@
                   {selected.answer || "No answer text recorded"}
                 </p>
                 {#if selected.answered_by}<p
-                    class="mt-2 text-micro text-fg-muted"
+                    class="mt-2 text-micro text-fg-subtle"
                   >
                     Answered by {selected.answered_by}
                   </p>{/if}
               </section>{/if}
-            <section class="border-t border-line pt-4">
+            <section class="border-t border-line-subtle pt-4">
               <h3 class="text-meta font-semibold text-fg">
                 Delivery and outcome
               </h3>
               {#if actionError}<StateError
                   message={actionError}
                   onretry={refreshReceipt}
+                  class="mt-2"
                 />{/if}
               {#if action}{@const verified =
                   action.status === "verified" &&
@@ -536,14 +530,14 @@
                     ? "source_reported"
                     : action.status,
                 )}
-                <div class="mt-3">
+                <div class="mt-3 flex flex-wrap items-center gap-2">
                   <SignalBadge tone={state.tone}>{state.label}</SignalBadge>
+                  {#if !verified}
+                    <span class="text-micro text-fg-subtle"
+                      >Outcome not independently verified</span
+                    >
+                  {/if}
                 </div>
-                <p class="mt-2 text-meta text-fg-muted">
-                  {verified
-                    ? "The receipt includes independent outcome verification."
-                    : "Delivery or acknowledgement does not establish the intended outcome."}
-                </p>
                 {#if action.receipt?.detail}<p
                     class="mt-2 whitespace-pre-wrap break-words text-meta text-fg"
                   >
@@ -554,12 +548,12 @@
                     target="_blank"
                     rel="noreferrer">Open authoritative receipt ↗</a
                   >{/if}{#if action.receipt?.external_id}<p
-                    class="mt-2 break-words text-micro text-fg-muted"
+                    class="mt-2 break-words font-mono text-micro text-fg-muted"
                   >
-                    Source action: {action.receipt.external_id}
+                    {action.receipt.external_id}
                   </p>{/if}
                 {#if action.receipt?.evidence_refs?.length}<ul
-                    class="mt-2 space-y-1 text-micro text-fg-muted"
+                    class="mt-2 space-y-1 font-mono text-micro text-fg-muted"
                   >
                     {#each action.receipt.evidence_refs as ref}<li
                         class="break-all"
@@ -567,7 +561,7 @@
                         {ref}
                       </li>{/each}
                   </ul>{/if}
-                <div class="mt-4 flex flex-wrap gap-2">
+                <div class="mt-4 flex flex-wrap items-center gap-2">
                   {#if action.status === "pending_delivery"}<button
                       class="ui-btn-primary"
                       onclick={deliver}
@@ -584,14 +578,10 @@
                       : "Check source receipt"}</button
                   >
                 </div>
-                <p class="mt-2 text-micro text-fg-muted">
-                  Checking a receipt reads back source state; it does not resend
-                  the instruction.
-                </p>
                 <details class="mt-4 text-micro text-fg-muted">
                   <summary class="cursor-pointer"
-                    >Authorization and delivery attempts ({action.attempts
-                      ?.length || 0})</summary
+                    >Authorization and attempts ({action.attempts?.length ||
+                      0})</summary
                   >
                   <pre
                     class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{JSON.stringify(
@@ -607,25 +597,22 @@
                 </details>
               {:else}<p class="mt-2 text-meta text-fg-muted">
                   {selected.status === "awaiting_answer"
-                    ? "No action is authorized yet."
-                    : "No delivery receipt is available. An answer alone does not establish delivery."}
+                    ? "Nothing is authorized yet."
+                    : "No delivery receipt yet."}
                 </p>{/if}
             </section>
           </div>{:else}<p class="p-6 text-meta text-fg-muted">
             {selectedId
-              ? "This decision is unavailable in the loaded history or work scope."
-              : "Select a decision to inspect its scope and delivery."}
+              ? "This decision is not in the loaded history or work scope."
+              : "Select a decision."}
           </p>{/if}
       </section>
     </div>{/if}
   {#if decisionsCursor || actionsCursor}
     <button
-      class="ui-btn-secondary"
+      class="ui-btn-secondary mx-auto"
       onclick={loadMore}
-      disabled={loading || busy}
-      >{loading
-        ? "Loading more history…"
-        : "Load more decisions and receipts"}</button
+      disabled={loading || busy}>{loading ? "Loading…" : "Load more"}</button
     >
   {/if}
 </WorkspacePageShell>
