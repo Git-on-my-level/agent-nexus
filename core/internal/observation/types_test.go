@@ -42,3 +42,28 @@ func TestInvestigationRequiresBoundedReadOnlyScope(t *testing.T) {
 		t.Fatal("unbounded tokens accepted")
 	}
 }
+
+func TestFreshReadIdentityAdvancesWithoutInventingSourceProgress(t *testing.T) {
+	a := newReport(fixtureTarget(), "builtin:fixture")
+	a.SourceRevision = "unchanged"
+	b := a
+	b.ObservedAt = a.ObservedAt.Add(time.Minute)
+	b.ReceivedAt = b.ObservedAt
+	first, err := finishReport(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := finishReport(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.IdempotencyKey == next.IdempotencyKey {
+		t.Fatal("fresh polling observation collapsed into an old receipt")
+	}
+	if first.SemanticKey != next.SemanticKey {
+		t.Fatal("unchanged source was treated as progress")
+	}
+	if next.SourceActivityAt != nil {
+		t.Fatal("polling invented source activity")
+	}
+}

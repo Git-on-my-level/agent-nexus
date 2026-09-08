@@ -70,6 +70,8 @@ type Report struct {
 	Facts            map[string]any `json:"facts,omitempty"`
 	Evidence         []Evidence     `json:"evidence"`
 	Coverage         Coverage       `json:"coverage"`
+	SemanticKey      string         `json:"semantic_key"`
+	SourceSequence   *int64         `json:"source_sequence,omitempty"`
 	IdempotencyKey   string         `json:"idempotency_key"`
 }
 
@@ -118,12 +120,17 @@ func finishReport(r Report) (Report, error) {
 	if err := r.Validate(); err != nil {
 		return Report{}, err
 	}
-	// Receipt time and observation clock are not semantic source activity.
+	// Source identity and observation delivery identity are separate. Replays of
+	// the same originating observation dedupe; a later unchanged read stays fresh.
 	copy := r
 	copy.ReceivedAt = time.Time{}
 	copy.ObservedAt = time.Time{}
 	copy.IdempotencyKey = ""
+	copy.SemanticKey = ""
 	b, _ := json.Marshal(copy)
+	r.SemanticKey = digest(b)
+	copy.ObservedAt = r.ObservedAt
+	b, _ = json.Marshal(copy)
 	r.IdempotencyKey = digest(b)
 	return r, nil
 }

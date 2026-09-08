@@ -261,6 +261,9 @@ func (r Report) Observation(staleAfter time.Duration) map[string]any {
 		evidence = append(evidence, map[string]any{"url": e.Reference, "kind": e.Kind, "revision": e.Revision, "summary": e.Summary, "knowledge": e.Knowledge})
 	}
 	out := map[string]any{"idempotency_key": r.IdempotencyKey, "reader_id": r.ReaderID, "reader_revision": r.ReaderRevision, "observed_at": r.ObservedAt.Format(time.RFC3339Nano), "source_revision": r.SourceRevision, "status": r.Knowledge, "facts": facts, "evidence": evidence, "coverage": r.Coverage, "uncertainty": r.Coverage.Limitations, "stale_after_seconds": int64(staleAfter / time.Second)}
+	if r.SourceSequence != nil {
+		out["source_sequence"] = *r.SourceSequence
+	}
 	if r.SourceActivityAt != nil {
 		out["source_activity_at"] = r.SourceActivityAt.Format(time.RFC3339Nano)
 	}

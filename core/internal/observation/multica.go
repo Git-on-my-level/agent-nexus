@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 )
 
 type MulticaReader struct{ source *httpSource }
@@ -34,27 +35,35 @@ func (r *MulticaReader) Read(ctx context.Context, t Target) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	return readMultica(ctx, t, r.source.config.SourceWorkspaceID, r.source.base.String(), "builtin:multica", s.get, func() int { return s.pages }, r.source.config.MaxPages)
+}
+func readMultica(ctx context.Context, t Target, sourceWorkspaceID, baseURL, readerID string, get func(context.Context, string, any) (http.Header, error), pages func() int, maxPages int) (Report, error) {
+	var err error
 	var issue map[string]any
-	_, err = s.get(ctx, "/api/issues/"+t.NativeID, &issue)
+	_, err = get(ctx, "/api/issues/"+t.NativeID, &issue)
 	if err != nil {
 		return Report{}, err
 	}
 	id := str(issue, "id")
-	if !validComponent(id) || (t.NativeID != id && t.NativeID != str(issue, "identifier")) || str(issue, "workspace_id") != r.source.config.SourceWorkspaceID {
+	if !validComponent(id) || (t.NativeID != id && t.NativeID != str(issue, "identifier")) || str(issue, "workspace_id") != sourceWorkspaceID {
 		return Report{}, failure(ErrPermission, "Multica response differs from approved issue or workspace")
 	}
 	if str(issue, "title") == "" || str(issue, "status") == "" {
 		return Report{}, failure(ErrInvalidOutput, "Multica issue required fields missing")
 	}
-	out := newReport(t, "builtin:multica")
+	out := newReport(t, readerID)
 	out.Title = str(issue, "title")
 	out.NativeStatus = str(issue, "status")
-	out.URL = r.source.base.String() + "/api/issues/" + id
+	out.URL = baseURL + "/api/issues/" + id
 	out.SourceUpdatedAt = stamp(str(issue, "updated_at"))
 	out.SourceActivityAt = stamp(str(issue, "last_activity_at"))
 	out.SourceRevision = str(issue, "updated_at")
 	if rev, ok := issue["revision"].(float64); ok {
 		out.SourceRevision = fmt.Sprintf("%.0f", rev)
+		if rev >= 0 && rev < 9007199254740992 && rev == float64(int64(rev)) {
+			seq := int64(rev)
+			out.SourceSequence = &seq
+		}
 	}
 	out.Facts = selectFields(issue, "title", "identifier", "priority", "assignee_id", "assignee_type", "parent_issue_id", "project_id", "start_date", "due_date", "status_category")
 	out.Facts["native_status"] = out.NativeStatus
@@ -67,7 +76,7 @@ func (r *MulticaReader) Read(ctx context.Context, t Target) (Report, error) {
 	}
 	out.Evidence = append(out.Evidence, Evidence{Kind: "issue", Reference: out.URL, Revision: out.SourceRevision, Knowledge: "reported"})
 	var runs []map[string]any
-	_, err = s.get(ctx, "/api/issues/"+id+"/task-runs", &runs)
+	_, err = get(ctx, "/api/issues/"+id+"/task-runs", &runs)
 	if err != nil {
 		partial(&out, err)
 	} else {
@@ -92,9 +101,9 @@ func (r *MulticaReader) Read(ctx context.Context, t Target) (Report, error) {
 		out.Facts["runs"] = selected
 	}
 	// Explicit source PR links are evidence; never join tasks by title.
-	if s.pages < s.source.config.MaxPages {
+	if pages() < maxPages {
 		var raw json.RawMessage
-		_, err = s.get(ctx, "/api/issues/"+id+"/pull-requests", &raw)
+		_, err = get(ctx, "/api/issues/"+id+"/pull-requests", &raw)
 		if err != nil {
 			partial(&out, err)
 		} else {
@@ -129,6 +138,6 @@ func (r *MulticaReader) Read(ctx context.Context, t Target) (Report, error) {
 	} else {
 		partial(&out, failure(ErrLimit, "linked PR evidence not read: request budget exhausted"))
 	}
-	out.Coverage.Pages = s.pages
+	out.Coverage.Pages = pages()
 	return finishReport(out)
 }
