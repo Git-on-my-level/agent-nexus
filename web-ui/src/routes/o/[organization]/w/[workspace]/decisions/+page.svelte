@@ -402,7 +402,7 @@
                   : "Change the mailbox or work filter to inspect other decisions."}
               </p>
               <a
-                class="mt-3 inline-block text-micro text-accent-text hover:underline"
+                class="ui-prose-link mt-3 inline-block text-micro"
                 href={href({ mailbox: "watching", decision: "" })}
                 >View follow-through</a
               >
@@ -434,7 +434,7 @@
         {#if selected}<div class="space-y-5 p-4 sm:p-5">
             <header>
               <a
-                class="text-micro text-accent-text hover:underline"
+                class="ui-prose-link text-micro"
                 href={workspaceHref(
                   `/work/${encodeURIComponent(selected.work_ref)}`,
                 )}>{selected.work_ref}</a
@@ -549,7 +549,7 @@
                   >
                     {action.receipt.detail}
                   </p>{/if}{#if safeSourceHref(action.receipt?.url)}<a
-                    class="mt-2 inline-block text-meta text-accent-text hover:underline"
+                    class="ui-prose-link mt-2 inline-block text-meta"
                     href={safeSourceHref(action.receipt.url)}
                     target="_blank"
                     rel="noreferrer">Open authoritative receipt ↗</a

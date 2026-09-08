@@ -1832,6 +1832,20 @@
     background: var(--bg-soft);
   }
 
+  /*
+   * Inline links inside body copy. Hover-only underline fails WCAG 1.4.1 /
+   * axe link-in-text-block; always underline and keep accent color.
+   */
+  .ui-prose-link {
+    color: var(--accent-text);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+  .ui-prose-link:hover {
+    color: var(--accent-hover);
+  }
+
   .ui-chip-meta {
     display: inline-flex;
     align-items: center;

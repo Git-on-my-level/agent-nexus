@@ -185,6 +185,62 @@ describe("PM operator interactions", () => {
     );
     expect(client.requestWorkRefresh).toHaveBeenCalledWith("card:one");
   });
+  it("keeps the Source filter labeled after switching to the board view", async () => {
+    client.listWork.mockResolvedValue({
+      work: [work("card:one", "Sample one")],
+      next_cursor: "",
+    });
+    render(WorkPage);
+    await screen.findByText("Sample one");
+    expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
+      "SELECT",
+    );
+    state.route("/work?view=board");
+    await screen.findByRole("region", {
+      name: "Work board grouped by phase",
+    });
+    expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
+      "SELECT",
+    );
+  });
+  it("preserves a typed PM draft until the conversation list is ready", async () => {
+    const pending = deferred();
+    client.listPmConversations.mockReturnValue(pending.promise);
+    state.route("/pm?work_ref=card%3Aone");
+    render(PMPage);
+    const input = await screen.findByLabelText("Message PM");
+    await fireEvent.input(input, {
+      target: { value: "What is still unverified?" },
+    });
+    expect(screen.getByRole("button", { name: "Send message" }).disabled).toBe(
+      true,
+    );
+    pending.resolve({ items: [] });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Send message" }).disabled,
+      ).toBe(false),
+    );
+    expect(input.value).toBe("What is still unverified?");
+  });
+  it("keeps Send message disabled when the PM conversation list is unavailable", async () => {
+    client.listPmConversations.mockRejectedValue(
+      new Error("PM bridge unavailable"),
+    );
+    state.route("/pm?work_ref=card%3Aone");
+    render(PMPage);
+    await screen.findByText("PM bridge unavailable");
+    const input = screen.getByLabelText("Message PM");
+    await fireEvent.input(input, {
+      target: { value: "What is still unverified?" },
+    });
+    expect(screen.getByRole("button", { name: "Send message" }).disabled).toBe(
+      true,
+    );
+    await fireEvent.submit(input.closest("form"));
+    expect(client.createPmConversation).not.toHaveBeenCalled();
+    expect(client.sendPmMessage).not.toHaveBeenCalled();
+  });
   it("retains a failed PM message and replays the same request key", async () => {
     state.route("/pm?conversation=conversation-one");
     client.getPmConversation.mockResolvedValue({
