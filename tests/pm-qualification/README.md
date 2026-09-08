@@ -40,6 +40,7 @@ prior failure scenarios.
 | authority | Canonical source tuple deduplication, equal-title independence, local external-status write rejection, API/CLI readback |
 | replay | Duplicate report durable ID, source-sequence ordering, crash/replay persistence, changed-content replay conflict |
 | outage | Expired evidence is stale, failed read retains last good observation and visible failure, restart retention |
+| attempt_ordering | An unreachable-source error with no source sequence remains visible after sequenced evidence |
 | completion | Completed run with no acceptance evidence does not complete work; client cannot self-verify |
 | views | Work appears in card board and work list, inbox read does not mutate it, dates/relations survive |
 
@@ -48,6 +49,24 @@ assertion. First distinguish a contract-shape mismatch from a product invariant
 failure. Preserve baseline failing evidence before applying a fix. For example,
 `/work` returning 404 on the pre-feature baseline is an expected missing-feature
 failure, not a successful qualification.
+
+## Independent public-service seam tests
+
+```sh
+python3 tests/pm-qualification/check_pm.py --build-root <integrated-checkout> --report /tmp/pm-service.local.json
+```
+
+This runner creates an isolated temporary Go module and reuses the integrated
+core's actual PM, observation, primitive and SQLite packages. It checks unchanged
+source rereads versus delivery replay, canonical event emission, human discovery
+of agent proposals, originating-agent receipt discovery, unknown action recovery
+without resend, stale approval denial, and exact channel identity/deduplication
+after reopening SQLite. No peer-owned tests or module files are modified.
+
+Identity policy, source action, channel and bridge callbacks are synthetic.
+These service tests complement the real-binary suite; they do not prove real
+transport authentication or channel delivery. Known regressions remain failures
+until the owning lane fixes the behavior; there is no expected-failure bypass.
 
 ## Real-source reads
 
