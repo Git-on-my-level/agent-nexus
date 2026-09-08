@@ -55,6 +55,13 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
         '200':
           description: List PM conversations
@@ -136,6 +143,12 @@ paths:
         required: true
         schema:
           type: string
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 200}
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
         '200':
           description: Read PM conversation and turns
@@ -272,6 +285,13 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
         '200':
           description: List durable PM decisions
@@ -482,6 +502,13 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
       responses:
         '200':
           description: List action receipts and attempts
@@ -5939,6 +5966,8 @@ components:
       type: object
       additionalProperties: true
       properties:
+        has_more: {type: boolean}
+        next_cursor: {type: string}
         conversation:
           $ref: '#/components/schemas/PMConversation'
         turns:
@@ -5952,6 +5981,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        next_cursor: {type: string}
         items:
           type: array
           items:
@@ -5965,6 +5995,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        next_cursor: {type: string}
         items:
           type: array
           items:
@@ -5978,6 +6009,7 @@ components:
       type: object
       additionalProperties: true
       properties:
+        next_cursor: {type: string}
         items:
           type: array
           items:
@@ -6232,6 +6264,7 @@ components:
         refresh:
           $ref: '#/components/schemas/WorkRefresh'
         latest_observation:
+          nullable: true
           type: object
           additionalProperties: true
           properties: *id001

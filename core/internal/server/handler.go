@@ -159,6 +159,7 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
+	observationRuntime             *ObservationRuntime
 	pmHandler                      http.Handler
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
@@ -258,6 +259,10 @@ func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
 // WithPMHandler mounts the PM package behind workspace auth, body limits,
 // rate limits, and write-access checks. The PM handler must additionally bind
 // its Principal to the same authenticated request and enforce PM permissions.
+func WithObservationRuntime(runtime *ObservationRuntime) HandlerOption {
+	return func(opts *handlerOptions) { opts.observationRuntime = runtime }
+}
+
 func WithPMHandler(handler http.Handler) HandlerOption {
 	return func(opts *handlerOptions) { opts.pmHandler = handler }
 }

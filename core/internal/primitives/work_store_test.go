@@ -5,6 +5,7 @@ import (
 	"agent-nexus-core/internal/storage"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -163,5 +164,85 @@ func TestWorkConflictingReplayAndCompletionEvidence(t *testing.T) {
 	o["observed_at"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
 	if _, err := s.SubmitWorkObservation(ctx, "actor-1", id, o); !errors.Is(err, primitives.ErrInvalidWorkRequest) {
 		t.Fatalf("future timestamp accepted: %v", err)
+	}
+}
+
+func TestWorkUnsequencedOutageAfterSequencedSuccess(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	w := registerWork(t, s, b)
+	id := w["id"].(string)
+	now := time.Now().UTC()
+	good := map[string]any{"idempotency_key": "good", "reader_id": "reader", "reader_revision": "v1", "observed_at": now.Add(-time.Second).Format(time.RFC3339Nano), "source_sequence": 9, "status": "reported", "facts": map[string]any{"phase": "review"}}
+	if _, err := s.SubmitWorkObservation(ctx, "actor-1", id, good); err != nil {
+		t.Fatal(err)
+	}
+	failed := map[string]any{"idempotency_key": "outage", "reader_id": "reader", "reader_revision": "v1", "observed_at": now.Format(time.RFC3339Nano), "status": "error", "error": map[string]any{"code": "unreachable", "message": "fixture"}}
+	if _, err := s.SubmitWorkObservation(ctx, "actor-1", id, failed); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetWork(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current["phase"] != "review" || current["freshness"].(map[string]any)["status"] != "error" {
+		t.Fatalf("outage hidden: %v", current)
+	}
+}
+
+func TestWorkUnchangedSequenceRefreshesWithoutProgress(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	w := registerWork(t, s, b)
+	id := w["id"].(string)
+	now := time.Now().UTC()
+	for i := 0; i < 2; i++ {
+		o := map[string]any{"idempotency_key": fmt.Sprintf("poll-%d", i), "reader_id": "r", "reader_revision": "1", "observed_at": now.Add(time.Duration(i-1) * time.Second).Format(time.RFC3339Nano), "source_sequence": 9, "source_revision": "9", "status": "reported", "facts": map[string]any{"phase": "review"}}
+		if _, err := s.SubmitWorkObservation(ctx, "actor-1", id, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, err := s.GetWork(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh := current["freshness"].(map[string]any)
+	if fresh["last_observed_at"] != now.Format(time.RFC3339Nano) {
+		t.Fatalf("unchanged source failed freshness: %v", fresh)
+	}
+	if _, ok := fresh["meaningful_progress_at"]; ok {
+		t.Fatal("poll invented progress")
+	}
+}
+
+func TestWorkObservationPaginationSurvivesInsert(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	w := registerWork(t, s, b)
+	ref := w["ref"].(string)
+	submit := func(key string) {
+		t.Helper()
+		_, err := s.SubmitWorkObservation(ctx, "actor-1", ref, map[string]any{"idempotency_key": key, "reader_id": "r", "reader_revision": "1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported", "facts": map[string]any{"phase": "review"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	submit("one")
+	submit("two")
+	page, cursor, err := s.ListWorkObservations(ctx, ref, 1, "")
+	if err != nil || len(page) != 1 || cursor == "" {
+		t.Fatalf("first page: %v %v", page, err)
+	}
+	submit("three")
+	older, next, err := s.ListWorkObservations(ctx, ref, 1, cursor)
+	if err != nil || len(older) != 1 || older[0]["idempotency_key"] != "one" || next != "" {
+		t.Fatalf("insert destabilized cursor: %v %s %v", older, next, err)
+	}
+	events, err := s.ListEventsByThread(ctx, w["thread_id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("routine polls created semantic events: %d", len(events))
 	}
 }

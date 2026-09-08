@@ -214,6 +214,9 @@ primitives:
         card_created:
           family: card_created
           required_payload_fields: [card_id]
+        card_updated:
+          family: card_updated
+          required_payload_fields: [card_id]
         card_moved:
           family: card_moved
           required_payload_fields: [card_id, from_column_key, column_key]

@@ -54,12 +54,20 @@ func workStoreError(w http.ResponseWriter, err error) {
 	}
 }
 func publicWork(w map[string]any) map[string]any {
-	out := copyStringAnyMap(w)
-	for _, key := range []string{"id", "board_id", "thread_id", "board_handle"} {
-		delete(out, key)
+	out := publicCardView(w)
+	delete(out, "id")
+	delete(out, "thread_id")
+	for _, key := range []string{"source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "version", "freshness", "latest_observation"} {
+		if value, ok := w[key]; ok {
+			out[key] = value
+		}
+	}
+	if refresh, ok := w["refresh"].(map[string]any); ok {
+		out["refresh"] = publicWorkRefresh(refresh)
 	}
 	return out
 }
+
 func workLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := r.URL.Query().Get("limit")
 	if raw == "" {
@@ -80,7 +88,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/work")
 	if path == "/capabilities" {
-		writeJSON(w, 200, map[string]any{"capabilities": map[string]any{"version": "1", "canonical_entity": "card", "projects": "topics", "observations": true, "remote_reports": "attributed_claims", "external_status_write": false, "refresh": "durable_queue", "refresh_executor_configured": false, "phases": []string{"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}}})
+		writeJSON(w, 200, map[string]any{"capabilities": map[string]any{"version": "1", "canonical_entity": "card", "projects": "topics", "observations": true, "remote_reports": "attributed_claims", "external_status_write": false, "refresh": "durable_queue", "refresh_executor_configured": opts.observationRuntime != nil, "phases": []string{"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}}})
 		return
 	}
 	if path == "" && r.Method == http.MethodGet {
@@ -194,7 +202,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				workStoreError(w, err)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"refresh": item["refresh"]})
+			writeJSON(w, 200, map[string]any{"refresh": publicWorkRefresh(item["refresh"].(map[string]any))})
 			return
 		}
 		refresh, err := store.RequestWorkRefresh(r.Context(), actor, id)
@@ -202,10 +210,17 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			workStoreError(w, err)
 			return
 		}
-		writeJSON(w, 202, map[string]any{"refresh": refresh})
+		writeJSON(w, 202, map[string]any{"refresh": publicWorkRefresh(refresh)})
 	}
 }
 
 func pmRouteAccess(r *http.Request) routeAccessRequirement {
 	return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet || r.Method == http.MethodPost}
+}
+
+func publicWorkRefresh(refresh map[string]any) map[string]any {
+	out := copyStringAnyMap(refresh)
+	delete(out, "lease_token")
+	delete(out, "lease_owner")
+	return out
 }

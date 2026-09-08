@@ -22,6 +22,7 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/heartbeat"
+	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
 	"agent-nexus-core/internal/schema"
@@ -430,6 +431,19 @@ func main() {
 			Enabled: true,
 		})
 	}
+	observationRuntime, err := server.LoadObservationRuntime(envString("ANX_OBSERVATION_CONFIG", ""), workspaceID, primitiveStore)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize observation runtime: %v\n", err)
+		os.Exit(1)
+	}
+	pmHandler, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
+		PM:            pm.Config{WorkspaceID: workspaceID, WorkspaceName: workspaceName, BaseURL: envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)), AgentActorID: envString("ANX_PM_AGENT_ACTOR_ID", ""), AgentHandle: envString("ANX_PM_AGENT_HANDLE", "")},
+		BridgeEnabled: envBool("ANX_PM_BRIDGE_ENABLED", false),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)
+		os.Exit(1)
+	}
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -440,6 +454,8 @@ func main() {
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithPrimitiveStore(primitiveStore),
+		server.WithPMHandler(pmHandler),
+		server.WithObservationRuntime(observationRuntime),
 		server.WithSchemaContract(contract),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
 			RPDisplayName:  webAuthnDisplayName,
@@ -485,6 +501,9 @@ func main() {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
+	if observationRuntime != nil {
+		go observationRuntime.Run(maintenanceCtx)
+	}
 	heartbeatURL := strings.TrimSpace(os.Getenv("ANX_HEARTBEAT_PUBLISHER_URL"))
 	if heartbeatURL == "" {
 		fmt.Println("heartbeat publisher: disabled (ANX_HEARTBEAT_PUBLISHER_URL unset)")

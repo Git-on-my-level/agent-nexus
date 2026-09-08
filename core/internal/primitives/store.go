@@ -115,6 +115,7 @@ type HomeUnreadGroup struct {
 var HomeFeedEventTypes = []string{
 	"message_posted",
 	"card_created",
+	"card_updated",
 	"card_moved",
 	"card_resolved",
 	"card_archived",

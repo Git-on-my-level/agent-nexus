@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -76,7 +75,14 @@ type WorkPage struct {
 func insertWorkMetadata(ctx context.Context, tx *sql.Tx, cardID, actorID string, m map[string]any) error {
 	source := workMap(m["source"])
 	_, err := tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,connection_id,native_id,metadata_json,updated_at,updated_by) VALUES(?,?,?,?,?,?,?)`, cardID, workString(source["authority"]), workString(source["connection_id"]), workString(source["native_id"]), workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actorID)
-	return err
+	if err != nil {
+		return err
+	}
+	var threadID, boardID string
+	if err = tx.QueryRowContext(ctx, `SELECT thread_id,board_id FROM cards WHERE id=?`, cardID).Scan(&threadID, &boardID); err != nil {
+		return err
+	}
+	return insertWorkEvent(ctx, tx, actorID, map[string]any{"id": cardID, "thread_id": threadID, "board_id": boardID}, "card_updated", "Commitment registered: "+workString(m["title"]), map[string]any{"changed_fields": []string{"work"}, "source": source})
 }
 
 func validateWorkLocal(m map[string]any) error {
@@ -252,7 +258,7 @@ func (s *Store) workObservation(ctx context.Context, id string) (map[string]any,
 }
 
 func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any, error) {
-	card, err := s.GetBoardCard(ctx, "", identifier)
+	card, err := s.getWorkCard(ctx, identifier)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +342,10 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	if attempt != nil && workString(attempt["status"]) == "error" {
 		fresh["status"] = "error"
 		fresh["last_error"] = attempt["error"]
+	}
+	if refresh["state"] == "failed" {
+		fresh["status"] = "error"
+		fresh["last_error"] = refresh["last_error"]
 	}
 	out["freshness"] = fresh
 	return out, nil
@@ -439,7 +449,12 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	for k, val := range patch {
 		m[k] = val
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actor, id, version)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE work_metadata SET metadata_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND version=?`, workJSON(m), time.Now().UTC().Format(time.RFC3339Nano), actor, id, version)
 	if err != nil {
 		return nil, err
 	}
@@ -449,6 +464,12 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	}
 	if n != 1 {
 		return nil, ErrConflict
+	}
+	if err = insertWorkEvent(ctx, tx, actor, w, "card_updated", "Work annotations updated", map[string]any{"changed_fields": []string{"work_annotations"}, "patch": patch}); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
 	}
 	return s.GetWork(ctx, id)
 }
@@ -460,22 +481,30 @@ func (s *Store) ListWorkObservations(ctx context.Context, identifier string, lim
 	if limit < 1 || limit > 200 {
 		return nil, "", workInvalid("limit must be 1..200")
 	}
-	card, err := s.GetBoardCard(ctx, "", identifier)
+	card, err := s.getWorkCard(ctx, identifier)
 	if err != nil {
 		return nil, "", err
 	}
-	offset := 0
+	cardID := workString(card["id"])
+	where := "card_id=?"
+	args := []any{cardID}
 	if cursor != "" {
 		b, e := base64.RawURLEncoding.DecodeString(cursor)
 		if e != nil {
 			return nil, "", ErrInvalidCursor
 		}
-		offset, e = strconv.Atoi(string(b))
-		if e != nil || offset < 0 {
+		var parts []string
+		if json.Unmarshal(b, &parts) != nil || len(parts) != 3 || parts[2] != cardID {
 			return nil, "", ErrInvalidCursor
 		}
+		if _, e := workTimestamp(parts[0]); e != nil {
+			return nil, "", ErrInvalidCursor
+		}
+		where += " AND (received_at<? OR (received_at=? AND id<?))"
+		args = append(args, parts[0], parts[0], parts[1])
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT body_json FROM work_observations WHERE card_id=? ORDER BY received_at DESC,id DESC LIMIT ? OFFSET ?`, workString(card["id"]), limit+1, offset)
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT body_json FROM work_observations WHERE `+where+` ORDER BY received_at DESC,id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -498,7 +527,9 @@ func (s *Store) ListWorkObservations(ctx context.Context, identifier string, lim
 	next := ""
 	if len(out) > limit {
 		out = out[:limit]
-		next = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset + limit)))
+		last := out[len(out)-1]
+		encoded, _ := json.Marshal([]string{workString(last["received_at"]), workString(last["id"]), cardID})
+		next = base64.RawURLEncoding.EncodeToString(encoded)
 	}
 	return out, next, nil
 }
@@ -571,7 +602,7 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 			return nil, workInvalid("completion requires referenced evidence")
 		}
 	}
-	card, err := s.GetBoardCard(ctx, "", identifier)
+	card, err := s.getWorkCard(ctx, identifier)
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +638,7 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 		return nil, err
 	}
 	o["id"] = uuid.NewString()
-	o["received_at"] = now.Format(time.RFC3339Nano)
+	o["received_at"] = now.Format("2006-01-02T15:04:05.000000000Z")
 	o["actor_id"] = actor
 	o["work_ref"] = card["ref"]
 	o["verification"] = "reported"
@@ -630,7 +661,19 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 		oldSeq, oldHasSeq := workInt(old["source_sequence"])
 		newSeq, newHasSeq := workInt(sequence)
 		if oldHasSeq {
-			return newHasSeq && newSeq > oldSeq, nil
+			if !newHasSeq || newSeq < oldSeq {
+				return false, nil
+			}
+			if newSeq > oldSeq {
+				return true, nil
+			}
+			// Equal source revision with equal facts is a new successful poll,
+			// not progress. Conflicting same-revision facts cannot replace it.
+			if workJSON(workMap(old["facts"])) != workJSON(facts) || workString(old["source_revision"]) != workString(o["source_revision"]) {
+				return false, nil
+			}
+			oldTime, e := workTimestamp(old["observed_at"])
+			return observed.After(oldTime), e
 		}
 		if newHasSeq {
 			return true, nil
@@ -642,12 +685,56 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 	if err != nil {
 		return nil, err
 	}
-	attemptNew, err := newer(oldAttemptID)
-	if err != nil {
-		return nil, err
+	// Refresh-attempt health is ordered separately from source revisions: an
+	// unreachable source cannot supply a sequence number, but its failed read
+	// must still surface without replacing last-good facts.
+	attemptNew := oldAttemptID == ""
+	if oldAttemptID != "" {
+		var oldObserved string
+		if err = tx.QueryRowContext(ctx, `SELECT observed_at FROM work_observations WHERE id=?`, oldAttemptID).Scan(&oldObserved); err != nil {
+			return nil, err
+		}
+		oldTime, parseErr := workTimestamp(oldObserved)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		attemptNew = observed.After(oldTime)
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_observations(id,card_id,idempotency_key,digest,observed_at,received_at,source_sequence,status,body_json) VALUES(?,?,?,?,?,?,?,?,?)`, o["id"], id, key, digest, o["observed_at"], o["received_at"], sequence, status, workJSON(o)); err != nil {
 		return nil, err
+	}
+	materialChange := false
+	if goodNew && status != "error" {
+		materialChange = oldGoodID == ""
+		if oldGoodID != "" {
+			var priorRaw string
+			if err = tx.QueryRowContext(ctx, `SELECT body_json FROM work_observations WHERE id=?`, oldGoodID).Scan(&priorRaw); err != nil {
+				return nil, err
+			}
+			var prior map[string]any
+			if err = json.Unmarshal([]byte(priorRaw), &prior); err != nil {
+				return nil, err
+			}
+			materialChange = workJSON(workMap(prior["facts"])) != workJSON(facts) || workString(prior["meaningful_progress_at"]) != workString(o["meaningful_progress_at"])
+		}
+	}
+	if materialChange {
+		if err = insertWorkEvent(ctx, tx, actor, card, "card_updated", "Source observation changed", map[string]any{"changed_fields": []string{"source_observation"}, "observation_id": o["id"], "source_revision": o["source_revision"], "knowledge": "reported", "facts": facts}); err != nil {
+			return nil, err
+		}
+	}
+	if attemptNew && status == "error" {
+		previousStatus := ""
+		if oldAttemptID != "" {
+			if err = tx.QueryRowContext(ctx, `SELECT status FROM work_observations WHERE id=?`, oldAttemptID).Scan(&previousStatus); err != nil {
+				return nil, err
+			}
+		}
+		if previousStatus != "error" {
+			if err = insertWorkEvent(ctx, tx, actor, card, "exception_raised", "Source refresh failed", map[string]any{"subtype": "source_refresh_failed", "observation_id": o["id"], "error": o["error"]}); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if goodNew && status != "error" {
 		oldGoodID = workString(o["id"])
@@ -656,12 +743,18 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 	_ = json.Unmarshal([]byte(refreshRaw), &refresh)
 	if attemptNew {
 		oldAttemptID = workString(o["id"])
-		refresh["last_attempt_at"] = o["received_at"]
+		if refresh["state"] != "running" {
+			refresh["last_attempt_at"] = o["received_at"]
+		}
 		if status == "error" {
-			refresh["state"] = "failed"
+			if refresh["state"] != "running" {
+				refresh["state"] = "failed"
+			}
 			refresh["last_error"] = o["error"]
 		} else {
-			refresh["state"] = "succeeded"
+			if refresh["state"] != "running" {
+				refresh["state"] = "succeeded"
+			}
 			refresh["last_success_at"] = o["received_at"]
 			delete(refresh, "last_error")
 		}
@@ -680,7 +773,7 @@ func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
-	card, err := s.GetBoardCard(ctx, "", identifier)
+	card, err := s.getWorkCard(ctx, identifier)
 	if err != nil {
 		return nil, err
 	}
@@ -733,4 +826,18 @@ func ensureNativeWorkMutation(ctx context.Context, q queryRower, cardID string) 
 		return invalidBoardRequest("external work is source-owned; request an authorized PM action")
 	}
 	return nil
+}
+
+// getWorkCard resolves the same public typed refs/handles as HTTP, without
+// loading unbounded card revision history into portfolio queries.
+func (s *Store) getWorkCard(ctx context.Context, identifier string) (map[string]any, error) {
+	resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "card", Ref: identifier})
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.loadBoardCardByGlobalID(ctx, s.db, resolved.ID, true)
+	if err != nil {
+		return nil, err
+	}
+	return row.toMap()
 }
