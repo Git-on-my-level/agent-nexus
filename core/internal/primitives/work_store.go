@@ -156,6 +156,9 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	if err := validateWorkLocal(m); err != nil {
 		return nil, err
 	}
+	if err := s.validateWorkReferences(ctx, m); err != nil {
+		return nil, err
+	}
 	source := workMap(m["source"])
 	authority := workString(source["authority"])
 	if authority == "" {
@@ -431,6 +434,10 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	if err := validateWorkLocal(patch); err != nil {
 		return nil, err
 	}
+	patch = workClone(patch)
+	if err := s.validateWorkReferences(ctx, patch); err != nil {
+		return nil, err
+	}
 	w, err := s.GetWork(ctx, identifier)
 	if err != nil {
 		return nil, err
@@ -535,6 +542,19 @@ func (s *Store) ListWorkObservations(ctx context.Context, identifier string, lim
 }
 
 func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier string, input map[string]any) (map[string]any, error) {
+	return s.submitWorkObservation(ctx, actor, identifier, "", input)
+}
+
+// SubmitLeasedWorkObservation fences the observation write itself, not merely
+// the final refresh state, so a resumed expired worker cannot regress evidence.
+func (s *Store) SubmitLeasedWorkObservation(ctx context.Context, actor, identifier, token string, input map[string]any) (map[string]any, error) {
+	if token == "" {
+		return nil, workInvalid("lease token required")
+	}
+	return s.submitWorkObservation(ctx, actor, identifier, token, input)
+}
+
+func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, token string, input map[string]any) (map[string]any, error) {
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
@@ -621,6 +641,20 @@ func (s *Store) SubmitWorkObservation(ctx context.Context, actor, identifier str
 	// Acquire the SQLite write lock before reading replay/order state.
 	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET card_id=card_id WHERE card_id=?`, id); err != nil {
 		return nil, err
+	}
+	if token != "" {
+		var leaseRaw string
+		if err = tx.QueryRowContext(ctx, `SELECT refresh_json FROM work_metadata WHERE card_id=?`, id).Scan(&leaseRaw); err != nil {
+			return nil, err
+		}
+		var lease map[string]any
+		if err = json.Unmarshal([]byte(leaseRaw), &lease); err != nil {
+			return nil, err
+		}
+		expires, e := workTimestamp(lease["lease_expires_at"])
+		if workString(lease["lease_token"]) != token || lease["state"] != "running" || e != nil || !expires.After(time.Now()) {
+			return nil, ErrConflict
+		}
 	}
 	var existingDigest, raw string
 	err = tx.QueryRowContext(ctx, `SELECT digest,body_json FROM work_observations WHERE card_id=? AND idempotency_key=?`, id, key).Scan(&existingDigest, &raw)
@@ -840,4 +874,36 @@ func (s *Store) getWorkCard(ctx context.Context, identifier string) (map[string]
 		return nil, err
 	}
 	return row.toMap()
+}
+
+func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) error {
+	if ref := workString(m["project_ref"]); ref != "" {
+		resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "topic", Ref: ref})
+		if err != nil {
+			return workInvalid("project_ref must resolve to an existing workspace topic")
+		}
+		m["project_ref"] = resolved.CanonicalRef
+	}
+	if value, ok := m["relations"]; ok {
+		b, _ := json.Marshal(value)
+		var relations []map[string]any
+		if json.Unmarshal(b, &relations) != nil {
+			return workInvalid("relations must be objects")
+		}
+		for _, relation := range relations {
+			ref := workString(relation["ref"])
+			kind := workString(relation["kind"])
+			typ := ""
+			if kind == "parent" || kind == "child" || kind == "depends_on" {
+				typ = "card"
+			}
+			resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: typ, Ref: ref})
+			if err != nil {
+				return workInvalid("relation ref must resolve inside this workspace")
+			}
+			relation["ref"] = resolved.CanonicalRef
+		}
+		m["relations"] = relations
+	}
+	return nil
 }

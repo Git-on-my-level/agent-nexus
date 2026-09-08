@@ -24,6 +24,10 @@ func TestWorkRefreshLeaseFencing(t *testing.T) {
 		t.Fatalf("overlapping claim: %v", err)
 	}
 	token := claim["lease_token"].(string)
+	_, err = s.SubmitLeasedWorkObservation(ctx, "actor-1", id, "wrong-token", map[string]any{"idempotency_key": "fenced", "reader_id": "r", "reader_revision": "1", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "reported"})
+	if !errors.Is(err, primitives.ErrConflict) {
+		t.Fatalf("stale worker observation was not fenced: %v", err)
+	}
 	if _, err := s.FinishWorkRefresh(ctx, id, "wrong-token", map[string]any{"state": "succeeded"}); !errors.Is(err, primitives.ErrConflict) {
 		t.Fatalf("unfenced finish: %v", err)
 	}

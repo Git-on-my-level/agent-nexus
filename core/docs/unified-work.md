@@ -69,7 +69,11 @@ Work must first be registered with matching source authority, connection ID and
 source-native ID. Workspace ID is injected from the running deployment and
 cannot cross workspace boundaries. GitHub and Multica use bounded HTTPS readers
 with redirects disabled. Multica also requires `source_workspace_id` and its
-actual approved HTTPS `base_url`. Explicit `allowed_networks` CIDRs can approve
+actual approved HTTPS `base_url`. Alternatively, set `transport=multica_cli`,
+`cli_binary` to the approved installed absolute executable, and `cli_profile` to
+an existing authorized profile. That trusted CLI owns its source authentication
+and network policy; no token extraction or credential copying occurs. Explicit
+`allowed_networks` CIDRs for the HTTP transport can approve
 private destinations. The environment handle resolves only the named variable
 in memory; choose source-side read-only credentials.
 

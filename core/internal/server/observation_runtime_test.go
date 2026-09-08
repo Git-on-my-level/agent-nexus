@@ -5,6 +5,8 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -104,5 +106,27 @@ func TestObservationRuntimeRejectsBindingMismatch(t *testing.T) {
 	}
 	if err = rt.Tick(ctx); err == nil || reader.calls != 0 {
 		t.Fatal("unregistered target read")
+	}
+}
+
+func TestObservationConfigSupportsExplicitTrustedMulticaCLI(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	path := filepath.Join(t.TempDir(), "readers.json")
+	config := `{"targets":[{"work_ref":"card:tracked","source_native_id":"issue-1","target":{"source":"multica","connection_id":"approved","kind":"issue","native_id":"issue-1"},"transport":"multica_cli","cli_binary":"/opt/approved/multica","cli_profile":"approved-profile","base_url":"https://example.test","source_workspace_id":"source-workspace"}]}`
+	if err := os.WriteFile(path, []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := LoadObservationRuntime(path, "ws_main", h.primitiveStore.(*primitives.Store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt == nil || len(rt.bindings) != 1 || rt.bindings[0].Reader.Capabilities().Source != "multica" {
+		t.Fatal("CLI reader not configured")
+	}
+	if err := os.Chmod(path, 0666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadObservationRuntime(path, "ws_main", h.primitiveStore.(*primitives.Store)); err == nil {
+		t.Fatal("writable operator configuration accepted")
 	}
 }

@@ -36,6 +36,9 @@ type observationConfig struct {
 		WorkRef           string             `json:"work_ref"`
 		SourceNativeID    string             `json:"source_native_id"`
 		Target            observation.Target `json:"target"`
+		Transport         string             `json:"transport"`
+		CLIBinary         string             `json:"cli_binary"`
+		CLIProfile        string             `json:"cli_profile"`
 		BaseURL           string             `json:"base_url"`
 		SourceWorkspaceID string             `json:"source_workspace_id"`
 		CredentialEnv     string             `json:"credential_env"`
@@ -100,8 +103,18 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 		}
 		policy := observation.RefreshPolicy{Interval: time.Duration(c.IntervalSeconds) * time.Second, StaleAfter: time.Duration(c.StaleAfterSeconds) * time.Second, Timeout: time.Duration(c.TimeoutSeconds) * time.Second, MaxBackoff: time.Duration(c.MaxBackoffSeconds) * time.Second}
 		var reader observation.Reader
+		if c.Transport != "" && c.Transport != "http" && c.Transport != "multica_cli" {
+			return nil, fmt.Errorf("unsupported reader transport")
+		}
+		if c.Transport == "multica_cli" && c.Target.Source != "multica" {
+			return nil, fmt.Errorf("CLI transport is only available for Multica")
+		}
 		switch c.Target.Source {
 		case "github", "multica":
+			if c.Transport == "multica_cli" {
+				reader, err = observation.NewMulticaCLIReader(observation.MulticaCLIConfig{Binary: c.CLIBinary, Profile: c.CLIProfile, BaseURL: c.BaseURL, WorkspaceID: workspaceID, ConnectionID: c.Target.ConnectionID, SourceWorkspaceID: c.SourceWorkspaceID, Timeout: policy.Timeout})
+				break
+			}
 			networks := []netip.Prefix{}
 			for _, raw := range c.AllowedNetworks {
 				prefix, e := netip.ParsePrefix(raw)
@@ -239,7 +252,7 @@ func (rt *ObservationRuntime) refresh(ctx context.Context, b ObservationBinding)
 		// Delivery identity is per actual leased read, source semantic identity is
 		// source_revision. An unchanged poll advances freshness without progress.
 		report["idempotency_key"] = "refresh:" + token
-		_, err = rt.store.SubmitWorkObservation(ctx, actors.SystemActorID, b.WorkRef, report)
+		_, err = rt.store.SubmitLeasedWorkObservation(ctx, actors.SystemActorID, b.WorkRef, token, report)
 		if err == nil {
 			finished["state"] = "succeeded"
 		} else {
@@ -248,6 +261,13 @@ func (rt *ObservationRuntime) refresh(ctx context.Context, b ObservationBinding)
 	}
 	if finished["state"] != "succeeded" {
 		finished["last_error"] = map[string]any{"code": "read_failed", "message": "Source read or observation persistence failed"}
+		// A failed attempt is durable evidence too, ordered independently from
+		// source revisions. Persist it while the lease is still held so event
+		// and inbox surfaces receive the same failure as the refresh panel.
+		failureReport := map[string]any{"idempotency_key": "refresh:" + token + ":error", "reader_id": "builtin:" + b.Target.Source, "reader_revision": observation.ReaderRevision, "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "status": "error", "facts": map[string]any{}, "error": finished["last_error"]}
+		if _, storeErr := rt.store.SubmitLeasedWorkObservation(ctx, actors.SystemActorID, b.WorkRef, token, failureReport); storeErr != nil {
+			readErr = errors.Join(readErr, storeErr)
+		}
 		if result.Health.NextDue.IsZero() {
 			finished["next_due_at"] = time.Now().Add(b.Policy.Interval).UTC().Format(time.RFC3339Nano)
 		}

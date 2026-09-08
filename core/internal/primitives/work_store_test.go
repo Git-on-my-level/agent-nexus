@@ -246,3 +246,17 @@ func TestWorkObservationPaginationSurvivesInsert(t *testing.T) {
 		t.Fatalf("routine polls created semantic events: %d", len(events))
 	}
 }
+
+func TestWorkReferencesRemainWorkspaceScoped(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	_, err := s.CreateWork(ctx, "actor-1", b, map[string]any{"title": "Invalid project", "project_ref": "topic:missing"})
+	if !errors.Is(err, primitives.ErrInvalidWorkRequest) {
+		t.Fatalf("unresolved project accepted: %v", err)
+	}
+	w := registerWork(t, s, b)
+	_, err = s.PatchWork(ctx, "actor-1", w["ref"].(string), 1, map[string]any{"relations": []any{map[string]any{"kind": "depends_on", "ref": "card:other-workspace"}}})
+	if !errors.Is(err, primitives.ErrInvalidWorkRequest) {
+		t.Fatalf("unresolved dependency accepted: %v", err)
+	}
+}
