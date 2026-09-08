@@ -2,7 +2,7 @@
   "openapi_version": "3.1.0",
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
-  "concept_count": 30,
+  "concept_count": 31,
   "concepts": [
     {
       "name": "actors",
@@ -2885,7 +2885,7 @@
     },
     {
       "name": "cards",
-      "command_count": 16,
+      "command_count": 42,
       "command_ids": [
         "boards.cards.batch_add",
         "boards.cards.get",
@@ -2902,7 +2902,33 @@
         "cards.revisions.get",
         "cards.revisions.list",
         "cards.timeline",
-        "cards.trash"
+        "cards.trash",
+        "pm.actions.get",
+        "pm.actions.list",
+        "pm.actions.reconcile",
+        "pm.bindings.create",
+        "pm.context",
+        "pm.conversations.create",
+        "pm.conversations.get",
+        "pm.conversations.list",
+        "pm.conversations.messages.create",
+        "pm.decisions.answer",
+        "pm.decisions.create",
+        "pm.decisions.dispatch",
+        "pm.decisions.get",
+        "pm.decisions.list",
+        "pm.turns.complete",
+        "pm.turns.context",
+        "pm.turns.decisions.create",
+        "work.capabilities",
+        "work.create",
+        "work.get",
+        "work.list",
+        "work.observations.list",
+        "work.observations.submit",
+        "work.patch",
+        "work.refresh.get",
+        "work.refresh.request"
       ],
       "commands": [
         {
@@ -4025,6 +4051,1708 @@
           ],
           "go_method": "CardsTrash",
           "ts_method": "cardsTrash"
+        },
+        {
+          "command_id": "pm.actions.get",
+          "cli_path": "pm actions get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/actions/{action_id}",
+          "operation_id": "pmActionsGet",
+          "summary": "Read an action and its receipts",
+          "why": "Read an action and its receipts.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "action_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsGet",
+          "ts_method": "pmActionsGet"
+        },
+        {
+          "command_id": "pm.actions.list",
+          "cli_path": "pm actions list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/actions",
+          "operation_id": "pmActionsList",
+          "summary": "List action receipts and attempts",
+          "why": "List action receipts and attempts.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMActionListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsList",
+          "ts_method": "pmActionsList"
+        },
+        {
+          "command_id": "pm.actions.reconcile",
+          "cli_path": "pm actions reconcile",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/actions/{action_id}/reconcile",
+          "operation_id": "pmActionsReconcile",
+          "summary": "Read back an action outcome without resending",
+          "why": "Read back an action outcome without resending.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "action_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsReconcile",
+          "ts_method": "pmActionsReconcile"
+        },
+        {
+          "command_id": "pm.bindings.create",
+          "cli_path": "pm bindings create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/bindings",
+          "operation_id": "pmBindingsCreate",
+          "summary": "Bind an exact channel identity to a workspace principal",
+          "why": "Bind an exact channel identity to a workspace principal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMBinding`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "can_approve",
+                "type": "boolean"
+              },
+              {
+                "name": "created_at",
+                "type": "string"
+              },
+              {
+                "name": "enabled",
+                "type": "boolean"
+              },
+              {
+                "name": "id",
+                "type": "string"
+              },
+              {
+                "name": "origin.channel_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.external_user_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.tenant_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.thread_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.transport",
+                "type": "string"
+              },
+              {
+                "name": "revision",
+                "type": "integer"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              },
+              {
+                "name": "workspace_id",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmBindingsCreate",
+          "ts_method": "pmBindingsCreate"
+        },
+        {
+          "command_id": "pm.context",
+          "cli_path": "pm context",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/context",
+          "operation_id": "pmContext",
+          "summary": "Read bounded authorized PM context",
+          "why": "Read bounded authorized PM context.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMContextResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmContext",
+          "ts_method": "pmContext"
+        },
+        {
+          "command_id": "pm.conversations.create",
+          "cli_path": "pm conversations create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/conversations",
+          "operation_id": "pmConversationsCreate",
+          "summary": "Create a durable PM conversation",
+          "why": "Create a durable PM conversation.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversation`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsCreate",
+          "ts_method": "pmConversationsCreate"
+        },
+        {
+          "command_id": "pm.conversations.get",
+          "cli_path": "pm conversations get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/conversations/{conversation_id}",
+          "operation_id": "pmConversationsGet",
+          "summary": "Read PM conversation and turns",
+          "why": "Read PM conversation and turns.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversationDetailResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "conversation_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsGet",
+          "ts_method": "pmConversationsGet"
+        },
+        {
+          "command_id": "pm.conversations.list",
+          "cli_path": "pm conversations list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/conversations",
+          "operation_id": "pmConversationsList",
+          "summary": "List PM conversations",
+          "why": "List PM conversations.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversationListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsList",
+          "ts_method": "pmConversationsList"
+        },
+        {
+          "command_id": "pm.conversations.messages.create",
+          "cli_path": "pm conversations messages create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/conversations/{conversation_id}/messages",
+          "operation_id": "pmConversationsMessagesCreate",
+          "summary": "Queue a contextual PM turn",
+          "why": "Queue a contextual PM turn.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMTurn`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "conversation_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsMessagesCreate",
+          "ts_method": "pmConversationsMessagesCreate"
+        },
+        {
+          "command_id": "pm.decisions.answer",
+          "cli_path": "pm decisions answer",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions/{decision_id}/answer",
+          "operation_id": "pmDecisionsAnswer",
+          "summary": "Answer and authorize a scoped decision",
+          "why": "Answer and authorize a scoped decision.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "approve",
+                "type": "boolean"
+              },
+              {
+                "name": "revision",
+                "type": "integer"
+              },
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsAnswer",
+          "ts_method": "pmDecisionsAnswer"
+        },
+        {
+          "command_id": "pm.decisions.create",
+          "cli_path": "pm decisions create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions",
+          "operation_id": "pmDecisionsCreate",
+          "summary": "Propose a scoped PM decision",
+          "why": "Propose a scoped PM decision.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "instruction",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "scope",
+                "type": "string"
+              },
+              {
+                "name": "target_revision",
+                "type": "string"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsCreate",
+          "ts_method": "pmDecisionsCreate"
+        },
+        {
+          "command_id": "pm.decisions.dispatch",
+          "cli_path": "pm decisions dispatch",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions/{decision_id}/dispatch",
+          "operation_id": "pmDecisionsDispatch",
+          "summary": "Hand off an authorized source action",
+          "why": "Hand off an authorized source action.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsDispatch",
+          "ts_method": "pmDecisionsDispatch"
+        },
+        {
+          "command_id": "pm.decisions.get",
+          "cli_path": "pm decisions get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/decisions/{decision_id}",
+          "operation_id": "pmDecisionsGet",
+          "summary": "Read a PM decision",
+          "why": "Read a PM decision.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsGet",
+          "ts_method": "pmDecisionsGet"
+        },
+        {
+          "command_id": "pm.decisions.list",
+          "cli_path": "pm decisions list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/decisions",
+          "operation_id": "pmDecisionsList",
+          "summary": "List durable PM decisions",
+          "why": "List durable PM decisions.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecisionListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsList",
+          "ts_method": "pmDecisionsList"
+        },
+        {
+          "command_id": "pm.turns.complete",
+          "cli_path": "pm turns complete",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/complete",
+          "operation_id": "pmTurnsComplete",
+          "summary": "Record a selected PM agent response",
+          "why": "Record a selected PM agent response.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMTurn`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "evidence_refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmTurnsComplete",
+          "ts_method": "pmTurnsComplete"
+        },
+        {
+          "command_id": "pm.turns.context",
+          "cli_path": "pm turns context",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/turns/{turn_id}/context",
+          "operation_id": "pmTurnsContext",
+          "summary": "Read requesting principal context as selected PM agent",
+          "why": "Read requesting principal context as selected PM agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMContextResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmTurnsContext",
+          "ts_method": "pmTurnsContext"
+        },
+        {
+          "command_id": "pm.turns.decisions.create",
+          "cli_path": "pm turns decisions create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/decisions",
+          "operation_id": "pmTurnsDecisionsCreate",
+          "summary": "Record a selected PM agent proposal",
+          "why": "Record a selected PM agent proposal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "instruction",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "scope",
+                "type": "string"
+              },
+              {
+                "name": "target_revision",
+                "type": "string"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context"
+          ],
+          "go_method": "PmTurnsDecisionsCreate",
+          "ts_method": "pmTurnsDecisionsCreate"
+        },
+        {
+          "command_id": "work.capabilities",
+          "cli_path": "work capabilities",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/capabilities",
+          "operation_id": "workCapabilities",
+          "summary": "Inspect work tracking capabilities",
+          "why": "Inspect work tracking capabilities.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkCapabilitiesResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "adjacent_commands": [
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkCapabilities",
+          "ts_method": "workCapabilities"
+        },
+        {
+          "command_id": "work.create",
+          "cli_path": "work create",
+          "group": "work",
+          "method": "POST",
+          "path": "/work",
+          "operation_id": "workCreate",
+          "summary": "Register a card-backed commitment",
+          "why": "Register a card-backed commitment.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "board_ref",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "blockers",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "definition_of_done",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "due_at",
+                "type": "string"
+              },
+              {
+                "name": "executions",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "next_action",
+                "type": "string"
+              },
+              {
+                "name": "next_actor",
+                "type": "string"
+              },
+              {
+                "name": "owner",
+                "type": "string"
+              },
+              {
+                "name": "phase",
+                "type": "string"
+              },
+              {
+                "name": "priority",
+                "type": "string"
+              },
+              {
+                "name": "project_ref",
+                "type": "string"
+              },
+              {
+                "name": "relations",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "source.authority",
+                "type": "string"
+              },
+              {
+                "name": "source.connection_id",
+                "type": "string"
+              },
+              {
+                "name": "source.native_id",
+                "type": "string"
+              },
+              {
+                "name": "source.native_status",
+                "type": "string"
+              },
+              {
+                "name": "source.revision",
+                "type": "string"
+              },
+              {
+                "name": "source.url",
+                "type": "string"
+              },
+              {
+                "name": "start_at",
+                "type": "string"
+              },
+              {
+                "name": "summary",
+                "type": "string"
+              },
+              {
+                "name": "wake_condition",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkCreate",
+          "ts_method": "workCreate"
+        },
+        {
+          "command_id": "work.get",
+          "cli_path": "work get",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}",
+          "operation_id": "workGet",
+          "summary": "Read a commitment and its evidence",
+          "why": "Read a commitment and its evidence.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkGet",
+          "ts_method": "workGet"
+        },
+        {
+          "command_id": "work.list",
+          "cli_path": "work list",
+          "group": "work",
+          "method": "GET",
+          "path": "/work",
+          "operation_id": "workList",
+          "summary": "List heterogeneous commitments",
+          "why": "List heterogeneous commitments.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkList",
+          "ts_method": "workList"
+        },
+        {
+          "command_id": "work.observations.list",
+          "cli_path": "work observations list",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}/observations",
+          "operation_id": "workObservationsList",
+          "summary": "List append-only work observations",
+          "why": "List append-only work observations.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkObservationListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkObservationsList",
+          "ts_method": "workObservationsList"
+        },
+        {
+          "command_id": "work.observations.submit",
+          "cli_path": "work observations submit",
+          "group": "work",
+          "method": "POST",
+          "path": "/work/{card_ref}/observations",
+          "operation_id": "workObservationsSubmit",
+          "summary": "Submit an attributed source observation",
+          "why": "Submit an attributed source observation.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkObservationResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "observation.idempotency_key",
+                "type": "string"
+              },
+              {
+                "name": "observation.observed_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.reader_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.reader_revision",
+                "type": "string"
+              },
+              {
+                "name": "observation.status",
+                "type": "string",
+                "enum_values": [
+                  "error",
+                  "reported",
+                  "uncertain",
+                  "verified"
+                ]
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.actor_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.coverage",
+                "type": "object"
+              },
+              {
+                "name": "observation.error.code",
+                "type": "string"
+              },
+              {
+                "name": "observation.error.message",
+                "type": "string"
+              },
+              {
+                "name": "observation.evidence",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "observation.facts",
+                "type": "object"
+              },
+              {
+                "name": "observation.id",
+                "type": "string"
+              },
+              {
+                "name": "observation.meaningful_progress_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.received_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_activity_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_revision",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_sequence",
+                "type": "integer"
+              },
+              {
+                "name": "observation.stale_after_seconds",
+                "type": "integer"
+              },
+              {
+                "name": "observation.uncertainty",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "observation.verification",
+                "type": "string",
+                "enum_values": [
+                  "reported"
+                ]
+              },
+              {
+                "name": "observation.work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkObservationsSubmit",
+          "ts_method": "workObservationsSubmit"
+        },
+        {
+          "command_id": "work.patch",
+          "cli_path": "work patch",
+          "group": "work",
+          "method": "PATCH",
+          "path": "/work/{card_ref}",
+          "operation_id": "workPatch",
+          "summary": "Update local commitment annotations",
+          "why": "Update local commitment annotations.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "if_version",
+                "type": "integer"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "patch.blockers",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "patch.due_at",
+                "type": "string"
+              },
+              {
+                "name": "patch.executions",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "patch.next_action",
+                "type": "string"
+              },
+              {
+                "name": "patch.next_actor",
+                "type": "string"
+              },
+              {
+                "name": "patch.priority",
+                "type": "string"
+              },
+              {
+                "name": "patch.project_ref",
+                "type": "string"
+              },
+              {
+                "name": "patch.relations",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "patch.start_at",
+                "type": "string"
+              },
+              {
+                "name": "patch.wake_condition",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkPatch",
+          "ts_method": "workPatch"
+        },
+        {
+          "command_id": "work.refresh.get",
+          "cli_path": "work refresh get",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}/refresh",
+          "operation_id": "workRefreshGet",
+          "summary": "Inspect durable refresh lifecycle",
+          "why": "Inspect durable refresh lifecycle.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkRefreshResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkRefreshGet",
+          "ts_method": "workRefreshGet"
+        },
+        {
+          "command_id": "work.refresh.request",
+          "cli_path": "work refresh request",
+          "group": "work",
+          "method": "POST",
+          "path": "/work/{card_ref}/refresh",
+          "operation_id": "workRefreshRequest",
+          "summary": "Queue or coalesce a read-only refresh",
+          "why": "Queue or coalesce a read-only refresh.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkRefreshResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get"
+          ],
+          "go_method": "WorkRefreshRequest",
+          "ts_method": "workRefreshRequest"
         }
       ]
     },
@@ -5881,6 +7609,1742 @@
           "surface": "canonical",
           "go_method": "HomeUnread",
           "ts_method": "homeUnread"
+        }
+      ]
+    },
+    {
+      "name": "evidence",
+      "command_count": 26,
+      "command_ids": [
+        "pm.actions.get",
+        "pm.actions.list",
+        "pm.actions.reconcile",
+        "pm.bindings.create",
+        "pm.context",
+        "pm.conversations.create",
+        "pm.conversations.get",
+        "pm.conversations.list",
+        "pm.conversations.messages.create",
+        "pm.decisions.answer",
+        "pm.decisions.create",
+        "pm.decisions.dispatch",
+        "pm.decisions.get",
+        "pm.decisions.list",
+        "pm.turns.complete",
+        "pm.turns.context",
+        "pm.turns.decisions.create",
+        "work.capabilities",
+        "work.create",
+        "work.get",
+        "work.list",
+        "work.observations.list",
+        "work.observations.submit",
+        "work.patch",
+        "work.refresh.get",
+        "work.refresh.request"
+      ],
+      "commands": [
+        {
+          "command_id": "pm.actions.get",
+          "cli_path": "pm actions get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/actions/{action_id}",
+          "operation_id": "pmActionsGet",
+          "summary": "Read an action and its receipts",
+          "why": "Read an action and its receipts.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "action_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsGet",
+          "ts_method": "pmActionsGet"
+        },
+        {
+          "command_id": "pm.actions.list",
+          "cli_path": "pm actions list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/actions",
+          "operation_id": "pmActionsList",
+          "summary": "List action receipts and attempts",
+          "why": "List action receipts and attempts.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMActionListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsList",
+          "ts_method": "pmActionsList"
+        },
+        {
+          "command_id": "pm.actions.reconcile",
+          "cli_path": "pm actions reconcile",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/actions/{action_id}/reconcile",
+          "operation_id": "pmActionsReconcile",
+          "summary": "Read back an action outcome without resending",
+          "why": "Read back an action outcome without resending.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "action_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmActionsReconcile",
+          "ts_method": "pmActionsReconcile"
+        },
+        {
+          "command_id": "pm.bindings.create",
+          "cli_path": "pm bindings create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/bindings",
+          "operation_id": "pmBindingsCreate",
+          "summary": "Bind an exact channel identity to a workspace principal",
+          "why": "Bind an exact channel identity to a workspace principal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMBinding`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "can_approve",
+                "type": "boolean"
+              },
+              {
+                "name": "created_at",
+                "type": "string"
+              },
+              {
+                "name": "enabled",
+                "type": "boolean"
+              },
+              {
+                "name": "id",
+                "type": "string"
+              },
+              {
+                "name": "origin.channel_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.external_user_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.tenant_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.thread_id",
+                "type": "string"
+              },
+              {
+                "name": "origin.transport",
+                "type": "string"
+              },
+              {
+                "name": "revision",
+                "type": "integer"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              },
+              {
+                "name": "workspace_id",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmBindingsCreate",
+          "ts_method": "pmBindingsCreate"
+        },
+        {
+          "command_id": "pm.context",
+          "cli_path": "pm context",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/context",
+          "operation_id": "pmContext",
+          "summary": "Read bounded authorized PM context",
+          "why": "Read bounded authorized PM context.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMContextResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmContext",
+          "ts_method": "pmContext"
+        },
+        {
+          "command_id": "pm.conversations.create",
+          "cli_path": "pm conversations create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/conversations",
+          "operation_id": "pmConversationsCreate",
+          "summary": "Create a durable PM conversation",
+          "why": "Create a durable PM conversation.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversation`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsCreate",
+          "ts_method": "pmConversationsCreate"
+        },
+        {
+          "command_id": "pm.conversations.get",
+          "cli_path": "pm conversations get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/conversations/{conversation_id}",
+          "operation_id": "pmConversationsGet",
+          "summary": "Read PM conversation and turns",
+          "why": "Read PM conversation and turns.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversationDetailResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "conversation_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsGet",
+          "ts_method": "pmConversationsGet"
+        },
+        {
+          "command_id": "pm.conversations.list",
+          "cli_path": "pm conversations list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/conversations",
+          "operation_id": "pmConversationsList",
+          "summary": "List PM conversations",
+          "why": "List PM conversations.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMConversationListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsList",
+          "ts_method": "pmConversationsList"
+        },
+        {
+          "command_id": "pm.conversations.messages.create",
+          "cli_path": "pm conversations messages create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/conversations/{conversation_id}/messages",
+          "operation_id": "pmConversationsMessagesCreate",
+          "summary": "Queue a contextual PM turn",
+          "why": "Queue a contextual PM turn.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMTurn`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "conversation_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmConversationsMessagesCreate",
+          "ts_method": "pmConversationsMessagesCreate"
+        },
+        {
+          "command_id": "pm.decisions.answer",
+          "cli_path": "pm decisions answer",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions/{decision_id}/answer",
+          "operation_id": "pmDecisionsAnswer",
+          "summary": "Answer and authorize a scoped decision",
+          "why": "Answer and authorize a scoped decision.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "approve",
+                "type": "boolean"
+              },
+              {
+                "name": "revision",
+                "type": "integer"
+              },
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsAnswer",
+          "ts_method": "pmDecisionsAnswer"
+        },
+        {
+          "command_id": "pm.decisions.create",
+          "cli_path": "pm decisions create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions",
+          "operation_id": "pmDecisionsCreate",
+          "summary": "Propose a scoped PM decision",
+          "why": "Propose a scoped PM decision.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "instruction",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "scope",
+                "type": "string"
+              },
+              {
+                "name": "target_revision",
+                "type": "string"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsCreate",
+          "ts_method": "pmDecisionsCreate"
+        },
+        {
+          "command_id": "pm.decisions.dispatch",
+          "cli_path": "pm decisions dispatch",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/decisions/{decision_id}/dispatch",
+          "operation_id": "pmDecisionsDispatch",
+          "summary": "Hand off an authorized source action",
+          "why": "Hand off an authorized source action.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMAction`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsDispatch",
+          "ts_method": "pmDecisionsDispatch"
+        },
+        {
+          "command_id": "pm.decisions.get",
+          "cli_path": "pm decisions get",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/decisions/{decision_id}",
+          "operation_id": "pmDecisionsGet",
+          "summary": "Read a PM decision",
+          "why": "Read a PM decision.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "decision_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsGet",
+          "ts_method": "pmDecisionsGet"
+        },
+        {
+          "command_id": "pm.decisions.list",
+          "cli_path": "pm decisions list",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/decisions",
+          "operation_id": "pmDecisionsList",
+          "summary": "List durable PM decisions",
+          "why": "List durable PM decisions.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecisionListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmDecisionsList",
+          "ts_method": "pmDecisionsList"
+        },
+        {
+          "command_id": "pm.turns.complete",
+          "cli_path": "pm turns complete",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/complete",
+          "operation_id": "pmTurnsComplete",
+          "summary": "Record a selected PM agent response",
+          "why": "Record a selected PM agent response.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMTurn`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "text",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "evidence_refs",
+                "type": "list\u003cstring\u003e"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmTurnsComplete",
+          "ts_method": "pmTurnsComplete"
+        },
+        {
+          "command_id": "pm.turns.context",
+          "cli_path": "pm turns context",
+          "group": "pm",
+          "method": "GET",
+          "path": "/pm/turns/{turn_id}/context",
+          "operation_id": "pmTurnsContext",
+          "summary": "Read requesting principal context as selected PM agent",
+          "why": "Read requesting principal context as selected PM agent.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMContextResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.decisions.create"
+          ],
+          "go_method": "PmTurnsContext",
+          "ts_method": "pmTurnsContext"
+        },
+        {
+          "command_id": "pm.turns.decisions.create",
+          "cli_path": "pm turns decisions create",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/decisions",
+          "operation_id": "pmTurnsDecisionsCreate",
+          "summary": "Record a selected PM agent proposal",
+          "why": "Record a selected PM agent proposal.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMDecision`.",
+          "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "instruction",
+                "type": "string"
+              },
+              {
+                "name": "request_key",
+                "type": "string"
+              },
+              {
+                "name": "scope",
+                "type": "string"
+              },
+              {
+                "name": "target_revision",
+                "type": "string"
+              },
+              {
+                "name": "work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context"
+          ],
+          "go_method": "PmTurnsDecisionsCreate",
+          "ts_method": "pmTurnsDecisionsCreate"
+        },
+        {
+          "command_id": "work.capabilities",
+          "cli_path": "work capabilities",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/capabilities",
+          "operation_id": "workCapabilities",
+          "summary": "Inspect work tracking capabilities",
+          "why": "Inspect work tracking capabilities.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkCapabilitiesResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "adjacent_commands": [
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkCapabilities",
+          "ts_method": "workCapabilities"
+        },
+        {
+          "command_id": "work.create",
+          "cli_path": "work create",
+          "group": "work",
+          "method": "POST",
+          "path": "/work",
+          "operation_id": "workCreate",
+          "summary": "Register a card-backed commitment",
+          "why": "Register a card-backed commitment.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "board_ref",
+                "type": "string"
+              },
+              {
+                "name": "title",
+                "type": "string"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "blockers",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "definition_of_done",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "due_at",
+                "type": "string"
+              },
+              {
+                "name": "executions",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "next_action",
+                "type": "string"
+              },
+              {
+                "name": "next_actor",
+                "type": "string"
+              },
+              {
+                "name": "owner",
+                "type": "string"
+              },
+              {
+                "name": "phase",
+                "type": "string"
+              },
+              {
+                "name": "priority",
+                "type": "string"
+              },
+              {
+                "name": "project_ref",
+                "type": "string"
+              },
+              {
+                "name": "relations",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "source.authority",
+                "type": "string"
+              },
+              {
+                "name": "source.connection_id",
+                "type": "string"
+              },
+              {
+                "name": "source.native_id",
+                "type": "string"
+              },
+              {
+                "name": "source.native_status",
+                "type": "string"
+              },
+              {
+                "name": "source.revision",
+                "type": "string"
+              },
+              {
+                "name": "source.url",
+                "type": "string"
+              },
+              {
+                "name": "start_at",
+                "type": "string"
+              },
+              {
+                "name": "summary",
+                "type": "string"
+              },
+              {
+                "name": "wake_condition",
+                "type": "string"
+              }
+            ]
+          },
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkCreate",
+          "ts_method": "workCreate"
+        },
+        {
+          "command_id": "work.get",
+          "cli_path": "work get",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}",
+          "operation_id": "workGet",
+          "summary": "Read a commitment and its evidence",
+          "why": "Read a commitment and its evidence.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkGet",
+          "ts_method": "workGet"
+        },
+        {
+          "command_id": "work.list",
+          "cli_path": "work list",
+          "group": "work",
+          "method": "GET",
+          "path": "/work",
+          "operation_id": "workList",
+          "summary": "List heterogeneous commitments",
+          "why": "List heterogeneous commitments.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkList",
+          "ts_method": "workList"
+        },
+        {
+          "command_id": "work.observations.list",
+          "cli_path": "work observations list",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}/observations",
+          "operation_id": "workObservationsList",
+          "summary": "List append-only work observations",
+          "why": "List append-only work observations.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkObservationListResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkObservationsList",
+          "ts_method": "workObservationsList"
+        },
+        {
+          "command_id": "work.observations.submit",
+          "cli_path": "work observations submit",
+          "group": "work",
+          "method": "POST",
+          "path": "/work/{card_ref}/observations",
+          "operation_id": "workObservationsSubmit",
+          "summary": "Submit an attributed source observation",
+          "why": "Submit an attributed source observation.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkObservationResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "observation.idempotency_key",
+                "type": "string"
+              },
+              {
+                "name": "observation.observed_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.reader_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.reader_revision",
+                "type": "string"
+              },
+              {
+                "name": "observation.status",
+                "type": "string",
+                "enum_values": [
+                  "error",
+                  "reported",
+                  "uncertain",
+                  "verified"
+                ]
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.actor_id",
+                "type": "string"
+              },
+              {
+                "name": "observation.coverage",
+                "type": "object"
+              },
+              {
+                "name": "observation.error.code",
+                "type": "string"
+              },
+              {
+                "name": "observation.error.message",
+                "type": "string"
+              },
+              {
+                "name": "observation.evidence",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "observation.facts",
+                "type": "object"
+              },
+              {
+                "name": "observation.id",
+                "type": "string"
+              },
+              {
+                "name": "observation.meaningful_progress_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.received_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_activity_at",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_revision",
+                "type": "string"
+              },
+              {
+                "name": "observation.source_sequence",
+                "type": "integer"
+              },
+              {
+                "name": "observation.stale_after_seconds",
+                "type": "integer"
+              },
+              {
+                "name": "observation.uncertainty",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "observation.verification",
+                "type": "string",
+                "enum_values": [
+                  "reported"
+                ]
+              },
+              {
+                "name": "observation.work_ref",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkObservationsSubmit",
+          "ts_method": "workObservationsSubmit"
+        },
+        {
+          "command_id": "work.patch",
+          "cli_path": "work patch",
+          "group": "work",
+          "method": "PATCH",
+          "path": "/work/{card_ref}",
+          "operation_id": "workPatch",
+          "summary": "Update local commitment annotations",
+          "why": "Update local commitment annotations.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "if_version",
+                "type": "integer"
+              }
+            ],
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              },
+              {
+                "name": "patch.blockers",
+                "type": "list\u003cstring\u003e"
+              },
+              {
+                "name": "patch.due_at",
+                "type": "string"
+              },
+              {
+                "name": "patch.executions",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "patch.next_action",
+                "type": "string"
+              },
+              {
+                "name": "patch.next_actor",
+                "type": "string"
+              },
+              {
+                "name": "patch.priority",
+                "type": "string"
+              },
+              {
+                "name": "patch.project_ref",
+                "type": "string"
+              },
+              {
+                "name": "patch.relations",
+                "type": "list\u003cobject\u003e"
+              },
+              {
+                "name": "patch.start_at",
+                "type": "string"
+              },
+              {
+                "name": "patch.wake_condition",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.refresh.get",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkPatch",
+          "ts_method": "workPatch"
+        },
+        {
+          "command_id": "work.refresh.get",
+          "cli_path": "work refresh get",
+          "group": "work",
+          "method": "GET",
+          "path": "/work/{card_ref}/refresh",
+          "operation_id": "workRefreshGet",
+          "summary": "Inspect durable refresh lifecycle",
+          "why": "Inspect durable refresh lifecycle.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkRefreshResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.request"
+          ],
+          "go_method": "WorkRefreshGet",
+          "ts_method": "workRefreshGet"
+        },
+        {
+          "command_id": "work.refresh.request",
+          "cli_path": "work refresh request",
+          "group": "work",
+          "method": "POST",
+          "path": "/work/{card_ref}/refresh",
+          "operation_id": "workRefreshRequest",
+          "summary": "Queue or coalesce a read-only refresh",
+          "why": "Queue or coalesce a read-only refresh.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `WorkRefreshResponse`.",
+          "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "work_unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+          "body_schema": {
+            "optional": [
+              {
+                "name": "actor_id",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "card_ref"
+          ],
+          "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get"
+          ],
+          "go_method": "WorkRefreshRequest",
+          "ts_method": "workRefreshRequest"
         }
       ]
     },

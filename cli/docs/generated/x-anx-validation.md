@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `123`
+- Command operations: `149`
 - Baseline-allowed required-field gaps: `125`
-- Missing recommended examples: `123`
+- Missing recommended examples: `149`
 
 ## Baseline gap counts
 
@@ -246,6 +246,23 @@ Generated from `contracts/anx-openapi.yaml`.
 - `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild`
 - `ops.health` `GET /ops/health`
 - `ops.usage.summary` `GET /ops/usage-summary`
+- `pm.actions.get` `GET /pm/actions/{action_id}`
+- `pm.actions.list` `GET /pm/actions`
+- `pm.actions.reconcile` `POST /pm/actions/{action_id}/reconcile`
+- `pm.bindings.create` `POST /pm/bindings`
+- `pm.context` `GET /pm/context`
+- `pm.conversations.create` `POST /pm/conversations`
+- `pm.conversations.get` `GET /pm/conversations/{conversation_id}`
+- `pm.conversations.list` `GET /pm/conversations`
+- `pm.conversations.messages.create` `POST /pm/conversations/{conversation_id}/messages`
+- `pm.decisions.answer` `POST /pm/decisions/{decision_id}/answer`
+- `pm.decisions.create` `POST /pm/decisions`
+- `pm.decisions.dispatch` `POST /pm/decisions/{decision_id}/dispatch`
+- `pm.decisions.get` `GET /pm/decisions/{decision_id}`
+- `pm.decisions.list` `GET /pm/decisions`
+- `pm.turns.complete` `POST /pm/turns/{turn_id}/complete`
+- `pm.turns.context` `GET /pm/turns/{turn_id}/context`
+- `pm.turns.decisions.create` `POST /pm/turns/{turn_id}/decisions`
 - `ref_edges.list` `GET /ref-edges`
 - `secrets.create` `POST /secrets`
 - `secrets.delete` `DELETE /secrets/{secret_id}`
@@ -269,3 +286,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - `topics.unarchive` `POST /topics/{topic_id}/unarchive`
 - `topics.workspace` `GET /topics/{topic_id}/workspace`
 - `usage.summary.v1` `GET /v1/usage/summary`
+- `work.capabilities` `GET /work/capabilities`
+- `work.create` `POST /work`
+- `work.get` `GET /work/{card_ref}`
+- `work.list` `GET /work`
+- `work.observations.list` `GET /work/{card_ref}/observations`
+- `work.observations.submit` `POST /work/{card_ref}/observations`
+- `work.patch` `PATCH /work/{card_ref}`
+- `work.refresh.get` `GET /work/{card_ref}/refresh`
+- `work.refresh.request` `POST /work/{card_ref}/refresh`

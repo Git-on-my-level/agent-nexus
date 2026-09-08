@@ -1175,6 +1175,203 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
+		CommandID:  "pm.actions.get",
+		CLIPath:    "pm actions get",
+		Group:      "pm",
+		Method:     "GET",
+		Path:       "/pm/actions/{action_id}",
+		PathParams: []string{"action_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.actions.list",
+		CLIPath:   "pm actions list",
+		Group:     "pm",
+		Method:    "GET",
+		Path:      "/pm/actions",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.actions.reconcile",
+		CLIPath:    "pm actions reconcile",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/actions/{action_id}/reconcile",
+		PathParams: []string{"action_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.bindings.create",
+		CLIPath:   "pm bindings create",
+		Group:     "pm",
+		Method:    "POST",
+		Path:      "/pm/bindings",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.context",
+		CLIPath:   "pm context",
+		Group:     "pm",
+		Method:    "GET",
+		Path:      "/pm/context",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.conversations.create",
+		CLIPath:   "pm conversations create",
+		Group:     "pm",
+		Method:    "POST",
+		Path:      "/pm/conversations",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.conversations.get",
+		CLIPath:    "pm conversations get",
+		Group:      "pm",
+		Method:     "GET",
+		Path:       "/pm/conversations/{conversation_id}",
+		PathParams: []string{"conversation_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.conversations.list",
+		CLIPath:   "pm conversations list",
+		Group:     "pm",
+		Method:    "GET",
+		Path:      "/pm/conversations",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.conversations.messages.create",
+		CLIPath:    "pm conversations messages create",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/conversations/{conversation_id}/messages",
+		PathParams: []string{"conversation_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.decisions.answer",
+		CLIPath:    "pm decisions answer",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/decisions/{decision_id}/answer",
+		PathParams: []string{"decision_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.decisions.create",
+		CLIPath:   "pm decisions create",
+		Group:     "pm",
+		Method:    "POST",
+		Path:      "/pm/decisions",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.decisions.dispatch",
+		CLIPath:    "pm decisions dispatch",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/decisions/{decision_id}/dispatch",
+		PathParams: []string{"decision_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.decisions.get",
+		CLIPath:    "pm decisions get",
+		Group:      "pm",
+		Method:     "GET",
+		Path:       "/pm/decisions/{decision_id}",
+		PathParams: []string{"decision_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID: "pm.decisions.list",
+		CLIPath:   "pm decisions list",
+		Group:     "pm",
+		Method:    "GET",
+		Path:      "/pm/decisions",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.turns.complete",
+		CLIPath:    "pm turns complete",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/turns/{turn_id}/complete",
+		PathParams: []string{"turn_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.context", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.turns.context",
+		CLIPath:    "pm turns context",
+		Group:      "pm",
+		Method:     "GET",
+		Path:       "/pm/turns/{turn_id}/context",
+		PathParams: []string{"turn_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.decisions.create"},
+	},
+	{
+		CommandID:  "pm.turns.decisions.create",
+		CLIPath:    "pm turns decisions create",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/turns/{turn_id}/decisions",
+		PathParams: []string{"turn_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context"},
+	},
+	{
 		CommandID: "ref_edges.list",
 		CLIPath:   "ref-edges list",
 		Group:     "ref-edges",
@@ -1439,6 +1636,111 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"ops", "quotas"},
+	},
+	{
+		CommandID: "work.capabilities",
+		CLIPath:   "work capabilities",
+		Group:     "work",
+		Method:    "GET",
+		Path:      "/work/capabilities",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID: "work.create",
+		CLIPath:   "work create",
+		Group:     "work",
+		Method:    "POST",
+		Path:      "/work",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"work.capabilities", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.get",
+		CLIPath:    "work get",
+		Group:      "work",
+		Method:     "GET",
+		Path:       "/work/{card_ref}",
+		PathParams: []string{"card_ref"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID: "work.list",
+		CLIPath:   "work list",
+		Group:     "work",
+		Method:    "GET",
+		Path:      "/work",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.observations.list",
+		CLIPath:    "work observations list",
+		Group:      "work",
+		Method:     "GET",
+		Path:       "/work/{card_ref}/observations",
+		PathParams: []string{"card_ref"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.observations.submit",
+		CLIPath:    "work observations submit",
+		Group:      "work",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/observations",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.patch",
+		CLIPath:    "work patch",
+		Group:      "work",
+		Method:     "PATCH",
+		Path:       "/work/{card_ref}",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.refresh.get",
+		CLIPath:    "work refresh get",
+		Group:      "work",
+		Method:     "GET",
+		Path:       "/work/{card_ref}/refresh",
+		PathParams: []string{"card_ref"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.refresh.request",
+		CLIPath:    "work refresh request",
+		Group:      "work",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/refresh",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get"},
 	},
 }
 
@@ -1968,6 +2270,74 @@ func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*htt
 	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
 }
 
+func (c *Client) PmActionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.actions.get", pathParams, opts)
+}
+
+func (c *Client) PmActionsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.actions.list", nil, opts)
+}
+
+func (c *Client) PmActionsReconcile(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.actions.reconcile", pathParams, opts)
+}
+
+func (c *Client) PmBindingsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.bindings.create", nil, opts)
+}
+
+func (c *Client) PmContext(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.context", nil, opts)
+}
+
+func (c *Client) PmConversationsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.conversations.create", nil, opts)
+}
+
+func (c *Client) PmConversationsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.conversations.get", pathParams, opts)
+}
+
+func (c *Client) PmConversationsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.conversations.list", nil, opts)
+}
+
+func (c *Client) PmConversationsMessagesCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.conversations.messages.create", pathParams, opts)
+}
+
+func (c *Client) PmDecisionsAnswer(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.decisions.answer", pathParams, opts)
+}
+
+func (c *Client) PmDecisionsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.decisions.create", nil, opts)
+}
+
+func (c *Client) PmDecisionsDispatch(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.decisions.dispatch", pathParams, opts)
+}
+
+func (c *Client) PmDecisionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.decisions.get", pathParams, opts)
+}
+
+func (c *Client) PmDecisionsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.decisions.list", nil, opts)
+}
+
+func (c *Client) PmTurnsComplete(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.turns.complete", pathParams, opts)
+}
+
+func (c *Client) PmTurnsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.turns.context", pathParams, opts)
+}
+
+func (c *Client) PmTurnsDecisionsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.turns.decisions.create", pathParams, opts)
+}
+
 func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ref_edges.list", nil, opts)
 }
@@ -2058,4 +2428,40 @@ func (c *Client) TopicsWorkspace(ctx context.Context, pathParams map[string]stri
 
 func (c *Client) UsageSummaryV1(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "usage.summary.v1", nil, opts)
+}
+
+func (c *Client) WorkCapabilities(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.capabilities", nil, opts)
+}
+
+func (c *Client) WorkCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.create", nil, opts)
+}
+
+func (c *Client) WorkGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.get", pathParams, opts)
+}
+
+func (c *Client) WorkList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.list", nil, opts)
+}
+
+func (c *Client) WorkObservationsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.observations.list", pathParams, opts)
+}
+
+func (c *Client) WorkObservationsSubmit(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.observations.submit", pathParams, opts)
+}
+
+func (c *Client) WorkPatch(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.patch", pathParams, opts)
+}
+
+func (c *Client) WorkRefreshGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.refresh.get", pathParams, opts)
+}
+
+func (c *Client) WorkRefreshRequest(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.refresh.request", pathParams, opts)
 }

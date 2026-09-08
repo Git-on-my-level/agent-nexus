@@ -776,6 +776,26 @@ var migrations = []migration{
 		},
 		AfterApply: applyMigration25ResourceHandles,
 	},
+	{
+		Version: 26,
+		Statements: []string{
+			`CREATE TABLE work_metadata (
+				card_id TEXT PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+				authority TEXT NOT NULL DEFAULT 'nexus', connection_id TEXT NOT NULL DEFAULT '', native_id TEXT NOT NULL DEFAULT '',
+				metadata_json TEXT NOT NULL DEFAULT '{}', version INTEGER NOT NULL DEFAULT 1,
+				latest_observation_id TEXT, latest_attempt_id TEXT,
+				refresh_json TEXT NOT NULL DEFAULT '{"state":"idle"}', updated_at TEXT NOT NULL, updated_by TEXT NOT NULL
+			);`,
+			`CREATE UNIQUE INDEX idx_work_source_identity ON work_metadata(authority,connection_id,native_id) WHERE authority <> 'nexus';`,
+			`CREATE TABLE work_observations (
+				id TEXT PRIMARY KEY, card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+				idempotency_key TEXT NOT NULL, digest TEXT NOT NULL, observed_at TEXT NOT NULL, received_at TEXT NOT NULL,
+				source_sequence INTEGER, status TEXT NOT NULL, body_json TEXT NOT NULL,
+				UNIQUE(card_id,idempotency_key)
+			);`,
+			`CREATE INDEX idx_work_observations_card_received ON work_observations(card_id,received_at DESC,id DESC);`,
+		},
+	},
 }
 
 func applyMigration25ResourceHandles(ctx context.Context, tx *sql.Tx) error {

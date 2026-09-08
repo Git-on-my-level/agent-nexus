@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `18`
+- Groups: `20`
 
 ## `topics`
 
@@ -193,6 +193,28 @@ Generated from `contracts/anx-openapi.yaml`.
   - `ops.health` (`ops health`)
   - `ops.usage.summary` (`ops usage summary`)
 
+## `pm`
+
+- Commands: `17`
+- Command IDs:
+  - `pm.actions.get` (`pm actions get`)
+  - `pm.actions.list` (`pm actions list`)
+  - `pm.actions.reconcile` (`pm actions reconcile`)
+  - `pm.bindings.create` (`pm bindings create`)
+  - `pm.context` (`pm context`)
+  - `pm.conversations.create` (`pm conversations create`)
+  - `pm.conversations.get` (`pm conversations get`)
+  - `pm.conversations.list` (`pm conversations list`)
+  - `pm.conversations.messages.create` (`pm conversations messages create`)
+  - `pm.decisions.answer` (`pm decisions answer`)
+  - `pm.decisions.create` (`pm decisions create`)
+  - `pm.decisions.dispatch` (`pm decisions dispatch`)
+  - `pm.decisions.get` (`pm decisions get`)
+  - `pm.decisions.list` (`pm decisions list`)
+  - `pm.turns.complete` (`pm turns complete`)
+  - `pm.turns.context` (`pm turns context`)
+  - `pm.turns.decisions.create` (`pm turns decisions create`)
+
 ## `ref-edges`
 
 - Commands: `1`
@@ -215,4 +237,18 @@ Generated from `contracts/anx-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `usage.summary.v1` (`usage summary --api v1`)
+
+## `work`
+
+- Commands: `9`
+- Command IDs:
+  - `work.capabilities` (`work capabilities`)
+  - `work.create` (`work create`)
+  - `work.get` (`work get`)
+  - `work.list` (`work list`)
+  - `work.observations.list` (`work observations list`)
+  - `work.observations.submit` (`work observations submit`)
+  - `work.patch` (`work patch`)
+  - `work.refresh.get` (`work refresh get`)
+  - `work.refresh.request` (`work refresh request`)
 

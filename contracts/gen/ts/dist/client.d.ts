@@ -155,6 +155,23 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
+    pmActionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmActionsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmActionsReconcile(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmBindingsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    pmContext(options?: RequestOptions): Promise<InvokeResult>;
+    pmConversationsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    pmConversationsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmConversationsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmConversationsMessagesCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmDecisionsAnswer(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmDecisionsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    pmDecisionsDispatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmDecisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmDecisionsList(options?: RequestOptions): Promise<InvokeResult>;
+    pmTurnsComplete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmTurnsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmTurnsDecisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
     secretsCreate(options?: RequestOptions): Promise<InvokeResult>;
     secretsDelete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -178,4 +195,13 @@ export declare class AnxClient {
     topicsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     usageSummaryV1(options?: RequestOptions): Promise<InvokeResult>;
+    workCapabilities(options?: RequestOptions): Promise<InvokeResult>;
+    workCreate(options?: RequestOptions): Promise<InvokeResult>;
+    workGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workList(options?: RequestOptions): Promise<InvokeResult>;
+    workObservationsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workObservationsSubmit(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workRefreshGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workRefreshRequest(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
 }

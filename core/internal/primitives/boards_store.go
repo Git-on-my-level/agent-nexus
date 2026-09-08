@@ -190,6 +190,8 @@ type BoardListItem struct {
 }
 
 type AddBoardCardInput struct {
+	// WorkMetadata is the optional one-to-one commitment extension, inserted atomically.
+	WorkMetadata     map[string]any
 	CardID           string
 	Title            string
 	Body             string
@@ -1523,6 +1525,15 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, err
 	}
+	if input.WorkMetadata != nil {
+		if err := insertWorkMetadata(ctx, tx, cardRow.CardID, actorID, input.WorkMetadata); err != nil {
+			_ = tx.Rollback()
+			if stagedContent != nil {
+				_ = stagedContent.Cleanup()
+			}
+			return BoardCardMutationResult{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		if stagedContent != nil {
 			_ = stagedContent.Cleanup()
@@ -1687,6 +1698,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		return BoardCardMutationResult{}, err
 	}
 	var boardRow boardRow
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := ensureBoardCardMutable(cardRow); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2054,6 +2069,10 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
+		return BoardCardMutationResult{}, err
+	}
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
+		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
 	}
 	if err := ensureBoardCardMutable(cardRow); err != nil {
@@ -2725,6 +2744,10 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	}
 	cardRow, err := s.loadBoardCardByGlobalID(ctx, tx, cardID, true)
 	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, nil, err
+	}
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}

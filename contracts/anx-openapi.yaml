@@ -27,6 +27,1151 @@ x-anx-extension-vocabulary:
   x-anx-surface: canonical | projection | diagnostic | utility
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
 paths:
+  /pm/conversations:
+    get:
+      operationId: pmConversationsList
+      summary: List PM conversations
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.list
+      x-anx-cli-path: pm conversations list
+      x-anx-why: List PM conversations.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversationListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      responses:
+        '200':
+          description: List PM conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversationListResponse'
+    post:
+      operationId: pmConversationsCreate
+      summary: Create a durable PM conversation
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.create
+      x-anx-cli-path: pm conversations create
+      x-anx-why: Create a durable PM conversation.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversation`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMConversationCreateRequest'
+      responses:
+        '201':
+          description: Create a durable PM conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversation'
+  /pm/conversations/{conversation_id}:
+    get:
+      operationId: pmConversationsGet
+      summary: Read PM conversation and turns
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.get
+      x-anx-cli-path: pm conversations get
+      x-anx-why: Read PM conversation and turns.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversationDetailResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read PM conversation and turns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversationDetailResponse'
+  /pm/conversations/{conversation_id}/messages:
+    post:
+      operationId: pmConversationsMessagesCreate
+      summary: Queue a contextual PM turn
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.messages.create
+      x-anx-cli-path: pm conversations messages create
+      x-anx-why: Queue a contextual PM turn.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMMessageCreateRequest'
+      responses:
+        '202':
+          description: Queue a contextual PM turn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+  /pm/context:
+    get:
+      operationId: pmContext
+      summary: Read bounded authorized PM context
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.context
+      x-anx-cli-path: pm context
+      x-anx-why: Read bounded authorized PM context.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMContextResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: work_ref
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: Read bounded authorized PM context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMContextResponse'
+  /pm/decisions:
+    get:
+      operationId: pmDecisionsList
+      summary: List durable PM decisions
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.list
+      x-anx-cli-path: pm decisions list
+      x-anx-why: List durable PM decisions.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecisionListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      responses:
+        '200':
+          description: List durable PM decisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecisionListResponse'
+    post:
+      operationId: pmDecisionsCreate
+      summary: Propose a scoped PM decision
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.create
+      x-anx-cli-path: pm decisions create
+      x-anx-why: Propose a scoped PM decision.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMDecisionCreateRequest'
+      responses:
+        '201':
+          description: Propose a scoped PM decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/decisions/{decision_id}:
+    get:
+      operationId: pmDecisionsGet
+      summary: Read a PM decision
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.get
+      x-anx-cli-path: pm decisions get
+      x-anx-why: Read a PM decision.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a PM decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/decisions/{decision_id}/answer:
+    post:
+      operationId: pmDecisionsAnswer
+      summary: Answer and authorize a scoped decision
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.answer
+      x-anx-cli-path: pm decisions answer
+      x-anx-why: Answer and authorize a scoped decision.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMDecisionAnswerRequest'
+      responses:
+        '200':
+          description: Answer and authorize a scoped decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/decisions/{decision_id}/dispatch:
+    post:
+      operationId: pmDecisionsDispatch
+      summary: Hand off an authorized source action
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.dispatch
+      x-anx-cli-path: pm decisions dispatch
+      x-anx-why: Hand off an authorized source action.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMEmptyRequest'
+      responses:
+        '200':
+          description: Hand off an authorized source action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+  /pm/actions:
+    get:
+      operationId: pmActionsList
+      summary: List action receipts and attempts
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.list
+      x-anx-cli-path: pm actions list
+      x-anx-why: List action receipts and attempts.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMActionListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      responses:
+        '200':
+          description: List action receipts and attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMActionListResponse'
+  /pm/actions/{action_id}:
+    get:
+      operationId: pmActionsGet
+      summary: Read an action and its receipts
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.get
+      x-anx-cli-path: pm actions get
+      x-anx-why: Read an action and its receipts.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read an action and its receipts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+  /pm/actions/{action_id}/reconcile:
+    post:
+      operationId: pmActionsReconcile
+      summary: Read back an action outcome without resending
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.reconcile
+      x-anx-cli-path: pm actions reconcile
+      x-anx-why: Read back an action outcome without resending.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMEmptyRequest'
+      responses:
+        '200':
+          description: Read back an action outcome without resending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+  /pm/bindings:
+    post:
+      operationId: pmBindingsCreate
+      summary: Bind an exact channel identity to a workspace principal
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.bindings.create
+      x-anx-cli-path: pm bindings create
+      x-anx-why: Bind an exact channel identity to a workspace principal.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMBinding`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMBinding'
+      responses:
+        '201':
+          description: Bind an exact channel identity to a workspace principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMBinding'
+  /pm/turns/{turn_id}/context:
+    get:
+      operationId: pmTurnsContext
+      summary: Read requesting principal context as selected PM agent
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.context
+      x-anx-cli-path: pm turns context
+      x-anx-why: Read requesting principal context as selected PM agent.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMContextResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: work_ref
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: Read requesting principal context as selected PM agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMContextResponse'
+  /pm/turns/{turn_id}/decisions:
+    post:
+      operationId: pmTurnsDecisionsCreate
+      summary: Record a selected PM agent proposal
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.decisions.create
+      x-anx-cli-path: pm turns decisions create
+      x-anx-why: Record a selected PM agent proposal.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMDecisionCreateRequest'
+      responses:
+        '201':
+          description: Record a selected PM agent proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/turns/{turn_id}/complete:
+    post:
+      operationId: pmTurnsComplete
+      summary: Record a selected PM agent response
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.complete
+      x-anx-cli-path: pm turns complete
+      x-anx-why: Record a selected PM agent response.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMCompleteRequest'
+      responses:
+        '200':
+          description: Record a selected PM agent response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+  /work:
+    get:
+      operationId: workList
+      summary: List heterogeneous commitments
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.list
+      x-anx-cli-path: work list
+      x-anx-why: List heterogeneous commitments.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: project_ref
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: owner
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: phase
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: freshness
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List heterogeneous commitments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkListResponse'
+    post:
+      operationId: workCreate
+      summary: Register a card-backed commitment
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.create
+      x-anx-cli-path: work create
+      x-anx-why: Register a card-backed commitment.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCreateRequest'
+      responses:
+        '201':
+          description: Register a card-backed commitment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+  /work/capabilities:
+    get:
+      operationId: workCapabilities
+      summary: Inspect work tracking capabilities
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.capabilities
+      x-anx-cli-path: work capabilities
+      x-anx-why: Inspect work tracking capabilities.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkCapabilitiesResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      responses:
+        '200':
+          description: Inspect work tracking capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkCapabilitiesResponse'
+  /work/{card_ref}:
+    get:
+      operationId: workGet
+      summary: Read a commitment and its evidence
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.get
+      x-anx-cli-path: work get
+      x-anx-why: Read a commitment and its evidence.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a commitment and its evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+    patch:
+      operationId: workPatch
+      summary: Update local commitment annotations
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.patch
+      x-anx-cli-path: work patch
+      x-anx-why: Update local commitment annotations.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkPatchRequest'
+      responses:
+        '200':
+          description: Update local commitment annotations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+  /work/{card_ref}/observations:
+    get:
+      operationId: workObservationsList
+      summary: List append-only work observations
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.observations.list
+      x-anx-cli-path: work observations list
+      x-anx-why: List append-only work observations.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkObservationListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List append-only work observations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkObservationListResponse'
+    post:
+      operationId: workObservationsSubmit
+      summary: Submit an attributed source observation
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.observations.submit
+      x-anx-cli-path: work observations submit
+      x-anx-why: Submit an attributed source observation.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkObservationResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkObservationRequest'
+      responses:
+        '200':
+          description: Submit an attributed source observation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkObservationResponse'
+  /work/{card_ref}/refresh:
+    get:
+      operationId: workRefreshGet
+      summary: Inspect durable refresh lifecycle
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.refresh.get
+      x-anx-cli-path: work refresh get
+      x-anx-why: Inspect durable refresh lifecycle.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkRefreshResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Inspect durable refresh lifecycle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRefreshResponse'
+    post:
+      operationId: workRefreshRequest
+      summary: Queue or coalesce a read-only refresh
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.refresh.request
+      x-anx-cli-path: work refresh request
+      x-anx-why: Queue or coalesce a read-only refresh.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkRefreshResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRefreshRequest'
+      responses:
+        '202':
+          description: Queue or coalesce a read-only refresh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRefreshResponse'
   /health:
     get:
       operationId: healthCheck
@@ -4517,6 +5662,728 @@ components:
       schema: { type: string }
 
   schemas:
+    PMConversation:
+      type: object
+      additionalProperties: true
+      properties:
+        id: &id001
+          type: string
+        workspace_id: &id002
+          type: string
+        actor_id: &id003
+          type: string
+        work_ref: &id004
+          type: string
+        created_at: &id005
+          type: string
+        title:
+          type: string
+        thread_id:
+          type: string
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+    PMOrigin:
+      type: object
+      additionalProperties: true
+      properties:
+        transport:
+          type: string
+        tenant_id:
+          type: string
+        channel_id:
+          type: string
+        thread_id:
+          type: string
+        external_user_id:
+          type: string
+    PMTurn:
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        conversation_id:
+          type: string
+        text:
+          type: string
+        response:
+          type: string
+        wakeup_id:
+          type: string
+        agent_actor_id:
+          type: string
+        deadline:
+          type: string
+        status:
+          type: string
+          enum:
+          - sending
+          - delivered
+          - unknown
+        revision:
+          type: integer
+        evidence_refs:
+          type: array
+          items:
+            type: string
+    PMDecision:
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        instruction:
+          type: string
+        scope:
+          type: string
+        target_revision:
+          type: string
+        answer:
+          type: string
+        answered_by:
+          type: string
+        action_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - awaiting_answer
+          - answered
+          - superseded
+        revision:
+          type: integer
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+    PMReceipt:
+      type: object
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+        external_id:
+          type: string
+        url:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        independently_verified:
+          type: boolean
+        detail:
+          type: string
+    PMAction:
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        decision_id:
+          type: string
+        instruction:
+          type: string
+        scope:
+          type: string
+        target_revision:
+          type: string
+        authorization_basis:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending_delivery
+          - sending
+          - delivered
+          - acknowledged
+          - source_reported
+          - verified
+          - failed
+          - unknown
+        receipt:
+          $ref: '#/components/schemas/PMReceipt'
+        attempts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              started_at:
+                type: string
+              finished_at:
+                type: string
+              status:
+                type: string
+              receipt:
+                $ref: '#/components/schemas/PMReceipt'
+        revision:
+          type: integer
+    PMBinding:
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+        can_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+    PMConversationCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_key:
+          type: string
+        title:
+          type: string
+        work_ref:
+          type: string
+      required:
+      - request_key
+      - title
+    PMMessageCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_key:
+          type: string
+        text:
+          type: string
+      required:
+      - request_key
+      - text
+    PMDecisionCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_key:
+          type: string
+        work_ref:
+          type: string
+        instruction:
+          type: string
+        scope:
+          type: string
+        target_revision:
+          type: string
+      required:
+      - request_key
+      - work_ref
+      - instruction
+      - scope
+      - target_revision
+    PMDecisionAnswerRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        revision:
+          type: integer
+        approve:
+          type: boolean
+        text:
+          type: string
+      required:
+      - revision
+      - approve
+      - text
+    PMCompleteRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        text:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+      required:
+      - text
+    PMEmptyRequest:
+      type: object
+      additionalProperties: true
+      properties: &id006 {}
+    PMContextResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: *id006
+        next_cursor:
+          type: string
+        limitations:
+          type: array
+          items:
+            type: string
+      required:
+      - items
+    PMConversationDetailResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        conversation:
+          $ref: '#/components/schemas/PMConversation'
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMTurn'
+      required:
+      - conversation
+      - turns
+    PMConversationListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMConversation'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    PMDecisionListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMDecision'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    PMActionListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMAction'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    WorkSource:
+      type: object
+      additionalProperties: true
+      properties:
+        authority:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        url:
+          type: string
+        native_status:
+          type: string
+        revision:
+          type: string
+      required:
+      - authority
+    WorkObservation:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        idempotency_key:
+          type: string
+        reader_id:
+          type: string
+        reader_revision:
+          type: string
+        observed_at:
+          type: string
+        received_at:
+          type: string
+        source_revision:
+          type: string
+        source_activity_at:
+          type: string
+        meaningful_progress_at:
+          type: string
+        actor_id:
+          type: string
+        work_ref:
+          type: string
+        status:
+          type: string
+          enum:
+          - reported
+          - verified
+          - uncertain
+          - error
+        verification:
+          type: string
+          enum:
+          - reported
+        source_sequence:
+          type: integer
+          minimum: 0
+        facts:
+          type: object
+          additionalProperties: true
+          properties: &id001 {}
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: *id001
+        uncertainty:
+          type: array
+          items:
+            type: string
+        coverage:
+          type: object
+          additionalProperties: true
+          properties: *id001
+        error:
+          type: object
+          additionalProperties: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        stale_after_seconds:
+          type: integer
+          minimum: 1
+          maximum: 2592000
+      required:
+      - idempotency_key
+      - reader_id
+      - reader_revision
+      - observed_at
+      - status
+    WorkRefresh:
+      type: object
+      additionalProperties: true
+      properties:
+        state:
+          type: string
+          enum:
+          - idle
+          - queued
+          - running
+          - succeeded
+          - failed
+        requested_at:
+          type: string
+        requested_by:
+          type: string
+        last_attempt_at:
+          type: string
+        last_success_at:
+          type: string
+        next_due_at:
+          type: string
+        last_error:
+          type: object
+          additionalProperties: true
+          properties: *id001
+      required:
+      - state
+    Work:
+      type: object
+      additionalProperties: true
+      properties:
+        project_ref: &id002
+          type: string
+        priority: &id003
+          type: string
+        next_actor: &id004
+          type: string
+        next_action: &id005
+          type: string
+        wake_condition: &id006
+          type: string
+        start_at: &id007
+          type: string
+        due_at: &id008
+          type: string
+        blockers: &id009
+          type: array
+          items:
+            type: string
+        relations: &id010
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              kind:
+                type: string
+                enum:
+                - parent
+                - child
+                - depends_on
+                - related
+                - artifact
+              ref:
+                type: string
+            required:
+            - kind
+            - ref
+        executions: &id011
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              authority:
+                type: string
+              run_id:
+                type: string
+              host:
+                type: string
+              harness:
+                type: string
+              agent:
+                type: string
+              model:
+                type: string
+              url:
+                type: string
+              result_ref:
+                type: string
+            required:
+            - authority
+            - run_id
+        ref:
+          type: string
+        handle:
+          type: string
+        board_ref:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        owner:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        definition_of_done:
+          type: array
+          items:
+            type: string
+        source:
+          $ref: '#/components/schemas/WorkSource'
+        phase:
+          type: string
+          enum:
+          - backlog
+          - ready
+          - in_progress
+          - blocked
+          - review
+          - done
+          - cancelled
+          - unknown
+        version:
+          type: integer
+        freshness:
+          type: object
+          additionalProperties: true
+          properties:
+            status:
+              type: string
+              enum:
+              - unknown
+              - fresh
+              - stale
+              - error
+            last_observed_at:
+              type: string
+            source_activity_at:
+              type: string
+            meaningful_progress_at:
+              type: string
+            stale_after_seconds:
+              type: integer
+        refresh:
+          $ref: '#/components/schemas/WorkRefresh'
+        latest_observation:
+          type: object
+          additionalProperties: true
+          properties: *id001
+      required:
+      - ref
+      - title
+      - source
+      - phase
+      - version
+      - freshness
+      - refresh
+    WorkResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        work:
+          $ref: '#/components/schemas/Work'
+      required:
+      - work
+    WorkListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        work:
+          type: array
+          items:
+            $ref: '#/components/schemas/Work'
+        next_cursor:
+          type: string
+      required:
+      - work
+    WorkCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        board_ref:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        owner:
+          type: string
+        phase:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkSource'
+        definition_of_done:
+          type: array
+          items:
+            type: string
+        project_ref: *id002
+        priority: *id003
+        next_actor: *id004
+        next_action: *id005
+        wake_condition: *id006
+        start_at: *id007
+        due_at: *id008
+        blockers: *id009
+        relations: *id010
+        executions: *id011
+      required:
+      - board_ref
+      - title
+    WorkPatchRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        if_version:
+          type: integer
+          minimum: 0
+        patch:
+          type: object
+          additionalProperties: true
+          properties:
+            project_ref: *id002
+            priority: *id003
+            next_actor: *id004
+            next_action: *id005
+            wake_condition: *id006
+            start_at: *id007
+            due_at: *id008
+            blockers: *id009
+            relations: *id010
+            executions: *id011
+      required:
+      - if_version
+      - patch
+    WorkObservationRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        observation:
+          $ref: '#/components/schemas/WorkObservation'
+      required:
+      - observation
+    WorkObservationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        observation:
+          $ref: '#/components/schemas/WorkObservation'
+        work:
+          $ref: '#/components/schemas/Work'
+        duplicate:
+          type: boolean
+      required:
+      - observation
+      - work
+      - duplicate
+    WorkObservationListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkObservation'
+        next_cursor:
+          type: string
+      required:
+      - observations
+    WorkRefreshResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        refresh:
+          $ref: '#/components/schemas/WorkRefresh'
+      required:
+      - refresh
+    WorkRefreshRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+    WorkCapabilitiesResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        capabilities:
+          type: object
+          additionalProperties: true
+          properties: *id001
+      required:
+      - capabilities
     Error:
       type: object
       properties:

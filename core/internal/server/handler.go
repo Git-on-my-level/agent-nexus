@@ -159,6 +159,7 @@ type PrimitiveStore interface {
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
+	pmHandler                      http.Handler
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	authStore                      *auth.Store
@@ -252,6 +253,13 @@ func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.passkeySessionStore = store
 	}
+}
+
+// WithPMHandler mounts the PM package behind workspace auth, body limits,
+// rate limits, and write-access checks. The PM handler must additionally bind
+// its Principal to the same authenticated request and enforce PM permissions.
+func WithPMHandler(handler http.Handler) HandlerOption {
+	return func(opts *handlerOptions) { opts.pmHandler = handler }
 }
 
 func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {
@@ -656,6 +664,17 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	mux.HandleFunc(stream.Prefix, func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "stream_not_found", "stream endpoint not found")
 	})
+
+	registerRoute("/pm/", pmRouteAccess, func(w http.ResponseWriter, r *http.Request) {
+		if opts.pmHandler == nil {
+			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM service is not configured")
+			return
+		}
+		opts.pmHandler.ServeHTTP(w, r)
+	})
+
+	registerRoute("/work", workRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleWork(w, r, opts) })
+	registerRoute("/work/", workRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleWork(w, r, opts) })
 
 	registerRoute("/health", exactRouteAccess(routeAccessAlwaysPublic, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

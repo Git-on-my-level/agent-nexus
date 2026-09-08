@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `30`
+- Concepts: `31`
 
 ## `actors`
 
@@ -96,7 +96,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `16`
+- Commands: `42`
 - Command IDs:
   - `boards.cards.batch_add`
   - `boards.cards.get`
@@ -114,6 +114,32 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `pm.actions.get`
+  - `pm.actions.list`
+  - `pm.actions.reconcile`
+  - `pm.bindings.create`
+  - `pm.context`
+  - `pm.conversations.create`
+  - `pm.conversations.get`
+  - `pm.conversations.list`
+  - `pm.conversations.messages.create`
+  - `pm.decisions.answer`
+  - `pm.decisions.create`
+  - `pm.decisions.dispatch`
+  - `pm.decisions.get`
+  - `pm.decisions.list`
+  - `pm.turns.complete`
+  - `pm.turns.context`
+  - `pm.turns.decisions.create`
+  - `work.capabilities`
+  - `work.create`
+  - `work.get`
+  - `work.list`
+  - `work.observations.list`
+  - `work.observations.submit`
+  - `work.patch`
+  - `work.refresh.get`
+  - `work.refresh.request`
 
 ## `compatibility`
 
@@ -166,6 +192,37 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.unarchive`
   - `home.read`
   - `home.unread`
+
+## `evidence`
+
+- Commands: `26`
+- Command IDs:
+  - `pm.actions.get`
+  - `pm.actions.list`
+  - `pm.actions.reconcile`
+  - `pm.bindings.create`
+  - `pm.context`
+  - `pm.conversations.create`
+  - `pm.conversations.get`
+  - `pm.conversations.list`
+  - `pm.conversations.messages.create`
+  - `pm.decisions.answer`
+  - `pm.decisions.create`
+  - `pm.decisions.dispatch`
+  - `pm.decisions.get`
+  - `pm.decisions.list`
+  - `pm.turns.complete`
+  - `pm.turns.context`
+  - `pm.turns.decisions.create`
+  - `work.capabilities`
+  - `work.create`
+  - `work.get`
+  - `work.list`
+  - `work.observations.list`
+  - `work.observations.submit`
+  - `work.patch`
+  - `work.refresh.get`
+  - `work.refresh.request`
 
 ## `health`
 
