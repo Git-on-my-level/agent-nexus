@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 149
+- Command count: 151
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -24,7 +24,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox | 4 |
 | meta | 9 |
 | ops | 3 |
-| pm | 17 |
+| pm | 19 |
 | ref-edges | 1 |
 | secret | 6 |
 | threads | 5 |
@@ -37,7 +37,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 56 |
-| exposed_write | 50 |
+| exposed_write | 52 |
 | gated_admin | 15 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 6 |
@@ -49,7 +49,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 106 | exposed_read + exposed_write + adapted |
+| standalone default | 108 | exposed_read + exposed_write + adapted |
 | hosted default | 55 | explicit read-only private-app allowlist |
 | gated | 28 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -173,9 +173,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.decisions.dispatch | pm | POST | /pm/decisions/{decision_id}/dispatch | gated_sensitive | Human approval or consequential source handoff; explicit exposure never bypasses core authorization. |
 | pm.decisions.get | pm | GET | /pm/decisions/{decision_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.decisions.list | pm | GET | /pm/decisions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.turns.claim | pm | POST | /pm/turns/claim | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.complete | pm | POST | /pm/turns/{turn_id}/complete | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.context | pm | GET | /pm/turns/{turn_id}/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.turns.decisions.create | pm | POST | /pm/turns/{turn_id}/decisions | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| pm.turns.fail | pm | POST | /pm/turns/{turn_id}/fail | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | ref_edges.list | ref-edges | GET | /ref-edges | exposed_read | reference edge inventory read |
 | secrets.create | secret | POST | /secrets | gated_sensitive | secret payload write is sensitive |
 | secrets.delete | secret | DELETE | /secrets/{secret_id} | gated_sensitive | secret deletion is destructive |

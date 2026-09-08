@@ -2,6 +2,8 @@ package pm
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -180,11 +182,11 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 	} else if !errors.Is(err, ErrNotFound) {
 		return Turn{}, err
 	}
-	if s.deps.Dispatch == nil || s.cfg.AgentActorID == "" || s.cfg.AgentHandle == "" {
+	if s.deps.Dispatch != nil && s.cfg.AgentHandle == "" {
 		return Turn{}, ErrUnavailable
 	}
 	now := time.Now().UTC()
-	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
+	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, MaxOutputBytes: s.cfg.MaxOutputBytes, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
 	inserted, err := s.store.insertTurn(ctx, t, s.cfg.MaxConcurrent)
 	if err != nil {
 		return Turn{}, err
@@ -204,6 +206,9 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 	t.Revision++
 	if err = s.store.cas(ctx, "turn", id, 1, t); err != nil {
 		return Turn{}, err
+	}
+	if s.deps.Dispatch == nil {
+		return t, nil
 	}
 	packet := s.packet(c, t)
 	bounded, cancel := context.WithTimeout(ctx, s.cfg.TurnTimeout)
@@ -227,11 +232,17 @@ func (s *Service) packet(c Conversation, t Turn) router.WakePacket {
 	return router.WakePacket{WakeupID: t.WakeupID, Handle: s.cfg.AgentHandle, ActorID: s.cfg.AgentActorID, WorkspaceID: s.cfg.WorkspaceID, WorkspaceName: s.cfg.WorkspaceName, ThreadID: c.ThreadID, ThreadTitle: c.Title, SubjectRef: c.WorkRef, TriggerEventID: t.ID, TriggerCreatedAt: t.CreatedAt.Format(time.RFC3339Nano), TriggerAuthorActorID: t.ActorID, TriggerText: prompt, CurrentSummary: runtimePolicy(t, s.cfg.MaxOutputBytes), SessionKey: fmt.Sprintf("anx:%s:%s:%s", s.cfg.WorkspaceID, c.ThreadID, s.cfg.AgentHandle), AnxBaseURL: base, ThreadContextURL: base + "/threads/" + c.ThreadID + "/context", ThreadWorkspaceURL: base + "/threads/" + c.ThreadID + "/workspace", TriggerEventURL: base + "/events/" + t.ID, CLIThreadInspect: "anx threads inspect --thread-id " + c.ThreadID + " --json", CLIThreadWorkspace: "anx threads workspace --thread-id " + c.ThreadID + " --json"}
 }
 func (s *Service) CompleteTurn(ctx context.Context, p Principal, turnID, text string, evidence []string) (Turn, error) {
+	return s.completeTurn(ctx, p, turnID, text, evidence, "")
+}
+func (s *Service) CompleteTurnWithLease(ctx context.Context, p Principal, turnID, text string, evidence []string, leaseToken string) (Turn, error) {
+	return s.completeTurn(ctx, p, turnID, text, evidence, leaseToken)
+}
+func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text string, evidence []string, leaseToken string) (Turn, error) {
 	var t Turn
 	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
 		return t, err
 	}
-	if p.WorkspaceID != t.WorkspaceID || p.ActorID != t.AgentActorID {
+	if p.WorkspaceID != t.WorkspaceID || t.AgentActorID == "" || p.ActorID != t.AgentActorID {
 		return Turn{}, ErrForbidden
 	}
 	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
@@ -252,13 +263,142 @@ func (s *Service) CompleteTurn(ctx context.Context, p Principal, turnID, text st
 	if time.Now().After(t.Deadline) {
 		return Turn{}, ErrStale
 	}
+	if err := leaseGuard(t, leaseToken); err != nil {
+		return Turn{}, err
+	}
 	old := t.Revision
 	t.Response = text
 	t.EvidenceRefs = evidence
 	t.Status = Delivered
+	t.LeaseToken = ""
+	t.LeaseOwner = ""
+	t.LeaseExpiresAt = time.Time{}
 	t.Revision++
 	if err := s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
 		return Turn{}, err
 	}
 	return t, nil
+}
+func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in FailInput) (Turn, error) {
+	var t Turn
+	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
+		return t, err
+	}
+	if p.WorkspaceID != t.WorkspaceID || t.AgentActorID == "" || p.ActorID != t.AgentActorID {
+		return Turn{}, ErrForbidden
+	}
+	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
+		return Turn{}, err
+	}
+	if !validText(in.Reason, s.cfg.MaxOutputBytes) {
+		return Turn{}, ErrInvalid
+	}
+	if t.Status == Failed {
+		if t.Failure == in.Reason {
+			return t, nil
+		}
+		return Turn{}, ErrConflict
+	}
+	if t.Status != Sending && t.Status != Unknown {
+		return Turn{}, ErrConflict
+	}
+	if err := leaseGuard(t, in.LeaseToken); err != nil {
+		return Turn{}, err
+	}
+	old := t.Revision
+	t.Failure = in.Reason
+	t.Status = Failed
+	t.LeaseToken = ""
+	t.LeaseOwner = ""
+	t.LeaseExpiresAt = time.Time{}
+	t.Revision++
+	if err := s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
+		return Turn{}, err
+	}
+	return t, nil
+}
+func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Turn, error) {
+	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
+		return Turn{}, err
+	}
+	if s.cfg.AgentActorID != "" && p.ActorID != s.cfg.AgentActorID {
+		return Turn{}, ErrForbidden
+	}
+	runner := strings.TrimSpace(in.RunnerID)
+	if runner == "" {
+		runner = p.ActorID
+	}
+	if !validText(runner, 256) {
+		return Turn{}, ErrInvalid
+	}
+	now := time.Now().UTC()
+	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, "", "")
+	if err != nil {
+		return Turn{}, err
+	}
+	for _, t := range turns {
+		if t.LeaseOwner == runner && leaseHeld(t, now) && (t.Status == Sending || t.Status == Unknown) {
+			if s.cfg.AgentActorID != "" && t.AgentActorID != s.cfg.AgentActorID {
+				continue
+			}
+			return t, nil
+		}
+	}
+	for _, t := range turns {
+		if t.Status != Sending && t.Status != Unknown {
+			continue
+		}
+		if now.After(t.Deadline) {
+			continue
+		}
+		if leaseHeld(t, now) {
+			continue
+		}
+		if t.AgentActorID != "" && t.AgentActorID != p.ActorID {
+			continue
+		}
+		old := t.Revision
+		if t.AgentActorID == "" {
+			t.AgentActorID = p.ActorID
+		}
+		t.LeaseToken = newLeaseToken()
+		t.LeaseOwner = runner
+		t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, s.cfg.TurnTimeout)
+		t.MaxOutputBytes = s.cfg.MaxOutputBytes
+		t.Revision++
+		if err = s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
+			if errors.Is(err, ErrConflict) {
+				continue
+			}
+			return Turn{}, err
+		}
+		return t, nil
+	}
+	return Turn{}, ErrEmpty
+}
+func leaseHeld(t Turn, now time.Time) bool {
+	return t.LeaseToken != "" && !t.LeaseExpiresAt.IsZero() && t.LeaseExpiresAt.After(now)
+}
+func leaseGuard(t Turn, token string) error {
+	if !leaseHeld(t, time.Now().UTC()) {
+		return nil
+	}
+	if strings.TrimSpace(token) == "" || token != t.LeaseToken {
+		return ErrConflict
+	}
+	return nil
+}
+func leaseDeadline(deadline, now time.Time, ttl time.Duration) time.Time {
+	expires := now.Add(ttl)
+	if deadline.Before(expires) {
+		return deadline
+	}
+	return expires
+}
+func newLeaseToken() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return stableID("lease", fmt.Sprint(time.Now().UnixNano()))
+	}
+	return hex.EncodeToString(b[:])
 }

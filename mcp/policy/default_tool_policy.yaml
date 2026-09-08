@@ -483,6 +483,12 @@ commands:
   "pm.turns.complete":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.claim":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.fail":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
   "pm.turns.context":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."

@@ -5035,9 +5035,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmActionsGet",
         "ts_method": "pmActionsGet"
@@ -5086,9 +5088,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmActionsList",
         "ts_method": "pmActionsList"
@@ -5140,9 +5144,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmActionsReconcile",
         "ts_method": "pmActionsReconcile"
@@ -5247,9 +5253,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmBindingsCreate",
         "ts_method": "pmBindingsCreate"
@@ -5298,9 +5306,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmContext",
         "ts_method": "pmContext"
@@ -5367,9 +5377,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmConversationsCreate",
         "ts_method": "pmConversationsCreate"
@@ -5421,9 +5433,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmConversationsGet",
         "ts_method": "pmConversationsGet"
@@ -5472,9 +5486,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmConversationsList",
         "ts_method": "pmConversationsList"
@@ -5538,9 +5554,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmConversationsMessagesCreate",
         "ts_method": "pmConversationsMessagesCreate"
@@ -5608,9 +5626,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmDecisionsAnswer",
         "ts_method": "pmDecisionsAnswer"
@@ -5683,9 +5703,11 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmDecisionsCreate",
         "ts_method": "pmDecisionsCreate"
@@ -5737,9 +5759,11 @@ export const commandRegistry = [
             "pm.decisions.create",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmDecisionsDispatch",
         "ts_method": "pmDecisionsDispatch"
@@ -5791,9 +5815,11 @@ export const commandRegistry = [
             "pm.decisions.create",
             "pm.decisions.dispatch",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmDecisionsGet",
         "ts_method": "pmDecisionsGet"
@@ -5842,12 +5868,75 @@ export const commandRegistry = [
             "pm.decisions.create",
             "pm.decisions.dispatch",
             "pm.decisions.get",
+            "pm.turns.claim",
             "pm.turns.complete",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmDecisionsList",
         "ts_method": "pmDecisionsList"
+    },
+    {
+        "command_id": "pm.turns.claim",
+        "cli_path": "pm turns claim",
+        "group": "pm",
+        "method": "POST",
+        "path": "/pm/turns/claim",
+        "operation_id": "pmTurnsClaim",
+        "summary": "Claim the next queued PM turn with an exclusive runner lease",
+        "why": "Claim one queued turn for the selected PM agent so two runners never answer it.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `PMTurn`.",
+        "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Lease expiry is bounded by the turn deadline and pm.Config turn timeout.",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "runner_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
+        ],
+        "go_method": "PmTurnsClaim",
+        "ts_method": "pmTurnsClaim"
     },
     {
         "command_id": "pm.turns.complete",
@@ -5890,6 +5979,10 @@ export const commandRegistry = [
                 {
                     "name": "evidence_refs",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "lease_token",
+                    "type": "string"
                 }
             ]
         },
@@ -5911,8 +6004,10 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.context",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmTurnsComplete",
         "ts_method": "pmTurnsComplete"
@@ -5965,8 +6060,10 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
-            "pm.turns.decisions.create"
+            "pm.turns.decisions.create",
+            "pm.turns.fail"
         ],
         "go_method": "PmTurnsContext",
         "ts_method": "pmTurnsContext"
@@ -6043,11 +6140,83 @@ export const commandRegistry = [
             "pm.decisions.dispatch",
             "pm.decisions.get",
             "pm.decisions.list",
+            "pm.turns.claim",
             "pm.turns.complete",
-            "pm.turns.context"
+            "pm.turns.context",
+            "pm.turns.fail"
         ],
         "go_method": "PmTurnsDecisionsCreate",
         "ts_method": "pmTurnsDecisionsCreate"
+    },
+    {
+        "command_id": "pm.turns.fail",
+        "cli_path": "pm turns fail",
+        "group": "pm",
+        "method": "POST",
+        "path": "/pm/turns/{turn_id}/fail",
+        "operation_id": "pmTurnsFail",
+        "summary": "Mark a claimed PM turn failed",
+        "why": "Record a selected PM agent failure reason without inventing a reply.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `PMTurn`.",
+        "error_codes": [
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "source_revision_changed",
+            "busy",
+            "unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Selected PM agent only. When a lease is held, lease_token must match.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "reason",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "lease_token",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "turn_id"
+        ],
+        "adjacent_commands": [
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.claim",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create"
+        ],
+        "go_method": "PmTurnsFail",
+        "ts_method": "pmTurnsFail"
     },
     {
         "command_id": "ref_edges.list",
@@ -8179,6 +8348,9 @@ export class AnxClient {
     pmDecisionsList(options = {}) {
         return this.invoke("pm.decisions.list", {}, options);
     }
+    pmTurnsClaim(options = {}) {
+        return this.invoke("pm.turns.claim", {}, options);
+    }
     pmTurnsComplete(pathParams, options = {}) {
         return this.invoke("pm.turns.complete", pathParams, options);
     }
@@ -8187,6 +8359,9 @@ export class AnxClient {
     }
     pmTurnsDecisionsCreate(pathParams, options = {}) {
         return this.invoke("pm.turns.decisions.create", pathParams, options);
+    }
+    pmTurnsFail(pathParams, options = {}) {
+        return this.invoke("pm.turns.fail", pathParams, options);
     }
     refEdgesList(options = {}) {
         return this.invoke("ref_edges.list", {}, options);

@@ -455,9 +455,41 @@ There is no client command to manufacture a verified receipt.
 
 Conversation creation uses `request_key`, `title` and optional `work_ref`; messages
 use `request_key` and `text`. Preserve request keys on retry. A queued turn is not
-an assistant response or completed work. The selected PM agent can use
-`pm turns context <turn-id>`, `pm turns propose <turn-id> --from-file ...`, and
-`pm turns complete <turn-id> --from-file ...`; other agents cannot impersonate it.
+an assistant response or completed work. Status vocabulary is `sending`,
+`unknown`, `failed`, or completed with `response` (`delivered`).
+
+The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
+`pm turns propose <turn-id> --from-file ...`, `pm turns complete <turn-id>
+--from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
+cannot impersonate it. Claim is lease-based and idempotent for the same
+`runner_id`; HTTP 204 means no claimable turn.
+
+### PM runner (`anx pm serve`)
+
+The PM is an external agent. Do not call a model in-process. `make serve` seeds
+persona `pm` (`actor-gds-pm` / `dev.pm`) for the default game-dev-studio
+scenario, writes CLI profile homes from registration tokens (no refresh
+exchange), and prints the exact command. Wake routing and
+`ANX_PM_BRIDGE_ENABLED` are not required.
+
+```sh
+make cli-build
+ANX_DEV_BLOB_BACKEND=filesystem make serve
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
+HOME=.tmp/anx-dev-profile-homes/maya ./cli/anx --agent maya pm ask --wait \
+  "What needs my decision?"
+```
+
+`--runner` is the native harness argv after `agentctl run --`. omp may silently
+substitute models; every run must show `"provider":"zai","model":"glm-5.3"` in
+the harness JSON (`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models
+never go through omp. The prompt stays small: the PM loads tracker context
+through `anx work list|get` and `anx pm context`, never from a stuffed dump.
+Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
+2 minutes). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
+tools before the lease expires.
 
 PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
 `--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are

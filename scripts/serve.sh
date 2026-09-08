@@ -182,6 +182,14 @@ export ANX_BOOTSTRAP_TOKEN
 ANX_DEV_REGISTER_LINKED_ACTORS="${ANX_DEV_REGISTER_LINKED_ACTORS:-1}"
 export ANX_DEV_REGISTER_LINKED_ACTORS
 
+# Runner path: selected PM actor is a normal agent. Do not enable the wake
+# bridge (`ANX_PM_BRIDGE_ENABLED`) for `anx pm serve`.
+if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev-studio" ]]; then
+	export ANX_PM_AGENT_ACTOR_ID="${ANX_PM_AGENT_ACTOR_ID:-actor-gds-pm}"
+	export ANX_PM_AGENT_HANDLE="${ANX_PM_AGENT_HANDLE:-dev.pm}"
+	export ANX_PM_TURN_TIMEOUT="${ANX_PM_TURN_TIMEOUT:-10m}"
+fi
+
 HOST="${CORE_HOST}" \
 	PORT="${CORE_PORT}" \
 	WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT}" \
@@ -209,6 +217,24 @@ if [ "$SEED_CORE" = "1" ]; then
 		ANX_DEV_SEED_IDENTITIES="${ANX_DEV_SEED_IDENTITIES:-1}" \
 		ANX_FORCE_SEED="${FORCE_SEED}" \
 		node "${REPO_ROOT}/web-ui/scripts/seed-core-from-mock.mjs"
+	if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev-studio" ]]; then
+		ANX_DEV_PROFILE_INCLUDE_HUMAN=1 \
+			ANX_CORE_BASE_URL="${CORE_BASE_URL}" \
+			node "${REPO_ROOT}/scripts/anx-dev-profile-homes.mjs" ||
+			echo "warning: CLI profile homes failed; anx pm serve will need a manual profile" >&2
+		PM_HOME="${REPO_ROOT}/.tmp/anx-dev-profile-homes/pm"
+		MAYA_HOME="${REPO_ROOT}/.tmp/anx-dev-profile-homes/maya"
+		ANX_BIN="${REPO_ROOT}/cli/anx"
+		echo ""
+		echo "PM runner (external agent via agentctl; wake/bridge not required):"
+		echo "  make cli-build"
+		echo "  HOME=${PM_HOME} ${ANX_BIN} --agent pm pm serve --work-dir ${REPO_ROOT}/.tmp/pm-runner --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'"
+		echo "Ask as Maya (seeded human):"
+		echo "  HOME=${MAYA_HOME} ${ANX_BIN} --agent maya pm ask --wait \"What needs my decision?\""
+		echo "Verify omp did not substitute the model:"
+		echo "  grep -o '\"provider\":\"[^\"]*\",\"model\":\"[^\"]*\"'"
+		echo ""
+	fi
 else
 	echo "Skipping core seed step (SEED_CORE=${SEED_CORE})."
 fi

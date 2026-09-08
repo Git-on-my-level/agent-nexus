@@ -1565,7 +1565,9 @@ async function seedDevFixtureIdentities() {
       principal_kind: p.principal_kind,
       default: p.default === true,
       dev_bridge: p.dev_bridge,
+      access_token: reg.tokens?.access_token,
       refresh_token: reg.tokens?.refresh_token,
+      expires_at: reg.tokens?.expires_at,
     });
   }
 

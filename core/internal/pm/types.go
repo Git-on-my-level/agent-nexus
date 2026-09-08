@@ -18,6 +18,7 @@ var (
 	ErrStale       = errors.New("approved source revision has changed")
 	ErrUnavailable = errors.New("PM capability is not configured")
 	ErrBusy        = errors.New("PM execution capacity reached")
+	ErrEmpty       = errors.New("no claimable PM turn")
 )
 
 type Status string
@@ -87,9 +88,21 @@ type Turn struct {
 	WakeupID       string    `json:"wakeup_id"`
 	AgentActorID   string    `json:"agent_actor_id"`
 	EvidenceRefs   []string  `json:"evidence_refs,omitempty"`
+	Failure        string    `json:"failure,omitempty"`
+	LeaseToken     string    `json:"lease_token,omitempty"`
+	LeaseOwner     string    `json:"lease_owner,omitempty"`
+	LeaseExpiresAt time.Time `json:"lease_expires_at,omitempty"`
+	MaxOutputBytes int       `json:"max_output_bytes,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	Deadline       time.Time `json:"deadline"`
 	Revision       int       `json:"revision"`
+}
+type ClaimInput struct {
+	RunnerID string `json:"runner_id"`
+}
+type FailInput struct {
+	Reason     string `json:"reason"`
+	LeaseToken string `json:"lease_token"`
 }
 type ConversationDetail struct {
 	Conversation Conversation `json:"conversation"`

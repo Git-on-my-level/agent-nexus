@@ -46,6 +46,15 @@ export const GAME_DEV_STUDIO_PERSONAS = [
     default: false,
     dev_bridge: false,
   },
+  {
+    persona_id: "pm",
+    actor_id: "actor-gds-pm",
+    auth_username: "dev.pm",
+    display_label: "Studio PM",
+    principal_kind: "agent",
+    default: false,
+    dev_bridge: false,
+  },
 ];
 
 const actors = [
@@ -78,6 +87,12 @@ const actors = [
     display_name: "Priya Shah",
     tags: ["agent", "qa", "release"],
     created_at: "2026-04-12T15:04:00.000Z",
+  },
+  {
+    id: "actor-gds-pm",
+    display_name: "Studio PM",
+    tags: ["agent", "pm"],
+    created_at: "2026-04-12T15:05:00.000Z",
   },
 ];
 

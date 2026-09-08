@@ -35,6 +35,12 @@ variables.
 | Embedded router poll interval | n/a | `ANX_SIDECAR_ROUTER_POLL_INTERVAL` | `1s` |
 | Embedded router principal cache TTL | n/a | `ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL` | `60s` |
 | Bootstrap token for first principal registration | n/a | `ANX_BOOTSTRAP_TOKEN` | unset |
+| Selected PM agent actor (claim/complete/fail when set) | n/a | `ANX_PM_AGENT_ACTOR_ID` | unset |
+| Selected PM agent handle (wake-bridge path only) | n/a | `ANX_PM_AGENT_HANDLE` | unset |
+| PM turn wall time (queued runner and wake dispatch) | n/a | `ANX_PM_TURN_TIMEOUT` | `2m` (max `10m`) |
+| PM turn response byte cap | n/a | `ANX_PM_MAX_OUTPUT_BYTES` | `16000` |
+| Enable wake-routing PM bridge | n/a | `ANX_PM_BRIDGE_ENABLED` | `false` |
+| Attest an independently enforced PM capability envelope | n/a | `ANX_PM_RUNTIME_ENVELOPE_ENFORCED` | `false` |
 | WebAuthn RP ID | n/a | `ANX_WEBAUTHN_RPID` | derived from browser origin host |
 | WebAuthn origin | n/a | `ANX_WEBAUTHN_ORIGIN` | derived from browser request origin |
 | WebAuthn allowed origins | n/a | `ANX_WEBAUTHN_ALLOWED_ORIGINS` | unset |
@@ -110,7 +116,12 @@ storage.
 ```
 
 From the repo root, `make serve` starts `anx-core`, seeds a local workspace,
-and starts the web UI.
+and starts the web UI. For the default game-dev-studio scenario it also seeds
+the Studio PM agent (`actor-gds-pm` / `dev.pm`), sets `ANX_PM_AGENT_ACTOR_ID`
+and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
+Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
+`POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
+`lease_token`. See `cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe.
 
 ## Router responsibilities
 
