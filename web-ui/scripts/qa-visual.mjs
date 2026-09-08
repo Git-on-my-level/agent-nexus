@@ -297,7 +297,10 @@ const QA_SCENES = [
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Launch checklist")');
       await page.waitForSelector("text=Operator-facing launch checklist");
-      await page.waitForSelector("text=Discussion");
+      // Desktop (1440px) uses the document rail; the dock header is lg:hidden.
+      // Do not use text=Discussion: it matches the hidden settings hint
+      // "Workspace projects and discussions" first and never becomes visible.
+      await page.waitForSelector("aside.dd-rail");
       await page.waitForSelector("text=Check the OAuth callback copy");
       await page.waitForSelector("text=Keep this wording exact");
     },

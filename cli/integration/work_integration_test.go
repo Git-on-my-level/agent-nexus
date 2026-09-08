@@ -144,7 +144,8 @@ func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 func TestSecondMachineCLIObservationDedupSurvivesRestart(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	h.registerAgentBootstrap(t, "machine-a", "machine-a."+runToken())
-	h.registerAgentBootstrap(t, "machine-b", "machine-b."+runToken())
+	invite := h.createInviteToken(t, "machine-a")
+	h.registerAgentInvite(t, "machine-b", "machine-b."+runToken(), invite)
 	board := h.runCLIExpectOK(t, "machine-a", map[string]any{"board": map[string]any{"title": "Synthetic second machine", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	boardRef := mustStringPath(t, board.Payload, "data.board.ref")
 	work := h.runCLIExpectOK(t, "machine-a", map[string]any{"board_ref": boardRef, "title": "Remote CLI commitment", "source": map[string]any{"authority": "github", "connection_id": "synthetic", "native_id": "fixture/repository/issues/second-machine"}}, "work", "create", "--from-file", "-")
