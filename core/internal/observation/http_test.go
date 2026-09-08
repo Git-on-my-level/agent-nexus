@@ -123,3 +123,20 @@ func TestTargetCannotChooseUnregisteredConnectionOrPath(t *testing.T) {
 		t.Fatal("connection crossing accepted")
 	}
 }
+
+func TestHTTPSRejectsSpecialUseDestinationsWithoutExplicitApproval(t *testing.T) {
+	source := &httpSource{}
+	for _, address := range []string{"100.64.0.1", "198.18.0.1", "192.0.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1", "::ffff:127.0.0.1"} {
+		if source.allowedAddress(netip.MustParseAddr(address).Unmap()) {
+			t.Errorf("special-use destination allowed: %s", address)
+		}
+	}
+	source.config.AllowedNetworks = []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10")}
+	if !source.allowedAddress(netip.MustParseAddr("100.64.0.1")) {
+		t.Fatal("approved Tailnet range rejected")
+	}
+	source.config.AllowedNetworks = []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0")}
+	if source.allowedAddress(netip.MustParseAddr("169.254.169.254")) {
+		t.Fatal("metadata address allowed by broad approval")
+	}
+}
