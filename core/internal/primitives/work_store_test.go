@@ -260,3 +260,14 @@ func TestWorkReferencesRemainWorkspaceScoped(t *testing.T) {
 		t.Fatalf("unresolved dependency accepted: %v", err)
 	}
 }
+
+func TestCreateWorkHonorsStableCardID(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	w, err := s.CreateWork(context.Background(), "actor-1", b, map[string]any{"id": "card-anx-github-208", "title": "Public issue", "source": map[string]any{"authority": "github", "connection_id": "github-main", "native_id": "Git-on-my-level/agent-nexus#208"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w["id"] != "card-anx-github-208" && w["ref"] != "card:card-anx-github-208" {
+		t.Fatalf("stable work id not preserved: id=%v ref=%v", w["id"], w["ref"])
+	}
+}

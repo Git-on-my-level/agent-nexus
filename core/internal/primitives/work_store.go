@@ -179,6 +179,8 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 			return nil, err
 		}
 	}
+	id := workString(m["id"])
+	delete(m, "id")
 	title := workString(m["title"])
 	if title == "" {
 		return nil, workInvalid("title required")
@@ -214,7 +216,7 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	if owner != "" && authority == "nexus" {
 		assignee = &owner
 	}
-	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
+	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
 	if err != nil {
 		if authority != "nexus" {
 			var id string

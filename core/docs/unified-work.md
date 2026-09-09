@@ -41,7 +41,13 @@ serially with per-reader deadlines. Persisted leases fence stale workers; retry
 backoff and rate-limit hints survive service recreation. Failure retains the
 last good evidence. Unconfigured targets remain queued and visibly unexecuted.
 
-Example using a public GitHub issue and a credential *handle*, not a secret:
+Example using a public GitHub issue and a credential *handle*, not a secret.
+`make serve` sets `ANX_OBSERVATION_CONFIG` to `core/dev/observation.serve.json`
+when that file exists: a builtin GitHub reader plus a JIT C transform against
+`Git-on-my-level/agent-nexus#208`. `core/scripts/dogfood-jit.sh` compiles
+`core/dev/github-transform.c`, then stages, validates, canaries and activates
+the artifact. A Linux host is not available in this worktree; `make -C core check`
+cross-compiles `./internal/observation` with `GOOS=linux`.
 
 ```json
 {

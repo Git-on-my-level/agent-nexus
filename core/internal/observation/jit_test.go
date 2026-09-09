@@ -14,6 +14,18 @@ import (
 func fixtureJITPolicy() JITPolicy {
 	return JITPolicy{MaxArtifactBytes: 16 << 20, Limits: IsolationLimits{Timeout: time.Second, MemoryBytes: 128 << 20, OutputBytes: 65536, InputBytes: 65536, CPUSeconds: 1, Processes: 8, FileBytes: 65536}, FailureThreshold: 2}
 }
+
+// isolationTestPolicy is for real sandbox-exec/bwrap runs. The 1s fixture
+// timeout is enough for the fake isolator but flakes under full-suite load.
+func isolationTestPolicy() JITPolicy {
+	p := fixtureJITPolicy()
+	p.Limits.Timeout = 15 * time.Second
+	p.Limits.CPUSeconds = 5
+	p.Limits.InputBytes = 1 << 20
+	p.Limits.OutputBytes = 1 << 20
+	p.Limits.FileBytes = 1 << 20
+	return p
+}
 func TestGeneratedReaderCapabilitiesFailClosed(t *testing.T) {
 	p := fixtureJITPolicy()
 	manifest := Manifest{AdapterID: "fixture", Target: fixtureTarget(), Envelope: Envelope{}, Limits: p.Limits}

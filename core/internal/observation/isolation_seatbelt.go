@@ -16,6 +16,37 @@ import (
 const seatbeltSandboxPath = "/usr/bin/sandbox-exec"
 const seatbeltShellPath = "/bin/sh"
 
+// seatbeltTempRoot is a host directory that is not covered by the profile's
+// /Users and /Volumes content-read denials. This host's TMPDIR is
+// /Volumes/scratch/tmp, so os.MkdirTemp("") would place the artifact and
+// scratch on a denied volume and flake under load when path aliasing differs.
+func seatbeltTempRoot() string {
+	for _, dir := range []string{"/private/tmp", "/tmp"} {
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil || !filepath.IsAbs(resolved) {
+			continue
+		}
+		if strings.HasPrefix(resolved, "/Volumes") || strings.HasPrefix(resolved, "/Users") {
+			continue
+		}
+		if st, err := os.Stat(resolved); err == nil && st.IsDir() {
+			return resolved
+		}
+	}
+	return "/private/tmp"
+}
+
+func copyExecutable(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(dst, data, 0500); err != nil {
+		return err
+	}
+	return os.Chmod(dst, 0500)
+}
+
 // SeatbeltRunner is the Darwin production executable backend. Generated code
 // runs under sandbox-exec with a deny-default profile: process-exec of the
 // reader artifact only, scratch writes, no network, no process-fork.
@@ -135,12 +166,20 @@ func (r *SeatbeltRunner) Run(ctx context.Context, artifact string, input []byte,
 	if err != nil || !info.Mode().IsRegular() {
 		return nil, failure(ErrPolicy, "generated executable unavailable or replaced")
 	}
-	root, err := os.MkdirTemp("", "anx-jit-seatbelt-")
+	root, err := os.MkdirTemp(seatbeltTempRoot(), "anx-jit-seatbelt-")
 	if err != nil {
 		return nil, failure(ErrIsolation, "isolated reader or sandbox setup failed")
 	}
 	defer os.RemoveAll(root)
 	if err = os.Chmod(root, 0700); err != nil {
+		return nil, failure(ErrIsolation, "isolated reader or sandbox setup failed")
+	}
+	copied := filepath.Join(root, "reader")
+	if err = copyExecutable(resolved, copied); err != nil {
+		return nil, failure(ErrIsolation, "isolated reader or sandbox setup failed")
+	}
+	resolved, err = filepath.EvalSymlinks(copied)
+	if err != nil {
 		return nil, failure(ErrIsolation, "isolated reader or sandbox setup failed")
 	}
 	scratch := filepath.Join(root, "scratch")

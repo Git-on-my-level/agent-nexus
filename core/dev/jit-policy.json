@@ -1,0 +1,13 @@
+{
+  "max_artifact_bytes": 16777216,
+  "limits": {
+    "timeout": 30000000000,
+    "memory_bytes": 134217728,
+    "output_bytes": 65536,
+    "input_bytes": 1048576,
+    "cpu_seconds": 5,
+    "processes": 8,
+    "file_bytes": 1048576
+  },
+  "failure_threshold": 2
+}

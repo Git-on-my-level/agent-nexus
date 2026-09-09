@@ -140,17 +140,23 @@ func NewJITManager(root string, p JITPolicy) (*JITManager, error) {
 		return nil, err
 	}
 	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil || resolved != filepath.Clean(root) {
-		return nil, failure(ErrPolicy, "JIT state root must not use symlinks")
+	if err != nil {
+		return nil, failure(ErrPolicy, "JIT state root is not a resolvable directory")
 	}
-	info, err := os.Stat(root)
+	if err = os.Chmod(resolved, 0700); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(resolved)
 	if err != nil {
 		return nil, err
+	}
+	if !info.IsDir() || !info.Mode().IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, failure(ErrPolicy, "JIT state root must be a directory, not a symlink")
 	}
 	if info.Mode().Perm()&0077 != 0 {
 		return nil, failure(ErrPolicy, "JIT state root must have private 0700 permissions")
 	}
-	return &JITManager{root: root, policy: p, runner: NewIsolatedRunner()}, nil
+	return &JITManager{root: resolved, policy: p, runner: NewIsolatedRunner()}, nil
 }
 func (m *JITManager) IsolationAvailable() error { return m.runner.Available() }
 func (m *JITManager) locked(fn func() error) error {

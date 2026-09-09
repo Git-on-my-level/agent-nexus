@@ -94,7 +94,8 @@ func run() error {
 	stateRoot := fs.String("state-root", "", "private 0700 JIT runtime directory")
 	policyPath := fs.String("policy", "", "approved JIT policy JSON")
 	manifestPath := fs.String("manifest", "", "generated reader manifest JSON")
-	artifactPath := fs.String("artifact", "", "static Linux ELF artifact")
+	artifactPath := fs.String("artifact", "", "host-native generated executable")
+	sourcePath := fs.String("source", "", "C source to compile into a generated artifact")
 	fixturesPath := fs.String("fixtures", "", "fixture array JSON: name,input (base64),want_valid")
 	adapterID := fs.String("adapter", "", "registered adapter ID")
 	revision := fs.String("revision", "", "immutable generated reader revision")
@@ -104,7 +105,7 @@ func run() error {
 	action := fs.Arg(0)
 	if action == "" {
 		fs.Usage()
-		return errors.New("action required: read, capabilities, jit-stage, jit-validate, jit-canary, jit-activate, jit-read, jit-status, jit-suspend, jit-rollback")
+		return errors.New("action required: read, capabilities, jit-stage, jit-generate, jit-validate, jit-canary, jit-activate, jit-read, jit-status, jit-suspend, jit-rollback")
 	}
 	var c config
 	var source observation.Reader
@@ -149,6 +150,40 @@ func run() error {
 		return err
 	}
 	switch action {
+	case "jit-generate":
+		var manifest observation.Manifest
+		if err := load(*manifestPath, &manifest); err != nil {
+			return err
+		}
+		srcPath := *sourcePath
+		if srcPath == "" {
+			return errors.New("jit-generate requires --source C file (harness output compiled in-process by tests)")
+		}
+		src, err := os.ReadFile(srcPath)
+		if err != nil {
+			return err
+		}
+		dir, err := os.MkdirTemp(*stateRoot, ".generate-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		if err = observation.GenerateWorkspace(observation.GenerateRequest{Workspace: dir, Manifest: manifest}); err != nil {
+			return err
+		}
+		compiled, err := observation.CompileGeneratedC(dir, src)
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(compiled)
+		if err != nil {
+			return err
+		}
+		v, err := manager.Stage(manifest, b)
+		if err != nil {
+			return err
+		}
+		return emit(v)
 	case "jit-stage":
 		var manifest observation.Manifest
 		if err := load(*manifestPath, &manifest); err != nil {
