@@ -1,3 +1,5 @@
+import { formatTimestamp } from "$lib/formatDate";
+
 /** Presentation only. Core owns work, freshness policy and every durable transition. */
 export const PHASES = [
   "backlog",
@@ -35,21 +37,41 @@ export function safeSourceHref(value) {
   }
 }
 
+/**
+ * Freshness as a reader would say it.
+ *
+ * The keys and tones are unchanged — callers filter on `.key` — but the labels
+ * were internal vocabulary ("Fresh observation", "Stale evidence", "Freshness
+ * unknown", "Refresh failed"), which describes our collection pipeline rather
+ * than answering the reader's question: when did we last look, and can we
+ * still reach the thing we looked at.
+ */
 export function freshness(
-  { observedAt, staleAfter, error, status } = {},
+  { observedAt, staleAfter, error, status, sourceName } = {},
   now = Date.now(),
 ) {
+  const named = String(sourceName ?? "").trim();
   if (error || status === "error")
-    return { key: "error", label: "Refresh failed", tone: "warn" };
+    return {
+      key: "error",
+      label: named ? `Can't reach ${named}` : "Can't reach source",
+      tone: "warn",
+    };
   const observed = Date.parse(observedAt);
   if (!Number.isFinite(observed) || observed > now + 60_000)
-    return { key: "unknown", label: "Freshness unknown", tone: "neutral" };
+    return { key: "unknown", label: "Never checked", tone: "neutral" };
   const deadline = Date.parse(staleAfter);
   if (status === "stale" || (Number.isFinite(deadline) && deadline <= now))
-    return { key: "stale", label: "Stale evidence", tone: "warn" };
-  if (status === "fresh" || Number.isFinite(deadline))
-    return { key: "fresh", label: "Fresh observation", tone: "ok" };
-  return { key: "unknown", label: "Freshness unknown", tone: "neutral" };
+    return { key: "stale", label: "Not checked lately", tone: "warn" };
+  if (status === "fresh" || Number.isFinite(deadline)) {
+    const when = formatTimestamp(observedAt);
+    return {
+      key: "fresh",
+      label: when ? `Checked ${when}` : "Checked recently",
+      tone: "ok",
+    };
+  }
+  return { key: "unknown", label: "Never checked", tone: "neutral" };
 }
 
 export function workFreshness(work, now = Date.now()) {
@@ -66,6 +88,7 @@ export function workFreshness(work, now = Date.now()) {
       staleAfter: deadline,
       status: f.status,
       error: work?.refresh?.last_error,
+      sourceName: work?.source ? sourceLabel(work.source) : "",
     },
     now,
   );

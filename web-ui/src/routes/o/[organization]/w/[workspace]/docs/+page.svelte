@@ -25,6 +25,47 @@
   import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
+
+  /**
+   * Agent-written comments are frequently "Update on <document title>". A row
+   * that already shows the title gains nothing from a second line repeating
+   * it, so a comment that is the title plus filler is not shown.
+   */
+  const COMMENT_FILLER = new Set([
+    "a",
+    "about",
+    "an",
+    "change",
+    "changed",
+    "changes",
+    "comment",
+    "for",
+    "new",
+    "note",
+    "on",
+    "re",
+    "the",
+    "to",
+    "update",
+    "updated",
+    "updates",
+  ]);
+  function commentRestatesTitle(body, title) {
+    const normalizedTitle = String(title ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedTitle) return false;
+    const normalizedBody = String(body ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedBody.includes(normalizedTitle)) return false;
+    const remainder = normalizedBody
+      .replace(normalizedTitle, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    if (!remainder) return true;
+    return remainder.split(/\s+/).every((word) => COMMENT_FILLER.has(word));
+  }
   import { absoluteUrl } from "$lib/absoluteUrl.js";
   import {
     resourceDisplayLabel,
@@ -649,7 +690,7 @@
   {#snippet docLastComment(doc)}
     {@const comment = doc?.last_comment}
     {@const commentBody = String(comment?.body ?? "").trim()}
-    {#if commentBody}
+    {#if commentBody && !commentRestatesTitle(commentBody, resourceDisplayLabel(doc))}
       <p class="mt-1 flex min-w-0 items-baseline gap-1.5 text-micro">
         <span class="shrink-0 text-fg-subtle">Last comment</span>
         <span class="min-w-0 truncate text-fg-muted" title={commentBody}>

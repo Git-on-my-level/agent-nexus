@@ -1115,6 +1115,7 @@
               type="button"
               aria-expanded={accountMenuOpen}
               aria-haspopup="menu"
+              aria-label="Account menu"
               onclick={toggleAccountMenu}
             >
               <span class="shell-account-avatar" aria-hidden="true"

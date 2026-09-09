@@ -685,7 +685,7 @@
   <div class="space-y-4">
     <div class="flex items-baseline justify-between gap-4">
       <div>
-        <h1 class="text-subtitle font-semibold text-fg">Access</h1>
+        <h1 class="text-title text-fg">Access</h1>
         <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
           Manage workspace access and invitations
         </p>
@@ -712,7 +712,7 @@
       class="flex items-center justify-between gap-3 sm:items-baseline sm:gap-4"
     >
       <div>
-        <h1 class="text-subtitle font-semibold text-fg">Access</h1>
+        <h1 class="text-title text-fg">Access</h1>
         <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
           Manage workspace access, principals, and invitations
         </p>

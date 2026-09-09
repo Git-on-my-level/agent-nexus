@@ -6,6 +6,7 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     errorMessage,
+    sourceLabel,
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -27,6 +28,27 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let groups = $derived(integrationGroups(work, now));
+
+  /**
+   * A source error is a JSON payload as often as it is a sentence. Printing
+   * `{"code":"permission_denied","detail":…}` at a reader tells them nothing
+   * they can act on, so the row says which source we cannot reach and when we
+   * will try again; the payload goes under a disclosure for whoever needs it.
+   */
+  function refreshErrorPayload(item) {
+    const raw = item?.refresh?.last_error;
+    if (!raw) return "";
+    if (typeof raw === "string") return raw;
+    try {
+      return JSON.stringify(raw, null, 2);
+    } catch {
+      return String(raw);
+    }
+  }
+  function retryLine(item) {
+    const next = formatTimestamp(item?.refresh?.next_due_at);
+    return next ? ` · retrying ${next}` : "";
+  }
   async function load(append = false) {
     const id = ++requestId;
     loading = true;
@@ -82,10 +104,8 @@
 <svelte:head><title>Integrations · Agent Nexus</title></svelte:head>
 <WorkspacePageShell>
   <WorkspacePageHeader title="Integrations"
-    >{#snippet subtitle()}Source freshness and coverage across {work.length}{nextCursor
-        ? "+"
-        : ""} loaded work records. Connections with no tracked work do not appear
-      here.{/snippet}{#snippet actions()}<button
+    >{#snippet subtitle()}How recently we read each connected tool. Tools with
+      no tasks yet aren't listed.{/snippet}{#snippet actions()}<button
         class="ui-btn-secondary"
         onclick={() => load()}
         disabled={loading}
@@ -149,13 +169,18 @@
                 href={workspaceHref(
                   `/tasks/${encodeURIComponent(workKey(item))}`,
                 )}>{item.title || item.ref}</a
-              >{#if item.refresh?.last_error}<p
-                  class="mt-0.5 break-words text-micro text-warn-text"
-                >
-                  {typeof item.refresh.last_error === "string"
-                    ? item.refresh.last_error
-                    : JSON.stringify(item.refresh.last_error)}
-                </p>{/if}
+              >{#if item.refresh?.last_error}
+                <p class="mt-0.5 text-micro text-warn-text">
+                  Can't reach {sourceLabel(item.source)}{retryLine(item)}
+                </p>
+                <details class="mt-0.5 text-micro text-fg-muted">
+                  <summary class="w-fit cursor-pointer">Details</summary>
+                  <pre
+                    class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-2 font-mono text-micro">{refreshErrorPayload(
+                      item,
+                    )}</pre>
+                </details>
+              {/if}
             </div>
             <div class="text-micro text-fg-muted">
               <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
