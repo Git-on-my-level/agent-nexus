@@ -24,6 +24,11 @@ const WATCHING_DECISION_STATUSES = new Set([
   "failed",
 ]);
 
+const LOUD_SEVERITIES = new Map([
+  ["critical", { label: "Critical", tone: "danger" }],
+  ["high", { label: "High", tone: "warn" }],
+]);
+
 export function inboxItemNeedsResponse(item) {
   const status = String(item?.status ?? "").toLowerCase();
   if (status === "completed") return false;
@@ -31,6 +36,20 @@ export function inboxItemNeedsResponse(item) {
   return true;
 }
 
+function taskIsBlocked(row) {
+  return row?.phase === "blocked" || row?.item?.phase === "blocked";
+}
+
+/**
+ * Which mailbox a row belongs to, or `null` when it does not belong in the
+ * Inbox at all.
+ *
+ * A task enters the Inbox only when it is blocked (Needs you) or when its
+ * evidence went stale or its source could not be reached (Watching). An
+ * untouched task is not inbox work: counting those under Handled made the
+ * Handled tab a second, worse copy of the task list and made "Handled" mean
+ * "we never looked at it".
+ */
 export function classifyInboxRow(row, now = Date.now()) {
   if (row.kind === "decision") {
     if (row.status === "awaiting_answer") return "needs-you";
@@ -38,14 +57,14 @@ export function classifyInboxRow(row, now = Date.now()) {
     return "handled";
   }
   if (row.kind === "task") {
-    if (row.phase === "blocked" || row.item?.phase === "blocked") {
+    if (taskIsBlocked(row)) {
       return "needs-you";
     }
     const freshness = workFreshness(row.item || row, now);
     if (freshness.key === "stale" || freshness.key === "error") {
       return "watching";
     }
-    return "handled";
+    return null;
   }
   if (row.kind === "update") return "watching";
   if (row.kind === "inbox") {
@@ -54,26 +73,44 @@ export function classifyInboxRow(row, now = Date.now()) {
   return "handled";
 }
 
+/**
+ * The badge for a row, or `null` when a badge would say nothing.
+ *
+ * A badge earns its place only by carrying information the two text lines do
+ * not: that a task is blocked, that an ask is loud, that a source cannot be
+ * reached, where a decision's receipt got to. "Needs you" inside Needs you and
+ * "Handled" inside Handled are not information.
+ */
 export function inboxRowBadge(row, now = Date.now()) {
+  if (row.kind === "task") {
+    if (taskIsBlocked(row)) {
+      return { label: "Blocked", tone: "warn" };
+    }
+    const freshness = workFreshness(row.item || row, now);
+    if (freshness.key === "error") {
+      const name = sourceLabel(row.item?.source);
+      return {
+        label: name ? `Can't reach ${name}` : "Can't reach source",
+        tone: "warn",
+      };
+    }
+    return null;
+  }
   if (row.kind === "decision") {
+    // Awaiting answer only ever shows inside Needs you, where the badge would
+    // repeat the mailbox back at the reader.
+    if (row.status === "awaiting_answer") return null;
     return receiptSignal(row.status);
   }
-  if (row.kind === "task") {
-    if (row.item?.phase === "blocked" || row.phase === "blocked") {
-      return { label: "Blocked", tone: "warn", primary: true };
-    }
-    return workFreshness(row.item || row, now);
-  }
   if (row.kind === "update") {
-    return {
-      label: row.count ? `${row.count}` : "Update",
-      tone: "neutral",
-      primary: true,
-    };
+    return row.count > 1 ? { label: String(row.count), tone: "neutral" } : null;
   }
-  return inboxItemNeedsResponse(row.item)
-    ? { label: "Needs you", tone: "warn", primary: true }
-    : { label: "Handled", tone: "neutral", primary: true };
+  if (row.kind === "inbox") {
+    return (
+      LOUD_SEVERITIES.get(String(row.severity ?? "").toLowerCase()) ?? null
+    );
+  }
+  return null;
 }
 
 export function buildInboxRows({
@@ -94,7 +131,9 @@ export function buildInboxRows({
       id: `decision:${item.id}`,
       kind: "decision",
       title: decisionTitle(item, taskTitles.get(item.work_ref) || ""),
-      source: item.work_ref || "",
+      // The raw work ref is pane-header material, never a list line.
+      source: taskTitles.get(item.work_ref) || "Decision",
+      ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
       status: item.status,
       phase: item.status,
@@ -106,9 +145,8 @@ export function buildInboxRows({
       id: `task:${workKey(item)}`,
       kind: "task",
       title: item.title || "Untitled task",
-      source: [sourceLabel(item.source), item.ref || workKey(item)]
-        .filter(Boolean)
-        .join(" · "),
+      source: sourceLabel(item.source),
+      ref: item.ref || workKey(item),
       time: item.freshness?.last_observed_at || item.updated_at,
       status: item.phase,
       phase: item.phase,
@@ -122,8 +160,21 @@ export function buildInboxRows({
       kind: "inbox",
       title: item.title || item.summary || "Inbox item",
       source: getInboxSubjectLabel(item) || "",
+      ref: item.subject_ref || "",
       time: item.source_event_time || item.created_at || item.responded_at,
       status: item.status || (item.responded_at ? "completed" : "open"),
+      category: String(item.kind ?? item.category ?? "").trim(),
+      severity: item.severity || "",
+      requesterLabel:
+        String(item.requester_label ?? "").trim() ||
+        String(item.requester_agent_id ?? "").trim() ||
+        String(item.requester_actor_id ?? "").trim(),
+      body: item.body || "",
+      responseProposals: Array.isArray(item.response_proposals)
+        ? item.response_proposals
+            .map((value) => String(value ?? "").trim())
+            .filter(Boolean)
+        : [],
       item,
     });
   }
@@ -133,6 +184,7 @@ export function buildInboxRows({
       kind: "update",
       title: group.display_name || group.group_ref || "Update",
       source: group.group_type || "workspace",
+      ref: group.group_ref || "",
       time: group.newest_event?.ts,
       status: "update",
       count: group.unread_count,
@@ -140,10 +192,9 @@ export function buildInboxRows({
       item: group,
     });
   }
-  return rows.map((row) => ({
-    ...row,
-    mailbox: classifyInboxRow(row, now),
-  }));
+  return rows
+    .map((row) => ({ ...row, mailbox: classifyInboxRow(row, now) }))
+    .filter((row) => row.mailbox !== null);
 }
 
 export function filterMailbox(rows, mailbox) {
