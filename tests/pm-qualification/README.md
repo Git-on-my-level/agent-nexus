@@ -45,9 +45,12 @@ ANX_LIVE_CORE_URL=http://127.0.0.1:8300 \
 ./web-ui/node_modules/.bin/playwright test --config tests/pm-qualification/playwright.live.config.js
 ```
 
-The spec signs in as Maya through `POST /auth/dev/session`, asks "What needs my
-decision?" on `/pm`, and checks that the delivered turn names a seeded task and
-that Inbox Needs you shows the proposed decisions. It does not start servers.
+The suite signs in as Maya through `POST /auth/dev/session`. `live_web_pm.spec.js`
+asks "What needs my decision?" on `/pm` and checks that the delivered turn names a
+seeded task and that Inbox Needs you shows the proposed decisions.
+`live_source_drag.spec.js` drags a source-owned card on `/tasks?view=board` and
+checks that a PM decision is proposed without mutating the task phase. Neither
+spec starts servers.
 
 ## Executable scenarios
 

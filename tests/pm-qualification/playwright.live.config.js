@@ -4,7 +4,7 @@ const baseURL = process.env.ANX_LIVE_UI_URL || "http://127.0.0.1:8301";
 
 module.exports = defineConfig({
   testDir: ".",
-  testMatch: "live_web_pm.spec.js",
+  testMatch: /live_(web_pm|source_drag)\.spec\.js/,
   workers: 1,
   retries: 0,
   timeout: 12 * 60 * 1000,
