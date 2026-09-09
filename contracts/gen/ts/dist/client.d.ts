@@ -166,6 +166,7 @@ export declare class AnxClient {
     pmActionsList(options?: RequestOptions): Promise<InvokeResult>;
     pmActionsReconcile(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmBindingsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    pmBindingsList(options?: RequestOptions): Promise<InvokeResult>;
     pmContext(options?: RequestOptions): Promise<InvokeResult>;
     pmConversationsCreate(options?: RequestOptions): Promise<InvokeResult>;
     pmConversationsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

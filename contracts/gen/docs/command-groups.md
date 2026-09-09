@@ -202,12 +202,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `pm`
 
-- Commands: `19`
+- Commands: `20`
 - Command IDs:
   - `pm.actions.get` (`pm actions get`)
   - `pm.actions.list` (`pm actions list`)
   - `pm.actions.reconcile` (`pm actions reconcile`)
   - `pm.bindings.create` (`pm bindings create`)
+  - `pm.bindings.list` (`pm bindings list`)
   - `pm.context` (`pm context`)
   - `pm.conversations.create` (`pm conversations create`)
   - `pm.conversations.get` (`pm conversations get`)

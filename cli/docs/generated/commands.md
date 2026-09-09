@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `158`
+- Commands: `159`
 
 ## `actors.create`
 
@@ -1380,6 +1380,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMBinding`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.bindings.list`
+
+- CLI path: `pm bindings list`
+- HTTP: `GET /pm/bindings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMBindingListResponse`.
+- Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
 
 ## `pm.context`
 

@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 158
+- Command count: 159
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -24,7 +24,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox | 4 |
 | meta | 9 |
 | ops | 3 |
-| pm | 19 |
+| pm | 20 |
 | ref-edges | 1 |
 | secret | 6 |
 | threads | 5 |
@@ -36,7 +36,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 58 |
+| exposed_read | 59 |
 | exposed_write | 57 |
 | gated_admin | 15 |
 | gated_sensitive | 13 |
@@ -49,8 +49,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 115 | exposed_read + exposed_write + adapted |
-| hosted default | 57 | explicit read-only private-app allowlist |
+| standalone default | 116 | exposed_read + exposed_write + adapted |
+| hosted default | 58 | explicit read-only private-app allowlist |
 | gated | 28 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 15 | not represented as direct MCP tools in v1 |
@@ -170,6 +170,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.actions.list | pm | GET | /pm/actions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.actions.reconcile | pm | POST | /pm/actions/{action_id}/reconcile | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.bindings.create | pm | POST | /pm/bindings | gated_admin | Binds an external channel user to a workspace principal; requires explicit human administration. |
+| pm.bindings.list | pm | GET | /pm/bindings | exposed_read | Read which exact channel identities are bound to workspace principals; an operator check that sends nothing. |
 | pm.context | pm | GET | /pm/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.conversations.create | pm | POST | /pm/conversations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.conversations.get | pm | GET | /pm/conversations/{conversation_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |

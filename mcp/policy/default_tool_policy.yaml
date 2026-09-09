@@ -59,6 +59,7 @@ hosted_default_commands:
   - "topics.workspace"
   - "pm.actions.get"
   - "pm.actions.list"
+  - "pm.bindings.list"
   - "pm.context"
   - "pm.conversations.get"
   - "pm.conversations.list"
@@ -470,6 +471,9 @@ commands:
   "pm.actions.reconcile":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.bindings.list":
+    classification: exposed_read
+    reason: "Read which exact channel identities are bound to workspace principals; an operator check that sends nothing."
   "pm.bindings.create":
     classification: gated_admin
     reason: "Binds an external channel user to a workspace principal; requires explicit human administration."

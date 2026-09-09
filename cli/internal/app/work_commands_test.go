@@ -313,6 +313,10 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(work, "card:example") || !strings.Contains(work, "freshness=unknown") || !strings.Contains(work, "next_cursor: next") {
 		t.Errorf("lost work semantics: %s", work)
 	}
+	bindings := formatWorkCommandText("pm bindings list", map[string]any{"items": []any{map[string]any{"id": "binding-1", "actor_id": "actor-david", "origin": map[string]any{"transport": "telegram", "tenant_id": "bot-1", "channel_id": "-100", "external_user_id": "42"}, "can_approve": true, "enabled": true, "revision": float64(1)}}, "has_more": false})
+	if !strings.Contains(bindings, "bindings: 1") || !strings.Contains(bindings, "binding-1  telegram bot-1/-100 user=42 -> actor-david can_approve=true enabled=true revision=1") {
+		t.Fatalf("unexpected bindings list text: %s", bindings)
+	}
 	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
 	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
 		t.Errorf("lost receipt uncertainty: %s", pm)

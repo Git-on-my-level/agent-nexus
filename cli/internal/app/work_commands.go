@@ -45,6 +45,8 @@ var workCommands = map[string]workCommandSpec{
 	"pm decisions answer":      {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
 	"pm decisions dispatch":    {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
 	"pm actions list":          {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},
+	"pm bindings list":         {path: "/pm/bindings", method: "GET", summary: "List channel identity bindings for this workspace; an operator check, never a send.", filters: []string{"limit", "cursor"}},
+	"pm bindings create":       {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit"}},
@@ -345,6 +347,27 @@ func formatWorkCommandText(name string, body any) string {
 					lines = append(lines, "  "+key+": "+string(raw))
 				}
 			}
+		}
+		if cursor := anyString(root["next_cursor"]); cursor != "" {
+			lines = append(lines, "next_cursor: "+cursor)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if name == "pm bindings list" {
+		rows, _ := root["items"].([]any)
+		lines := []string{fmt.Sprintf("bindings: %d", len(rows))}
+		for _, row := range rows {
+			item := asMap(row)
+			origin := asMap(item["origin"])
+			line := fmt.Sprintf("%s  %s %s/%s user=%s -> %s", anyString(item["id"]), anyString(origin["transport"]), anyString(origin["tenant_id"]), anyString(origin["channel_id"]), anyString(origin["external_user_id"]), anyString(item["actor_id"]))
+			if thread := anyString(origin["thread_id"]); thread != "" {
+				line += " thread=" + thread
+			}
+			line += fmt.Sprintf(" can_approve=%t enabled=%t revision=%s", item["can_approve"] == true, item["enabled"] == true, fmt.Sprintf("%v", item["revision"]))
+			lines = append(lines, line)
+		}
+		if more, _ := root["has_more"].(bool); more {
+			lines = append(lines, "has_more: true")
 		}
 		if cursor := anyString(root["next_cursor"]); cursor != "" {
 			lines = append(lines, "next_cursor: "+cursor)
