@@ -5,6 +5,8 @@
  * turn status; this module decides how a turn reads on screen.
  */
 
+import { decisionIdsFromTurn } from "./turnDecisions.js";
+
 /**
  * Typed refs the PM writes in prose. `url:` is deliberately absent — a URL
  * carries its own colons and slashes and would not survive this scan intact.
@@ -54,6 +56,139 @@ export function evidenceRefsForTurn(turn) {
     ordered.push(ref);
   }
   return ordered;
+}
+
+/**
+ * A PM record id as the runner writes it in prose: `pm_` plus 32 lowercase hex.
+ * The leading capture keeps the character before the id so an id that is
+ * already part of a ref (`decision:pm_…`) or of a link target (`/inbox?…/pm_…`)
+ * is left alone.
+ */
+const BARE_PM_ID_PATTERN =
+  /(^|[^A-Za-z0-9_:/[-])(pm_[0-9a-f]{32})(?![0-9A-Za-z_-])/g;
+
+/** Fenced blocks and inline code spans: prose transforms must not reach inside. */
+const CODE_SEGMENT_PATTERN = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+
+/** A decision record carries one of these; anything else is not a decision. */
+const DECISION_STATUSES = new Set([
+  "awaiting_answer",
+  "answered",
+  "superseded",
+]);
+
+/**
+ * Bare `pm_…` ids named in a text. The runner names its own proposals this way
+ * — as an id in a sentence, with no `decision:` prefix — so these are only
+ * candidates: an id here may be a decision, a turn, a conversation, or a record
+ * this actor cannot read. Resolving them is the caller's job.
+ *
+ * @param {unknown} text
+ * @returns {string[]} unique ids in first-seen order
+ */
+export function bareDecisionIds(text) {
+  const seen = new Set();
+  const ids = [];
+  for (const match of String(text ?? "").matchAll(BARE_PM_ID_PATTERN)) {
+    const id = match[2];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Candidate decision ids for a turn: bare ids in the reply that are not already
+ * recorded as `decision:` refs.
+ *
+ * @param {{ evidence_refs?: string[], response?: string } | null} turn
+ * @returns {string[]}
+ */
+export function candidateDecisionIdsFromTurn(turn) {
+  const confirmed = new Set(decisionIdsFromTurn(turn));
+  return bareDecisionIds(turn?.response).filter((id) => !confirmed.has(id));
+}
+
+/**
+ * Whether a record fetched for a candidate id really is a decision. A lookup
+ * that failed is stored as `null`; a lookup that answered with some other kind
+ * of PM record must not become a "Proposed decision" row.
+ *
+ * @param {unknown} record
+ * @param {string} id
+ */
+export function isDecisionRecord(record, id = "") {
+  if (!record || typeof record !== "object" || Array.isArray(record))
+    return false;
+  const recordId = String(record.id ?? "").trim();
+  if (id && recordId && recordId !== String(id)) return false;
+  if (typeof record.instruction === "string" && record.instruction.trim())
+    return true;
+  return DECISION_STATUSES.has(String(record.status ?? ""));
+}
+
+/**
+ * Decision ids to show under a reply: every `decision:` ref (shown even while
+ * its record is still loading, because the ref itself is the runner's claim),
+ * plus every bare candidate that resolved to a real decision.
+ *
+ * @param {{ evidence_refs?: string[], response?: string } | null} turn
+ * @param {Record<string, unknown>} records id → fetched record, `null` on failure
+ * @returns {string[]}
+ */
+export function proposedDecisionIds(turn, records = {}) {
+  const ids = decisionIdsFromTurn(turn);
+  const seen = new Set(ids);
+  for (const id of candidateDecisionIdsFromTurn(turn)) {
+    if (seen.has(id) || !isDecisionRecord(records?.[id], id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Short label for an id standing in the middle of a sentence. The full id stays
+ * on the link title.
+ *
+ * @param {string} id
+ */
+export function decisionChipLabel(id) {
+  const value = String(id ?? "");
+  const short = value.startsWith("pm_")
+    ? value.slice(0, "pm_".length + 8)
+    : value.slice(0, 8);
+  return `Decision ${short}`;
+}
+
+function linkifySegment(segment, hrefFor) {
+  return segment.replace(BARE_PM_ID_PATTERN, (match, lead, id) => {
+    const href = String(hrefFor(id) ?? "").trim();
+    if (!href) return match;
+    return `${lead}[${decisionChipLabel(id)}](${href} "${id}")`;
+  });
+}
+
+/**
+ * The reply body with each resolved bare id replaced by a short inline link, so
+ * a paragraph reads as a sentence instead of as a wall of hex. `hrefFor`
+ * returns an empty string for an id that is not an answerable decision, and
+ * that id is left exactly as the runner wrote it. Code spans are never touched.
+ *
+ * @param {unknown} text
+ * @param {(id: string) => string} hrefFor
+ * @returns {string}
+ */
+export function linkifyDecisionIds(text, hrefFor) {
+  const source = String(text ?? "");
+  if (!source || typeof hrefFor !== "function") return source;
+  return source
+    .split(CODE_SEGMENT_PATTERN)
+    .map((segment, index) =>
+      index % 2 === 1 ? segment : linkifySegment(segment, hrefFor),
+    )
+    .join("");
 }
 
 /** A new time-group header appears when a turn opens more than this after the last one. */
