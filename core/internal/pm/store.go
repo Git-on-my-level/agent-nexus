@@ -80,15 +80,30 @@ func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent s
 	if err != nil {
 		return nil, err
 	}
+	return scanBodies[T](rows)
+}
+
+// listOpenTurns returns every sending or unknown turn, including those past the
+// bounded listRecords window. Claim and deadline expiry must see current work,
+// not the oldest 200 historical rows.
+func listOpenTurns(ctx context.Context, s *Store, ws string) ([]Turn, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('sending','unknown') ORDER BY rowid`, ws)
+	if err != nil {
+		return nil, err
+	}
+	return scanBodies[Turn](rows)
+}
+
+func scanBodies[T any](rows *sql.Rows) ([]T, error) {
 	defer rows.Close()
 	out := make([]T, 0)
 	for rows.Next() {
 		var b []byte
 		var v T
-		if err = rows.Scan(&b); err != nil {
+		if err := rows.Scan(&b); err != nil {
 			return nil, err
 		}
-		if err = json.Unmarshal(b, &v); err != nil {
+		if err := json.Unmarshal(b, &v); err != nil {
 			return nil, err
 		}
 		out = append(out, v)

@@ -335,7 +335,7 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	if err := s.expireStaleTurns(ctx, p, now); err != nil {
 		return Turn{}, err
 	}
-	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, "", "")
+	turns, err := listOpenTurns(ctx, s.store, p.WorkspaceID)
 	if err != nil {
 		return Turn{}, err
 	}
@@ -387,7 +387,7 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	return Turn{}, ErrEmpty
 }
 func (s *Service) expireStaleTurns(ctx context.Context, p Principal, now time.Time) error {
-	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, "", "")
+	turns, err := listOpenTurns(ctx, s.store, p.WorkspaceID)
 	if err != nil {
 		return err
 	}

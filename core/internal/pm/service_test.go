@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -367,5 +368,56 @@ func TestChannelTurnIsClaimableOnSharedPipeline(t *testing.T) {
 	done, err := s.CompleteTurnWithLease(ctx, agent, claimed.ID, "No open decisions.", []string{"decision:pm_x"}, claimed.LeaseToken)
 	if err != nil || done.Status != Delivered {
 		t.Fatalf("complete %+v %v", done, err)
+	}
+}
+
+func TestClaimAndExpirySeeTurnsPastHistoricalListLimit(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "history", Title: "Long history"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	for i := 0; i < 200; i++ {
+		turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: fmt.Sprintf("old-%d", i), Text: fmt.Sprintf("Historical %d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.CompleteTurn(ctx, agent, turn.ID, "done", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "live", Text: "Current work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
+	if err != nil || claimed.ID != live.ID {
+		t.Fatalf("claim missed live turn after 200 historical rows: %+v %v", claimed, err)
+	}
+	if _, err = s.CompleteTurnWithLease(ctx, agent, claimed.ID, "done", nil, claimed.LeaseToken); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "stale", Text: "Past deadline"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := stale.Revision
+	stale.Deadline = time.Now().UTC().Add(-time.Second)
+	stale.Revision++
+	if err = s.store.cas(ctx, "turn", stale.ID, old, stale); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"}); !errors.Is(err, ErrEmpty) {
+		t.Fatalf("stale turn after 200 historical rows remained claimable: %v", err)
+	}
+	var stored Turn
+	if err = s.store.get(ctx, "turn", stale.ID, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != Failed || stored.Failure == "" {
+		t.Fatalf("stale turn after 200 historical rows %+v", stored)
 	}
 }

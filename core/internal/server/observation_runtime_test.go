@@ -110,6 +110,41 @@ func TestObservationRuntimeRejectsBindingMismatch(t *testing.T) {
 	}
 }
 
+func TestObservationRuntimeAcceptsCanonicalGitAuthorityForSSH(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	s := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	b, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "SSH repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.CreateWork(ctx, "actor-1", asString(b["id"]), map[string]any{"title": "Tracked repository", "source": map[string]any{"authority": "git", "connection_id": "fixture", "native_id": "repo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := asString(work["ref"])
+	reader := &workFixtureReader{}
+	rt, err := NewObservationRuntime(s, []ObservationBinding{{
+		WorkRef:        ref,
+		SourceNativeID: "repo",
+		Target:         observation.Target{WorkspaceID: "ws_main", ConnectionID: "fixture", Source: "ssh_git", Kind: "repository", NativeID: "repo", Host: "git@example.test", Path: "/srv/repo"},
+		Reader:         reader,
+		Policy:         observation.RefreshPolicy{Interval: time.Minute, StaleAfter: time.Hour, Timeout: time.Second, MaxBackoff: time.Hour},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rt.ReadOne(ctx, ref); err != nil {
+		t.Fatalf("SSH work with canonical git authority rejected: %v", err)
+	}
+	if err = rt.Tick(ctx); err != nil {
+		t.Fatalf("SSH refresh with canonical git authority rejected: %v", err)
+	}
+	if reader.calls != 2 {
+		t.Fatalf("expected read and refresh, got %d calls", reader.calls)
+	}
+}
+
 func TestObservationConfigSupportsExplicitTrustedMulticaCLI(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	path := filepath.Join(t.TempDir(), "readers.json")

@@ -302,7 +302,7 @@ func (rt *ObservationRuntime) ReadOne(ctx context.Context, workRef string) (obse
 			return observation.Report{}, err
 		}
 		source := workSourceMap(w)
-		if anyString(source["authority"]) != b.Target.Source || anyString(source["connection_id"]) != b.Target.ConnectionID || anyString(source["native_id"]) != b.SourceNativeID {
+		if anyString(source["authority"]) != b.Target.Authority() || anyString(source["connection_id"]) != b.Target.ConnectionID || anyString(source["native_id"]) != b.SourceNativeID {
 			return observation.Report{}, fmt.Errorf("registered work/source binding mismatch")
 		}
 		bounded, cancel := context.WithTimeout(ctx, b.Policy.Timeout)
@@ -330,7 +330,7 @@ func (rt *ObservationRuntime) refresh(ctx context.Context, b ObservationBinding)
 		return err
 	}
 	source := workSourceMap(w)
-	if anyString(source["authority"]) != b.Target.Source || anyString(source["connection_id"]) != b.Target.ConnectionID || anyString(source["native_id"]) != b.SourceNativeID {
+	if anyString(source["authority"]) != b.Target.Authority() || anyString(source["connection_id"]) != b.Target.ConnectionID || anyString(source["native_id"]) != b.SourceNativeID {
 		return fmt.Errorf("registered work/source binding mismatch")
 	}
 	refresh, _ := w["refresh"].(map[string]any)

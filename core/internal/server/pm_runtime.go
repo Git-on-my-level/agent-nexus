@@ -341,7 +341,7 @@ func reconcileSourceRead(ctx context.Context, store *primitives.Store, runtime *
 	}
 	source := workSourceMap(w)
 	authority := anyString(source["authority"])
-	if authority != "github" && authority != "multica" && authority != "ssh_git" {
+	if authority != "github" && authority != "multica" && authority != "git" && authority != "ssh_git" {
 		return pm.Receipt{}, pm.ErrUnavailable
 	}
 	report, err := runtime.ReadOne(ctx, a.WorkRef)
@@ -358,10 +358,16 @@ func reconcileSourceRead(ctx context.Context, store *primitives.Store, runtime *
 	if revision == "" {
 		return pm.Receipt{Status: pm.Unknown, Detail: "Source read succeeded but did not establish a revision for verification"}, nil
 	}
-	if a.TargetRevision != "" && revision != a.TargetRevision {
-		return pm.Receipt{Status: pm.Unknown, ExternalID: a.ID, EvidenceRefs: refs, Detail: "Current source revision does not match the authorized target revision"}, nil
+	// TargetRevision is the authorized pre-write snapshot. A read-only reader
+	// cannot prove that this action's mutation was applied, whether or not the
+	// live revision still matches that snapshot.
+	detail := "Read-only source reader cannot independently verify a source write"
+	if a.TargetRevision != "" && revision == a.TargetRevision {
+		detail = "Current source revision still matches the pre-action snapshot; a source write was not independently verified"
+	} else if a.TargetRevision != "" && revision != a.TargetRevision {
+		detail = "Current source revision does not match the authorized target revision"
 	}
-	return pm.Receipt{Status: pm.Verified, ExternalID: a.ID, EvidenceRefs: refs, IndependentlyVerified: true, Detail: "Read-only source reader established current revision without a source write"}, nil
+	return pm.Receipt{Status: pm.Unknown, ExternalID: a.ID, EvidenceRefs: refs, Detail: detail}, nil
 }
 
 func workSourceMap(w map[string]any) map[string]any {
