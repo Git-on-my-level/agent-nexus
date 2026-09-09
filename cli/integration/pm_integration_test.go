@@ -43,9 +43,12 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	}
 	conversation := h.runCLIExpectOK(t, "worker", map[string]any{"request_key": "synthetic-conversation", "title": "Synthetic PM", "work_ref": ref}, "pm", "conversations", "create", "--from-file", "-")
 	conversationID := mustStringPath(t, conversation.Payload, "data.id")
-	response := h.runCLI(t, "worker", map[string]any{"request_key": "no-provider", "text": "Review this synthetic commitment"}, "pm", "conversations", "message", conversationID, "--from-file", "-")
-	if response.ExitCode == 0 || mustStringPath(t, response.Payload, "error.code") != "unavailable" {
-		t.Fatalf("unconfigured provider must fail honestly: %s", response.Stdout)
+	response := h.runCLI(t, "worker", map[string]any{"request_key": "queued-runner", "text": "Review this synthetic commitment"}, "pm", "conversations", "message", conversationID, "--from-file", "-")
+	if response.ExitCode != 0 {
+		t.Fatalf("queued turn without bridge must be accepted: %s", response.Stdout)
+	}
+	if mustStringPath(t, response.Payload, "data.status") != "sending" {
+		t.Fatalf("queued turn status: %s", response.Stdout)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "pm", "conversations", "get", conversationID)
 }

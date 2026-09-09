@@ -248,3 +248,70 @@ func TestContextPaginationUsesRequestingPrincipalAndBounds(t *testing.T) {
 		t.Fatalf("context page %+v %v", page, err)
 	}
 }
+
+func TestQueuedTurnWithoutDispatchIsClaimedByLease(t *testing.T) {
+	s, _, p, count := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "queued", Title: "Queue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "m1", Text: "What needs my decision?"})
+	if err != nil || turn.Status != Sending || *count != 0 {
+		t.Fatalf("queued turn %+v %v count=%d", turn, err, *count)
+	}
+	human := p
+	if _, err = s.ClaimTurn(ctx, human, ClaimInput{RunnerID: "runner-a"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("human claimed PM turn: %v", err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	first, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
+	if err != nil || first.ID != turn.ID || first.LeaseToken == "" {
+		t.Fatalf("claim %+v %v", first, err)
+	}
+	if _, err = s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-b"}); !errors.Is(err, ErrEmpty) {
+		t.Fatalf("second runner claimed leased turn: %v", err)
+	}
+	again, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
+	if err != nil || again.ID != first.ID || again.LeaseToken != first.LeaseToken {
+		t.Fatalf("idempotent claim %+v %v", again, err)
+	}
+	if _, err = s.CompleteTurn(ctx, agent, first.ID, "Needs a decision on restock.", nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("complete without lease token: %v", err)
+	}
+	done, err := s.CompleteTurnWithLease(ctx, agent, first.ID, "Needs a decision on restock.", []string{"card:emergency-restock"}, first.LeaseToken)
+	if err != nil || done.Status != Delivered || done.Response == "" {
+		t.Fatalf("complete %+v %v", done, err)
+	}
+}
+
+func TestFailTurnRecordsReasonAndFreesSession(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "fail", Title: "Fail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "boom", Text: "Ping"})
+	if err != nil || turn.Status != Sending {
+		t.Fatalf("queued turn %+v %v", turn, err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	claimed, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed, err := s.FailTurn(ctx, agent, claimed.ID, FailInput{Reason: "harness timeout", LeaseToken: claimed.LeaseToken})
+	if err != nil || failed.Status != Failed || failed.Failure != "harness timeout" {
+		t.Fatalf("fail %+v %v", failed, err)
+	}
+	replay, err := s.FailTurn(ctx, agent, claimed.ID, FailInput{Reason: "harness timeout", LeaseToken: claimed.LeaseToken})
+	if err != nil || replay.ID != failed.ID {
+		t.Fatalf("fail replay %v", err)
+	}
+	if _, err = s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "next", Text: "Retry"}); err != nil {
+		t.Fatalf("session stayed occupied after fail: %v", err)
+	}
+}

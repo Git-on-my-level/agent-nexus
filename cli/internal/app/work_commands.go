@@ -48,6 +48,8 @@ var workCommands = map[string]workCommandSpec{
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit"}},
+	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
+	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
 	"pm turns complete":        {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
 }
@@ -165,6 +167,16 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 }
 
 func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
+	if len(args) >= 2 && args[0] == "pm" {
+		switch args[1] {
+		case "serve":
+			result, err := a.runPMServe(ctx, args[2:], cfg)
+			return result, "pm serve", err
+		case "ask":
+			result, err := a.runPMAsk(ctx, args[2:], cfg)
+			return result, "pm ask", err
+		}
+	}
 	if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
 		text, _ := workHelpText(topic)
 		return &commandResult{Text: text, Data: map[string]any{"help_text": text}}, topic, nil
@@ -205,6 +217,13 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
 	if err != nil {
 		return result, parsed.name, err
+	}
+	if parsed.name == "pm turns claim" {
+		status, _ := asMap(result.Data)["status_code"].(int)
+		if status == 204 {
+			result.Text = "No claimable turn"
+			return result, parsed.name, nil
+		}
 	}
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")

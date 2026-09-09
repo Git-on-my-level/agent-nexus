@@ -95,7 +95,7 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 	if err = json.NewDecoder(resp.Body).Decode(&c); err != nil {
 		t.Fatal(err)
 	}
-	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 503)
+	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 202)
 }
 
 func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {

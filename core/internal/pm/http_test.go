@@ -107,3 +107,43 @@ func TestConversationShowsNewestHistoryAndPagesBackward(t *testing.T) {
 		t.Fatalf("older history missing %+v", older)
 	}
 }
+
+func TestHTTPClaimAndFailTurns(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "http-claim", Title: "Claim"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "q", Text: "What needs my decision?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return agent, nil }}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/pm/turns/claim", strings.NewReader(`{"runner_id":"runner-a"}`)))
+	if w.Code != 200 {
+		t.Fatalf("claim %d %s", w.Code, w.Body.String())
+	}
+	var claimed Turn
+	if err = json.Unmarshal(w.Body.Bytes(), &claimed); err != nil || claimed.ID != turn.ID || claimed.LeaseToken == "" {
+		t.Fatalf("claim body %s", w.Body.String())
+	}
+	empty := httptest.NewRecorder()
+	h.Authenticate = func(*http.Request) (Principal, error) {
+		return Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, nil
+	}
+	req := httptest.NewRequest("POST", "/pm/turns/claim", strings.NewReader(`{"runner_id":"runner-b"}`))
+	h.ServeHTTP(empty, req)
+	if empty.Code != 204 {
+		t.Fatalf("second claim %d %s", empty.Code, empty.Body.String())
+	}
+	fail := httptest.NewRecorder()
+	body := fmt.Sprintf(`{"reason":"deadline","lease_token":%q}`, claimed.LeaseToken)
+	h.ServeHTTP(fail, httptest.NewRequest("POST", "/pm/turns/"+claimed.ID+"/fail", strings.NewReader(body)))
+	if fail.Code != 200 || !strings.Contains(fail.Body.String(), `"failed"`) {
+		t.Fatalf("fail %d %s", fail.Code, fail.Body.String())
+	}
+}

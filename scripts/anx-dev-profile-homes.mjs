@@ -34,7 +34,9 @@ async function main() {
   const personas = Array.isArray(bundle?.personas) ? bundle.personas : [];
   const selected = personas.filter((persona) => {
     const personaID = String(persona?.persona_id ?? "").trim();
-    if (!personaID || !String(persona?.refresh_token ?? "").trim()) {
+    const hasAccess = String(persona?.access_token ?? "").trim();
+    const hasRefresh = String(persona?.refresh_token ?? "").trim();
+    if (!personaID || (!hasAccess && !hasRefresh)) {
       return false;
     }
     if (onlyPersonas.size > 0 && !onlyPersonas.has(personaID)) {
@@ -53,7 +55,7 @@ async function main() {
   const entries = [];
   for (const persona of selected) {
     const personaID = String(persona.persona_id).trim();
-    const tokens = await refreshSeededPersonaToken(persona);
+    const tokens = await tokensForSeededPersona(persona);
     const homeDir = path.join(outputRoot, personaID);
     const profileDir = path.join(homeDir, ".config", "anx", "profiles");
     await mkdir(profileDir, { recursive: true });
@@ -111,6 +113,20 @@ async function main() {
       `${entry.persona_id}: HOME=${entry.home} anx --agent ${entry.agent} auth whoami`,
     );
   }
+}
+
+async function tokensForSeededPersona(persona) {
+  const accessToken = String(persona?.access_token ?? "").trim();
+  const refreshToken = String(persona?.refresh_token ?? "").trim();
+  if (accessToken && refreshToken) {
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: "Bearer",
+      expires_at: String(persona?.expires_at ?? "").trim(),
+    };
+  }
+  return refreshSeededPersonaToken(persona);
 }
 
 async function refreshSeededPersonaToken(persona) {

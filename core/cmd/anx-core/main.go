@@ -477,11 +477,13 @@ func main() {
 	}
 	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
 		PM: pm.Config{
-			WorkspaceID:   workspaceID,
-			WorkspaceName: workspaceName,
-			BaseURL:       envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
-			AgentActorID:  envString("ANX_PM_AGENT_ACTOR_ID", ""),
-			AgentHandle:   envString("ANX_PM_AGENT_HANDLE", ""),
+			WorkspaceID:    workspaceID,
+			WorkspaceName:  workspaceName,
+			BaseURL:        envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
+			AgentActorID:   envString("ANX_PM_AGENT_ACTOR_ID", ""),
+			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
+			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
+			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
 		},
 		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
 		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),

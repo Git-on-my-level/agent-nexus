@@ -130,16 +130,33 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err = decode(&in); err == nil {
 			out, err = s.ProposeForTurn(ctx, p, path[1], in)
 		}
+	case len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost:
+		var in ClaimInput
+		if r.Body == nil || r.ContentLength == 0 {
+			out, err = s.ClaimTurn(ctx, p, in)
+		} else if err = decode(&in); err == nil {
+			out, err = s.ClaimTurn(ctx, p, in)
+		}
+	case len(path) == 3 && path[0] == "turns" && path[2] == "fail" && r.Method == http.MethodPost:
+		var in FailInput
+		if err = decode(&in); err == nil {
+			out, err = s.FailTurn(ctx, p, path[1], in)
+		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "complete" && r.Method == http.MethodPost:
 		var in struct {
 			Text         string   `json:"text"`
 			EvidenceRefs []string `json:"evidence_refs"`
+			LeaseToken   string   `json:"lease_token"`
 		}
 		if err = decode(&in); err == nil {
-			out, err = s.CompleteTurn(ctx, p, path[1], in.Text, in.EvidenceRefs)
+			out, err = s.CompleteTurnWithLease(ctx, p, path[1], in.Text, in.EvidenceRefs, in.LeaseToken)
 		}
 	default:
 		err = ErrNotFound
+	}
+	if errors.Is(err, ErrEmpty) {
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 	if err != nil {
 		writeError(w, err)

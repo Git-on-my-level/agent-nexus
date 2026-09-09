@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `154`
+- Commands: `156`
 
 ## `actors.create`
 
@@ -1448,6 +1448,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `PMDecisionListResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
+## `pm.turns.claim`
+
+- CLI path: `pm turns claim`
+- HTTP: `POST /pm/turns/claim`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Claim one queued turn for the selected PM agent so two runners never answer it.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Lease expiry is bounded by the turn deadline and pm.Config turn timeout.
+
 ## `pm.turns.complete`
 
 - CLI path: `pm turns complete`
@@ -1486,6 +1499,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.turns.fail`
+
+- CLI path: `pm turns fail`
+- HTTP: `POST /pm/turns/{turn_id}/fail`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Record a selected PM agent failure reason without inventing a reply.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
 
 ## `ref_edges.list`
 

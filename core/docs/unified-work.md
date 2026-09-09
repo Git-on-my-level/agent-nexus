@@ -117,16 +117,24 @@ reconcile. Dispatch records `source_reported`; separate canonical read-back can
 record `verified`. A changed version rejects stale approval. No external source
 write executor, deployment tool, or shell action is enabled by default.
 
-PM conversation creation and context inspection work without a model. Messages
-require a configured existing PM bridge. `ANX_PM_BRIDGE_ENABLED` defaults false.
-Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and
+PM conversation creation, context inspection, and queued turns work without a
+model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages`
+queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
+runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
+`POST /pm/turns/{id}/fail` require that lease token when a lease is held.
+`ANX_PM_AGENT_ACTOR_ID` (optional) restricts claim/complete/fail to that actor;
+`make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
+
+The optional existing-bridge path is separate. `ANX_PM_BRIDGE_ENABLED` defaults
+false. Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and
 `ANX_PM_RUNTIME_ENVELOPE_ENFORCED=true` only when an independently enforced
 read-only capability envelope already exists for that actor. The env flag is
 an operator attestation, not the envelope. Optionally `ANX_PM_BASE_URL`.
-Core checks the selected principal's current wake registration and online state.
-A prompt, directory, or bounded-process wrapper is not isolation. Missing or
-unready providers return unavailable, not canned text. GitHub/Multica/SSH source
-writes stay unavailable until a dedicated authorized executor is supplied.
+Core then checks the selected principal's current wake registration and online
+state. A prompt, directory, or bounded-process wrapper is not isolation.
+Missing or unready providers return unavailable, not canned text.
+GitHub/Multica/SSH source writes stay unavailable until a dedicated authorized
+executor is supplied.
 
 Native `/threads`, `/events`, `/artifacts`, and inbox routes hide PM conversation
 records from anyone who is not the conversation owner or the selected PM agent.

@@ -645,6 +645,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMBinding'
+  /pm/turns/claim:
+    post:
+      operationId: pmTurnsClaim
+      summary: Claim the next queued PM turn with an exclusive runner lease
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.claim
+      x-anx-cli-path: pm turns claim
+      x-anx-why: Claim one queued turn for the selected PM agent so two runners never answer it.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn.
+        Reclaiming with the same runner_id returns the held lease. Lease expiry is bounded by the
+        turn deadline and pm.Config turn timeout.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMClaimRequest'
+      responses:
+        '200':
+          description: Claimed queued turn with a runner lease
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+        '204':
+          description: No claimable turn
+  /pm/turns/{turn_id}/fail:
+    post:
+      operationId: pmTurnsFail
+      summary: Mark a claimed PM turn failed
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.fail
+      x-anx-cli-path: pm turns fail
+      x-anx-why: Record a selected PM agent failure reason without inventing a reply.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only. When a lease is held, lease_token must match.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMFailRequest'
+      responses:
+        '200':
+          description: Mark a claimed PM turn failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
   /pm/turns/{turn_id}/context:
     get:
       operationId: pmTurnsContext
@@ -5997,12 +6087,23 @@ components:
           - sending
           - delivered
           - unknown
+          - failed
         revision:
           type: integer
         evidence_refs:
           type: array
           items:
             type: string
+        failure:
+          type: string
+        lease_token:
+          type: string
+        lease_owner:
+          type: string
+        lease_expires_at:
+          type: string
+        max_output_bytes:
+          type: integer
     PMDecision:
       type: object
       additionalProperties: true
@@ -6185,8 +6286,26 @@ components:
           type: array
           items:
             type: string
+        lease_token:
+          type: string
       required:
       - text
+    PMClaimRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        runner_id:
+          type: string
+    PMFailRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        reason:
+          type: string
+        lease_token:
+          type: string
+      required:
+      - reason
     PMEmptyRequest:
       type: object
       additionalProperties: true
