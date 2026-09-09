@@ -120,7 +120,7 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   const reply = ((await response.innerText()) || "").trim();
   writeEvidence("pm-reply-excerpt.local.txt", reply.slice(0, 800));
 
-  const userTurn = page.locator(".pm-turn--you").last();
+  const userTurn = page.locator(".pm-you").last();
   await expect(userTurn).toContainText(prompt);
   const proposed = page.getByRole("list", {
     name: "Decisions proposed in this reply",
@@ -129,7 +129,7 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   const proposedText =
     proposedCount > 0 ? ((await proposed.innerText()) || "").trim() : "";
   const evidenceHrefs = await page
-    .locator(".pm-turn--pm a[href]")
+    .locator(".pm-answer a[href]")
     .evaluateAll((nodes) =>
       nodes.map((node) => node.getAttribute("href") || ""),
     );
