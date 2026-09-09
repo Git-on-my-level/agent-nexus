@@ -15,6 +15,7 @@
     safeSourceHref,
     sourceLabel,
     workFreshness,
+    workKey,
     label,
     errorMessage,
   } from "$lib/pm/presentation.js";
@@ -24,6 +25,9 @@
     loading = $state(true),
     error = $state(""),
     evidenceError = $state(""),
+    decisions = $state([]),
+    decisionsError = $state(""),
+    decisionsLoading = $state(false),
     notice = $state(""),
     refreshing = $state(false),
     ready = $state(false);
@@ -45,10 +49,12 @@
     loading = true;
     error = "";
     evidenceError = "";
+    decisionsError = "";
     refreshing = false;
     notice = "";
     work = null;
     observations = [];
+    decisions = [];
     nextCursor = "";
     const results = await Promise.allSettled([
       coreClient.getWork(id),
@@ -58,12 +64,39 @@
     if (results[0].status === "fulfilled") {
       work = results[0].value.work;
       if (!work) error = "The workspace did not return this commitment.";
+      else void loadDecisions(ticket, work);
     } else error = errorMessage(results[0].reason);
     if (results[1].status === "fulfilled") {
       observations = results[1].value.observations || [];
       nextCursor = results[1].value.next_cursor || "";
     } else evidenceError = errorMessage(results[1].reason);
     loading = false;
+  }
+  async function loadDecisions(ticket, loadedWork) {
+    decisionsLoading = true;
+    decisionsError = "";
+    decisions = [];
+    try {
+      const result = await coreClient.listPmDecisions({ limit: 200 });
+      if (ticket !== requestId) return;
+      const ref = workKey(loadedWork);
+      decisions = (result.items || [])
+        .filter((decision) => decision.work_ref === ref)
+        .sort(
+          (a, b) =>
+            Date.parse(b.created_at || 0) - Date.parse(a.created_at || 0),
+        );
+    } catch (err) {
+      if (ticket === requestId) decisionsError = errorMessage(err);
+    } finally {
+      if (ticket === requestId) decisionsLoading = false;
+    }
+  }
+  function decisionSignal(status) {
+    if (status === "awaiting_answer") return { tone: "warn", label: "Needs you" };
+    if (status === "answered") return { tone: "ok", label: "Answered" };
+    if (status === "superseded") return { tone: "neutral", label: "Superseded" };
+    return { tone: "neutral", label: status || "Unknown status" };
   }
   async function loadMore() {
     if (loading) return;
@@ -322,6 +355,57 @@
               onclick={loadMore}
               >{loading ? "Loading…" : "Older observations"}</button
             >{/if}
+        </section>
+        <section>
+          <h2
+            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+          >
+            Decisions
+          </h2>
+          {#if decisionsError}<div class="mt-3">
+              <StateError
+                title="Decisions unavailable"
+                message={decisionsError}
+                onretry={() => load()}
+              />
+            </div>{/if}
+          {#if decisionsLoading && !decisions.length}<p
+              class="mt-3 text-meta text-fg-muted"
+              role="status"
+            >
+              Loading decisions…
+            </p>{/if}
+          {#if !decisionsLoading && !decisions.length && !decisionsError}<p
+              class="mt-3 text-meta text-fg-muted"
+            >
+              No decisions recorded for this task.
+            </p>{/if}
+          <ul class="mt-3 divide-y divide-line-subtle border-t border-line-subtle">
+            {#each decisions as decision (decision.id)}
+              {@const decisionBadge = decisionSignal(decision.status)}
+              <li class="py-3">
+                <p class="break-words text-meta text-fg">
+                  {decision.instruction}
+                </p>
+                <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                  <SignalBadge tone={decisionBadge.tone}>{decisionBadge.label}</SignalBadge
+                  ><time
+                    class="text-micro text-fg-muted"
+                    datetime={decision.created_at}
+                    title={formatAbsoluteDateTime(decision.created_at)}
+                    >{formatTimestamp(decision.created_at) ||
+                      "time unknown"}</time
+                  >
+                  {#if decision.status === "awaiting_answer"}<a
+                      class="ui-prose-link text-micro"
+                      href={workspaceHref(
+                        `/inbox?item=decision:${encodeURIComponent(decision.id)}`,
+                      )}>Answer</a
+                    >{/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
         </section>
         {#if work.executions?.length}<section>
             <h2

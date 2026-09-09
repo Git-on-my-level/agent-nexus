@@ -7068,6 +7068,16 @@ components:
           description: >
             List-only enrichment: timeline `message_posted` counts on backing `thread_id`,
             excluding trashed events (same derivation as `/topics`).
+        last_comment:
+          type: object
+          description: >
+            List-only enrichment: most recent `message_posted` comment on the backing thread,
+            excluding trashed events. Omitted when the document has no comments.
+          properties:
+            body: { type: string }
+            created_at: { type: string, format: date-time }
+            created_by: { type: string }
+          required: [body, created_at]
         search_rank:
           type: integer
           description: >

@@ -111,6 +111,26 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		t.Fatalf("expected comment text hit, got %#v", handlesOf(commentHits))
 	}
 
+	withLast, _, err := store.ListDocuments(ctx, primitives.DocumentListFilter{})
+	if err != nil {
+		t.Fatalf("list documents for last_comment: %v", err)
+	}
+	var lastComment map[string]any
+	for _, document := range withLast {
+		if strings.TrimSpace(anyString(document["handle"])) == "kb-shared-runbook" {
+			lastComment, _ = document["last_comment"].(map[string]any)
+		}
+	}
+	if lastComment == nil {
+		t.Fatalf("expected last_comment enrichment on commented document, got %#v", withLast)
+	}
+	if strings.TrimSpace(anyString(lastComment["body"])) != "ack from host A" {
+		t.Fatalf("last_comment.body: %#v", lastComment)
+	}
+	if strings.TrimSpace(anyString(lastComment["created_by"])) != "actor-a" {
+		t.Fatalf("last_comment.created_by: %#v", lastComment)
+	}
+
 	head := strings.TrimSpace(anyString(knowledge["head_revision_id"]))
 	updated, nextRev, err := store.UpdateDocument(ctx, "actor-a", docID, map[string]any{
 		"title":  "Lane docs knowledge runbook",

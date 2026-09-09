@@ -194,6 +194,58 @@ describe("PM operator interactions", () => {
     );
     expect(client.requestWorkRefresh).toHaveBeenCalledWith("card:one");
   });
+  it("scopes task detail decisions to this work, newest first, with an inbox answer link", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Decided work"),
+    });
+    client.listWorkObservations.mockResolvedValue({ observations: [] });
+    client.listPmDecisions.mockResolvedValue({
+      items: [
+        {
+          id: "d-old",
+          work_ref: "card:one",
+          instruction: "Older question",
+          status: "answered",
+          created_at: "2026-09-01T10:00:00Z",
+        },
+        {
+          id: "d-new",
+          work_ref: "card:one",
+          instruction: "Newer question",
+          status: "awaiting_answer",
+          created_at: "2026-09-02T10:00:00Z",
+        },
+        {
+          id: "d-other",
+          work_ref: "card:two",
+          instruction: "Other work question",
+          status: "awaiting_answer",
+          created_at: "2026-09-03T10:00:00Z",
+        },
+      ],
+    });
+    render(WorkDetail);
+    await screen.findByText("Newer question");
+    expect(screen.getByText("Older question")).toBeTruthy();
+    expect(screen.queryByText("Other work question")).toBeNull();
+    expect(client.listPmDecisions).toHaveBeenCalledWith({ limit: 200 });
+    expect(
+      screen.getByRole("link", { name: "Answer", exact: true }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Answer", exact: true })
+        .getAttribute("href"),
+    ).toBe("/o/local/w/local/inbox?item=decision:d-new");
+    const rows = [
+      ...screen.getByText("Newer question").closest("ul").querySelectorAll("li"),
+    ];
+    expect(rows.map((row) => row.querySelector("p").textContent)).toEqual([
+      "Newer question",
+      "Older question",
+    ]);
+  });
   it("keeps the Source filter labeled after switching to the board view", async () => {
     client.listWork.mockResolvedValue({
       work: [work("card:one", "Sample one")],

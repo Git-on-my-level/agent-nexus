@@ -457,6 +457,16 @@ resources:
           Derived `/documents` list enrichment when backing `thread_id` is present (`message_posted`
           timeline, excluding trashed events). Not returned from document-by-id payloads; clients treat
           omission as zero for list rows.
+      last_comment:
+        type: object
+        required: false
+        description: >
+          Derived `/documents` list enrichment: the most recent `message_posted` comment on the
+          backing thread (excluding trashed events). Omitted when the document has no comments.
+        fields:
+          body: { type: string, required: true }
+          created_at: { type: datetime, required: true }
+          created_by: { type: string, required: false }
 
   document_revision:
     description: >

@@ -305,8 +305,40 @@ async function setup(page, overrides = {}) {
     }
     return route.continue();
   });
-  return { work, calls, decisions, actions };
+  return { work, calls, decisions, actions, conversations, turns };
 }
+
+test("a reply that proposes decisions shows answerable rows linked to Inbox", async ({
+  page,
+}) => {
+  const { conversations, turns } = await setup(page);
+  conversations.push({
+    id: "conversation-sample",
+    title: "Weekly review",
+    created_at: stamp(1),
+  });
+  turns.push({
+    id: "turn-sample",
+    text: "What needs my decision?",
+    response:
+      "One item needs you: the release note handoff. Proposed as decision:decision-sample.",
+    status: "delivered",
+    created_at: stamp(1),
+    evidence_refs: ["card:release", "decision:decision-sample"],
+  });
+  await page.goto(`${root}/pm?conversation=conversation-sample`);
+  const list = page.getByRole("list", {
+    name: "Decisions proposed in this reply",
+  });
+  await expect(list).toBeVisible();
+  const row = list.getByRole("listitem");
+  await expect(row).toContainText("Update the sample handoff note");
+  await expect(row.getByText("card:release")).toBeVisible();
+  await expect(row.getByRole("link", { name: "Answer" })).toHaveAttribute(
+    "href",
+    "/o/local/w/local/inbox?item=decision:decision-sample",
+  );
+});
 
 test("board and table preserve source states and show the same commitments", async ({
   page,

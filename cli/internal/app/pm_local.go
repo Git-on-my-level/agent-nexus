@@ -76,7 +76,7 @@ var (
 		}
 		return out, err
 	}
-	typedRefPattern = regexp.MustCompile(`\b(?:card|work|artifact|topic|document):[A-Za-z0-9._:-]+`)
+	typedRefPattern = regexp.MustCompile(`\b(?:card|work|artifact|topic|document|decision):[A-Za-z0-9._:-]+`)
 	providerModelRe = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
 )
 

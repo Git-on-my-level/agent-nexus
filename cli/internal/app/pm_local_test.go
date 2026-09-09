@@ -49,6 +49,10 @@ func TestExtractProviderModelAndAssistantText(t *testing.T) {
 	if len(refs) != 1 || refs[0] != "card:emergency-restock" {
 		t.Fatalf("refs %v", refs)
 	}
+	decisionRefs := extractEvidenceRefs("Proposed decision:dec-42 awaiting your answer")
+	if len(decisionRefs) != 1 || decisionRefs[0] != "decision:dec-42" {
+		t.Fatalf("decision refs %v", decisionRefs)
+	}
 }
 
 func TestPMServeRequiresRunner(t *testing.T) {
