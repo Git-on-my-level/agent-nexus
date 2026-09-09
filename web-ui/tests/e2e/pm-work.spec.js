@@ -413,6 +413,12 @@ test("board and table preserve source states and show the same commitments", asy
       .locator("[data-work-ref]")
       .evaluateAll((rows) => rows.map((row) => row.dataset.workRef).sort()),
   ).toEqual(tableRefs);
+  // Source now lives inside the single Filters disclosure.
+  await page
+    .getByRole("group")
+    .filter({ hasText: "Filters" })
+    .locator("summary")
+    .click();
   await page.getByLabel("Source", { exact: true }).selectOption("github");
   await expect(page.locator("[data-work-ref]")).toHaveCount(1);
   expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0);
@@ -564,9 +570,7 @@ for (const viewport of [
     ]) {
       await page.goto(`${root}${route.path}`);
       await expect(page.locator("h1").first()).toBeVisible();
-      await expect(
-        page.getByText("Loading commitments and evidence…"),
-      ).toHaveCount(0);
+      await expect(page.getByText("Loading tasks…")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /Loading health|Loading decisions/ }),
       ).toHaveCount(0);
