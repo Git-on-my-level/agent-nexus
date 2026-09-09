@@ -1599,7 +1599,7 @@ func (a *App) normalizeMutationCommandBodyLegacy(ctx context.Context, cfg config
 			}
 		}
 		return nil
-	case "docs.create", "docs.update", "docs.revisions.create":
+	case "docs.create", "docs.put", "docs.update", "docs.revisions.create":
 		if rev, ok := body["revision"].(map[string]any); ok && rev != nil {
 			if err := a.normalizeMutationFields(ctx, cfg, rev, []mutationFieldSpec{
 				{key: "refs", kind: mutationFieldTypedRefList},

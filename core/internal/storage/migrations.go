@@ -796,6 +796,10 @@ var migrations = []migration{
 			`CREATE INDEX idx_work_observations_card_received ON work_observations(card_id,received_at DESC,id DESC);`,
 		},
 	},
+	{
+		Version:    27,
+		AfterApply: applyMigration27DocumentKnowledge,
+	},
 }
 
 func applyMigration25ResourceHandles(ctx context.Context, tx *sql.Tx) error {
@@ -1924,6 +1928,36 @@ func applyMigration17BoardsDocumentsSummary(ctx context.Context, tx *sql.Tx) err
 		q := fmt.Sprintf(`ALTER TABLE %s ADD COLUMN summary TEXT NOT NULL DEFAULT ''`, table)
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("migration 17 add %s.summary: %w", table, err)
+		}
+	}
+	return nil
+}
+
+func applyMigration27DocumentKnowledge(ctx context.Context, tx *sql.Tx) error {
+	ok, err := sqliteTableExists(ctx, tx, "documents")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{name: "source", ddl: `ALTER TABLE documents ADD COLUMN source TEXT NOT NULL DEFAULT ''`},
+		{name: "tags_json", ddl: `ALTER TABLE documents ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'`},
+		{name: "search_text", ddl: `ALTER TABLE documents ADD COLUMN search_text TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := sqliteTableHasColumn(ctx, tx, "documents", col.name)
+		if err != nil {
+			return fmt.Errorf("migration 27 pragma documents.%s: %w", col.name, err)
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, col.ddl); err != nil {
+			return fmt.Errorf("migration 27 add documents.%s: %w", col.name, err)
 		}
 	}
 	return nil

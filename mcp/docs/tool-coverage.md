@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 149
+- Command count: 154
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -18,7 +18,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards | 13 |
 | cards | 13 |
 | derived | 1 |
-| docs | 12 |
+| docs | 17 |
 | events | 8 |
 | home | 2 |
 | inbox | 4 |
@@ -36,8 +36,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 56 |
-| exposed_write | 50 |
+| exposed_read | 58 |
+| exposed_write | 53 |
 | gated_admin | 15 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 6 |
@@ -49,8 +49,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 106 | exposed_read + exposed_write + adapted |
-| hosted default | 55 | explicit read-only private-app allowlist |
+| standalone default | 111 | exposed_read + exposed_write + adapted |
+| hosted default | 57 | explicit read-only private-app allowlist |
 | gated | 28 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 15 | not represented as direct MCP tools in v1 |
@@ -122,15 +122,20 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | cards.trash | cards | POST | /cards/{card_id}/trash | exposed_write | ordinary reversible card lifecycle write |
 | derived.rebuild | derived | POST | /derived/rebuild | gated_admin | projection rebuild is maintenance/ops |
 | docs.archive | docs | POST | /docs/{document_id}/archive | exposed_write | ordinary reversible document lifecycle write |
+| docs.comments.create | docs | POST | /docs/{document_id}/comments | exposed_write | ordinary document comment write for cross-host knowledge |
+| docs.comments.list | docs | GET | /docs/{document_id}/comments | exposed_read | document comment thread read |
+| docs.comments.reply | docs | POST | /docs/{document_id}/comments/{comment_id}/replies | exposed_write | ordinary document comment reply write |
 | docs.create | docs | POST | /docs | exposed_write | ordinary document creation |
 | docs.get | docs | GET | /docs/{document_id} | exposed_read | document read |
 | docs.list | docs | GET | /docs | exposed_read | document inventory read |
 | docs.patch | docs | PATCH | /docs/{document_id} | exposed_write | ordinary document update with concurrency controls |
 | docs.purge | docs | POST | /docs/{document_id}/purge | gated_sensitive | permanent deletion is destructive |
+| docs.put | docs | PUT | /docs/{document_id} | exposed_write | idempotent document create-or-replace by handle |
 | docs.restore | docs | POST | /docs/{document_id}/restore | exposed_write | ordinary reversible document lifecycle write |
 | docs.revisions.create | docs | POST | /docs/{document_id}/revisions | exposed_write | ordinary document revision creation |
 | docs.revisions.get | docs | GET | /docs/{document_id}/revisions/{revision_id} | exposed_read | document revision read |
 | docs.revisions.list | docs | GET | /docs/{document_id}/revisions | exposed_read | document revision inventory read |
+| docs.search | docs | GET | /docs/search | exposed_read | document full-text search over title, body, and comments |
 | docs.trash | docs | POST | /docs/{document_id}/trash | exposed_write | ordinary reversible document lifecycle write |
 | docs.unarchive | docs | POST | /docs/{document_id}/unarchive | exposed_write | ordinary reversible document lifecycle write |
 | events.archive | events | POST | /events/{event_id}/archive | exposed_write | ordinary reversible event lifecycle write |

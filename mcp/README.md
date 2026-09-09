@@ -62,6 +62,47 @@ ANX_ACCESS_TOKEN="$TOKEN" \
 The stdio transport is newline-delimited JSON-RPC. stdout is reserved for MCP
 messages; logs and startup diagnostics are written to stderr.
 
+## Docs as a cross-host knowledge base
+
+Agents on different machines share documents through the same workspace core.
+Configure `anx-mcp` with the same profile (or `ANX_BASE_URL` + `ANX_ACCESS_TOKEN`)
+the `anx` CLI uses; MCP authorization is the workspace bearer token, not a
+separate MCP credential.
+
+Hosted default tools for this slice (read):
+
+- `docs.search` — `GET /docs/search?q=` over title, body, source, tags, and comments
+- `docs.get` — read one document and its head revision
+- `docs.comments.list` — read the document comment thread
+
+Write tools with the same workspace token (not in the hosted-default read set):
+
+- `docs.put` — idempotent create-or-replace by handle, with `source` and `tags`
+- `docs.comments.create` / `docs.comments.reply`
+
+Tag agent-facing docs `knowledge`. `source` is a canonical URL or ref when the
+document aggregates material that lives elsewhere. Git-repo ingest is not in
+this slice.
+
+Example: two profiles on one core (stand-in for two hosts):
+
+```bash
+# host A
+ANX_ACCESS_TOKEN="$TOKEN_A" anx --json docs put notes.md \
+  --title "Runbook" --source https://example.invalid/runbook.md --tags knowledge
+
+# host B
+ANX_ACCESS_TOKEN="$TOKEN_B" anx --json docs search "runbook" --knowledge
+ANX_ACCESS_TOKEN="$TOKEN_B" anx --json docs comment doc:notes "Found this on host B"
+
+# host A
+ANX_ACCESS_TOKEN="$TOKEN_A" anx --json docs comments kb-shared
+```
+
+The MCP server exposes the same commands. After `initialize` / `tools/list`,
+call `docs.search`, `docs.get`, `docs.put`, and `docs.comments.create` with the
+catalog argument names.
+
 Run the automated local smoke against an active workspace profile:
 
 ```bash

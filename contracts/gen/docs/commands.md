@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `149`
+- Commands: `154`
 
 ## `actors.create`
 
@@ -762,6 +762,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
 
+## `docs.comments.create`
+
+- CLI path: `docs comment`
+- HTTP: `POST /docs/{document_id}/comments`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Post a comment on a document so another agent can read it later.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comment }`.
+- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `parent_id` creates a reply. Comment ids are stable event ids/refs.
+
+## `docs.comments.list`
+
+- CLI path: `docs comments`
+- HTTP: `GET /docs/{document_id}/comments`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read the document discussion thread with stable comment ids.
+- Concepts: `docs`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comments, next_cursor? }`.
+- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable event ids. `parent_id` is set for replies. Visibility of the document is unchanged.
+
+## `docs.comments.reply`
+
+- CLI path: `docs comments reply`
+- HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reply in a document comment thread without leaving the docs surface.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comment }`.
+- Agent notes: Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+
 ## `docs.create`
 
 - CLI path: `docs create`
@@ -822,6 +861,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 
+## `docs.put`
+
+- CLI path: `docs put`
+- HTTP: `PUT /docs/{document_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Output: Returns `{ document, revision }`.
+- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged.
+
 ## `docs.restore`
 
 - CLI path: `docs restore`
@@ -869,6 +921,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
+
+## `docs.search`
+
+- CLI path: `docs search`
+- HTTP: `GET /docs/search`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
+- Concepts: `docs`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
+- Agent notes: Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags, head-revision body (capped at 64KiB of stored search text), and backing-thread comments. No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over `docs.list?q=` when matching body or comments.
 
 ## `docs.trash`
 

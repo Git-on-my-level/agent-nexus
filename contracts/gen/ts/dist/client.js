@@ -3223,20 +3223,214 @@ export const commandRegistry = [
             "document_id"
         ],
         "adjacent_commands": [
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsArchive",
         "ts_method": "docsArchive"
+    },
+    {
+        "command_id": "docs.comments.create",
+        "cli_path": "docs comment",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/comments",
+        "operation_id": "createDocumentComment",
+        "summary": "Post a document comment",
+        "why": "Post a comment on a document so another agent can read it later.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ comment }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Posts a `message_posted` event on the document backing thread. Optional `parent_id` creates a reply. Comment ids are stable event ids/refs.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "text",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "parent_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.comments.list",
+            "docs.comments.reply",
+            "docs.create",
+            "docs.get",
+            "docs.revisions.list",
+            "docs.list",
+            "docs.patch",
+            "docs.purge",
+            "docs.put",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.search",
+            "docs.trash",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsCommentsCreate",
+        "ts_method": "docsCommentsCreate"
+    },
+    {
+        "command_id": "docs.comments.list",
+        "cli_path": "docs comments",
+        "group": "docs",
+        "method": "GET",
+        "path": "/docs/{document_id}/comments",
+        "operation_id": "listDocumentComments",
+        "summary": "List document comments",
+        "why": "Read the document discussion thread with stable comment ids.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ comments, next_cursor? }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "docs"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Comments are the document backing-thread `message_posted` events, projected with stable event ids. `parent_id` is set for replies. Visibility of the document is unchanged.",
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.comments.create",
+            "docs.comments.reply",
+            "docs.create",
+            "docs.get",
+            "docs.revisions.list",
+            "docs.list",
+            "docs.patch",
+            "docs.purge",
+            "docs.put",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.search",
+            "docs.trash",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsCommentsList",
+        "ts_method": "docsCommentsList"
+    },
+    {
+        "command_id": "docs.comments.reply",
+        "cli_path": "docs comments reply",
+        "group": "docs",
+        "method": "POST",
+        "path": "/docs/{document_id}/comments/{comment_id}/replies",
+        "operation_id": "replyDocumentComment",
+        "summary": "Reply to a document comment",
+        "why": "Reply in a document comment thread without leaving the docs surface.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ comment }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "text",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "parent_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id",
+            "comment_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.create",
+            "docs.get",
+            "docs.revisions.list",
+            "docs.list",
+            "docs.patch",
+            "docs.purge",
+            "docs.put",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.search",
+            "docs.trash",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsCommentsReply",
+        "ts_method": "docsCommentsReply"
     },
     {
         "command_id": "docs.create",
@@ -3289,6 +3483,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "document.handle",
+                    "type": "string"
+                },
+                {
                     "name": "document.provenance.by_field",
                     "type": "object"
                 },
@@ -3305,12 +3503,20 @@ export const commandRegistry = [
                     "type": "list\u003cany\u003e"
                 },
                 {
+                    "name": "document.source",
+                    "type": "string"
+                },
+                {
                     "name": "document.subject_ref",
                     "type": "string"
                 },
                 {
                     "name": "document.summary",
                     "type": "string"
+                },
+                {
+                    "name": "document.tags",
+                    "type": "list\u003cstring\u003e"
                 },
                 {
                     "name": "refs",
@@ -3324,14 +3530,19 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3367,14 +3578,19 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3407,14 +3623,19 @@ export const commandRegistry = [
         "surface": "canonical",
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3454,9 +3675,23 @@ export const commandRegistry = [
                 {
                     "name": "if_updated_at",
                     "type": "datetime"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "patch.source",
+                    "type": "string"
                 },
                 {
                     "name": "patch.summary",
+                    "type": "string"
+                },
+                {
+                    "name": "patch.tags",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "patch.title",
                     "type": "string"
                 }
             ]
@@ -3466,14 +3701,19 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3520,19 +3760,138 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
         "go_method": "DocsPurge",
         "ts_method": "docsPurge"
+    },
+    {
+        "command_id": "docs.put",
+        "cli_path": "docs put",
+        "group": "docs",
+        "method": "PUT",
+        "path": "/docs/{document_id}",
+        "operation_id": "putDocument",
+        "summary": "Create or replace a document by handle",
+        "why": "Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ document, revision }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "conflict"
+        ],
+        "concepts": [
+            "docs",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Path `{document_id}` is the public handle (or `document:\u003chandle\u003e`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "content",
+                    "type": "any"
+                },
+                {
+                    "name": "content_type",
+                    "type": "string",
+                    "enum_values": [
+                        "binary",
+                        "structured",
+                        "text"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "document.provenance.by_field",
+                    "type": "object"
+                },
+                {
+                    "name": "document.provenance.notes",
+                    "type": "string"
+                },
+                {
+                    "name": "document.provenance.sources",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "document.refs",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "document.source",
+                    "type": "string"
+                },
+                {
+                    "name": "document.subject_ref",
+                    "type": "string"
+                },
+                {
+                    "name": "document.summary",
+                    "type": "string"
+                },
+                {
+                    "name": "document.tags",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "document.title",
+                    "type": "string"
+                },
+                {
+                    "name": "refs",
+                    "type": "list\u003cany\u003e"
+                }
+            ]
+        },
+        "path_params": [
+            "document_id"
+        ],
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
+            "docs.create",
+            "docs.get",
+            "docs.revisions.list",
+            "docs.list",
+            "docs.patch",
+            "docs.purge",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.search",
+            "docs.trash",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsPut",
+        "ts_method": "docsPut"
     },
     {
         "command_id": "docs.restore",
@@ -3578,14 +3937,19 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3672,14 +4036,19 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3717,14 +4086,19 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
+            "docs.search",
             "docs.trash",
             "docs.unarchive"
         ],
@@ -3761,19 +4135,70 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
+            "docs.restore",
+            "docs.revisions.create",
+            "docs.revisions.get",
+            "docs.search",
+            "docs.trash",
+            "docs.unarchive"
+        ],
+        "go_method": "DocsRevisionsList",
+        "ts_method": "docsRevisionsList"
+    },
+    {
+        "command_id": "docs.search",
+        "cli_path": "docs search",
+        "group": "docs",
+        "method": "GET",
+        "path": "/docs/search",
+        "operation_id": "searchDocuments",
+        "summary": "Search documents",
+        "why": "Full-text search over document title, body, and comments so agents can find knowledge another host wrote.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token"
+        ],
+        "concepts": [
+            "docs"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags, head-revision body (capped at 64KiB of stored search text), and backing-thread comments. No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over `docs.list?q=` when matching body or comments.",
+        "adjacent_commands": [
+            "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
+            "docs.create",
+            "docs.get",
+            "docs.revisions.list",
+            "docs.list",
+            "docs.patch",
+            "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
             "docs.trash",
             "docs.unarchive"
         ],
-        "go_method": "DocsRevisionsList",
-        "ts_method": "docsRevisionsList"
+        "go_method": "DocsSearch",
+        "ts_method": "docsSearch"
     },
     {
         "command_id": "docs.trash",
@@ -3821,15 +4246,20 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.unarchive"
         ],
         "go_method": "DocsTrash",
@@ -3875,15 +4305,20 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "docs.archive",
+            "docs.comments.create",
+            "docs.comments.list",
+            "docs.comments.reply",
             "docs.create",
             "docs.get",
             "docs.revisions.list",
             "docs.list",
             "docs.patch",
             "docs.purge",
+            "docs.put",
             "docs.restore",
             "docs.revisions.create",
             "docs.revisions.get",
+            "docs.search",
             "docs.trash"
         ],
         "go_method": "DocsUnarchive",
@@ -8026,6 +8461,15 @@ export class AnxClient {
     docsArchive(pathParams, options = {}) {
         return this.invoke("docs.archive", pathParams, options);
     }
+    docsCommentsCreate(pathParams, options = {}) {
+        return this.invoke("docs.comments.create", pathParams, options);
+    }
+    docsCommentsList(pathParams, options = {}) {
+        return this.invoke("docs.comments.list", pathParams, options);
+    }
+    docsCommentsReply(pathParams, options = {}) {
+        return this.invoke("docs.comments.reply", pathParams, options);
+    }
     docsCreate(options = {}) {
         return this.invoke("docs.create", {}, options);
     }
@@ -8041,6 +8485,9 @@ export class AnxClient {
     docsPurge(pathParams, options = {}) {
         return this.invoke("docs.purge", pathParams, options);
     }
+    docsPut(pathParams, options = {}) {
+        return this.invoke("docs.put", pathParams, options);
+    }
     docsRestore(pathParams, options = {}) {
         return this.invoke("docs.restore", pathParams, options);
     }
@@ -8052,6 +8499,9 @@ export class AnxClient {
     }
     docsRevisionsList(pathParams, options = {}) {
         return this.invoke("docs.revisions.list", pathParams, options);
+    }
+    docsSearch(options = {}) {
+        return this.invoke("docs.search", {}, options);
     }
     docsTrash(pathParams, options = {}) {
         return this.invoke("docs.trash", pathParams, options);

@@ -56,6 +56,13 @@ Supported overrides:
 - `ANX_BASE_URL`
 - `ANX_ACCESS_TOKEN`
 
+## Docs knowledge tools
+
+With a workspace profile, `anx-mcp` exposes the same docs search/get/put/comment
+commands as the CLI (`docs.search`, `docs.get`, `docs.put`, `docs.comments.*`).
+Authorization is the profile access token. Tag agent-facing docs `knowledge`.
+Git-repo ingest is a follow-up; this slice is live core + CLI/MCP only.
+
 Diagnostics go to stderr. stdout is reserved for newline-delimited JSON-RPC MCP
 messages.
 

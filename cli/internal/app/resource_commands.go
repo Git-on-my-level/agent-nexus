@@ -1477,17 +1477,19 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	switch sub {
 	case "list":
 		fs := newSilentFlagSet("docs list")
-		var threadIDFlag, queryFlag, cursorFlag trackedString
+		var threadIDFlag, queryFlag, cursorFlag, tagFlag trackedString
 		var limitFlag trackedInt
-		var includeTrashed, trashedOnly, includeArchived, archivedOnly bool
+		var includeTrashed, trashedOnly, includeArchived, archivedOnly, knowledge bool
 		fs.BoolVar(&includeTrashed, "include-trashed", false, "Include trashed documents")
 		fs.BoolVar(&trashedOnly, "trashed-only", false, "Show only trashed documents")
 		fs.BoolVar(&includeArchived, "include-archived", false, "Include archived documents")
 		fs.BoolVar(&archivedOnly, "archived-only", false, "Show only archived documents")
 		fs.Var(&threadIDFlag, "thread-id", "Filter by thread id")
 		fs.Var(&queryFlag, "q", "Search by document id or title")
+		fs.Var(&tagFlag, "tag", "Restrict results to documents that include this tag")
 		fs.Var(&limitFlag, "limit", "Limit the number of returned documents")
 		fs.Var(&cursorFlag, "cursor", "Pagination cursor from a previous list response")
+		fs.BoolVar(&knowledge, "knowledge", false, "Only documents tagged knowledge")
 		if err := fs.Parse(args[1:]); err != nil {
 			return nil, "docs list", errnorm.Usage("invalid_flags", err.Error())
 		}
@@ -1516,6 +1518,10 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		addSingleQuery(&query, "thread_id", resolvedThreadID)
 		addSingleQuery(&query, "q", queryFlag.value)
+		addSingleQuery(&query, "tag", tagFlag.value)
+		if knowledge {
+			addSingleQuery(&query, "knowledge", "true")
+		}
 		if limitFlag.set {
 			addSingleQuery(&query, "limit", strconv.Itoa(limitFlag.value))
 		}
@@ -1535,6 +1541,12 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, body)
 		return addResourceURLToResult(cfg, "docs.create", result), "docs create", callErr
+	case "put":
+		result, callErr := a.runDocsPutCommand(ctx, args[1:], cfg)
+		return result, "docs put", callErr
+	case "search":
+		result, callErr := a.runDocsSearchCommand(ctx, args[1:], cfg)
+		return result, "docs search", callErr
 	case "get":
 		id, err := parseResourceIDArg(args[1:], "document-id", "document id", "document")
 		if err != nil {
@@ -1552,6 +1564,16 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			nil,
 		)
 		return result, "docs get", callErr
+	case "comment":
+		result, callErr := a.runDocsCommentCommand(ctx, args[1:], cfg)
+		return result, "docs comment", callErr
+	case "comments":
+		if len(args) >= 2 && docsCommentsSubcommandSpec.normalize(args[1]) == "reply" {
+			result, callErr := a.runDocsCommentsReplyCommand(ctx, args[2:], cfg)
+			return result, "docs comments reply", callErr
+		}
+		result, callErr := a.runDocsCommentsListCommand(ctx, args[1:], cfg)
+		return result, "docs comments", callErr
 	case "content":
 		result, callErr := a.runDocsContentCommand(ctx, args[1:], cfg)
 		return result, "docs content", callErr
@@ -3696,7 +3718,7 @@ func enrichListBodyWithPublicIdentity(commandID string, body any) (any, bool) {
 		return body, addPublicIdentityToNestedListField(typedBody, "boards", []string{"board"}, "board")
 	case "boards.cards.list":
 		return body, addPublicIdentityToListField(typedBody, "cards", "card")
-	case "docs.list":
+	case "docs.list", "docs.search":
 		return body, addPublicIdentityToListField(typedBody, "documents", "document")
 	case "events.list":
 		return body, addPublicIdentityToListField(typedBody, "events", "event")
