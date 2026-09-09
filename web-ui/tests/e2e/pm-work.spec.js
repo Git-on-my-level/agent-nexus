@@ -489,9 +489,9 @@ test("PM retains failed draft and retries the same message intent without claimi
   );
   await expect(page.getByRole("alert")).toContainText("PM bridge unavailable");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await expect(
-    page.getByText("Message queued · awaiting PM response"),
-  ).toBeVisible();
+  // A queued turn is a transient state, so it reads as a live "Thinking · <elapsed>"
+  // row rather than the durable badge this page used to show.
+  await expect(page.getByText(/^Thinking/)).toBeVisible();
   const sends = calls.filter((call) => call.path.endsWith("/messages"));
   expect(sends).toHaveLength(2);
   expect(sends[0].body.request_key).toBe(sends[1].body.request_key);
