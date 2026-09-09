@@ -134,8 +134,13 @@ func preflightKnownCommandShape(args []string) error {
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return preflightSubcommand(args[2:], docsRevisionSubcommandSpec)
 		}
-		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" && docsCommentsSubcommandSpec.normalize(args[2]) == "reply" {
-			return preflightSubcommand(args[2:], docsCommentsSubcommandSpec)
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" {
+			token := docsCommentsSubcommandSpec.normalize(args[2])
+			for _, valid := range docsCommentsSubcommandSpec.valid {
+				if token == valid {
+					return preflightSubcommand(args[2:], docsCommentsSubcommandSpec)
+				}
+			}
 		}
 	case "events":
 		return preflightSubcommand(args[1:], eventsSubcommandSpec)
@@ -216,8 +221,13 @@ func preflightShapeCommandName(args []string) string {
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return "docs revision"
 		}
-		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" && docsCommentsSubcommandSpec.normalize(args[2]) == "reply" {
-			return "docs comments"
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" {
+			token := docsCommentsSubcommandSpec.normalize(args[2])
+			for _, valid := range docsCommentsSubcommandSpec.valid {
+				if token == valid {
+					return "docs comments " + token
+				}
+			}
 		}
 	case "meta":
 		if len(args) >= 3 && metaSubcommandSpec.normalize(args[1]) == "ops" {
@@ -543,18 +553,25 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"docs search": {
 			"q":         valueFlag,
 			"tag":       valueFlag,
+			"host":      valueFlag,
 			"knowledge": boolFlag,
 			"limit":     valueFlag,
 			"cursor":    valueFlag,
 		},
 		"docs put": {
-			"title":     valueFlag,
-			"source":    valueFlag,
-			"tags":      valueFlag,
-			"handle":    valueFlag,
-			"body":      valueFlag,
-			"body-file": valueFlag,
-			"actor-id":  valueFlag,
+			"title":       valueFlag,
+			"source":      valueFlag,
+			"tags":        valueFlag,
+			"hosts":       valueFlag,
+			"verified-at": valueFlag,
+			"handle":      valueFlag,
+			"body":        valueFlag,
+			"body-file":   valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs get": {
+			"document-id": valueFlag,
+			"format":      valueFlag,
 		},
 		"docs comment": {
 			"document-id": valueFlag,
@@ -571,6 +588,17 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"document-id": valueFlag,
 			"comment-id":  valueFlag,
 			"body":        valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments edit": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
+			"body":        valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments delete": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
 			"actor-id":    valueFlag,
 		},
 		"docs revise": {

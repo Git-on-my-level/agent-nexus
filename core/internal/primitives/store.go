@@ -33,6 +33,7 @@ var ErrArtifactInUse = errors.New("artifact is referenced by document revisions"
 var ErrOwnedArtifactLifecycle = errors.New("artifact lifecycle is owned by its parent resource")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
 var ErrInvalidDocumentRequest = errors.New("invalid document request")
+var ErrForbidden = errors.New("forbidden")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
 const provenanceEventIDPlaceholder = "<event_id>"

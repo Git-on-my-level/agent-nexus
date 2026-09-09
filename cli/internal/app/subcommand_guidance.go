@@ -245,8 +245,12 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 
 var docsCommentsSubcommandSpec = subcommandSpec{
 	command:  "docs comments",
-	valid:    []string{"reply"},
-	examples: []string{"anx docs comments reply doc:runbook <comment-id> --body \"Acknowledged\""},
+	valid:    []string{"reply", "edit", "delete"},
+	examples: []string{
+		"anx docs comments reply doc:runbook <comment-id> --body \"Acknowledged\"",
+		"anx docs comments edit doc:runbook event:note --body \"Corrected\"",
+		"anx docs comments delete doc:runbook event:note",
+	},
 }
 
 var eventsSubcommandSpec = subcommandSpec{

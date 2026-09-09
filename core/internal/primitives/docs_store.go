@@ -28,6 +28,8 @@ type documentRow struct {
 	Summary                  string
 	Source                   string
 	TagsJSON                 string
+	HostsJSON                string
+	VerifiedAt               string
 	Slug                     sql.NullString
 	SupersedesJSON           string
 	RefsJSON                 string
@@ -57,7 +59,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.slug, d.supersedes_json,
+	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.hosts_json, d.verified_at, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -150,6 +152,8 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.Summary,
 			&row.Source,
 			&row.TagsJSON,
+			&row.HostsJSON,
+			&row.VerifiedAt,
 			&row.Slug,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
@@ -423,6 +427,18 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
 	}
+	hosts, err := normalizeDocumentHosts(document["hosts"], document, "hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	hostsJSON, err := json.Marshal(hosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
+	}
+	verifiedAt, err := normalizeDocumentVerifiedAt(document["verified_at"], document, "verified_at")
+	if err != nil {
+		return nil, nil, err
+	}
 	requestedHandle := strings.TrimSpace(anyStringValue(document["handle"]))
 	if _, exists := document["labels"]; exists {
 		return nil, nil, invalidDocumentRequest("document.labels is not supported")
@@ -580,11 +596,11 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, handle, thread_id, title, summary, source, tags_json, search_text, slug, supersedes_json,
+			id, handle, thread_id, title, summary, source, tags_json, hosts_json, verified_at, search_text, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		documentHandle,
 		nullableString(threadID),
@@ -592,6 +608,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		docSummary,
 		source,
 		string(tagsJSON),
+		string(hostsJSON),
+		verifiedAt,
 		searchText,
 		nullableString(slug),
 		string(supersedesJSON),
@@ -679,6 +697,13 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, string(encodedContent), docSummary, source, tags, threadID); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return nil, nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -701,6 +726,8 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		Summary:         docSummary,
 		Source:          source,
 		TagsJSON:        string(tagsJSON),
+		HostsJSON:       string(hostsJSON),
+		VerifiedAt:      verifiedAt,
 		Slug:            nullableString(slug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -770,7 +797,7 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if patch == nil || len(patch) == 0 {
 		return nil, nil, invalidDocumentRequest("patch is required")
 	}
-	allowedPatch := map[string]struct{}{"summary": {}, "source": {}, "tags": {}, "title": {}}
+	allowedPatch := map[string]struct{}{"summary": {}, "source": {}, "tags": {}, "title": {}, "hosts": {}, "verified_at": {}}
 	for k := range patch {
 		if _, ok := allowedPatch[k]; !ok {
 			return nil, nil, invalidDocumentRequest("unsupported document patch field: " + k)
@@ -791,6 +818,11 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if err != nil {
 		return nil, nil, err
 	}
+	nextHosts, err := decodeStoredJSONList(doc.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextVerifiedAt := strings.TrimSpace(doc.VerifiedAt)
 	if value, exists := patch["title"]; exists {
 		nextTitle = strings.TrimSpace(anyStringValue(value))
 	}
@@ -806,18 +838,36 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 			return nil, nil, err
 		}
 	}
+	if _, exists := patch["hosts"]; exists {
+		nextHosts, err = normalizeDocumentHosts(patch["hosts"], patch, "hosts")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if _, exists := patch["verified_at"]; exists {
+		nextVerifiedAt, err = normalizeDocumentVerifiedAt(patch["verified_at"], patch, "verified_at")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	tagsJSON, err := json.Marshal(nextTags)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
 	}
+	hostsJSON, err := json.Marshal(nextHosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(
 		ctx,
-		`UPDATE documents SET title = ?, summary = ?, source = ?, tags_json = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		`UPDATE documents SET title = ?, summary = ?, source = ?, tags_json = ?, hosts_json = ?, verified_at = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
 		nullableString(nextTitle),
 		nextSummary,
 		nextSource,
 		string(tagsJSON),
+		string(hostsJSON),
+		nextVerifiedAt,
 		now,
 		actorID,
 		documentID,
@@ -832,6 +882,9 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	}
 	if affected == 0 {
 		return nil, nil, ErrConflict
+	}
+	if err := s.rebuildDocumentFTS(ctx, documentID); err != nil {
+		return nil, nil, err
 	}
 	return s.GetDocument(ctx, documentID)
 }
@@ -883,6 +936,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, err
 	}
+	nextHosts, err := decodeStoredJSONList(doc.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextVerifiedAt := strings.TrimSpace(doc.VerifiedAt)
 	nextSupersedes, err := decodeStoredJSONList(doc.SupersedesJSON, "document.supersedes")
 	if err != nil {
 		return nil, nil, err
@@ -925,6 +983,20 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 				return nil, nil, tagErr
 			}
 			nextTags = parsed
+		}
+		if _, exists := documentPatch["hosts"]; exists {
+			parsed, hostErr := normalizeDocumentHosts(documentPatch["hosts"], documentPatch, "hosts")
+			if hostErr != nil {
+				return nil, nil, hostErr
+			}
+			nextHosts = parsed
+		}
+		if _, exists := documentPatch["verified_at"]; exists {
+			parsed, verifiedErr := normalizeDocumentVerifiedAt(documentPatch["verified_at"], documentPatch, "verified_at")
+			if verifiedErr != nil {
+				return nil, nil, verifiedErr
+			}
+			nextVerifiedAt = parsed
 		}
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
@@ -974,6 +1046,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextTagsJSON, err := json.Marshal(nextTags)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	nextHostsJSON, err := json.Marshal(nextHosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
 	}
 	searchText := documentSearchText(nextTitle, nextSummary, nextSource, nextTags, encodedContent, contentType)
 
@@ -1158,6 +1234,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			summary = ?,
 			source = ?,
 			tags_json = ?,
+			hosts_json = ?,
+			verified_at = ?,
 			search_text = ?,
 			slug = ?,
 			supersedes_json = ?,
@@ -1173,6 +1251,8 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nextSummary,
 		nextSource,
 		string(nextTagsJSON),
+		string(nextHostsJSON),
+		nextVerifiedAt,
 		searchText,
 		nullableString(nextSlug),
 		string(supersedesJSON),
@@ -1226,6 +1306,13 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, string(encodedContent), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return nil, nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1246,6 +1333,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Summary:         nextSummary,
+		Source:          nextSource,
+		TagsJSON:        string(nextTagsJSON),
+		HostsJSON:       string(nextHostsJSON),
+		VerifiedAt:      nextVerifiedAt,
 		Slug:            nullableString(nextSlug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
@@ -1783,7 +1874,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, handle, thread_id, title, summary, source, tags_json, slug, supersedes_json,
+		`SELECT id, handle, thread_id, title, summary, source, tags_json, hosts_json, verified_at, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1798,6 +1889,8 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.Summary,
 		&row.Source,
 		&row.TagsJSON,
+		&row.HostsJSON,
+		&row.VerifiedAt,
 		&row.Slug,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
@@ -2005,6 +2098,14 @@ func (r documentRow) toMap() (map[string]any, error) {
 		return nil, err
 	}
 	out["tags"] = tags
+	hosts, err := decodeStoredJSONList(r.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, err
+	}
+	out["hosts"] = hosts
+	if verifiedAt := strings.TrimSpace(r.VerifiedAt); verifiedAt != "" {
+		out["verified_at"] = verifiedAt
+	}
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}

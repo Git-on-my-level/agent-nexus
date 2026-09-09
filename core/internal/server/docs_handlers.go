@@ -967,6 +967,7 @@ func handleSearchDocuments(w http.ResponseWriter, r *http.Request, opts handlerO
 	documents, nextCursor, err := opts.primitiveStore.SearchDocuments(r.Context(), primitives.DocumentSearchFilter{
 		Query:     q,
 		Tag:       strings.TrimSpace(query.Get("tag")),
+		Host:      strings.TrimSpace(query.Get("host")),
 		Knowledge: knowledge,
 		Limit:     limitFilter,
 		Cursor:    strings.TrimSpace(query.Get("cursor")),
@@ -1071,6 +1072,12 @@ func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		if _, has := req.Document["tags"]; has {
 			patch["tags"] = req.Document["tags"]
 		}
+		if _, has := req.Document["hosts"]; has {
+			patch["hosts"] = req.Document["hosts"]
+		}
+		if _, has := req.Document["verified_at"]; has {
+			patch["verified_at"] = req.Document["verified_at"]
+		}
 		document, nextRevision, err := opts.primitiveStore.UpdateDocument(r.Context(), actorID, resolved.ID, patch, baseRevision, req.Content, req.ContentType, refs, nil)
 		if err != nil {
 			if writePrimitiveQuotaViolationError(w, err) {
@@ -1170,12 +1177,13 @@ func handleCreateDocumentComment(w http.ResponseWriter, r *http.Request, opts ha
 		ActorID  string `json:"actor_id"`
 		Text     string `json:"text"`
 		ParentID string `json:"parent_id"`
+		ReplyTo  string `json:"reply_to"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if parentID == "" {
-		parentID = req.ParentID
+		parentID = firstNonEmptyString(req.ReplyTo, req.ParentID)
 	}
 	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
 	if !ok {
@@ -1195,6 +1203,73 @@ func handleCreateDocumentComment(w http.ResponseWriter, r *http.Request, opts ha
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"comment": comment})
+}
+
+func handleUpdateDocumentComment(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, commentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Text    string `json:"text"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	comment, err := opts.primitiveStore.UpdateDocumentComment(r.Context(), actorID, documentID, commentID, req.Text)
+	if err != nil {
+		writeDocumentCommentMutationError(w, err, "failed to update document comment")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comment": comment})
+}
+
+func handleDeleteDocumentComment(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, commentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, "")
+	if !ok {
+		return
+	}
+	comment, err := opts.primitiveStore.DeleteDocumentComment(r.Context(), actorID, documentID, commentID)
+	if err != nil {
+		writeDocumentCommentMutationError(w, err, "failed to delete document comment")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comment": comment})
+}
+
+func writeDocumentCommentMutationError(w http.ResponseWriter, err error, fallback string) {
+	if errors.Is(err, primitives.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "comment not found")
+		return
+	}
+	if errors.Is(err, primitives.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden", "only the comment author may change this comment")
+		return
+	}
+	if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "internal_error", fallback)
 }
 
 func optionalRefs(raw any) ([]string, error) {

@@ -123,8 +123,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | derived.rebuild | derived | POST | /derived/rebuild | gated_admin | projection rebuild is maintenance/ops |
 | docs.archive | docs | POST | /docs/{document_id}/archive | exposed_write | ordinary reversible document lifecycle write |
 | docs.comments.create | docs | POST | /docs/{document_id}/comments | exposed_write | ordinary document comment write for cross-host knowledge |
+| docs.comments.delete | docs | DELETE | /docs/{document_id}/comments/{comment_id} | exposed_write | author delete of a document comment |
 | docs.comments.list | docs | GET | /docs/{document_id}/comments | exposed_read | document comment thread read |
 | docs.comments.reply | docs | POST | /docs/{document_id}/comments/{comment_id}/replies | exposed_write | ordinary document comment reply write |
+| docs.comments.update | docs | PATCH | /docs/{document_id}/comments/{comment_id} | exposed_write | author edit of a document comment |
 | docs.create | docs | POST | /docs | exposed_write | ordinary document creation |
 | docs.get | docs | GET | /docs/{document_id} | exposed_read | document read |
 | docs.list | docs | GET | /docs | exposed_read | document inventory read |

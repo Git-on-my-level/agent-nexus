@@ -2,6 +2,7 @@ package primitives_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -23,16 +24,25 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 	ctx := context.Background()
 
 	knowledge, _, err := store.CreateDocument(ctx, "actor-a", map[string]any{
-		"handle": "kb-shared-runbook",
-		"title":  "Lane docs knowledge runbook",
-		"source": "https://example.invalid/kb/runbook.md",
-		"tags":   []string{"knowledge", "ops"},
+		"handle":      "kb-shared-runbook",
+		"title":       "Lane docs knowledge runbook",
+		"source":      "https://example.invalid/kb/runbook.md",
+		"tags":        []string{"knowledge", "ops"},
+		"hosts":       []string{"m4-air"},
+		"verified_at": "2026-09-08T12:00:00Z",
 	}, "body token alphawhiz lives only in the document body", "text", nil)
 	if err != nil {
 		t.Fatalf("create knowledge document: %v", err)
 	}
-	if got := strings.TrimSpace(anyString(knowledge["source"])); got != "https://example.invalid/kb/runbook.md" {
-		t.Fatalf("source roundtrip: got %q", got)
+	if strings.TrimSpace(anyString(knowledge["source"])) != "https://example.invalid/kb/runbook.md" {
+		t.Fatalf("source roundtrip: got %q", knowledge["source"])
+	}
+	hosts, _ := knowledge["hosts"].([]string)
+	if !containsString(hosts, "m4-air") {
+		t.Fatalf("expected hosts, got %#v", knowledge["hosts"])
+	}
+	if strings.TrimSpace(anyString(knowledge["verified_at"])) == "" {
+		t.Fatalf("verified_at missing: %#v", knowledge)
 	}
 	tags, _ := knowledge["tags"].([]string)
 	if !containsString(tags, "knowledge") {
@@ -94,6 +104,26 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 	if strings.TrimSpace(anyString(reply["parent_id"])) != commentID {
 		t.Fatalf("reply parent_id: %#v", reply)
 	}
+	if strings.TrimSpace(anyString(reply["reply_to"])) == "" {
+		t.Fatalf("reply_to missing: %#v", reply)
+	}
+	if strings.TrimSpace(anyString(root["ref"])) == "" {
+		t.Fatalf("comment missing stable ref: %#v", root)
+	}
+
+	edited, err := store.UpdateDocumentComment(ctx, "actor-b", docID, commentID, "edited token gammawhiz")
+	if err != nil {
+		t.Fatalf("edit own comment: %v", err)
+	}
+	if strings.TrimSpace(anyString(edited["body"])) != "edited token gammawhiz" {
+		t.Fatalf("edited body: %#v", edited)
+	}
+	if strings.TrimSpace(anyString(edited["ref"])) != strings.TrimSpace(anyString(root["ref"])) {
+		t.Fatalf("edit changed comment ref: %#v vs %#v", edited, root)
+	}
+	if _, err := store.UpdateDocumentComment(ctx, "actor-a", docID, commentID, "should fail"); !errors.Is(err, primitives.ErrForbidden) {
+		t.Fatalf("expected forbidden edit, got %v", err)
+	}
 
 	comments, _, err := store.ListDocumentComments(ctx, docID, nil, "")
 	if err != nil {
@@ -103,19 +133,36 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		t.Fatalf("expected comment thread, got %#v", comments)
 	}
 
-	commentHits, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "betawhiz"})
+	hostHits, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "alphawhiz", Host: "m4-air"})
 	if err != nil {
-		t.Fatalf("search comments: %v", err)
+		t.Fatalf("host search: %v", err)
+	}
+	if !searchContainsHandle(hostHits, "kb-shared-runbook") {
+		t.Fatalf("expected host filter hit, got %#v", handlesOf(hostHits))
+	}
+	missHost, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "alphawhiz", Host: "proxmox"})
+	if err != nil {
+		t.Fatalf("host miss search: %v", err)
+	}
+	if searchContainsHandle(missHost, "kb-shared-runbook") {
+		t.Fatalf("host filter leaked other host: %#v", handlesOf(missHost))
+	}
+
+	commentHits, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "gammawhiz"})
+	if err != nil {
+		t.Fatalf("search edited comments: %v", err)
 	}
 	if !searchContainsHandle(commentHits, "kb-shared-runbook") {
-		t.Fatalf("expected comment text hit, got %#v", handlesOf(commentHits))
+		t.Fatalf("expected edited comment text hit, got %#v", handlesOf(commentHits))
 	}
 
 	head := strings.TrimSpace(anyString(knowledge["head_revision_id"]))
 	updated, nextRev, err := store.UpdateDocument(ctx, "actor-a", docID, map[string]any{
-		"title":  "Lane docs knowledge runbook",
-		"source": "https://example.invalid/kb/runbook.md",
-		"tags":   []string{"knowledge", "ops"},
+		"title":       "Lane docs knowledge runbook",
+		"source":      "https://example.invalid/kb/runbook.md",
+		"tags":        []string{"knowledge", "ops"},
+		"hosts":       []string{"m4-air"},
+		"verified_at": "2026-09-08T12:00:00Z",
 	}, head, "updated body still has alphawhiz", "text", nil, nil)
 	if err != nil {
 		t.Fatalf("put-style update: %v", err)
@@ -125,6 +172,30 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 	}
 	if strings.TrimSpace(anyString(nextRev["revision_id"])) == head {
 		t.Fatalf("expected new revision after put-style update")
+	}
+	afterRev, _, err := store.ListDocumentComments(ctx, docID, nil, "")
+	if err != nil {
+		t.Fatalf("list comments after revision: %v", err)
+	}
+	if len(afterRev) < 2 {
+		t.Fatalf("comments did not survive document revision: %#v", afterRev)
+	}
+
+	deleted, err := store.DeleteDocumentComment(ctx, "actor-b", docID, commentID)
+	if err != nil {
+		t.Fatalf("delete own comment: %v", err)
+	}
+	if strings.TrimSpace(anyString(deleted["id"])) != commentID {
+		t.Fatalf("deleted comment id: %#v", deleted)
+	}
+	remaining, _, err := store.ListDocumentComments(ctx, docID, nil, "")
+	if err != nil {
+		t.Fatalf("list after delete: %v", err)
+	}
+	for _, row := range remaining {
+		if strings.TrimSpace(anyString(row["id"])) == commentID {
+			t.Fatalf("deleted comment still listed: %#v", remaining)
+		}
 	}
 	_ = other
 }
