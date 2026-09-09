@@ -241,7 +241,12 @@
   let initials = $derived(shellIdentity.initials);
   let shellContentConfig = $derived(getShellContentConfig(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
-  const shellNavForTitle = [...navigationItems, ...settingsNavItems];
+  const shellNavForTitle = [
+    ...navigationItems,
+    // PM is an action, not a nav item; it still names its page's title.
+    { label: "PM", href: "/pm" },
+    ...settingsNavItems,
+  ];
 
   let pageTitle = $derived(() => {
     const navItem = shellNavForTitle.find(
@@ -575,8 +580,6 @@
         return "tasks";
       case "/docs":
         return "docs";
-      case "/pm":
-        return "pm";
       case "/access":
         return "access";
       default:
@@ -771,6 +774,28 @@
             <span>Search</span>
             <kbd class="shell-search-kbd">⌘K</kbd>
           </button>
+          <a
+            class="shell-search-trigger"
+            href={workspaceHref("/pm")}
+            data-tour="pm"
+            aria-label="Ask PM"
+          >
+            <svg
+              class="shell-search-trigger-icon"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.75"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8.25 9h7.5m-7.5 4.5h4.5m-9.75 7.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v11.25A2.25 2.25 0 004.5 19.5z"
+              />
+            </svg>
+            <span>Ask PM</span>
+          </a>
         </div>
 
         <div class="shell-sidebar-main">
@@ -1091,6 +1116,26 @@
         </svg>
         <span>Search</span>
       </button>
+      <a
+        class="shell-bottom-nav-item"
+        href={workspaceHref("/pm")}
+        aria-current={isActive("/pm") ? "page" : undefined}
+      >
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.75"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8.25 9h7.5m-7.5 4.5h4.5m-9.75 7.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v11.25A2.25 2.25 0 004.5 19.5z"
+          />
+        </svg>
+        <span>Ask PM</span>
+      </a>
       <a
         class="shell-bottom-nav-item {moreBottomNavActive
           ? 'shell-bottom-nav-item--active'

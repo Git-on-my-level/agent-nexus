@@ -80,7 +80,39 @@ function hoursAgo(hours) {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
 
-test("inbox triage shows urgency summary and responding removes an item", async ({
+/** Mocks the PM-adjacent surfaces the unified Inbox loads alongside inbox items. */
+async function mockPmSurfaces(page) {
+  await page.route(/\/pm\/decisions(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [] }),
+    });
+  });
+  await page.route(/\/pm\/actions(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [] }),
+    });
+  });
+  await page.route(/\/work(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ work: [] }),
+    });
+  });
+  await page.route(/\/home\/unread(\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ groups: [] }),
+    });
+  });
+}
+
+test("inbox triage lists actionable rows and responding removes an item", async ({
   page,
 }) => {
   const actorId = "actor-e2e";
@@ -225,21 +257,26 @@ test("inbox triage shows urgency summary and responding removes an item", async 
     });
   });
 
+  await mockPmSurfaces(page);
+
   await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();
-  await expect(page.getByTestId("inbox-triage-header")).toBeVisible();
-  await expect(page.getByTestId("urgency-summary-immediate")).toBeVisible();
-  await expect(page.getByTestId("urgency-summary-high")).toBeVisible();
-  await expect(page.getByTestId("urgency-summary-normal")).toBeVisible();
 
-  const targetCard = page.getByTestId("inbox-card-inbox-001");
-  await expect(targetCard).toBeVisible();
+  const targetRow = page.getByTestId("inbox-row-inbox-001");
+  await expect(targetRow).toBeVisible();
 
-  await targetCard.click();
+  await targetRow.click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Approve onboarding exception handling",
+    }),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "Open item" }).click();
   await expect(
     page.getByRole("heading", {
       name: "Approve onboarding exception handling",
@@ -249,7 +286,9 @@ test("inbox triage shows urgency summary and responding removes an item", async 
   await page.getByLabel("Your response").fill("Approved.");
   await page.getByRole("button", { name: "Send response" }).click();
   await expect(page).toHaveURL(/responded=/);
-  await expect(targetCard).toHaveCount(0);
+
+  await page.goto("/o/local/w/local/inbox");
+  await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
 });
 
 test("inbox loads after hard refresh when workspace bootstrap is delayed", async ({
@@ -317,13 +356,15 @@ test("inbox loads after hard refresh when workspace bootstrap is delayed", async
     });
   });
 
+  await mockPmSurfaces(page);
+
   await page.goto("/o/local/w/local/inbox");
 
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
-  await expect(page.getByTestId("inbox-card-inbox-refresh-001")).toBeVisible();
+  await expect(page.getByTestId("inbox-row-inbox-refresh-001")).toBeVisible();
 });
 
-test("inbox urgency filters reduce visible cards", async ({ page }) => {
+test("inbox mailbox filters reduce visible rows", async ({ page }) => {
   const actorId = "actor-e2e";
   let inboxRequestCount = 0;
   const inboxItems = [
@@ -345,16 +386,17 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
       subject_ref: "thread:thread-onboarding",
       related_refs: ["event:evt-1001"],
       response_proposals: ["Escalate.", "Wait."],
-      source_event_time: hoursAgo(9), // 9h old → 84+6=90 → immediate
+      source_event_time: hoursAgo(9),
     },
     {
       id: "inbox-003",
       kind: "review",
-      title: "Needs attention",
+      title: "Resolved during triage",
       thread_id: "thread-incident-42",
       subject_ref: "thread:thread-incident-42",
       related_refs: ["thread:thread-incident-42"],
-      response_proposals: ["Approve.", "Reject."],
+      response_proposals: [],
+      responded_at: "2026-03-04T00:00:00.000Z",
       source_event_time: hoursAgo(1),
     },
   ];
@@ -406,19 +448,18 @@ test("inbox urgency filters reduce visible cards", async ({ page }) => {
     });
   });
 
+  await mockPmSurfaces(page);
+
   await page.goto("/o/local/w/local/inbox");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
-  await expect(page.getByTestId("inbox-card-inbox-001")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-002")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-003")).toBeVisible();
+  await expect(page.getByTestId("inbox-row-inbox-001")).toBeVisible();
+  await expect(page.getByTestId("inbox-row-inbox-002")).toBeVisible();
+  await expect(page.getByTestId("inbox-row-inbox-003")).toHaveCount(0);
 
-  await page.getByTestId("inbox-filters-toggle").click();
-  const urgencySelect = page.getByTestId("inbox-urgency-filter");
-
-  await urgencySelect.selectOption("immediate");
-  await expect(page.getByTestId("inbox-card-inbox-002")).toBeVisible();
-  await expect(page.getByTestId("inbox-card-inbox-001")).toHaveCount(0);
-  await expect(page.getByTestId("inbox-card-inbox-003")).toHaveCount(0);
+  await page.getByRole("link", { name: "Handled" }).click();
+  await expect(page.getByTestId("inbox-row-inbox-003")).toBeVisible();
+  await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
+  await expect(page.getByTestId("inbox-row-inbox-002")).toHaveCount(0);
 });
 
 test("completed inbox tab renders history rows", async ({ page }) => {
@@ -488,10 +529,12 @@ test("completed inbox tab renders history rows", async ({ page }) => {
     });
   });
 
-  await page.goto("/o/local/w/local/inbox?status=completed");
+  await mockPmSurfaces(page);
+
+  await page.goto("/o/local/w/local/inbox?status=completed&mailbox=handled");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   await expect(
-    page.getByTestId("inbox-completed-card-completed:event-done-1"),
+    page.getByTestId("inbox-row-completed:event-done-1"),
   ).toBeVisible();
 });

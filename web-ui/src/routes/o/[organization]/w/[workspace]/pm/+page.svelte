@@ -6,11 +6,16 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatTimestamp } from "$lib/formatDate";
-  import { errorMessage, receiptSignal } from "$lib/pm/presentation.js";
+  import {
+    decisionTitle,
+    errorMessage,
+    receiptSignal,
+  } from "$lib/pm/presentation.js";
   import { decisionIdsFromTurn } from "$lib/pm/turnDecisions.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
 
   let conversations = $state([]),
@@ -387,7 +392,7 @@
     <p class="text-micro text-fg-muted">
       About <a
         class="ui-prose-link font-mono"
-        href={workspaceHref(`/work/${encodeURIComponent(activeWorkRef)}`)}
+        href={workspaceHref(`/tasks/${encodeURIComponent(activeWorkRef)}`)}
         >{activeWorkRef}</a
       >
     </p>
@@ -483,8 +488,9 @@
                     {#if ref.startsWith("card:") || ref.startsWith("work:")}
                       <a
                         class="ui-prose-link"
-                        href={workspaceHref(`/work/${encodeURIComponent(ref)}`)}
-                        >{ref}</a
+                        href={workspaceHref(
+                          `/tasks/${encodeURIComponent(ref)}`,
+                        )}>{ref}</a
                       >
                     {:else}{ref}{/if}
                   </li>
@@ -508,7 +514,9 @@
                       class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1.5"
                     >
                       <span class="min-w-0 flex-1 break-words text-meta text-fg"
-                        >{record?.instruction || `decision:${id}`}</span
+                        >{record
+                          ? decisionTitle(record)
+                          : `decision:${id}`}</span
                       >
                       {#if record?.work_ref}
                         <a
@@ -520,9 +528,7 @@
                       {/if}
                       {#if record}
                         {@const signal = receiptSignal(record.status)}
-                        <SignalBadge tone={signal.tone}
-                          >{signal.label}</SignalBadge
-                        >
+                        <ReceiptSignal {signal} />
                         {#if record.status === "awaiting_answer"}
                           <a
                             class="ui-prose-link text-micro"

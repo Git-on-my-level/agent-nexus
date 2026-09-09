@@ -6,7 +6,11 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatTimestamp } from "$lib/formatDate";
-  import { errorMessage, taskDetailPath } from "$lib/pm/presentation.js";
+  import {
+    errorMessage,
+    taskDetailPath,
+    workKey,
+  } from "$lib/pm/presentation.js";
   import {
     INBOX_MAILBOXES,
     buildInboxRows,
@@ -17,7 +21,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
 
   let decisions = $state([]);
@@ -65,6 +69,14 @@
   );
   let selectedDecision = $derived(
     selected?.kind === "decision" ? selected.item : null,
+  );
+  let selectedTaskTitle = $derived(
+    selectedDecision?.work_ref
+      ? String(
+          work.find((item) => workKey(item) === selectedDecision.work_ref)
+            ?.title || "",
+        )
+      : "",
   );
   let action = $derived(
     actions.find(
@@ -404,9 +416,7 @@
                     <time datetime={row.time}>{formatTimestamp(row.time)}</time>
                   {/if}
                   <span class="ml-auto">
-                    <SignalBadge tone={badge.tone || "neutral"}
-                      >{badge.label}</SignalBadge
-                    >
+                    <ReceiptSignal signal={badge} quiet />
                   </span>
                 </div>
               </a>
@@ -453,6 +463,7 @@
         {#if selected?.kind === "decision"}
           <DecisionPanel
             selected={selectedDecision}
+            taskTitle={selectedTaskTitle}
             {action}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),

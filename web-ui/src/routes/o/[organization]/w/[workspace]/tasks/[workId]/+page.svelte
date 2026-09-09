@@ -10,14 +10,18 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import EvidenceTimes from "$lib/components/pm/EvidenceTimes.svelte";
   import {
+    decisionPayload,
+    decisionTitle,
     safeSourceHref,
     sourceLabel,
     workFreshness,
     workKey,
     label,
     errorMessage,
+    receiptSignal,
   } from "$lib/pm/presentation.js";
   let work = $state(null),
     observations = $state([]),
@@ -91,14 +95,6 @@
     } finally {
       if (ticket === requestId) decisionsLoading = false;
     }
-  }
-  function decisionSignal(status) {
-    if (status === "awaiting_answer")
-      return { tone: "warn", label: "Needs you" };
-    if (status === "answered") return { tone: "ok", label: "Answered" };
-    if (status === "superseded")
-      return { tone: "neutral", label: "Superseded" };
-    return { tone: "neutral", label: status || "Unknown status" };
   }
   async function loadMore() {
     if (loading) return;
@@ -386,15 +382,22 @@
             class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
           >
             {#each decisions as decision (decision.id)}
-              {@const decisionBadge = decisionSignal(decision.status)}
+              {@const decisionBadge = receiptSignal(decision.status)}
               <li class="py-3">
-                <p class="break-words text-meta text-fg">
-                  {decision.instruction}
+                <p class="whitespace-pre-wrap break-words text-meta text-fg">
+                  {decisionTitle(decision, work?.title || "")}
                 </p>
+                {#if decisionPayload(decision)}
+                  <details class="mt-1 text-micro text-fg-muted">
+                    <summary class="cursor-pointer">Proposed payload</summary>
+                    <pre
+                      class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
+                        decision,
+                      )}</pre>
+                  </details>
+                {/if}
                 <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                  <SignalBadge tone={decisionBadge.tone}
-                    >{decisionBadge.label}</SignalBadge
-                  ><time
+                  <ReceiptSignal signal={decisionBadge} /><time
                     class="text-micro text-fg-muted"
                     datetime={decision.created_at}
                     title={formatAbsoluteDateTime(decision.created_at)}

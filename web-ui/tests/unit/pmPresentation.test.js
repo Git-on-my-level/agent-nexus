@@ -5,6 +5,8 @@ import {
   receiptSignal,
   phaseGroups,
   filterWork,
+  decisionTitle,
+  decisionPayload,
 } from "../../src/lib/pm/presentation.js";
 
 describe("PM evidence presentation", () => {
@@ -123,5 +125,29 @@ describe("PM evidence presentation", () => {
     expect(filterWork(records, { q: "two" }).map((item) => item.id)).toEqual([
       "b",
     ]);
+  });
+  it("never titles a decision with a JSON blob", () => {
+    expect(
+      decisionTitle({
+        instruction: '{"next_action":"Ship the release","scope":"repo"}',
+      }),
+    ).toBe("Ship the release");
+    expect(decisionTitle({ instruction: '{"title":"Cut 2.1","x":1}' })).toBe(
+      "Cut 2.1",
+    );
+    expect(
+      decisionTitle({ instruction: '{"work_ref_only":true}' }, "Release"),
+    ).toBe("Release");
+    expect(decisionTitle({ instruction: "[1,2]" }, "Release")).toBe("Release");
+    expect(decisionTitle({ instruction: "not json { still plain" })).toBe(
+      "not json { still plain",
+    );
+    expect(decisionTitle({}, "Release")).toBe("Release");
+    expect(decisionTitle({})).toBe("Decision");
+  });
+  it("exposes structured instructions as payloads, plain text stays a title", () => {
+    expect(decisionPayload({ instruction: '{"a":1}' })).toBe('{\n  "a": 1\n}');
+    expect(decisionPayload({ instruction: "plain text" })).toBe("");
+    expect(decisionPayload({})).toBe("");
   });
 });

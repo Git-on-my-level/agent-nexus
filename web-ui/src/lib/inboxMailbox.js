@@ -1,5 +1,6 @@
 import { getInboxSubjectLabel, enrichInboxItem } from "./inboxUtils.js";
 import {
+  decisionTitle,
   receiptSignal,
   sourceLabel,
   workFreshness,
@@ -83,11 +84,16 @@ export function buildInboxRows({
   now = Date.now(),
 } = {}) {
   const rows = [];
+  const taskTitles = new Map(
+    work
+      .filter((item) => item && workKey(item))
+      .map((item) => [workKey(item), String(item.title || "").trim()]),
+  );
   for (const item of decisions) {
     rows.push({
       id: `decision:${item.id}`,
       kind: "decision",
-      title: item.instruction || "Decision",
+      title: decisionTitle(item, taskTitles.get(item.work_ref) || ""),
       source: item.work_ref || "",
       time: item.updated_at || item.created_at,
       status: item.status,

@@ -112,6 +112,65 @@ export function receiptSignal(state) {
   };
 }
 
+const DECISION_SUMMARY_KEYS = [
+  "summary",
+  "title",
+  "question",
+  "next_action",
+  "action",
+  "instruction",
+  "message",
+  "reason",
+];
+
+function parseStructuredInstruction(text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+  try {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Human title for a decision. PM harnesses sometimes file the instruction as
+ * a JSON payload (`{"next_action":"…"}`); a JSON blob is never a title —
+ * prefer an instruction summary field, then the task title, then a generic.
+ */
+export function decisionTitle(item, taskTitle = "") {
+  const instruction = String(item?.instruction ?? "").trim();
+  const structured = parseStructuredInstruction(instruction);
+  if (structured) {
+    if (!Array.isArray(structured)) {
+      for (const key of DECISION_SUMMARY_KEYS) {
+        const value = structured[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+      for (const value of Object.values(structured)) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+    }
+    return taskTitle || "Proposed decision";
+  }
+  return instruction || taskTitle || "Decision";
+}
+
+/**
+ * Structured instruction payload to show under a disclosure. Empty for
+ * plain-text instructions — the text itself is the title, not a payload.
+ */
+export function decisionPayload(item) {
+  const structured = parseStructuredInstruction(item?.instruction);
+  if (!structured) return "";
+  try {
+    return JSON.stringify(structured, null, 2);
+  } catch {
+    return String(item?.instruction ?? "").trim();
+  }
+}
+
 export function isNexusOwned(work) {
   return String(work?.source?.authority ?? "").toLowerCase() === "nexus";
 }
