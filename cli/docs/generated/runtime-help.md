@@ -213,6 +213,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
+- `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
@@ -7683,6 +7684,32 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm ask ... ; anx --json pm ask ... ; anx pm ask ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm channels doctor`
+
+Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+
+```text
+Local Help: pm channels doctor
+
+- Kind: `local helper`
+- Summary: Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- Composition: Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.
+- JSON body: `checks`, `ok`
+- Examples:
+  - `anx pm channels doctor`
+  - `anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord`
+
+Flags:
+  --telegram-webhook-url <url> Telegram ingress URL to probe with GET (fake or core). Does not POST an update.
+  --discord-webhook-url <url>  Discord interactions URL to probe with GET (fake or core). Does not POST an interaction.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

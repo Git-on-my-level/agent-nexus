@@ -491,9 +491,11 @@ func main() {
 		TelegramWebhookSecret:   envString("ANX_PM_TELEGRAM_WEBHOOK_SECRET", ""),
 		TelegramBotID:           envString("ANX_PM_TELEGRAM_BOT_ID", ""),
 		TelegramBotToken:        envString("ANX_PM_TELEGRAM_BOT_TOKEN", ""),
+		TelegramAPIBase:         envString("ANX_PM_TELEGRAM_API_BASE", ""),
 		DiscordPublicKeyHex:     envString("ANX_PM_DISCORD_PUBLIC_KEY", ""),
 		DiscordApplicationID:    envString("ANX_PM_DISCORD_APPLICATION_ID", ""),
 		DiscordBotToken:         envString("ANX_PM_DISCORD_BOT_TOKEN", ""),
+		DiscordAPIBase:          envString("ANX_PM_DISCORD_API_BASE", ""),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)

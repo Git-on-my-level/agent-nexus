@@ -106,6 +106,16 @@ func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, curs
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
 	return recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
 }
+func (s *Service) BindingPage(ctx context.Context, p Principal) (Page[Binding], error) {
+	if err := s.authorize(ctx, p, "pm.bind", ""); err != nil {
+		return Page[Binding]{}, err
+	}
+	items, err := listRecords[Binding](ctx, s.store, "binding", p.WorkspaceID, "", "")
+	if err != nil {
+		return Page[Binding]{}, err
+	}
+	return Page[Binding]{Items: items}, nil
+}
 
 // ConversationHistory reads newest history by default, in chronological display
 // order, with a cursor for older turns. A long-lived chat cannot lose visibility

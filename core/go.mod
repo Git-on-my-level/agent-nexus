@@ -3,6 +3,7 @@ module agent-nexus-core
 go 1.23.0
 
 require (
+	agent-nexus-test-channels v0.0.0
 	github.com/aws/aws-sdk-go-v2/config v1.31.21
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.25
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
@@ -46,3 +47,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace agent-nexus-test-channels => ../tests/channels
