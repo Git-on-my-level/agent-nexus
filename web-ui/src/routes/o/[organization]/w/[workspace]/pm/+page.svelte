@@ -14,10 +14,13 @@
   } from "$lib/pm/presentation.js";
   import { decisionIdsFromTurn } from "$lib/pm/turnDecisions.js";
   import {
+    candidateDecisionIdsFromTurn,
     clockTime,
     evidenceRefsForTurn,
     hasPendingTurn,
     isNearBottom,
+    linkifyDecisionIds,
+    proposedDecisionIds,
     startsTimeGroup,
     turnState,
   } from "$lib/pm/chatModel.js";
@@ -67,6 +70,11 @@
   let turnDecisionIds = $derived(
     turns.flatMap((turn) => decisionIdsFromTurn(turn)),
   );
+  // Ids the PM names in prose without a `decision:` prefix. They are guesses
+  // until core answers for them, so a failed lookup is silent.
+  let turnCandidateDecisionIds = $derived(
+    turns.flatMap((turn) => candidateDecisionIdsFromTurn(turn)),
+  );
   let waiting = $derived(hasPendingTurn(turns, now));
   let showJump = $derived(Boolean(turns.length) && !atBottom);
 
@@ -104,6 +112,9 @@
   $effect(() => {
     void loadDecisionRecords(turnDecisionIds);
   });
+  $effect(() => {
+    void loadDecisionRecords(turnCandidateDecisionIds, true);
+  });
   // A pending turn shows its own elapsed wait; nothing else needs a clock.
   $effect(() => {
     if (!waiting) return;
@@ -123,11 +134,17 @@
     if (measured > 0) element.style.height = `${Math.min(measured, 200)}px`;
   });
   // Stick to the newest turn while the reader is already at the bottom. Only a
-  // new turn (or an answer arriving on one) may move the view — the reader's own
-  // scroll position is read untracked so scrolling never re-pins them.
+  // new turn (an answer arriving on one, or its proposals resolving underneath
+  // it) may move the view — the reader's own scroll position is read untracked
+  // so scrolling never re-pins them.
   $effect(() => {
     const signature = turns
-      .map((turn) => `${turn.id}:${turn.response ? 1 : 0}`)
+      .map(
+        (turn) =>
+          `${turn.id}:${turn.response ? 1 : 0}:${
+            proposedDecisionIds(turn, decisionRecords).length
+          }`,
+      )
       .join("|");
     const element = threadElement;
     if (!element || !signature) return;
@@ -214,7 +231,7 @@
       loadingOlder = false;
     }
   }
-  async function loadDecisionRecords(ids) {
+  async function loadDecisionRecords(ids, speculative = false) {
     const ticket = decisionFetch;
     const missing = ids.filter(
       (id) => id && !(id in decisionRecords) && !pendingDecisions.has(id),
@@ -229,7 +246,9 @@
         } catch (err) {
           if (ticket === decisionFetch) {
             decisionRecords[id] = null;
-            decisionError = errorMessage(err);
+            // A bare id in prose need not be a decision this actor can read;
+            // that lookup failing is expected and says nothing to the reader.
+            if (!speculative) decisionError = errorMessage(err);
           }
         } finally {
           pendingDecisions.delete(id);
@@ -373,6 +392,18 @@
         isExternal: false,
       };
     return resolved;
+  }
+  function decisionInboxHref(id) {
+    return workspaceHref(`/inbox?item=decision:${encodeURIComponent(id)}`);
+  }
+  // The PM names its proposals as bare ids mid-sentence. Every id that resolved
+  // to a decision becomes a short link to the Inbox item that answers it; an id
+  // that did not resolve stays as written.
+  function answerBody(response, proposed) {
+    const answerable = new Set(proposed);
+    return linkifyDecisionIds(response, (id) =>
+      answerable.has(id) ? decisionInboxHref(id) : "",
+    );
   }
   const prompts = [
     "What needs my decision?",
@@ -553,7 +584,7 @@
       >
         {#each turns as turn, index (turn.id)}
           {@const view = turnState(turn, now)}
-          {@const proposed = decisionIdsFromTurn(turn)}
+          {@const proposed = proposedDecisionIds(turn, decisionRecords)}
           {@const evidence = evidenceRefsForTurn(turn)}
           {@const clock = clockTime(turn.created_at)}
           {@const grouped = startsTimeGroup(turn, turns[index - 1]) && clock}
@@ -578,7 +609,7 @@
             <div class="pm-answer">
               {#if view.kind === "answered"}
                 <MarkdownRenderer
-                  source={turn.response}
+                  source={answerBody(turn.response, proposed)}
                   class="pm-response text-meta text-fg"
                 />
               {:else if view.kind === "pending"}
@@ -650,14 +681,17 @@
                         class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1.5"
                       >
                         <span
-                          class="min-w-0 flex-1 break-words text-meta text-fg"
+                          class="line-clamp-2 min-w-0 flex-1 basis-80 break-words text-meta text-fg"
+                          title={record
+                            ? decisionTitle(record)
+                            : `decision:${id}`}
                           >{record
                             ? decisionTitle(record)
                             : `decision:${id}`}</span
                         >
                         {#if record?.work_ref}
                           <a
-                            class="font-mono text-micro text-fg-muted hover:text-accent-text"
+                            class="min-w-0 truncate font-mono text-micro text-fg-muted hover:text-accent-text"
                             href={workspaceHref(
                               `/tasks/${encodeURIComponent(record.work_ref)}`,
                             )}>{record.work_ref}</a
@@ -669,9 +703,7 @@
                           {#if record.status === "awaiting_answer"}
                             <a
                               class="ui-prose-link text-micro"
-                              href={workspaceHref(
-                                `/inbox?item=decision:${encodeURIComponent(id)}`,
-                              )}>Answer</a
+                              href={decisionInboxHref(id)}>Answer</a
                             >
                           {/if}
                         {:else if record === null}
@@ -911,6 +943,25 @@
     background: var(--bg-soft);
     padding: 0.05em 0.3em;
     border-radius: 3px;
+  }
+  /* Inline chip for a decision id the PM named mid-sentence. Markdown carries
+     no class, so the Inbox href is the hook. */
+  :global(.pm-response a[href*="?item=decision:"]) {
+    display: inline-block;
+    padding: 0 5px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--accent-text);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+    text-decoration: none;
+    vertical-align: baseline;
+  }
+  :global(.pm-response a[href*="?item=decision:"]:hover) {
+    border-color: var(--line-strong);
+    text-decoration: none;
   }
 
   .pm-status {
