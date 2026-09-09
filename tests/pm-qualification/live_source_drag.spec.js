@@ -210,6 +210,7 @@ test("source-owned board drag proposes a decision and does not mutate the source
 
   await page.goto(
     `/o/local/w/local/inbox?mailbox=needs-you&item=decision:${encodeURIComponent(matching[0].id)}`,
+    { waitUntil: "domcontentloaded" },
   );
   await expect(
     page.locator(`[data-inbox-row="decision:${matching[0].id}"]`),

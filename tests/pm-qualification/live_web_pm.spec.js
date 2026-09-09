@@ -55,11 +55,40 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   expect(session.ok(), `dev session failed: ${await session.text()}`).toBeTruthy();
 
   await page.goto("/o/local/w/local/pm");
-  const navLabels = (await page.locator("nav a").allInnerTexts()).map((text) =>
-    text.replace(/\s+/g, " ").trim(),
+  await expect(page.getByRole("link", { name: "Ask PM" }).first()).toBeVisible({
+    timeout: 30_000,
+  });
+  const primaryNav = page.getByRole("navigation", { name: "Primary", exact: true });
+  const navLabels = await primaryNav.locator("a").evaluateAll((nodes) =>
+    nodes.map((node) => (node.getAttribute("aria-label") || "").trim()),
   );
-  writeEvidence("primary-nav.local.json", { navLabels });
-  await expect(page.getByRole("link", { name: "PM", exact: true })).toBeVisible();
+  const primaryHrefs = await primaryNav.locator("a").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("href") || ""),
+  );
+  const bottomNav = page.getByRole("navigation", { name: "Primary navigation" });
+  const bottomLabels = await bottomNav.locator("a, button").evaluateAll((nodes) =>
+    nodes.map((node) =>
+      (node.getAttribute("aria-label") || node.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    ),
+  );
+  writeEvidence("primary-nav.local.json", {
+    navLabels,
+    primaryHrefs,
+    bottomLabels,
+  });
+  expect(
+    navLabels,
+    `sidebar primary nav must be Inbox, Tasks, Docs: ${JSON.stringify(navLabels)}`,
+  ).toEqual(["Inbox", "Tasks", "Docs"]);
+  await expect(primaryNav.getByRole("link", { name: "PM", exact: true })).toHaveCount(
+    0,
+  );
+  expect(
+    primaryHrefs.some((href) => href.includes("/pm")),
+    `sidebar primary still links /pm: ${JSON.stringify(primaryHrefs)}`,
+  ).toBeFalsy();
   await expect(page.locator("#pm-message")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: prompt, exact: true }).click();
   await expect(page.locator("#pm-message")).toHaveValue(prompt);
@@ -85,10 +114,18 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   const proposedCount = await proposed.count();
   const proposedText =
     proposedCount > 0 ? ((await proposed.innerText()) || "").trim() : "";
+  const evidenceHrefs = await page
+    .locator(".pm-turn--pm a[href]")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") || ""));
   writeEvidence("pm-proposed-decisions.local.json", {
     proposedCount,
     proposedText: proposedText.slice(0, 800),
+    evidenceHrefs,
   });
+  expect(
+    evidenceHrefs.filter((href) => href.includes("/work/")),
+    `PM evidence still links /work/: ${JSON.stringify(evidenceHrefs)}`,
+  ).toEqual([]);
 
   await page.goto("/o/local/w/local/inbox?mailbox=needs-you");
   await expect(
@@ -101,9 +138,42 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   const titles = (await inboxRows.allInnerTexts()).map((text) =>
     text.replace(/\s+/g, " ").trim(),
   );
-  writeEvidence("inbox-needs-you.local.json", { decisionCount, titles });
+  const foldedInList = await page.locator('[data-inbox-row] details').count();
+  const hedgingInList = await page
+    .getByText("Outcome not independently verified")
+    .count();
+  writeEvidence("inbox-needs-you.local.json", {
+    decisionCount,
+    titles,
+    foldedInList,
+    hedgingInList,
+  });
   expect(
     decisionCount > 0 || titles.some((title) => seededTask.test(title)),
     `Inbox Needs you had no PM decision or seeded-task row: ${JSON.stringify(titles)}`,
   ).toBeTruthy();
+
+  if (decisionCount > 0) {
+    await decisionRows.first().click();
+    const panelHedging = await page
+      .getByText("Outcome not independently verified")
+      .count();
+    const panelHtml = (
+      (await page.locator(".space-y-6").first().innerHTML().catch(() => "")) || ""
+    ).slice(0, 1200);
+    writeEvidence("inbox-decision-panel.local.json", {
+      panelHedging,
+      panelHtml,
+    });
+  }
+
+  await page.goto("/o/local/w/local/inbox?mailbox=watching");
+  const watchingFolded = await page.locator('[data-inbox-row] details').count();
+  const watchingQuiet = await page
+    .locator('[data-inbox-row] .text-fg-subtle')
+    .allInnerTexts();
+  writeEvidence("inbox-watching.local.json", {
+    watchingFolded,
+    watchingQuiet: watchingQuiet.map((text) => text.replace(/\s+/g, " ").trim()),
+  });
 });
