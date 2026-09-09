@@ -23,17 +23,9 @@
   } from "$lib/resourceIdentity.js";
   import { workspacePath } from "$lib/workspacePaths";
 
-  let {
-    threadId = "",
-    detailAsTopic = true,
-    dense = false,
-    showDesktop = true,
-  } = $props();
+  let { threadId = "", detailAsTopic = true, dense = false } = $props();
 
   let topic = $derived($topicDetailStore.topic);
-  let topicSummary = $derived(
-    String(topic?.summary ?? topic?.current_summary ?? "").trim(),
-  );
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
   function actorName(id) {
@@ -142,46 +134,11 @@
   });
 </script>
 
-{#snippet topicDesktop()}
-  <h1
-    class="min-w-0 text-subtitle font-semibold {topic?.title
-      ? 'text-fg'
-      : 'text-fg-subtle italic'}"
-  >
-    {topic?.title || "Untitled topic"}
-  </h1>
-  {#if topicSummary}
-    <p class="line-clamp-2 text-meta text-fg-muted" title={topicSummary}>
-      {topicSummary}
-    </p>
-  {/if}
-  {#if topic}
-    <p
-      class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-micro text-fg-subtle"
-    >
-      <span class="whitespace-nowrap"
-        >Updated {formatTimestamp(topic.updated_at) || "—"}</span
-      >
-      {#if topic.created_by}
-        <span aria-hidden="true">·</span>
-        <ActorLabel
-          label={actorName(topic.created_by)}
-          seed={topic.created_by}
-          size="xs"
-          prefix="by"
-          nameClass="text-micro text-fg-subtle"
-        />
-      {/if}
-    </p>
-  {/if}
-{/snippet}
-
 <WorkspaceResourceTopRow
   breadcrumbAriaLabel="Breadcrumb and topic status"
   desktopAriaLabel="Topic details"
   {dense}
-  {showDesktop}
-  desktop={topic ? topicDesktop : undefined}
+  showDesktop={false}
 >
   {#snippet breadcrumb()}
     <a
@@ -190,13 +147,12 @@
       >Topic (thread view)</a
     >
     <span class="shrink-0 text-fg-subtle">/</span>
-    <span
-      class="min-w-0 shrink truncate text-fg-muted"
-      aria-current="page"
+    <h1
+      class="min-w-0 shrink truncate text-[length:inherit] font-[length:inherit] text-fg-muted"
       title={resourceDisplayLabel(topic, threadId)}
     >
       {resourceDisplayLabel(topic, threadId)}
-    </span>
+    </h1>
   {/snippet}
   {#snippet actions()}
     {#if topic?.id}

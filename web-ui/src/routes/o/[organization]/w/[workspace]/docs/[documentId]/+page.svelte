@@ -41,6 +41,10 @@
   } from "$lib/resourceIdentity.js";
   import { tick } from "svelte";
 
+  function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value ?? "").trim());
+  }
+
   let { data } = $props();
 
   let documentId = $derived($page.params.documentId);
@@ -111,6 +115,12 @@
    * means no stable handle exists and the copy affordance stays hidden.
    */
   let documentCliHandle = $derived(resourceRouteSegment(document, "document"));
+  let docSource = $derived(String(document?.source ?? "").trim());
+  let docTags = $derived(
+    (Array.isArray(document?.tags) ? document.tags : [])
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean),
+  );
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
   let docStashedSelection = $state("");
@@ -1602,6 +1612,48 @@
               <p class="mt-1 text-meta text-fg-muted">
                 {String(document.summary).trim()}
               </p>
+            {/if}
+            {#if !titleEditing && (docSource || docTags.length > 0)}
+              <div
+                class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+              >
+                {#if docSource}
+                  {#if isHttpUrl(docSource)}
+                    <a
+                      class="inline-flex min-w-0 max-w-[20rem] items-center gap-1 font-mono text-micro text-fg-muted transition-colors hover:text-accent-text"
+                      href={docSource}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={docSource}
+                    >
+                      <span aria-hidden="true">↗</span>
+                      <span class="truncate">{docSource}</span>
+                    </a>
+                  {:else}
+                    <span
+                      class="min-w-0 max-w-[20rem] truncate font-mono text-micro text-fg-subtle"
+                      title={docSource}
+                    >
+                      {docSource}
+                    </span>
+                  {/if}
+                {/if}
+                {#each docTags as tag (tag)}
+                  {#if tag === "knowledge"}
+                    <span
+                      class="inline-flex shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-micro font-semibold text-accent-text"
+                    >
+                      Knowledge
+                    </span>
+                  {:else}
+                    <span
+                      class="inline-flex shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+                    >
+                      {tag}
+                    </span>
+                  {/if}
+                {/each}
+              </div>
             {/if}
             <p
               class="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-micro text-fg-subtle"

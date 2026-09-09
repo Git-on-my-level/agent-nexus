@@ -14,7 +14,6 @@ describe("navigation model", () => {
       "Inbox",
       "Tasks",
       "Docs",
-      "PM",
     ]);
   });
 

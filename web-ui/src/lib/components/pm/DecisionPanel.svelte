@@ -1,10 +1,16 @@
 <script>
-  import SignalBadge from "./SignalBadge.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import { receiptSignal, safeSourceHref } from "$lib/pm/presentation.js";
+  import ReceiptSignal from "./ReceiptSignal.svelte";
+  import {
+    decisionPayload,
+    decisionTitle,
+    receiptSignal,
+    safeSourceHref,
+  } from "$lib/pm/presentation.js";
 
   let {
     selected = null,
+    taskTitle = "",
     action = null,
     workHref = "",
     busy = false,
@@ -38,8 +44,17 @@
       <h2
         class="mt-1.5 whitespace-pre-wrap break-words text-subtitle font-semibold text-fg"
       >
-        {selected.instruction}
+        {decisionTitle(selected, taskTitle)}
       </h2>
+      {#if decisionPayload(selected)}
+        <details class="mt-2 text-micro text-fg-muted">
+          <summary class="cursor-pointer">Proposed payload</summary>
+          <pre
+            class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
+              selected,
+            )}</pre>
+        </details>
+      {/if}
       <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-micro text-fg-muted">
         <div class="flex gap-1.5">
           <dt>Scope</dt>
@@ -135,13 +150,7 @@
             : action.status,
         )}
         <div class="mt-3 flex flex-wrap items-center gap-2">
-          {#if state.primary}
-            <SignalBadge tone={state.tone}>{state.label}</SignalBadge>
-          {:else}
-            <details class="text-micro text-fg-muted">
-              <summary class="cursor-pointer">{state.label}</summary>
-            </details>
-          {/if}
+          <ReceiptSignal signal={state} />
           {#if !verified}
             <span class="text-micro text-fg-subtle"
               >Outcome not independently verified</span

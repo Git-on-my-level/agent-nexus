@@ -1,7 +1,8 @@
 /**
- * Primary navigation: Inbox, Tasks, Docs, and the PM conversation surface.
- * Settings (Access, Secrets, Integrations, Audit) live in the sidebar footer
- * and the mobile More hub.
+ * Primary navigation: the three product primitives — Inbox, Tasks, Docs.
+ * The PM conversation is an action ("Ask PM" in the sidebar header and the
+ * mobile bottom bar), not a destination category. Settings (Access, Secrets,
+ * Integrations, Audit) live in the sidebar footer and the mobile More hub.
  */
 export const navigationItems = [
   {
@@ -21,12 +22,6 @@ export const navigationItems = [
     href: "/docs",
     icon: "docs",
     hint: "Shared knowledge",
-  },
-  {
-    label: "PM",
-    href: "/pm",
-    icon: "topics",
-    hint: "Ask, decide, follow through",
   },
 ];
 
@@ -123,9 +118,13 @@ function normalizePathname(pathname) {
   return pathname;
 }
 
+/** Live routes that are not nav items: the Ask PM action target. */
+const NON_NAV_ROUTES = ["/pm"];
+
 export function isKnownSection(pathname) {
   const normalizedPathname = normalizePathname(pathname);
   return (
+    NON_NAV_ROUTES.includes(normalizedPathname) ||
     navigationItems.some((item) => normalizedPathname === item.href) ||
     settingsNavItems.some((item) => normalizedPathname === item.href)
   );
