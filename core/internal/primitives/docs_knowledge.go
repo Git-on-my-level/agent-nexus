@@ -317,7 +317,42 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
 		d.archived_at, d.archived_by,
-		` + rankExpr + ` AS search_rank
+		` + rankExpr + ` AS search_rank,
+		(SELECT COUNT(*) FROM document_revisions dr2 WHERE dr2.document_id = d.id),
+		(SELECT COUNT(*) FROM events e
+			WHERE e.type = 'message_posted'
+			  AND COALESCE(trim(e.trashed_at), '') = ''
+			  AND trim(COALESCE(e.thread_id, '')) = trim(COALESCE(d.thread_id, ''))
+			  AND trim(COALESCE(d.thread_id, '')) <> ''),
+		(SELECT TRIM(COALESCE(
+				NULLIF(json_extract(e.payload_json, '$.payload.text'), ''),
+				NULLIF(json_extract(e.payload_json, '$.text'), ''),
+				json_extract(e.payload_json, '$.summary'),
+				''
+			))
+			FROM events e
+			WHERE e.type = 'message_posted'
+			  AND COALESCE(trim(e.trashed_at), '') = ''
+			  AND trim(COALESCE(e.thread_id, '')) = trim(COALESCE(d.thread_id, ''))
+			  AND trim(COALESCE(d.thread_id, '')) <> ''
+			ORDER BY e.ts DESC, e.id DESC
+			LIMIT 1),
+		(SELECT e.ts
+			FROM events e
+			WHERE e.type = 'message_posted'
+			  AND COALESCE(trim(e.trashed_at), '') = ''
+			  AND trim(COALESCE(e.thread_id, '')) = trim(COALESCE(d.thread_id, ''))
+			  AND trim(COALESCE(d.thread_id, '')) <> ''
+			ORDER BY e.ts DESC, e.id DESC
+			LIMIT 1),
+		(SELECT e.actor_id
+			FROM events e
+			WHERE e.type = 'message_posted'
+			  AND COALESCE(trim(e.trashed_at), '') = ''
+			  AND trim(COALESCE(e.thread_id, '')) = trim(COALESCE(d.thread_id, ''))
+			  AND trim(COALESCE(d.thread_id, '')) <> ''
+			ORDER BY e.ts DESC, e.id DESC
+			LIMIT 1)
 		FROM document_fts
 		JOIN documents d ON d.id = document_fts.document_id
 		WHERE ` + strings.Join(conditions, " AND ") + `
@@ -371,6 +406,11 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 			&row.ArchivedAt,
 			&row.ArchivedBy,
 			&rank,
+			&row.ListRevisionCount,
+			&row.ListTimelineMessageCount,
+			&row.ListLastCommentBody,
+			&row.ListLastCommentAt,
+			&row.ListLastCommentBy,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan document search row: %w", err)
 		}

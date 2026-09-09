@@ -4,13 +4,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `156`
-- Baseline-allowed required-field gaps: `125`
-- Missing recommended examples: `156`
+- Command operations: `158`
+- Baseline-allowed required-field gaps: `124`
+- Missing recommended examples: `140`
 
 ## Baseline gap counts
 
-- `x-anx-agent-notes`: `116`
+- `x-anx-agent-notes`: `115`
 - `x-anx-cli-path`: `3`
 - `x-anx-concepts`: `1`
 - `x-anx-error-codes`: `4`
@@ -83,7 +83,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `derived.rebuild` `POST /derived/rebuild` missing `x-anx-agent-notes`
 - `docs.archive` `POST /docs/{document_id}/archive` missing `x-anx-agent-notes`
 - `docs.create` `POST /docs` missing `x-anx-agent-notes`
-- `docs.get` `GET /docs/{document_id}` missing `x-anx-agent-notes`
 - `docs.list` `GET /docs` missing `x-anx-agent-notes`
 - `docs.patch` `PATCH /docs/{document_id}` missing `x-anx-agent-notes`
 - `docs.purge` `POST /docs/{document_id}/purge` missing `x-anx-agent-notes`
@@ -208,23 +207,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.timeline` `GET /cards/{card_id}/timeline`
 - `cards.trash` `POST /cards/{card_id}/trash`
 - `derived.rebuild` `POST /derived/rebuild`
-- `docs.archive` `POST /docs/{document_id}/archive`
-- `docs.comments.create` `POST /docs/{document_id}/comments`
-- `docs.comments.list` `GET /docs/{document_id}/comments`
-- `docs.comments.reply` `POST /docs/{document_id}/comments/{comment_id}/replies`
-- `docs.create` `POST /docs`
-- `docs.get` `GET /docs/{document_id}`
-- `docs.list` `GET /docs`
-- `docs.patch` `PATCH /docs/{document_id}`
-- `docs.purge` `POST /docs/{document_id}/purge`
-- `docs.put` `PUT /docs/{document_id}`
-- `docs.restore` `POST /docs/{document_id}/restore`
-- `docs.revisions.create` `POST /docs/{document_id}/revisions`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
-- `docs.revisions.list` `GET /docs/{document_id}/revisions`
-- `docs.search` `GET /docs/search`
-- `docs.trash` `POST /docs/{document_id}/trash`
-- `docs.unarchive` `POST /docs/{document_id}/unarchive`
 - `events.archive` `POST /events/{event_id}/archive`
 - `events.create` `POST /events`
 - `events.get` `GET /events/{event_id}`

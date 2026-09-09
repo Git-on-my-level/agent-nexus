@@ -484,6 +484,7 @@ func main() {
 			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
 			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
 			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
+			MaxConcurrent:  envInt("ANX_PM_MAX_CONCURRENT", 2),
 		},
 		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
 		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),
@@ -491,9 +492,11 @@ func main() {
 		TelegramWebhookSecret:   envString("ANX_PM_TELEGRAM_WEBHOOK_SECRET", ""),
 		TelegramBotID:           envString("ANX_PM_TELEGRAM_BOT_ID", ""),
 		TelegramBotToken:        envString("ANX_PM_TELEGRAM_BOT_TOKEN", ""),
+		TelegramAPIBase:         envString("ANX_PM_TELEGRAM_API_BASE", ""),
 		DiscordPublicKeyHex:     envString("ANX_PM_DISCORD_PUBLIC_KEY", ""),
 		DiscordApplicationID:    envString("ANX_PM_DISCORD_APPLICATION_ID", ""),
 		DiscordBotToken:         envString("ANX_PM_DISCORD_BOT_TOKEN", ""),
+		DiscordAPIBase:          envString("ANX_PM_DISCORD_API_BASE", ""),
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)

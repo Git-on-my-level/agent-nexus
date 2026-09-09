@@ -9,6 +9,8 @@
     /** Icon + checkmark only — no "Copy"/"Copied" text (compact toolbars). */
     iconOnly = false,
     icon = "copy",
+    /** Overrides the idle tooltip when it should explain more than the label. */
+    title = "",
   } = $props();
 
   let copied = $state(false);
@@ -33,7 +35,7 @@
   variant="ghost"
   size={btnSize}
   onclick={onCopy}
-  title={copied ? "Copied" : label}
+  title={copied ? "Copied" : title || label}
   aria-label={label}
 >
   {#if copied}

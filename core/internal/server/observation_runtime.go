@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -165,6 +166,9 @@ func LoadObservationRuntime(path, workspaceID string, store *primitives.Store) (
 		case "jit":
 			if c.JITStateRoot == "" || c.JITAdapterID == "" || c.JITPolicy == nil {
 				return nil, fmt.Errorf("JIT transport requires state root, adapter id and approved policy")
+			}
+			if !filepath.IsAbs(c.JITStateRoot) {
+				c.JITStateRoot = filepath.Join(filepath.Dir(path), c.JITStateRoot)
 			}
 			manager, e := observation.NewJITManager(c.JITStateRoot, *c.JITPolicy)
 			if e != nil {

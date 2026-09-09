@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -61,15 +61,28 @@ async function main() {
     await mkdir(profileDir, { recursive: true });
 
     const now = new Date().toISOString();
+    const keyID = String(persona.key_id ?? "").trim();
+    const privateKey = String(persona.private_key ?? "").trim();
+    const agentID = String(persona.agent_id ?? "").trim();
+    if (!agentID || !keyID || !privateKey) {
+      throw new Error(
+        `persona ${personaID}: identity bundle is missing agent_id/key_id/private_key; re-run make serve so seed writes CLI assertion material`,
+      );
+    }
+    const keysDir = path.join(homeDir, ".config", "anx", "keys");
+    await mkdir(keysDir, { recursive: true, mode: 0o700 });
+    const privateKeyPath = path.join(keysDir, `${personaID}.ed25519`);
+    await writeFile(privateKeyPath, `${privateKey}\n`, { mode: 0o600 });
+    await chmod(privateKeyPath, 0o600);
     const profile = {
       version: 1,
       agent: personaID,
       base_url: baseUrl,
       username: persona.auth_username,
-      agent_id: persona.agent_id,
+      agent_id: agentID,
       actor_id: persona.actor_id,
-      key_id: "",
-      private_key_path: "",
+      key_id: keyID,
+      private_key_path: privateKeyPath,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_type: tokens.token_type || "Bearer",

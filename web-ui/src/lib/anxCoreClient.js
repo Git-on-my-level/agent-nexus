@@ -590,6 +590,7 @@ const adapterCommandTable = [
     (payload) => ({ options: b(payload), injectActor: true }),
   ],
   ["listDocuments", "docs.list", (filters) => ({ options: q(filters) })],
+  ["searchDocuments", "docs.search", (filters) => ({ options: q(filters) })],
   [
     "getDocument",
     "docs.get",

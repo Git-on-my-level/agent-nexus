@@ -9,7 +9,6 @@
 <a
   {href}
   class="block rounded-md border border-line bg-panel px-3 py-2.5 transition-colors hover:border-line-strong hover:bg-panel-hover"
-  data-work-ref={work.ref}
 >
   <h3 class="break-words text-meta font-medium leading-snug text-fg">
     {work.title || "Untitled task"}

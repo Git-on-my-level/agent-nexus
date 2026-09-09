@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 	"unicode/utf8"
 )
 
@@ -114,9 +115,10 @@ func (s *Service) DeliverPending(ctx context.Context, sender Sender, limit int) 
 	}
 	rows, err = s.store.db.QueryContext(ctx, `SELECT d.id FROM pm_records d WHERE d.kind='delivery' AND d.workspace_id=?
  AND json_extract(d.body,'$.status')='pending_delivery'
+ AND (json_extract(d.body,'$.next_retry_at') IS NULL OR json_extract(d.body,'$.next_retry_at') <= ?)
  AND NOT EXISTS(SELECT 1 FROM pm_records prior WHERE prior.kind='delivery' AND prior.parent_id=d.parent_id
  AND prior.rowid<d.rowid AND json_extract(prior.body,'$.status') IN ('sending','unknown','failed'))
- ORDER BY d.rowid LIMIT ?`, s.cfg.WorkspaceID, limit)
+ ORDER BY d.rowid LIMIT ?`, s.cfg.WorkspaceID, time.Now().UTC().Format(time.RFC3339Nano), limit)
 	if err != nil {
 		return nil, err
 	}

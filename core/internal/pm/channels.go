@@ -3,6 +3,7 @@ package pm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -138,6 +139,9 @@ func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (D
 	if d.Status != Pending {
 		return d, nil
 	}
+	if d.NextRetryAt != nil && time.Now().UTC().Before(*d.NextRetryAt) {
+		return d, nil
+	}
 	old := d.Revision
 	d.Status = Sending
 	d.Attempts = append(d.Attempts, Attempt{StartedAt: time.Now().UTC(), Status: Sending})
@@ -148,13 +152,30 @@ func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (D
 	bounded, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	receipt, sendErr := sender.Send(bounded, d)
+	now := time.Now().UTC()
+	if after, hasAfter, ok := retryAfterOf(sendErr); ok {
+		wait := deliveryBackoff(len(d.Attempts), after, hasAfter)
+		next := now.Add(wait)
+		old = d.Revision
+		d.Status = Pending
+		d.NextRetryAt = &next
+		d.Receipt = Receipt{Status: Pending, Detail: "channel asked to retry later"}
+		d.Attempts[len(d.Attempts)-1].FinishedAt = &now
+		d.Attempts[len(d.Attempts)-1].Status = Pending
+		d.Attempts[len(d.Attempts)-1].Receipt = d.Receipt
+		d.Revision++
+		if err = s.store.cas(context.WithoutCancel(ctx), "delivery", id, old, d); err != nil {
+			return Delivery{}, err
+		}
+		return d, nil
+	}
 	if sendErr != nil || receipt.Status != Delivered || receipt.ExternalID == "" {
 		receipt = Receipt{Status: Unknown, Detail: "Transport outcome unknown; inspect remote history before retry"}
 	}
 	old = d.Revision
 	d.Status = receipt.Status
 	d.Receipt = receipt
-	now := time.Now().UTC()
+	d.NextRetryAt = nil
 	d.Attempts[len(d.Attempts)-1].FinishedAt = &now
 	d.Attempts[len(d.Attempts)-1].Status = d.Status
 	d.Attempts[len(d.Attempts)-1].Receipt = receipt
@@ -163,6 +184,42 @@ func (s *Service) SendDelivery(ctx context.Context, id string, sender Sender) (D
 		return Delivery{}, err
 	}
 	return d, nil
+}
+
+// QueueDecisionCard persists one origin card for a decision. The id includes
+// revision so a stale-card refresh is a distinct delivery, not a rewrite.
+func (s *Service) QueueDecisionCard(ctx context.Context, d Decision, eventID string) (Delivery, error) {
+	if d.Origin == nil || !validOrigin(*d.Origin) {
+		return Delivery{}, ErrInvalid
+	}
+	b, err := s.ResolveBinding(ctx, *d.Origin)
+	if err != nil || b.ActorID != d.ActorID {
+		return Delivery{}, ErrForbidden
+	}
+	key := eventID
+	if key == "" {
+		key = "offer"
+	}
+	card := Delivery{
+		ID:          stableID("delivery", "decision-card", d.ID, fmt.Sprint(d.Revision), key),
+		WorkspaceID: d.WorkspaceID,
+		ActorID:     d.ActorID,
+		Origin:      *d.Origin,
+		Text:        decisionCardText(d),
+		ReplyMarkup: decisionReplyMarkup(d.Origin.Transport, d),
+		Status:      Pending,
+		Revision:    1,
+	}
+	inserted, err := s.store.insert(ctx, "delivery", card.ID, d.WorkspaceID, d.ActorID, d.ID, card)
+	if err != nil {
+		return Delivery{}, err
+	}
+	if !inserted {
+		if err = s.store.get(ctx, "delivery", card.ID, &card); err != nil {
+			return Delivery{}, err
+		}
+	}
+	return card, nil
 }
 
 // ReconcileDelivery records externally inspected evidence. It cannot reopen a

@@ -65,7 +65,6 @@ known_missing:
     - derived.rebuild
     - docs.list
     - docs.create
-    - docs.get
     - docs.patch
     - docs.archive
     - docs.purge

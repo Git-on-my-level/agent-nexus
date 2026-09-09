@@ -114,6 +114,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err = decode(&in); err == nil {
 			out, err = s.ReconcileAction(ctx, p, path[1])
 		}
+	case len(path) == 1 && path[0] == "bindings" && r.Method == http.MethodGet:
+		out, err = s.BindingPage(ctx, p)
 	case len(path) == 1 && path[0] == "bindings" && r.Method == http.MethodPost:
 		var in Binding
 		if err = decode(&in); err == nil {

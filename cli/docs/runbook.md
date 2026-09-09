@@ -462,7 +462,10 @@ The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
 `pm turns propose <turn-id> --from-file ...`, `pm turns complete <turn-id>
 --from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
 cannot impersonate it. Claim is lease-based and idempotent for the same
-`runner_id`; HTTP 204 means no claimable turn.
+`runner_id`; HTTP 204 means no claimable turn. Channel ingress (Telegram and
+Discord) creates conversations with `origin` and posts through the same
+`/pm/conversations/{id}/messages` pipeline; those turns are claimed, completed,
+and failed identically. The channels lane owns transport authentication.
 
 ### PM runner (`anx pm serve`)
 
@@ -482,14 +485,50 @@ HOME=.tmp/anx-dev-profile-homes/maya ./cli/anx --agent maya pm ask --wait \
   "What needs my decision?"
 ```
 
-`--runner` is the native harness argv after `agentctl run --`. omp may silently
-substitute models; every run must show `"provider":"zai","model":"glm-5.3"` in
-the harness JSON (`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models
-never go through omp. The prompt stays small: the PM loads tracker context
-through `anx work list|get` and `anx pm context`, never from a stuffed dump.
+`--runner` is the native harness argv. Two forms:
+
+- Without `{prompt}`: argv after `agentctl run --`. Example:
+  `omp -p --mode json --model zai/glm-5.3 --auto-approve`
+- With `{prompt}`: argv is executed directly. `{prompt}` is replaced with the
+  absolute prompt file path. `agentctl` is not required.
+
+omp may silently substitute models; every omp run must show
+`"provider":"zai","model":"glm-5.3"` in the harness JSON
+(`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models never go through
+omp. The prompt stays small: the PM loads tracker context through
+`anx work list|get` and `anx pm context`, never from a stuffed dump. Proposed
+decisions must bind `work_ref` to a task and name each id as `decision:<id>`
+so the runner records evidence refs the web page can link.
+
 Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
 2 minutes). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
-tools before the lease expires.
+tools before the lease expires. `ANX_PM_MAX_CONCURRENT` (default 2) bounds
+workspace sending turns. `make pm-serve` runs the seeded PM persona.
+
+When stderr is not a TTY, runner logs are flushed immediately and harness
+stdout/stderr are copied to stderr. On restart, `pm turns claim` with the same
+`runner_id` recovers an in-flight lease; past-deadline sending turns expire to
+`failed` with a visible reason.
+
+Hermes and Codex are the same runner with a `{prompt}` argv (do not run Hermes
+from this checkout unless asked):
+
+```sh
+# Hermes (direct)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'
+
+# Codex (direct)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'codex exec --skip-git-repo-check -- {prompt}'
+
+# Same harnesses through agentctl (no {prompt} placeholder)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'hermes -p --provider zai --model glm-5.3'
+```
 
 PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
 `--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are
@@ -501,6 +540,42 @@ For cross-lane validation only, the real-binary harness accepts
 `ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the
 harness builds this checkout's core. This is not a mock backend; record the core
 source revision when using the override.
+
+### PM channels (`anx pm channels doctor`)
+
+Telegram and Discord ingress are webhook/interaction only. Bind a channel
+identity before the PM will accept messages:
+
+```sh
+anx pm bindings create --from-file binding.json
+anx pm channels doctor \
+  --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram \
+  --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord
+```
+
+Doctor reads env (never prints token values), probes those URLs with GET, and
+lists `/pm/bindings`. It does not POST an update, send a Bot API message, or
+open a Discord gateway.
+
+Core env (set on `anx-core`, not in Git):
+
+| Env | Role |
+|---|---|
+| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters |
+| `ANX_PM_TELEGRAM_BOT_ID` | Expected bot / tenant id |
+| `ANX_PM_TELEGRAM_BOT_TOKEN` | Outbound `sendMessage` |
+| `ANX_PM_DISCORD_PUBLIC_KEY` | 32-byte hex Ed25519 public key |
+| `ANX_PM_DISCORD_APPLICATION_ID` | Expected application id |
+| `ANX_PM_DISCORD_BOT_TOKEN` | Outbound REST `Bot` token |
+| `ANX_PM_TELEGRAM_API_BASE` | Test-only Bot API base (local fake) |
+| `ANX_PM_DISCORD_API_BASE` | Test-only Discord REST base (local fake, include `/api/v10`) |
+| `ANX_PM_TELEGRAM_WEBHOOK_URL` | Optional doctor GET target |
+| `ANX_PM_DISCORD_WEBHOOK_URL` | Optional doctor GET target |
+
+When dedicated bots exist: create the bots, set the env vars, register the
+webhook/interactions URL at core ingress, bind each human identity, then run
+doctor. Do not point existing production bot streams at this workspace. Local
+proof uses `tests/channels/` fakes, not live Telegram or Discord.
 
 ## Docs as a cross-host knowledge base
 
@@ -536,4 +611,3 @@ anx docs comments edit kb-proxmox-ssh event:<handle> --body "Corrected"
 `anx docs search` is SQLite FTS5 over title, body, summary, source, tags, and
 comments. `--tag`, `--limit`, and `--cursor` paginate. `anx docs put -` reads
 stdin. `anx docs get <handle> --format md` prints the body only.
-

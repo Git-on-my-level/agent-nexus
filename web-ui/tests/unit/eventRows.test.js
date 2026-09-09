@@ -26,7 +26,7 @@ describe("event row helpers", () => {
     expect(isHomeFeedEvent(row.event)).toBe(true);
     expect(row.label).toBe("Message");
     expect(row.detail).toBe("First line\nSecond line");
-    expect(row.href).toBe("/w/topics/topic-1?tab=messages#message-evt-1");
+    expect(row.href).toBe("/w/threads/thread-1?tab=messages#message-evt-1");
   });
 
   it("keeps unknown events inspectable for Events", () => {
@@ -46,7 +46,7 @@ describe("event row helpers", () => {
     expect(row.href).toBe("/w/events#evt-x");
   });
 
-  it("links card lifecycle rows to the owning board and card modal", () => {
+  it("anchors card lifecycle rows to the audit log (board surface deleted)", () => {
     const row = normalizeEventRow(
       {
         id: "evt-card-moved",
@@ -64,7 +64,7 @@ describe("event row helpers", () => {
     expect(row.label).toBe("Card moved");
     expect(row.detail).toBe("review -> done");
     expect(row.sourceLabel).toBe("CLI Domain Standardization");
-    expect(row.href).toBe("/w/boards/board-1?card=card-1");
+    expect(row.href).toBe("/w/events#evt-card-moved");
   });
 
   it.each([
@@ -88,6 +88,6 @@ describe("event row helpers", () => {
     expect(row.label).toBe(label);
     expect(row.detail).toBe("CLI Domain Standardization");
     expect(row.sourceLabel).toBe("CLI Domain Standardization");
-    expect(row.href).toBe("/w/boards/board-1?card=card-1");
+    expect(row.href).toBe(`/w/events#evt-${type}`);
   });
 });

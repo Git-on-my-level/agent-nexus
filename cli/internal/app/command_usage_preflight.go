@@ -19,6 +19,16 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 			}
 			return commandName, nil
 		}
+		if len(args) >= 2 && args[0] == "pm" && args[1] == "channels" {
+			commandName := "pm channels"
+			if len(args) >= 3 && args[2] == "doctor" {
+				commandName = "pm channels doctor"
+				if err := preflightFlagUsage(args[3:], preflightFlagSpecs()[commandName]); err != nil {
+					return commandName, err
+				}
+			}
+			return commandName, nil
+		}
 		if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
 			return topic, nil
 		}

@@ -93,7 +93,7 @@ test("security headers are set on all document responses", async ({ page }) => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
 
-  const routes = ["/", "/inbox", "/topics"];
+  const routes = ["/", "/inbox", "/docs"];
 
   for (const route of routes) {
     const response = await page.goto(route);

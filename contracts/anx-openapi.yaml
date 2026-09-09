@@ -182,8 +182,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
+      x-anx-agent-notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
       parameters:
       - name: conversation_id
         in: path
@@ -672,8 +671,9 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn.
-        Reclaiming with the same runner_id returns the held lease. Lease expiry is bounded by the
-        turn deadline and pm.Config turn timeout.
+        Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are
+        expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn
+        timeout. Channel-origin turns use this same claim/complete/fail pipeline.
       requestBody:
         required: false
         content:
@@ -6245,6 +6245,8 @@ components:
           type: string
         max_output_bytes:
           type: integer
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
     PMDecision:
       type: object
       additionalProperties: true
@@ -7217,6 +7219,16 @@ components:
           description: >
             List-only enrichment: timeline `message_posted` counts on backing `thread_id`,
             excluding trashed events (same derivation as `/topics`).
+        last_comment:
+          type: object
+          description: >
+            List-only enrichment: most recent `message_posted` comment on the backing thread,
+            excluding trashed events. Omitted when the document has no comments.
+          properties:
+            body: { type: string }
+            created_at: { type: string, format: date-time }
+            created_by: { type: string }
+          required: [body, created_at]
         search_rank:
           type: integer
           description: >

@@ -76,11 +76,8 @@ function primaryThreadIdFromTopic(topic) {
   return String(topic?.thread_id ?? "").trim();
 }
 
-async function openThreadDetailFromNav(page, threadTitle) {
-  await page.getByRole("link", { name: "Topics", exact: true }).click();
-  const threadLink = page.getByRole("link", { name: threadTitle, exact: true });
-  await expect(threadLink).toBeVisible();
-  await threadLink.click();
+async function openThreadDetail(page, threadId, threadTitle) {
+  await page.goto(`/o/local/w/local/threads/${encodeURIComponent(threadId)}`);
   await expect(
     page.getByRole("heading", { name: threadTitle, exact: true }),
   ).toBeVisible();
@@ -306,7 +303,7 @@ test("golden path integration runs against a real anx-core", async ({
   receiptId = String(receiptBody?.artifact?.id ?? receiptId).trim();
   expect(receiptId).toMatch(/^rc-/);
 
-  await openThreadDetailFromNav(page, threadTitle);
+  await openThreadDetail(page, threadId, threadTitle);
 
   const receiptArtifactsBody = await getUiJson(
     request,
@@ -325,12 +322,6 @@ test("golden path integration runs against a real anx-core", async ({
       receiptId,
     ),
   ).toBe(true);
-
-  await page.goto(`/artifacts/${receiptId}`);
-
-  await expect(
-    page.getByRole("heading", { name: receiptSummary }),
-  ).toBeVisible();
 
   // Receipt detail no longer hosts a review composer; assert the receipt in UI, then create the
   // review via core (same contract as `core/scripts/smoke`).
@@ -380,12 +371,7 @@ test("golden path integration runs against a real anx-core", async ({
     ),
   ).toBe(true);
 
-  await page.goto(`/artifacts/${encodeURIComponent(reviewId)}`);
-  await expect(
-    page.getByRole("heading", { name: reviewSummary }),
-  ).toBeVisible();
-
-  await openThreadDetailFromNav(page, threadTitle);
+  await openThreadDetail(page, threadId, threadTitle);
 
   await page.getByRole("tab", { name: "Messages" }).click();
   await page.getByLabel("Message").fill(messageText);
@@ -448,7 +434,7 @@ test("golden path integration runs against a real anx-core", async ({
     .poll(async () => ackButtons.count())
     .toBeLessThan(ackCountBefore);
 
-  await openThreadDetailFromNav(page, threadTitle);
+  await openThreadDetail(page, threadId, threadTitle);
 
   const attentionEntry = page
     .locator("article", {

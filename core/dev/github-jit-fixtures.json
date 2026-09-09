@@ -1,0 +1,4 @@
+[
+  {"Name": "happy", "Input": "eyJ0aXRsZSI6IkdpdC1vbi1teS1sZXZlbC9hZ2VudC1uZXh1cyJ9", "WantValid": true},
+  {"Name": "rejected", "Input": "eyJyZWplY3QiOnRydWV9", "WantValid": false}
+]

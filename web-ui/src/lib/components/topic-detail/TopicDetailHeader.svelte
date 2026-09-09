@@ -97,7 +97,7 @@
     lifecycleBusy = true;
     try {
       await coreClient.trashTopic(threadId, {});
-      await goto(workspacePath(organizationSlug, workspaceSlug, "/topics"));
+      await goto(workspacePath(organizationSlug, workspaceSlug, "/threads"));
     } finally {
       lifecycleBusy = false;
     }
@@ -186,11 +186,8 @@
   {#snippet breadcrumb()}
     <a
       class="shrink-0 transition-colors hover:text-fg"
-      href={workspacePath(
-        organizationSlug,
-        workspaceSlug,
-        detailAsTopic ? "/topics" : "/threads",
-      )}>{detailAsTopic ? "Topics" : "Topic (thread view)"}</a
+      href={workspacePath(organizationSlug, workspaceSlug, "/threads")}
+      >Topic (thread view)</a
     >
     <span class="shrink-0 text-fg-subtle">/</span>
     <span

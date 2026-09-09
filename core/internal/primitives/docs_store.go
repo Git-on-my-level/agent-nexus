@@ -51,6 +51,9 @@ type documentRow struct {
 	HeadCreatedBy            sql.NullString
 	ListRevisionCount        sql.NullInt64
 	ListTimelineMessageCount sql.NullInt64
+	ListLastCommentBody      sql.NullString
+	ListLastCommentAt        sql.NullString
+	ListLastCommentBy        sql.NullString
 }
 
 func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTarget {
@@ -103,7 +106,8 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	query := `WITH doc_page AS (` + inner + `)
 SELECT dp.*,
 	COALESCE(rc.revision_cnt, 0),
-	COALESCE(tmc.timeline_msg_cnt, 0)
+	COALESCE(tmc.timeline_msg_cnt, 0),
+	tml.last_body, tml.last_at, tml.last_by
 FROM doc_page dp
 LEFT JOIN (
 	SELECT dr2.document_id, COUNT(*) AS revision_cnt FROM document_revisions dr2
@@ -119,7 +123,22 @@ LEFT JOIN (
 		SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
 	  )
 	GROUP BY tid
-) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid`
+) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid
+LEFT JOIN (
+	SELECT tid, last_body, last_at, last_by FROM (
+		SELECT trim(COALESCE(e.thread_id,'')) AS tid,
+			TRIM(COALESCE(NULLIF(json_extract(e.payload_json, '$.text'), ''), json_extract(e.payload_json, '$.summary'))) AS last_body,
+			e.ts AS last_at, e.actor_id AS last_by,
+			ROW_NUMBER() OVER (PARTITION BY trim(COALESCE(e.thread_id,'')) ORDER BY e.ts DESC, e.id DESC) AS rn
+		FROM events e
+		WHERE e.type = 'message_posted'
+		  AND COALESCE(trim(e.thread_id),'') <> ''
+		  AND COALESCE(trim(e.trashed_at),'') = ''
+		  AND trim(COALESCE(e.thread_id,'')) IN (
+			SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
+		  )
+	) ranked WHERE rn = 1
+) tml ON trim(COALESCE(dp.thread_id,'')) = tml.tid`
 	return query, args
 }
 
@@ -175,6 +194,9 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.HeadCreatedBy,
 			&row.ListRevisionCount,
 			&row.ListTimelineMessageCount,
+			&row.ListLastCommentBody,
+			&row.ListLastCommentAt,
+			&row.ListLastCommentBy,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan document row: %w", err)
 		}
@@ -2141,6 +2163,16 @@ func (r documentRow) toMap() (map[string]any, error) {
 	}
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" && r.ListTimelineMessageCount.Valid {
 		out["timeline_message_count"] = int(r.ListTimelineMessageCount.Int64)
+	}
+	if body := strings.TrimSpace(r.ListLastCommentBody.String); body != "" && r.ListLastCommentAt.Valid {
+		lastComment := map[string]any{
+			"body":       body,
+			"created_at": r.ListLastCommentAt.String,
+		}
+		if by := strings.TrimSpace(r.ListLastCommentBy.String); by != "" {
+			lastComment["created_by"] = by
+		}
+		out["last_comment"] = lastComment
 	}
 
 	return out, nil

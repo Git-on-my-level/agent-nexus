@@ -41,7 +41,13 @@ serially with per-reader deadlines. Persisted leases fence stale workers; retry
 backoff and rate-limit hints survive service recreation. Failure retains the
 last good evidence. Unconfigured targets remain queued and visibly unexecuted.
 
-Example using a public GitHub issue and a credential *handle*, not a secret:
+Example using a public GitHub issue and a credential *handle*, not a secret.
+`make serve` sets `ANX_OBSERVATION_CONFIG` to `core/dev/observation.serve.json`
+when that file exists: a builtin GitHub reader plus a JIT C transform against
+`Git-on-my-level/agent-nexus#208`. `core/scripts/dogfood-jit.sh` compiles
+`core/dev/github-transform.c`, then stages, validates, canaries and activates
+the artifact. A Linux host is not available in this worktree; `make -C core check`
+cross-compiles `./internal/observation` with `GOOS=linux`.
 
 ```json
 {
@@ -147,6 +153,23 @@ Channel ingress is webhook/interaction only: `POST /pm/ingress/telegram` and
 (`ANX_PM_TELEGRAM_BOT_TOKEN`, `ANX_PM_DISCORD_BOT_TOKEN`) are env-only and never
 written to the tree. Ingress does not call `setWebhook`, poll `getUpdates`, or
 open a Discord gateway. Production bot streams must not be redirected here.
+
+Test-only API bases `ANX_PM_TELEGRAM_API_BASE` and `ANX_PM_DISCORD_API_BASE`
+point outbound delivery at local fakes under `tests/channels/`. Those fakes
+speak the real Bot API / Discord REST and interaction shapes, including secret
+and Ed25519 checks, and can inject 409/429. They are never production config.
+`anx pm channels doctor` checks secret presence/shape, GET webhook
+reachability, and binding state without sending a message.
+
+A channel identity must be bound (`POST /pm/bindings` / `anx pm bindings create`)
+before it can queue a turn. Unbound identities get a bounded bind-first reply.
+Decisions awaiting the requester are offered with Telegram inline keyboards or
+Discord components; `/pm-approve` and `/pm-reject` (and Discord slash
+equivalents) record an answer against the displayed revision. A stale
+revision is rejected and a fresh card is queued. Transport receipt (message
+id) is separate from human acknowledgement. 429/409 retry with capped
+exponential backoff; unknown send outcomes stay visible and are not
+auto-retried.
 
 The PM peer package owns channel authentication, exact identity mappings,
 durable outboxes, and source-action state machines. Real channel delivery, a

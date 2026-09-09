@@ -93,6 +93,7 @@ type Turn struct {
 	LeaseOwner     string    `json:"lease_owner,omitempty"`
 	LeaseExpiresAt time.Time `json:"lease_expires_at,omitempty"`
 	MaxOutputBytes int       `json:"max_output_bytes,omitempty"`
+	Origin         *Origin   `json:"origin,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	Deadline       time.Time `json:"deadline"`
 	Revision       int       `json:"revision"`
@@ -174,15 +175,17 @@ type Receipt struct {
 	Detail                string   `json:"detail,omitempty"`
 }
 type Delivery struct {
-	ID          string    `json:"id"`
-	WorkspaceID string    `json:"workspace_id"`
-	ActorID     string    `json:"actor_id"`
-	Origin      Origin    `json:"origin"`
-	Text        string    `json:"text"`
-	Status      Status    `json:"status"`
-	Receipt     Receipt   `json:"receipt"`
-	Revision    int       `json:"revision"`
-	Attempts    []Attempt `json:"attempts"`
+	ID          string         `json:"id"`
+	WorkspaceID string         `json:"workspace_id"`
+	ActorID     string         `json:"actor_id"`
+	Origin      Origin         `json:"origin"`
+	Text        string         `json:"text"`
+	ReplyMarkup map[string]any `json:"reply_markup,omitempty"`
+	Status      Status         `json:"status"`
+	Receipt     Receipt        `json:"receipt"`
+	Revision    int            `json:"revision"`
+	Attempts    []Attempt      `json:"attempts"`
+	NextRetryAt *time.Time     `json:"next_retry_at,omitempty"`
 }
 
 type Config struct {

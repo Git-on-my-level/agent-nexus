@@ -32,6 +32,23 @@ even when all executable scenarios pass. See [acceptance.md](acceptance.md) for
 the full product gates and [CAR reference cases](car-reference.md) for relevant
 prior failure scenarios.
 
+## Live web PM proof (real `make serve` + `anx pm serve`)
+
+Against an already running stack (`CORE_PORT=8300`, `WEB_UI_PORT=8301`, and
+`anx pm serve` with omp/glm-5.3 as printed by `make serve`):
+
+```sh
+PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" \
+NODE_PATH=web-ui/node_modules \
+ANX_LIVE_UI_URL=http://127.0.0.1:8301 \
+ANX_LIVE_CORE_URL=http://127.0.0.1:8300 \
+./web-ui/node_modules/.bin/playwright test --config tests/pm-qualification/playwright.live.config.js
+```
+
+The spec signs in as Maya through `POST /auth/dev/session`, asks "What needs my
+decision?" on `/pm`, and checks that the delivered turn names a seeded task and
+that Inbox Needs you shows the proposed decisions. It does not start servers.
+
 ## Executable scenarios
 
 | Scenario | Boundary checked |

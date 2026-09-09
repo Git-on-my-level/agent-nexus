@@ -1,19 +1,23 @@
 # JIT executable isolation and lifecycle
 
-Generated adapters are static Linux ELF programs that read a JSON `Report` from
-stdin and write one bounded JSON `TransformOutput` to stdout. Generated findings
-are stored under `facts.generated_findings`; they cannot replace source title,
+Generated adapters are host-native executables that read a JSON `Report` from
+stdin and write one bounded JSON `TransformOutput` to stdout. The generated
+language is C compiled with the host `cc`: Darwin emits a thin Mach-O that may
+link only `/usr/lib` and `/System/Library` (Seatbelt `process-exec` of that one
+binary; no fork, so no interpreter). Linux emits a static ELF (`cc -static`)
+because bubblewrap binds only the artifact at `/reader` and mounts no libc.
+Generated findings are stored under `facts.generated_findings`; they cannot replace source title,
 status, owner, phase or timestamps. Added evidence must reference the exact
 brokered source evidence and remain `reported`. Unknown output fields, invalid
 JSON, invented references and self-verified evidence are rejected.
 
 ## Enforced envelope
 
-The production executor is Linux Bubblewrap plus `prlimit`, under an unprivileged
-account. It has no shell/host-execution fallback. The manager fails validation,
-canary and activation when that executor is unavailable. Bubblewrap setup failure
-also fails closed; merely finding binaries is not evidence that kernel namespaces
-work.
+The production executor is Linux Bubblewrap plus `prlimit`, or Darwin
+`sandbox-exec` with a deny-default Seatbelt profile. There is no shell/host-execution
+fallback. The manager fails validation, canary and activation when that executor
+is unavailable. Bubblewrap or Seatbelt setup failure also fails closed; merely
+finding binaries is not evidence that isolation is enforced.
 
 The runner uses a new user, PID and network namespace; disables further user
 namespaces; drops capabilities; clears environment; binds only the immutable
@@ -44,8 +48,9 @@ a boundary. No sandbox software is installed automatically by this package.
 private 0700 directory. It uses cross-process locking and fsynced atomic state
 replacement. That directory is never visible inside generated readers.
 
-1. `Stage(manifest, artifact)` validates the approved envelope and static ELF
-   format, rejects dynamic interpreter/dependency requirements, and stores a
+1. `Stage(manifest, artifact)` validates the approved envelope and host executable
+   format (static ELF on Linux, thin Mach-O on Darwin), rejects dynamic interpreter/dependency
+   requirements outside the Darwin system libraries, and stores a
    content-addressed immutable artifact plus manifest. An adapter ID is bound to
    one exact target. Artifact and manifest digests are verified again before use.
 2. `Validate(ctx, id, revision, cases)` requires both successful and rejection

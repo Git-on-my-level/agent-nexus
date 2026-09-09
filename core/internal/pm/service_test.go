@@ -315,3 +315,57 @@ func TestFailTurnRecordsReasonAndFreesSession(t *testing.T) {
 		t.Fatalf("session stayed occupied after fail: %v", err)
 	}
 }
+
+func TestClaimExpiresPastDeadlineTurns(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "stale", Title: "Stale"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "late", Text: "Ping"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := turn.Revision
+	turn.Deadline = time.Now().UTC().Add(-time.Second)
+	turn.Revision++
+	if err = s.store.cas(ctx, "turn", turn.ID, old, turn); err != nil {
+		t.Fatal(err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	if _, err = s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"}); !errors.Is(err, ErrEmpty) {
+		t.Fatalf("stale turn remained claimable: %v", err)
+	}
+	var stored Turn
+	if err = s.store.get(ctx, "turn", turn.ID, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != Failed || stored.Failure == "" {
+		t.Fatalf("stale turn %+v", stored)
+	}
+}
+
+func TestChannelTurnIsClaimableOnSharedPipeline(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.deps.Dispatch = nil
+	ctx := context.Background()
+	o := Origin{Transport: "telegram", TenantID: "bot-1", ChannelID: "-123", ExternalUserID: "42"}
+	if _, err := s.BindChannel(ctx, p, Binding{WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Origin: o, Enabled: true, CanApprove: false}); err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.ReceiveChannel(ctx, o, "chan-1", "What needs my decision?")
+	if err != nil || turn.Origin == nil || *turn.Origin != o {
+		t.Fatalf("channel turn %+v %v", turn, err)
+	}
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	claimed, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "channel-runner"})
+	if err != nil || claimed.ID != turn.ID || claimed.Origin == nil || *claimed.Origin != o {
+		t.Fatalf("channel turn was not claimable %+v %v", claimed, err)
+	}
+	done, err := s.CompleteTurnWithLease(ctx, agent, claimed.ID, "No open decisions.", []string{"decision:pm_x"}, claimed.LeaseToken)
+	if err != nil || done.Status != Delivered {
+		t.Fatalf("complete %+v %v", done, err)
+	}
+}

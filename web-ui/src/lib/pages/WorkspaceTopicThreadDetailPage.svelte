@@ -31,7 +31,7 @@
   const TOPIC_TAB_ALIASES = { overview: "about" };
 
   let { data } = $props();
-  /** Canonical id for the URL (topic id on /topics/…, else backing thread id on /threads/…). */
+  /** Canonical id for the URL (backing thread id on /threads/…). */
   let threadId = $derived(
     data?.topicId || $page.params.topicId || $page.params.threadId,
   );
