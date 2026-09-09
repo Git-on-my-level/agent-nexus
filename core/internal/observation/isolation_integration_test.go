@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func isolationRunnerOrSkip(t *testing.T) isolatedExecutor {
@@ -136,13 +137,13 @@ int main(void) {
  if (open(%q,O_RDONLY)>=0 || getenv("ANX_FIXTURE_SECRET") || open(%q,O_WRONLY|O_CREAT,0600)>=0) return 10;
  %s
  int fd=socket(AF_INET,SOCK_STREAM,0); struct sockaddr_in a; memset(&a,0,sizeof(a)); a.sin_family=AF_INET; a.sin_port=htons(%d); a.sin_addr.s_addr=htonl(0x7f000001);
- if(fd>=0) { fcntl(fd,F_SETFL,O_NONBLOCK); if(connect(fd,(struct sockaddr*)&a,sizeof(a))==0 || errno==EINPROGRESS) { close(fd); return 12; } close(fd); }
+ if(fd>=0) { if(connect(fd,(struct sockaddr*)&a,sizeof(a))==0) { close(fd); return 12; } close(fd); }
  puts("{\"facts\":{\"fixture_denials_verified\":true},\"uncertainty\":[]}"); return 0;
 }
 `, readPath, writePath, unshareCheck, port)
 	binary := compileIsolatedFixture(t, dir, "fixture-reader", source)
 	t.Setenv("ANX_FIXTURE_SECRET", "harmless-not-a-real-secret")
-	limits := fixtureJITPolicy().Limits
+	limits := isolationTestPolicy().Limits
 	raw, err := runner.Run(context.Background(), binary, []byte(`{}`), limits)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +152,7 @@ int main(void) {
 	if err := json.Unmarshal(raw, &output); err != nil || output.Facts["fixture_denials_verified"] != true {
 		t.Fatalf("runtime isolation not verified: %s %v", raw, err)
 	}
-	manager, err := NewJITManager(filepath.Join(dir, "managed"), fixtureJITPolicy())
+	manager, err := NewJITManager(filepath.Join(dir, "managed"), isolationTestPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +178,7 @@ func TestIsolationNegativeDenials(t *testing.T) {
 		t.Fatal("HOME is required")
 	}
 	outside := filepath.Join(dir, "outside")
-	limits := fixtureJITPolicy().Limits
+	limits := isolationTestPolicy().Limits
 	limits.OutputBytes = 1024
 	t.Run("home", func(t *testing.T) {
 		src := fmt.Sprintf(`#include <fcntl.h>
@@ -252,11 +253,11 @@ int main(void){
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager, err := NewJITManager(filepath.Join(dir, "managed"), fixtureJITPolicy())
+	manager, err := NewJITManager(filepath.Join(dir, "managed"), isolationTestPolicy())
 	if err != nil {
 		t.Fatal(err)
 	}
-	limits := fixtureJITPolicy().Limits
+	limits := isolationTestPolicy().Limits
 	version, err := manager.Stage(Manifest{AdapterID: "fixture", Target: fixtureTarget(), Limits: limits}, artifact)
 	if err != nil {
 		t.Fatal(err)
@@ -282,4 +283,186 @@ int main(void){
 	if findings["transform"] != "handwritten" {
 		t.Fatalf("generated findings missing: %+v", report.Facts)
 	}
+}
+
+const canaryFailTransform = `#include <stdio.h>
+#include <string.h>
+int main(void){
+ char input[65536]; size_t n=fread(input,1,sizeof(input)-1,stdin); input[n]=0;
+ if (strstr(input,"\"reject\":true")) { puts("{\"error\":\"fixture rejected\"}"); return 0; }
+ if (n>200 || strstr(input,"github.com") || strstr(input,"multica")) { puts("{\"error\":\"snapshot not handled\"}"); return 0; }
+ puts("{\"facts\":{\"transform\":\"narrow-fixture\"},\"uncertainty\":[],\"evidence\":[]}");
+ return 0;
+}
+`
+
+const policyTripTransform = `#include <stdio.h>
+#include <string.h>
+int main(void){
+ char input[65536]; size_t n=fread(input,1,sizeof(input)-1,stdin); input[n]=0;
+ if (strstr(input,"\"reject\":true")) { puts("{\"error\":\"fixture rejected\"}"); return 0; }
+ if (strstr(input,"\"trip\":true")) {
+  puts("{\"facts\":{\"trip\":true},\"uncertainty\":[],\"evidence\":[{\"kind\":\"issue\",\"reference\":\"https://unapproved.invalid/invented\",\"knowledge\":\"reported\"}]}");
+  return 0;
+ }
+ puts("{\"facts\":{\"transform\":\"policy-trip\"},\"uncertainty\":[],\"evidence\":[]}");
+ return 0;
+}
+`
+
+func TestRealCanaryFailureDoesNotActivate(t *testing.T) {
+	_ = isolationRunnerOrSkip(t)
+	dir := t.TempDir()
+	policy := isolationTestPolicy()
+	manager, err := NewJITManager(filepath.Join(dir, "managed"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := policy.Limits
+	goodBin := compileIsolatedFixture(t, dir, "good-transform", `#include <stdio.h>
+#include <string.h>
+int main(void){
+ char input[65536]; size_t n=fread(input,1,sizeof(input)-1,stdin); input[n]=0;
+ if (strstr(input,"\"reject\":true")) { puts("{\"error\":\"fixture rejected\"}"); return 0; }
+ puts("{\"facts\":{\"transform\":\"good\"},\"uncertainty\":[],\"evidence\":[]}");
+ return 0;
+}
+`)
+	goodBytes, err := os.ReadFile(goodBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := Manifest{AdapterID: "fixture", Target: fixtureTarget(), Limits: limits}
+	good, err := manager.Stage(manifest, goodBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []ValidationCase{{Name: "happy", Input: []byte(`{"title":"ok"}`), WantValid: true}, {Name: "rejected", Input: []byte(`{"reject":true}`), WantValid: false}}
+	if err := manager.Validate(context.Background(), "fixture", good.Revision, cases); err != nil {
+		t.Fatal(err)
+	}
+	source := trustedFixtureReader{fixtureReader{read: func(_ context.Context, target Target) (Report, error) {
+		return finishReport(newReport(target, "builtin:fixture"))
+	}}}
+	if _, err := manager.Canary(context.Background(), "fixture", good.Revision, source); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Activate("fixture", good.Revision); err != nil {
+		t.Fatal(err)
+	}
+	badBin := compileIsolatedFixture(t, dir, "bad-transform", canaryFailTransform)
+	badBytes, err := os.ReadFile(badBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := manager.Stage(manifest, badBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Validate(context.Background(), "fixture", bad.Revision, cases); err != nil {
+		t.Fatal(err)
+	}
+	wide := trustedFixtureReader{fixtureReader{read: func(_ context.Context, target Target) (Report, error) {
+		r := newReport(target, "builtin:fixture")
+		r.Title = "https://github.com/Git-on-my-level/agent-nexus"
+		r.URL = "https://github.com/Git-on-my-level/agent-nexus/issues/208"
+		r.Evidence = []Evidence{{Kind: "issue", Reference: r.URL, Knowledge: "reported"}}
+		return finishReport(r)
+	}}}
+	if _, err := manager.Canary(context.Background(), "fixture", bad.Revision, wide); err == nil {
+		t.Fatal("failed canary activated a path")
+	}
+	if err := manager.Activate("fixture", bad.Revision); err == nil {
+		t.Fatal("revision that failed canary was activated")
+	}
+	state, err := manager.Status("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Active != good.Revision || state.Versions[bad.Revision].State == "active" {
+		t.Fatalf("failed canary mutated active revision: %+v", state)
+	}
+}
+
+func TestRealPolicyViolationKeepsLastGood(t *testing.T) {
+	_ = isolationRunnerOrSkip(t)
+	dir := t.TempDir()
+	policy := isolationTestPolicy()
+	manager, err := NewJITManager(filepath.Join(dir, "managed"), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := compileIsolatedFixture(t, dir, "policy-trip", policyTripTransform)
+	artifact, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := manager.Stage(Manifest{AdapterID: "fixture", Target: fixtureTarget(), Limits: policy.Limits}, artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []ValidationCase{{Name: "happy", Input: []byte(`{"title":"ok"}`), WantValid: true}, {Name: "rejected", Input: []byte(`{"reject":true}`), WantValid: false}}
+	if err := manager.Validate(context.Background(), "fixture", version.Revision, cases); err != nil {
+		t.Fatal(err)
+	}
+	clean := trustedFixtureReader{fixtureReader{read: func(_ context.Context, target Target) (Report, error) {
+		return finishReport(newReport(target, "builtin:fixture"))
+	}}}
+	if _, err := manager.Canary(context.Background(), "fixture", version.Revision, clean); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Activate("fixture", version.Revision); err != nil {
+		t.Fatal(err)
+	}
+	scheduler, err := NewScheduler(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := jitBoundTestReader{manager: manager, id: "fixture", source: clean}
+	refresh := fixturePolicy()
+	refresh.Timeout = 20 * time.Second
+	first, err := scheduler.Refresh(context.Background(), "fixture", refresh, reader, fixtureTarget(), true)
+	if err != nil || first.Health.LastGood == nil {
+		t.Fatalf("good read: %v %+v", err, first)
+	}
+	observed := first.Health.LastGood.ObservedAt
+	trip := trustedFixtureReader{fixtureReader{read: func(_ context.Context, target Target) (Report, error) {
+		r := newReport(target, "builtin:fixture")
+		r.Facts["trip"] = true
+		return finishReport(r)
+	}}}
+	reader.source = trip
+	second, err := scheduler.Refresh(context.Background(), "fixture", refresh, reader, fixtureTarget(), true)
+	if err == nil {
+		t.Fatal("policy-violating read succeeded")
+	}
+	state, _ := manager.Status("fixture")
+	if state.Active != "" || state.Versions[version.Revision].State != "suspended" {
+		t.Fatalf("policy violation did not suspend: %+v", state)
+	}
+	if second.Health.LastGood == nil || second.Health.LastGood.ObservedAt != observed {
+		t.Fatalf("last good observation was dropped: %+v", second.Health)
+	}
+	if second.Health.LastGood.Facts["generated_findings"] == nil {
+		t.Fatal("last good lost generated findings")
+	}
+	age := scheduler.now().UTC().Sub(second.Health.LastGood.ObservedAt)
+	if age < 0 {
+		t.Fatalf("last good age is negative: %s", age)
+	}
+	t.Logf("last good retained age=%s observed_at=%s", age, second.Health.LastGood.ObservedAt)
+}
+
+type jitBoundTestReader struct {
+	manager *JITManager
+	id      string
+	source  Reader
+}
+
+func (r jitBoundTestReader) Capabilities() Capabilities {
+	return Capabilities{ReadOne: true, TrustedBuiltin: true}
+}
+func (r jitBoundTestReader) Read(ctx context.Context, target Target) (Report, error) {
+	_ = target
+	return r.manager.Read(ctx, r.id, r.source)
 }

@@ -1,0 +1,14 @@
+{
+  "target": {
+    "workspace_id": "ws_main",
+    "connection_id": "github-jit",
+    "source": "github",
+    "kind": "issue",
+    "native_id": "208",
+    "repository": "Git-on-my-level/agent-nexus"
+  },
+  "base_url": "https://api.github.com",
+  "max_pages": 5,
+  "max_bytes": 1048576,
+  "timeout_seconds": 30
+}

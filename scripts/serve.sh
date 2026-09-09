@@ -190,6 +190,14 @@ if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev
 	export ANX_PM_TURN_TIMEOUT="${ANX_PM_TURN_TIMEOUT:-10m}"
 fi
 
+# Dogfood observation: builtin GitHub + JIT transform against a public repo.
+if [ -z "${ANX_OBSERVATION_CONFIG:-}" ] && [ -f "${REPO_ROOT}/core/dev/observation.serve.json" ]; then
+	export ANX_OBSERVATION_CONFIG="${REPO_ROOT}/core/dev/observation.serve.json"
+	if ! "${REPO_ROOT}/core/scripts/dogfood-jit.sh"; then
+		echo "warning: JIT dogfood artifact was not activated; builtin GitHub reader still runs" >&2
+	fi
+fi
+
 HOST="${CORE_HOST}" \
 	PORT="${CORE_PORT}" \
 	WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT}" \
@@ -233,6 +241,22 @@ if [ "$SEED_CORE" = "1" ]; then
 		echo "  HOME=${MAYA_HOME} ${ANX_BIN} --agent maya pm ask --wait \"What needs my decision?\""
 		echo "Verify omp did not substitute the model:"
 		echo "  grep -o '\"provider\":\"[^\"]*\",\"model\":\"[^\"]*\"'"
+		echo ""
+	fi
+	if [ -n "${ANX_OBSERVATION_CONFIG:-}" ]; then
+		seed_observation_work() {
+			local id="$1"
+			local connection="$2"
+			curl -sS -X POST "${CORE_BASE_URL}/work" \
+				-H "Content-Type: application/json" \
+				-d "{\"actor_id\":\"actor-gds-producer\",\"board_ref\":\"board:board-gds-production\",\"id\":\"${id}\",\"title\":\"Public GitHub observation ${id}\",\"source\":{\"authority\":\"github\",\"connection_id\":\"${connection}\",\"native_id\":\"Git-on-my-level/agent-nexus#208\"}}" \
+				>/dev/null || echo "warning: could not seed observation work ${id}" >&2
+		}
+		seed_observation_work "card-anx-github-208" "github-main"
+		seed_observation_work "card-anx-github-208-jit" "github-jit"
+		echo "Observation dogfood: ANX_OBSERVATION_CONFIG=${ANX_OBSERVATION_CONFIG}"
+		echo "  builtin github-main → card:card-anx-github-208"
+		echo "  JIT github-jit → card:card-anx-github-208-jit"
 		echo ""
 	fi
 else
