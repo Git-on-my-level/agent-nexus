@@ -1,16 +1,13 @@
 <script>
-  let { tone = "neutral", children } = $props();
-  const colors = {
-    neutral: "bg-bg-soft text-fg-muted ring-1 ring-inset ring-line",
-    warn: "bg-warn-soft text-warn-text",
-    danger: "bg-danger-soft text-danger-text",
-    ok: "bg-ok-soft text-ok-text",
-  };
+  /**
+   * One badge. Tone only picks the colour; `.ui-badge` owns the box, so a
+   * neutral badge and a warn badge are the same height on the same row.
+   */
+  let { tone = "neutral", class: extraClass = "", children } = $props();
+  const TONES = ["neutral", "warn", "danger", "ok"];
+  let toneClass = $derived(
+    `ui-badge--${TONES.includes(tone) ? tone : "neutral"}`,
+  );
 </script>
 
-<span
-  class="inline-flex max-w-full items-center whitespace-nowrap rounded px-1.5 py-0.5 text-micro font-medium leading-none {colors[
-    tone
-  ] || colors.neutral}"
-  style="padding-top:3px;padding-bottom:3px">{@render children?.()}</span
->
+<span class="ui-badge {toneClass} {extraClass}">{@render children?.()}</span>
