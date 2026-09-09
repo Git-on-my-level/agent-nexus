@@ -1773,6 +1773,35 @@
     color: var(--ok-text);
   }
 
+  /* 32px square icon button — list-header search, row affordances. */
+  .ui-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--fg-muted);
+    cursor: pointer;
+    transition:
+      background 120ms ease,
+      color 120ms ease;
+  }
+
+  .ui-icon-btn:hover {
+    background: var(--bg-soft);
+    color: var(--fg);
+  }
+
+  .ui-icon-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
   /* One uppercase micro section label. */
   .ui-label {
     display: block;
@@ -1984,6 +2013,21 @@
 
   .shell-bottom-nav-item--active {
     color: var(--fg);
+  }
+
+  /* Ask PM is the one accent action on the bar, not a fifth grey tab. */
+  .shell-bottom-nav-item--accent {
+    color: var(--accent-text);
+  }
+
+  .shell-bottom-nav-accent-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 1.5rem;
+    border-radius: var(--radius-full);
+    background: var(--accent-soft);
   }
 
   @media (min-width: 640px) {

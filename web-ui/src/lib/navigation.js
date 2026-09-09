@@ -14,7 +14,7 @@ export const navigationItems = [
   {
     label: "Tasks",
     href: "/tasks",
-    icon: "boards",
+    icon: "tasks",
     hint: "Table and board",
   },
   {
@@ -45,13 +45,13 @@ export const settingsNavGroups = [
       {
         label: "Integrations",
         href: "/integrations",
-        icon: "events",
+        icon: "integrations",
         hint: "Source freshness and coverage",
       },
       {
         label: "Audit",
         href: "/events",
-        icon: "events",
+        icon: "audit",
         hint: "Workspace history",
       },
     ],

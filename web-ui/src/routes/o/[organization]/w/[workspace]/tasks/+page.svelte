@@ -16,6 +16,8 @@
     workKey,
     errorMessage,
   } from "$lib/pm/presentation.js";
+  import { navIconPath } from "$lib/icons.js";
+  import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import {
     applyTaskPhaseMove,
     requestedDecisionMap,
@@ -282,6 +284,26 @@
         aria-keyshortcuts="?"
         title="Keyboard shortcuts">?</button
       >
+      <button
+        class="ui-icon-btn"
+        onclick={openCommandPalette}
+        aria-label="Search workspace"
+        aria-keyshortcuts="Meta+K"
+        title="Search workspace (⌘K)"
+        type="button"
+      >
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d={navIconPath("search")} />
+        </svg>
+      </button>
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
       <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
     {/snippet}
