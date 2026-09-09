@@ -41,39 +41,6 @@ export function boardListColumnMetricItems(board, listStats) {
 }
 
 /**
- * @param {object | null | undefined} topic
- * @returns {{ key: string, count: number, label: string, dotClass: string }[]}
- */
-export function topicListLinkedMetricItems(topic) {
-  const timeline = Number(topic?.timeline_message_count ?? 0);
-  const docRefs = Array.isArray(topic?.document_refs)
-    ? topic.document_refs
-    : [];
-  const boardRefs = Array.isArray(topic?.board_refs) ? topic.board_refs : [];
-
-  return [
-    {
-      key: "timeline_messages",
-      count: timeline,
-      label: "Messages",
-      dotClass: "bg-accent",
-    },
-    {
-      key: "documents",
-      count: docRefs.length,
-      label: "Documents",
-      dotClass: "bg-blue-400",
-    },
-    {
-      key: "boards",
-      count: boardRefs.length,
-      label: "Boards",
-      dotClass: "bg-warn",
-    },
-  ];
-}
-
-/**
  * @param {object | null | undefined} doc
  * @returns {Array<{ key: string, label: string, dotClass: string, count?: number, displayValue?: string }>}
  */

@@ -3,31 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   boardListColumnMetricItems,
   documentListMetricItems,
-  topicListLinkedMetricItems,
 } from "../../src/lib/workspaceRowMetrics.js";
 
 describe("workspaceRowMetrics", () => {
-  describe("topicListLinkedMetricItems", () => {
-    it("uses timeline_message_count plus ref list lengths including zeros", () => {
-      const items = topicListLinkedMetricItems({
-        timeline_message_count: 14,
-        document_refs: [],
-        board_refs: ["board:a", "board:b"],
-      });
-      expect(items.map((i) => [i.label, i.count])).toEqual([
-        ["Messages", 14],
-        ["Documents", 0],
-        ["Boards", 2],
-      ]);
-    });
-
-    it("defaults missing enrichment to zero counts", () => {
-      expect(topicListLinkedMetricItems({}).map((i) => i.count)).toEqual([
-        0, 0, 0,
-      ]);
-    });
-  });
-
   describe("boardListColumnMetricItems", () => {
     it("respects canonical column order when no schema is present", () => {
       const items = boardListColumnMetricItems(

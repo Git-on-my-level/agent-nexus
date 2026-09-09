@@ -75,16 +75,10 @@ export function normalizeEventRow(
 ) {
   const type = asText(event?.type);
   const payload = payloadOf(event);
-  const topicId = refId(event, "topic");
   const cardId = firstText(
     payload.card_id,
     payload.cardId,
     refId(event, "card"),
-  );
-  const boardId = firstText(
-    payload.board_id,
-    payload.boardId,
-    refId(event, "board"),
   );
   const documentId = firstText(
     payload.document_id,
@@ -96,21 +90,9 @@ export function normalizeEventRow(
     payload.ask_id,
     refId(event, "inbox"),
   );
-  const topicHref = topicId
-    ? workspaceHref(`/topics/${encodeURIComponent(topicId)}`)
-    : "";
-  const cardHref =
-    cardId && boardId
-      ? workspaceHref(
-          `/boards/${encodeURIComponent(boardId)}?card=${encodeURIComponent(cardId)}`,
-        )
-      : "";
-
   let label = type || "Event";
   let detail = asText(event?.summary);
-  let href =
-    topicHref ||
-    workspaceHref(`/events#${encodeURIComponent(asText(event?.id))}`);
+  let href = workspaceHref(`/events#${encodeURIComponent(asText(event?.id))}`);
   let sourceLabel = "";
 
   if (type === "message_posted") {
@@ -118,8 +100,7 @@ export function normalizeEventRow(
     detail = truncateLines(
       firstText(payload.body, payload.text, event?.summary),
     );
-    href =
-      messageEventHrefFromEvent(event, { workspaceHref }) || topicHref || href;
+    href = messageEventHrefFromEvent(event, { workspaceHref }) || href;
   } else if (type === "card_moved") {
     label = "Card moved";
     detail = firstText(
@@ -132,29 +113,24 @@ export function normalizeEventRow(
       event?.summary,
     );
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardHref || href;
   } else if (type === "card_created") {
     label = "Card created";
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardHref || href;
   } else if (CARD_LIFECYCLE_LABELS[type]) {
     label = CARD_LIFECYCLE_LABELS[type];
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardHref || href;
   } else if (type === "card_restored") {
     label = "Card restored";
     detail = firstText(payload.title, payload.card_title, event?.summary);
     sourceLabel = firstText(payload.title, payload.card_title, cardId);
-    href = cardHref || href;
   } else if (type === "topic_priority_changed") {
     label = "Priority";
     detail = firstText(
       [payload.from, payload.to].filter(Boolean).join(" -> "),
       event?.summary,
     );
-    href = topicHref || href;
   } else if (
     [
       "topic_lifecycle_changed",
@@ -169,7 +145,6 @@ export function normalizeEventRow(
       [payload.from, payload.to].filter(Boolean).join(" -> "),
       event?.summary,
     );
-    href = topicHref || href;
   } else if (type === "human_attention_requested") {
     label = "Ask opened";
     detail = firstText(payload.title, payload.subject, event?.summary);

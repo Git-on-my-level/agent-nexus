@@ -66,12 +66,12 @@ describe("RefLink model", () => {
 
   it("scopes internal refs to the active workspace when provided", () => {
     expect(
-      resolveRefLink("artifact:artifact-1", {
+      resolveRefLink("thread:thread-1", {
         organizationSlug: "acme",
         workspaceSlug: "proj",
       }),
     ).toMatchObject({
-      href: "/o/acme/w/proj/artifacts/artifact-1",
+      href: "/o/acme/w/proj/threads/thread-1",
       isLink: true,
     });
 
@@ -195,8 +195,8 @@ describe("RefLink model", () => {
       routedValue: "card-1",
       primaryLabel: "Restock lemons",
       secondaryLabel: "",
-      href: "/o/acme/w/proj/boards/board-1?card=card-1",
-      isLink: true,
+      href: "",
+      isLink: false,
     });
   });
 
@@ -245,7 +245,7 @@ describe("RefLink model", () => {
     });
   });
 
-  it("prefers topic message targets when event route metadata includes a topic", () => {
+  it("links message targets to their backing thread when route metadata is known", () => {
     const message = resolveRefLink("event:evt-message", {
       organizationSlug: "acme",
       workspaceSlug: "proj",
@@ -263,7 +263,7 @@ describe("RefLink model", () => {
     expect(message).toMatchObject({
       routed: true,
       routedKind: "message",
-      href: "/o/acme/w/proj/topics/topic-1?tab=messages#message-evt-message",
+      href: "/o/acme/w/proj/threads/thread-1?tab=messages#message-evt-message",
       isLink: true,
     });
   });
@@ -374,8 +374,8 @@ describe("RefLink model", () => {
       routedValue: artifactId,
       primaryLabel: "Specs.pdf",
       secondaryLabel: "",
-      href: `/o/acme/w/proj/artifacts/${artifactId}`,
-      isLink: true,
+      href: "",
+      isLink: false,
     });
   });
 

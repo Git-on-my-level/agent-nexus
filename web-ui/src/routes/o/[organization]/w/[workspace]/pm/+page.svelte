@@ -6,7 +6,8 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatTimestamp } from "$lib/formatDate";
-  import { errorMessage } from "$lib/pm/presentation.js";
+  import { errorMessage, receiptSignal } from "$lib/pm/presentation.js";
+  import { decisionIdsFromTurn } from "$lib/pm/turnDecisions.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
@@ -22,6 +23,8 @@
     draft = $state(""),
     partial = $state(false),
     historyOpen = $state(false);
+  let decisionRecords = $state({});
+  let decisionError = $state("");
   let conversationsCursor = $state("");
   let turnsCursor = $state("");
   let loadingOlder = $state(false);
@@ -29,7 +32,9 @@
   let olderLoaded = false;
   let creationKey, requestKey, requestText, createdConversationId;
   let requestId = 0;
+  let decisionFetch = 0;
   let pollInFlight = false;
+  const pendingDecisions = new Set();
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
@@ -37,6 +42,9 @@
   let workRef = $derived($page.url.searchParams.get("work_ref") || "");
   let selectedKey = $derived(`${selectedId}\n${workRef}`);
   let activeWorkRef = $derived(conversation?.work_ref || workRef);
+  let turnDecisionIds = $derived(
+    turns.flatMap((turn) => decisionIdsFromTurn(turn)),
+  );
 
   beforeNavigate(({ cancel }) => {
     if (sending) {
@@ -67,6 +75,9 @@
       draft = "";
     }
     void loadConversation(key.split("\n")[0]);
+  });
+  $effect(() => {
+    void loadDecisionRecords(turnDecisionIds);
   });
 
   async function loadList(append = false) {
@@ -118,6 +129,29 @@
     } finally {
       loadingOlder = false;
     }
+  }
+  async function loadDecisionRecords(ids) {
+    const ticket = decisionFetch;
+    const missing = ids.filter(
+      (id) => id && !(id in decisionRecords) && !pendingDecisions.has(id),
+    );
+    if (!missing.length) return;
+    for (const id of missing) pendingDecisions.add(id);
+    await Promise.all(
+      missing.map(async (id) => {
+        try {
+          const record = await coreClient.getPmDecision(id);
+          if (ticket === decisionFetch) decisionRecords[id] = record;
+        } catch (err) {
+          if (ticket === decisionFetch) {
+            decisionRecords[id] = null;
+            decisionError = errorMessage(err);
+          }
+        } finally {
+          pendingDecisions.delete(id);
+        }
+      }),
+    );
   }
   async function loadConversation(id = selectedId, quiet = false) {
     const ticket = ++requestId;
@@ -245,7 +279,10 @@
   ];
   onMount(() => {
     void initialize();
-    const timer = setInterval(async () => {
+    // Turn status must catch up without a manual reload even when the tab sat
+    // hidden through the whole poll-paused window: poll while visible, and
+    // refresh immediately on becoming visible again.
+    const pollNow = () => {
       if (
         !selectedId ||
         sending ||
@@ -256,14 +293,19 @@
       )
         return;
       pollInFlight = true;
-      try {
-        await loadConversation(selectedId, true);
-      } finally {
+      void loadConversation(selectedId, true).finally(() => {
         pollInFlight = false;
-      }
-    }, 5000);
+      });
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) pollNow();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const timer = setInterval(pollNow, 5000);
     return () => {
       requestId++;
+      decisionFetch++;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       clearInterval(timer);
     };
   });
@@ -409,6 +451,7 @@
     >
       {#each turns as turn (turn.id)}
         {@const [statusLabel, statusTone] = turnStatus(turn)}
+        {@const proposed = decisionIdsFromTurn(turn)}
         <li class="space-y-3">
           <div class="pm-turn pm-turn--you">
             <p class="pm-turn-meta">
@@ -435,7 +478,7 @@
             {/if}
             {#if turn.evidence_refs?.length}
               <ul class="mt-2 flex flex-wrap gap-1.5 text-micro">
-                {#each turn.evidence_refs as ref (ref)}
+                {#each turn.evidence_refs.filter((ref) => !ref.startsWith("decision:")) as ref (ref)}
                   <li class="rounded bg-bg-soft px-1.5 py-0.5 font-mono">
                     {#if ref.startsWith("card:") || ref.startsWith("work:")}
                       <a
@@ -447,6 +490,59 @@
                   </li>
                 {/each}
               </ul>
+            {/if}
+            {#if proposed.length}
+              <div class="mt-3 border-t border-line-subtle pt-2">
+                <p
+                  class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+                >
+                  Proposed decisions
+                </p>
+                <ul
+                  class="mt-1 divide-y divide-line-subtle"
+                  aria-label="Decisions proposed in this reply"
+                >
+                  {#each proposed as id (id)}
+                    {@const record = decisionRecords[id]}
+                    <li
+                      class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-1.5"
+                    >
+                      <span class="min-w-0 flex-1 break-words text-meta text-fg"
+                        >{record?.instruction || `decision:${id}`}</span
+                      >
+                      {#if record?.work_ref}
+                        <a
+                          class="font-mono text-micro text-fg-muted hover:text-accent-text"
+                          href={workspaceHref(
+                            `/tasks/${encodeURIComponent(record.work_ref)}`,
+                          )}>{record.work_ref}</a
+                        >
+                      {/if}
+                      {#if record}
+                        {@const signal = receiptSignal(record.status)}
+                        <SignalBadge tone={signal.tone}
+                          >{signal.label}</SignalBadge
+                        >
+                        {#if record.status === "awaiting_answer"}
+                          <a
+                            class="ui-prose-link text-micro"
+                            href={workspaceHref(
+                              `/inbox?item=decision:${encodeURIComponent(id)}`,
+                            )}>Answer</a
+                          >
+                        {/if}
+                      {:else if record === null}
+                        <SignalBadge tone="neutral">Unavailable</SignalBadge>
+                      {:else}
+                        <span class="text-micro text-fg-subtle">Loading…</span>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+                {#if decisionError}
+                  <p class="mt-1 text-micro text-warn-text">{decisionError}</p>
+                {/if}
+              </div>
             {/if}
           </div>
         </li>

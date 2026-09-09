@@ -16,6 +16,7 @@
     workspaceHref,
     now = Date.now(),
     requested = {},
+    requestedDecisions = {},
     onMove,
   } = $props();
   let groups = $derived(
@@ -50,6 +51,9 @@
 
   function handleCardKey(event, work) {
     if (event.key === "Enter") {
+      // Only act when the card container itself has focus; a focused inner
+      // link (task or Requested badge) activates natively.
+      if (event.target !== event.currentTarget) return;
       const link = event.currentTarget.querySelector("a[href]");
       if (link) {
         event.preventDefault();
@@ -93,27 +97,39 @@
           >
             {group.label}
           </h2>
-          <span class="text-micro text-fg-subtle">{group.items.length}</span>
-        </div>
-        <div class="space-y-2">
           {#each group.items as work (workKey(work))}
+            {@const key = workKey(work)}
+            {@const decisionId = requestedDecisions[key]}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
             <div
-              class="outline-none {focusedKey === workKey(work)
+              class="outline-none {focusedKey === key
                 ? 'ring-1 ring-accent'
                 : ''}"
+              data-work-ref={work.ref}
               draggable="true"
               tabindex="0"
               role="listitem"
               ondragstart={(event) => handleDragStart(event, work)}
-              onfocus={() => (focusedKey = workKey(work))}
+              onfocus={() => (focusedKey = key)}
               onkeydown={(event) => handleCardKey(event, work)}
             >
               <WorkCard {work} href={href(work)} {now} />
-              {#if requested[workKey(work)]}
+              {#if requested[key]}
                 <p class="mt-1 px-1">
-                  <SignalBadge tone="warn">Requested</SignalBadge>
+                  {#if decisionId}
+                    <a
+                      class="inline-flex rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                      href={workspaceHref(
+                        `/inbox?item=decision:${encodeURIComponent(decisionId)}`,
+                      )}
+                      title="Answer this request in Inbox"
+                    >
+                      <SignalBadge tone="warn">Requested</SignalBadge>
+                    </a>
+                  {:else}
+                    <SignalBadge tone="warn">Requested</SignalBadge>
+                  {/if}
                 </p>
               {/if}
             </div>

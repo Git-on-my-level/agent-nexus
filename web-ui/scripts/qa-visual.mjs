@@ -252,29 +252,11 @@ const QA_SCENES = [
     },
   },
   {
-    name: "workspace-topics",
-    path: "/o/local/w/local/topics",
-    workspaceMode: "workspace-default",
-    thresholdRatio: 0.013,
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Topics")');
-    },
-  },
-  {
     name: "workspace-tasks",
     path: "/o/local/w/local/tasks",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Tasks")');
-    },
-  },
-  {
-    name: "workspace-artifacts",
-    path: "/o/local/w/local/artifacts",
-    workspaceMode: "workspace-default",
-    thresholdRatio: 0.018,
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Artifacts")');
     },
   },
   {
@@ -341,14 +323,14 @@ const QA_SCENES = [
   },
   {
     name: "confirm-modal-open",
-    path: "/o/local/w/local/artifacts",
+    path: "/o/local/w/local/docs",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Artifacts")');
+      await page.waitForSelector('h1:has-text("Docs")');
       await page.getByRole("button", { name: "Select" }).click();
-      await page.locator('[aria-label="Select Cutover review packet"]').click();
+      await page.locator('[aria-label="Select Launch checklist"]').click();
       await page.getByRole("button", { name: "Archive" }).click();
-      await page.waitForSelector("text=Archive 1 artifacts");
+      await page.waitForSelector("text=Archive 1 documents");
     },
   },
 ];

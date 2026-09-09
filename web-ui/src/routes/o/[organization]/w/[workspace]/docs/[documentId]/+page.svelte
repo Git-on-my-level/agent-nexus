@@ -5,6 +5,7 @@
   import Button from "$lib/components/Button.svelte";
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
@@ -104,6 +105,12 @@
   let documentRouteSegment = $derived(
     resourceRouteSegment(document, "document") || documentId,
   );
+  /**
+   * Public handle for the `anx docs get` CLI command. `resourceRouteSegment`
+   * prefers `document.handle` and never yields a bare UUID, so an empty value
+   * means no stable handle exists and the copy affordance stays hidden.
+   */
+  let documentCliHandle = $derived(resourceRouteSegment(document, "document"));
   /** Selection stash + discussion rail for document text comments */
   let docBodyMarkdownRoot = $state(null);
   let docStashedSelection = $state("");
@@ -1380,15 +1387,12 @@
               >
               {#if parentTopic}
                 <span class="shrink-0 text-fg-subtle">/</span>
-                <a
-                  class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-fg"
-                  href={workspaceHref(
-                    `/topics/${encodeURIComponent(resourceRouteSegment(parentTopic, "topic"))}`,
-                  )}
+                <span
+                  class="min-w-0 max-w-[5.5rem] shrink truncate text-fg-muted sm:max-w-[12rem]"
                   title={parentTopic.title}
                 >
                   {parentTopic.title}
-                </a>
+                </span>
               {/if}
               <span class="shrink-0 text-fg-subtle">/</span>
               <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">
@@ -1422,6 +1426,14 @@
                   resourceId={resourceCopyValue("document", document)}
                   resourceLabel="document ref"
                 />
+                {#if documentCliHandle}
+                  <CopyButton
+                    value={`anx docs get ${documentCliHandle}`}
+                    label="Copy CLI command"
+                    size="sm"
+                    title="Command for agents to fetch this doc via the anx CLI"
+                  />
+                {/if}
                 {#if isTextEditable}
                   <Button
                     variant="primary"
