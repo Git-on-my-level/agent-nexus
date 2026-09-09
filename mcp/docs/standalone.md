@@ -56,6 +56,18 @@ Supported overrides:
 - `ANX_BASE_URL`
 - `ANX_ACCESS_TOKEN`
 
+## Docs knowledge tools
+
+With a workspace profile, `anx-mcp` exposes the same docs search/get/put/comment
+commands as the CLI (`docs.search`, `docs.get`, `docs.put`, `docs.comments.*`).
+Authorization is the profile access token. Tag agent-facing docs `knowledge`.
+Git-repo ingest is a CLI composition over `docs.put`:
+
+```bash
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+```
+
 Diagnostics go to stderr. stdout is reserved for newline-delimited JSON-RPC MCP
 messages.
 
@@ -145,3 +157,25 @@ are deliberately not exposed or are gated:
 Tool results are redacted before returning through MCP. Raw access tokens,
 refresh tokens, invite tokens, private keys, secret values, authorization
 headers, and environment payloads should not appear in normal responses.
+
+## Unified work and PM receipts
+
+The generated catalog includes workspace-scoped `work.*` reads and observation
+submission, plus `pm.*` context, conversations, decisions and action receipt reads.
+Hosted defaults include only reads. Standalone defaults additionally expose durable
+requests such as observation submission and receipt reconciliation; core still
+validates workspace identity, replay keys and selected-PM-agent permissions.
+
+`pm.decisions.answer` and `pm.decisions.dispatch` are gated sensitive tools, while
+`pm.bindings.create` is gated administration. Making a tool visible never grants
+human approval, source-write permission, or a new channel identity. Receipt
+reconciliation reads back authoritative outcomes; it must not resend actions.
+Generated readers and remote observations cannot self-certify accepted completion.
+
+Request bodies use nested canonical JSON objects (for example
+`body.observation.idempotency_key` denotes an `observation` object, not a literal
+key containing dots). The optional MCP `idempotency_key` is mapped to the
+observation's nested key or the PM creation request's `request_key`; conflicting
+keys fail locally. Versioned annotations, refresh, approval, dispatch and receipt
+reconciliation use their documented version/action identity and do not advertise
+a generic replay-key option.

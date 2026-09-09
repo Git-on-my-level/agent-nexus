@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -22,6 +23,8 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/heartbeat"
+	"agent-nexus-core/internal/observation"
+	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
 	"agent-nexus-core/internal/schema"
@@ -53,6 +56,10 @@ const (
 	defaultWriteRouteRateLimitPerMinute       = 1200
 	defaultWriteRouteRateBurst                = 200
 )
+
+// Local-only marker that must exist in the workspace root before the passkey
+// dev bypass (synthetic human onboarding) is honored.
+const devPasskeyBypassMarkerName = ".anx-dev-insecure-auth"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -88,6 +95,7 @@ func main() {
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
 		devRegisterLinkedActors     = envBool("ANX_DEV_REGISTER_LINKED_ACTORS", false)
+		allowPasskeyDevBypass       = envBool("ANX_ALLOW_PASSKEY_DEV_BYPASS", false)
 		enableDevActorMode          = envBool("ANX_ENABLE_DEV_ACTOR_MODE", false)
 		allowUnauthenticatedWrites  = envBool("ANX_ALLOW_UNAUTHENTICATED_WRITES", false)
 		allowLoopbackVerifyReads    = envBool("ANX_ALLOW_LOOPBACK_VERIFICATION_READS", false)
@@ -355,6 +363,17 @@ func main() {
 		accountStatusChecker = checker
 	}
 
+	// Passkey dev bypass (synthetic human onboarding without WebAuthn) is a
+	// local-only capability: it requires both the explicit env switch and a
+	// marker file inside the workspace root, and it is only honored alongside
+	// the loopback dev-mode gate below.
+	passkeyDevBypassMarkerPath := filepath.Join(workspace.Layout().RootDir, devPasskeyBypassMarkerName)
+	passkeyDevBypassMarkerPresent, err := fileExists(passkeyDevBypassMarkerPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to check passkey dev bypass marker: %v\n", err)
+		os.Exit(1)
+	}
+	passkeyDevBypassEffective := allowPasskeyDevBypass && passkeyDevBypassMarkerPresent && enableDevActorMode
 	authStoreOpts := []auth.Option{
 		auth.WithBootstrapToken(bootstrapToken),
 		auth.WithAllowDevRegisterLinkedActor(devRegisterLinkedActors),
@@ -430,6 +449,59 @@ func main() {
 			Enabled: true,
 		})
 	}
+	observationRuntime, err := server.LoadObservationRuntime(envString("ANX_OBSERVATION_CONFIG", ""), workspaceID, primitiveStore)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize observation runtime: %v\n", err)
+		os.Exit(1)
+	}
+	if observationRuntime != nil {
+		invStore, invErr := observation.NewInvestigationStore(workspace.DB(), func(_ context.Context, preset string) error {
+			preset = strings.TrimSpace(preset)
+			allowed := envString("ANX_INVESTIGATION_PRESET", "")
+			handle := envString("ANX_PM_AGENT_HANDLE", "")
+			if preset != "" && ((allowed != "" && preset == allowed) || (handle != "" && preset == handle)) {
+				return nil
+			}
+			return fmt.Errorf("existing investigation preset is unavailable; no model fallback")
+		})
+		if invErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize investigation runtime: %v\n", invErr)
+			os.Exit(1)
+		}
+		invRuntime, invErr := observation.NewInvestigationRuntime(invStore)
+		if invErr != nil {
+			fmt.Fprintf(os.Stderr, "failed to initialize investigation runtime: %v\n", invErr)
+			os.Exit(1)
+		}
+		observationRuntime.BindInvestigations(invRuntime)
+	}
+	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
+		PM: pm.Config{
+			WorkspaceID:    workspaceID,
+			WorkspaceName:  workspaceName,
+			BaseURL:        envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
+			AgentActorID:   envString("ANX_PM_AGENT_ACTOR_ID", ""),
+			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
+			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
+			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
+			MaxConcurrent:  envInt("ANX_PM_MAX_CONCURRENT", 2),
+		},
+		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
+		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),
+		Observation:             observationRuntime,
+		TelegramWebhookSecret:   envString("ANX_PM_TELEGRAM_WEBHOOK_SECRET", ""),
+		TelegramBotID:           envString("ANX_PM_TELEGRAM_BOT_ID", ""),
+		TelegramBotToken:        envString("ANX_PM_TELEGRAM_BOT_TOKEN", ""),
+		TelegramAPIBase:         envString("ANX_PM_TELEGRAM_API_BASE", ""),
+		DiscordPublicKeyHex:     envString("ANX_PM_DISCORD_PUBLIC_KEY", ""),
+		DiscordApplicationID:    envString("ANX_PM_DISCORD_APPLICATION_ID", ""),
+		DiscordBotToken:         envString("ANX_PM_DISCORD_BOT_TOKEN", ""),
+		DiscordAPIBase:          envString("ANX_PM_DISCORD_API_BASE", ""),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)
+		os.Exit(1)
+	}
 	handler := server.NewHandler(
 		contract.Version,
 		server.WithHealthCheck(workspace.Ping),
@@ -439,7 +511,10 @@ func main() {
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
+		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
 		server.WithPrimitiveStore(primitiveStore),
+		server.WithPMRuntime(pmRuntime),
+		server.WithObservationRuntime(observationRuntime),
 		server.WithSchemaContract(contract),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
 			RPDisplayName:  webAuthnDisplayName,
@@ -485,6 +560,25 @@ func main() {
 		go projectionMaintainer.Run(maintenanceCtx)
 	}
 	sidecarHost.Run(maintenanceCtx)
+	if observationRuntime != nil {
+		go observationRuntime.Run(maintenanceCtx)
+	}
+	if pmRuntime != nil {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-maintenanceCtx.Done():
+					return
+				case <-ticker.C:
+					if err := pmRuntime.Drain(maintenanceCtx); err != nil {
+						fmt.Fprintf(os.Stderr, "pm channel drain: %v\n", err)
+					}
+				}
+			}
+		}()
+	}
 	heartbeatURL := strings.TrimSpace(os.Getenv("ANX_HEARTBEAT_PUBLISHER_URL"))
 	if heartbeatURL == "" {
 		fmt.Println("heartbeat publisher: disabled (ANX_HEARTBEAT_PUBLISHER_URL unset)")
@@ -577,6 +671,11 @@ func main() {
 		fmt.Printf("  human auth mode: %s\n", humanAuthMode)
 		if enableDevActorMode {
 			fmt.Println("  WARNING: dev actor mode enabled (unauthenticated reads; legacy POST /actors)")
+			if passkeyDevBypassEffective {
+				fmt.Printf("  WARNING: passkey dev bypass enabled (marker=%s)\n", passkeyDevBypassMarkerPath)
+			} else if allowPasskeyDevBypass {
+				fmt.Printf("  WARNING: passkey dev bypass requested but inactive (missing marker %s)\n", passkeyDevBypassMarkerPath)
+			}
 		}
 		if allowUnauthenticatedWrites {
 			fmt.Println("  WARNING: unauthenticated writes enabled (actor_id in body; local dev only)")
@@ -839,4 +938,15 @@ func asMapAny(value any) map[string]any {
 		return map[string]any{}
 	}
 	return decoded
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }

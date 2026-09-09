@@ -165,18 +165,11 @@ export async function eventRouteForRef(eventId, client) {
 export function messageEventHref({
   eventId,
   threadId = "",
-  topicId = "",
   workspaceHref,
 } = {}) {
   const id = asText(eventId);
   if (!id || typeof workspaceHref !== "function") {
     return "";
-  }
-  const topic = asText(topicId);
-  if (topic) {
-    return workspaceHref(
-      `/topics/${pathSegment(topic)}?tab=messages#message-${pathSegment(id)}`,
-    );
   }
   const thread = asText(threadId);
   if (thread) {
@@ -205,15 +198,10 @@ export function threadTimelineEventHref({
 export function messageEventHrefFromEvent(event, { workspaceHref } = {}) {
   const eventId = asText(event?.id);
   const refs = Array.isArray(event?.refs) ? event.refs : [];
-  const topicFromRef = splitTypedRef(event?.topic_ref);
   const threadFromRef = splitTypedRef(event?.thread_ref);
   return messageEventHref({
     eventId,
     workspaceHref,
-    topicId:
-      (topicFromRef.prefix === "topic" ? topicFromRef.value : "") ||
-      asText(event?.topic_id || event?.topicId) ||
-      firstRefValue(refs, "topic"),
     threadId:
       asText(event?.thread_id || event?.threadId) ||
       (threadFromRef.prefix === "thread" ? threadFromRef.value : "") ||

@@ -154,8 +154,8 @@ Options:
   --viewport <WxH>      Viewport size                 (default: 1440x900)
   --out <dir>           Output directory              (default: .qa-captures)
   --routes <list>       Comma-separated route names   (default: curated list)
-                        Available: home,inbox,topics,boards,docs,artifacts,trash,access
-                        When set, detail discovery only follows matching list types (e.g. boards → board detail only).
+                        Available: inbox,tasks,docs,access
+                        When set, detail discovery only follows matching list types (e.g. docs → doc detail only).
   --detail-limit <n>    When detail discovery runs, max captures per collection (default: 1)
   --full-page           Capture full scrollable page  (default)
   --no-full-page        Capture viewport only
@@ -170,7 +170,7 @@ Options:
 Examples:
   node scripts/qa-capture.mjs
   node scripts/qa-capture.mjs --baseline
-  node scripts/qa-capture.mjs --routes inbox,topics --viewport 768x1024
+  node scripts/qa-capture.mjs --routes inbox,docs --viewport 768x1024
   node scripts/qa-capture.mjs --compare .qa-captures/2026-04-09_04-00-54_1440x900
   node scripts/qa-capture.mjs --json --no-axe --no-detail
 `.trim(),
@@ -186,17 +186,9 @@ function workspaceShellPrefix(opts) {
 function getDefaultRoutes(opts) {
   const shell = workspaceShellPrefix(opts);
   return [
-    { name: "home", path: "/", description: "Workspace dashboard / chooser" },
     { name: "inbox", path: `${shell}/inbox`, description: "Inbox triage view" },
-    { name: "topics", path: `${shell}/topics`, description: "Topic list" },
-    { name: "boards", path: `${shell}/boards`, description: "Board list" },
+    { name: "tasks", path: `${shell}/tasks`, description: "Tasks" },
     { name: "docs", path: `${shell}/docs`, description: "Documents list" },
-    {
-      name: "artifacts",
-      path: `${shell}/artifacts`,
-      description: "Artifacts list",
-    },
-    { name: "trash", path: `${shell}/trash`, description: "Trash" },
     {
       name: "access",
       path: `${shell}/access`,
@@ -221,34 +213,15 @@ async function discoverDetailPages(page, opts) {
 
   const collections = [
     {
-      listPath: `${shell}/topics`,
-      detailPrefix: `${shell}/topics/`,
-      name: "topic-detail",
-    },
-    {
-      listPath: `${shell}/boards`,
-      detailPrefix: `${shell}/boards/`,
-      name: "board-detail",
-      linkSelector: "a[href]",
-    },
-    {
       listPath: `${shell}/docs`,
       detailPrefix: `${shell}/docs/`,
       name: "doc-detail",
       excludePattern: /\/revisions\//,
     },
-    {
-      listPath: `${shell}/artifacts`,
-      detailPrefix: `${shell}/artifacts/`,
-      name: "artifact-detail",
-    },
   ];
 
   const routeNameToDetailCollection = {
-    topics: "topic-detail",
-    boards: "board-detail",
     docs: "doc-detail",
-    artifacts: "artifact-detail",
   };
   let activeCollections = collections;
   if (opts.routes?.length) {

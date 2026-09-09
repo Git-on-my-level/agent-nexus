@@ -125,7 +125,8 @@ func (a *App) Run(args []string) int {
 		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
 		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||
 		isAPICallHelpOnly(remaining) ||
-		isTrailingHelpOnlyInvocation(remaining)
+		isTrailingHelpOnlyInvocation(remaining) ||
+		isWorkCommandGroup(strings.Join(remaining, " "))
 
 	preflightCommandName, usageErr := preflightConfigIndependentUsage(remaining)
 	if usageErr != nil {

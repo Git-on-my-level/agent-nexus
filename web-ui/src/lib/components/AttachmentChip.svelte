@@ -42,9 +42,9 @@
 
   let state = $derived.by(() => {
     if (pending) return "pending";
-    // `routed` means the id was in `artifactRoutesById` (timeline had metadata).
-    // Unrouted `artifact:` refs still get a direct `/artifacts/:id` href from
-    // `resolveRefLink`; only treat as missing when that href could not be built.
+    // `routed` means the id was in `artifactRoutesById` (timeline had metadata);
+    // routed chips download via the API. Unrouted `artifact:` refs have neither
+    // metadata nor a detail page, so they render as unavailable.
     if (
       !resolved?.routed &&
       resolved?.prefix === "artifact" &&
@@ -315,7 +315,7 @@
           </span>
         {/if}
 
-        {#if browser && resolved?.isLink && resolved?.href && state === "ready" && !resolved?.isExternal && !rowTight}
+        {#if browser && state === "ready" && !resolved?.isExternal && !rowTight}
           <button
             type="button"
             class="hidden shrink-0 items-center justify-center border-l border-line px-2 text-accent-text hover:bg-bg-soft sm:flex"

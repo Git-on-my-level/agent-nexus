@@ -279,22 +279,20 @@ func inputSchema(command Command) map[string]any {
 	}
 
 	if len(command.BodySchema.Required) > 0 || len(command.BodySchema.Optional) > 0 || command.InputMode == "json-body" {
-		bodyProps := map[string]any{}
-		bodyRequired := make([]string, 0, len(command.BodySchema.Required))
+		bodySchema := objectSchema(map[string]any{}, nil, true)
 		for _, field := range command.BodySchema.Required {
-			bodyProps[field.Name] = jsonSchemaForField(field)
-			bodyRequired = append(bodyRequired, field.Name)
+			addBodyField(bodySchema, strings.Split(field.Name, "."), jsonSchemaForField(field), true)
 		}
 		for _, field := range command.BodySchema.Optional {
-			bodyProps[field.Name] = jsonSchemaForField(field)
+			addBodyField(bodySchema, strings.Split(field.Name, "."), jsonSchemaForField(field), false)
 		}
-		properties["body"] = objectSchema(bodyProps, bodyRequired, true)
-		if len(bodyRequired) > 0 {
+		properties["body"] = bodySchema
+		if len(command.BodySchema.Required) > 0 {
 			required = append(required, "body")
 		}
 	}
 
-	if command.Method != "GET" && command.Method != "HEAD" {
+	if SupportsIdempotencyKey(command.CommandID, command.Method) {
 		properties["idempotency_key"] = map[string]any{
 			"type":        "string",
 			"description": "Optional client-supplied idempotency key for write calls.",
@@ -407,4 +405,55 @@ func copyBoolMap(in map[string]bool) map[string]bool {
 		out[key] = value
 	}
 	return out
+}
+
+// SupportsIdempotencyKey describes the request-key contract, not a promise of
+// exactly-once source execution. Versioned/receipt mutations use their own CAS.
+func SupportsIdempotencyKey(id, method string) bool {
+	if method == "GET" || method == "HEAD" {
+		return false
+	}
+	if strings.HasPrefix(id, "work.") || strings.HasPrefix(id, "pm.") {
+		switch id {
+		case "work.observations.submit", "pm.conversations.create", "pm.conversations.messages.create", "pm.decisions.create", "pm.turns.decisions.create":
+			return true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func addBodyField(schema map[string]any, path []string, field map[string]any, required bool) {
+	if len(path) == 0 {
+		return
+	}
+	properties, _ := schema["properties"].(map[string]any)
+	if properties == nil {
+		properties = map[string]any{}
+		schema["properties"] = properties
+	}
+	key := path[0]
+	if required {
+		keys, _ := schema["required"].([]string)
+		found := false
+		for _, existing := range keys {
+			if existing == key {
+				found = true
+			}
+		}
+		if !found {
+			schema["required"] = append(keys, key)
+		}
+	}
+	if len(path) == 1 {
+		properties[key] = field
+		return
+	}
+	child, _ := properties[key].(map[string]any)
+	if child == nil {
+		child = objectSchema(map[string]any{}, nil, true)
+		properties[key] = child
+	}
+	addBodyField(child, path[1:], field, required)
 }

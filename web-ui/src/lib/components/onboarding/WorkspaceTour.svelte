@@ -67,45 +67,39 @@
             placement: "center",
             eyebrow: "60-second tour",
             title: welcomeTitle,
-            body: "This is your control plane for delegating work to AI agents. We'll show you the map in 6 stops — then connect your first agent so the workspace comes alive.",
+            body: "Inbox, Tasks, and Docs are the three places you work. PM is the conversation surface for decisions that need follow-through.",
             primaryLabel: "Take the tour →",
             skipLabel: "Maybe later",
           },
           {
-            selector: '[data-tour="home"]',
-            eyebrow: "1 of 6 · Home",
-            title: "Home is your situation room",
-            body: "A live snapshot of what your agents are doing, what's blocked, and what just shipped — so you walk in and know where to look.",
-          },
-          {
             selector: '[data-tour="inbox"]',
-            eyebrow: "2 of 6 · Inbox",
-            title: "Inbox is where agents tap you in",
-            body: "When an agent gets stuck, needs a decision, or finishes work, it lands here. Think of it as the one place to triage agent output.",
+            eyebrow: "1 of 5 · Inbox",
+            title: "Inbox is the only attention surface",
+            body: "Decisions that need an answer, blocked tasks, and items that require a response land here.",
           },
           {
-            selector: '[data-tour="topics"]',
-            eyebrow: "3 of 6 · Topics",
-            title: "Topics keep work on rails",
-            body: "Every long-running thread of work — a feature, a customer, an investigation — gets its own topic. Agents and humans collaborate against shared context, not loose chats.",
-          },
-          {
-            selector: '[data-tour="boards"]',
-            eyebrow: "4 of 6 · Boards",
-            title: "Boards are the views you'll live in",
-            body: 'Group related topics into the dashboards you actually open every day — "Customer X", "This week", "Stuck on me". You build them, agents respect them.',
+            selector: '[data-tour="tasks"]',
+            eyebrow: "2 of 5 · Tasks",
+            title: "Tasks is the work board",
+            body: "Table and board over the same records. Drag a Nexus-owned card to change phase. Source-owned cards open a decision instead of mutating the source.",
           },
           {
             selector: '[data-tour="docs"]',
-            eyebrow: "5 of 6 · Docs",
-            title: "Docs your agents can read and write",
-            body: "Briefs, specs, runbooks — the durable knowledge your agents reach for. Edit them like a wiki; agents will cite them in their work.",
+            eyebrow: "3 of 5 · Docs",
+            title: "Docs is shared knowledge",
+            body: "Versioned documents with first-class comments. Use them for meta knowledge and what other hosts cannot see.",
+          },
+          {
+            selector: '[data-tour="pm"]',
+            eyebrow: "4 of 5 · PM",
+            title: "PM is the conversation",
+            body: "Ask what needs a decision, then follow the receipt. The PM runs through the existing agent harnesses.",
           },
           {
             selector: '[data-tour="access"]',
-            eyebrow: "6 of 6 · Access",
-            title: "This is where the workspace wakes up",
-            body: "Right now you're the only principal here. Invite an agent (or a teammate) and the rest of the workspace lights up — Inbox starts catching real work, Topics fill in, Boards earn their keep.",
+            eyebrow: "5 of 5 · Access",
+            title: "Connect the first agent",
+            body: "Invite an agent or teammate. Settings also holds Secrets, Integrations, and Audit.",
             ctaLabel: "Connect your first agent →",
             ctaHref: ctaAccessHref,
           },
@@ -113,7 +107,7 @@
   );
 
   function shouldOfferTourPath(/** @type {string} */ path) {
-    return path === "/";
+    return path === "/inbox";
   }
 
   function finishTour() {
@@ -197,7 +191,7 @@
     }
 
     if (!shouldOfferTourPath(relPath)) {
-      const dest = workspacePath(organizationSlug, workspaceSlug, "/");
+      const dest = workspacePath(organizationSlug, workspaceSlug, "/inbox");
       void goto(dest, { replaceState: true, noScroll: false });
       return;
     }
@@ -218,9 +212,7 @@
 
   // Replay-on-demand: the Home page exposes a "Take the tour" button that
   // bumps replayTourSignal. Force the tour open regardless of the
-  // workspaceTourSeen flag. The tour is anchored to landmarks that only
-  // render on Home, so navigate there first if needed, then open once the
-  // path settles.
+  // workspaceTourSeen flag. The tour is anchored to Inbox landmarks.
   let lastReplaySignal = $state(0);
   let pendingReplay = $state(false);
 
@@ -233,7 +225,7 @@
     if (tourOpen) return;
     pendingReplay = true;
     if (!shouldOfferTourPath(relPath)) {
-      const dest = workspacePath(organizationSlug, workspaceSlug, "/");
+      const dest = workspacePath(organizationSlug, workspaceSlug, "/inbox");
       void goto(dest, { replaceState: false, noScroll: false });
     }
   });

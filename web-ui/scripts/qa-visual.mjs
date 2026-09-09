@@ -135,7 +135,9 @@ const QA_SCENES = [
     hostedMode: "authed-dashboard",
     waitFor: async (page) => {
       /** Legacy usage URL redirects to the billing page that now owns usage details. */
-      await page.waitForURL(/\/hosted\/organizations\/org_qa_primary\/billing$/);
+      await page.waitForURL(
+        /\/hosted\/organizations\/org_qa_primary\/billing$/,
+      );
       await page.waitForSelector('h1:has-text("Billing & Usage")');
       await page.waitForSelector('h2:has-text("Workspace usage")');
     },
@@ -180,8 +182,7 @@ const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-unread-feed"]');
-      await page.waitForSelector("text=unread across");
+      await page.waitForSelector('h1:has-text("Inbox")');
     },
   },
   {
@@ -189,8 +190,7 @@ const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-recent",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-unread-feed"]');
-      await page.waitForSelector("text=Launch war room");
+      await page.waitForSelector('h1:has-text("Inbox")');
     },
   },
   {
@@ -198,8 +198,7 @@ const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="home-unread-empty"]');
-      await page.waitForSelector("text=You're caught up.");
+      await page.waitForSelector('h1:has-text("Inbox")');
     },
   },
   {
@@ -207,7 +206,8 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-empty",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Inbox is clear");
+      // Empty Needs you now reads "You're clear." plus a link to Watching.
+      await page.waitForSelector("text=You're clear.");
     },
   },
   {
@@ -215,7 +215,7 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-populated",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="inbox-card-inbox-ask-auth"]');
+      await page.waitForSelector('[data-testid="inbox-row-inbox-ask-auth"]');
     },
   },
   {
@@ -223,7 +223,7 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-loading",
     waitFor: async (page) => {
-      await page.waitForSelector(".animate-pulse");
+      await page.waitForSelector("text=Loading inbox…");
     },
   },
   {
@@ -253,30 +253,11 @@ const QA_SCENES = [
     },
   },
   {
-    name: "workspace-topics",
-    path: "/o/local/w/local/topics",
-    workspaceMode: "workspace-default",
-    thresholdRatio: 0.013,
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Topics")');
-    },
-  },
-  {
-    name: "workspace-boards",
-    path: "/o/local/w/local/boards",
+    name: "workspace-tasks",
+    path: "/o/local/w/local/tasks",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Boards")');
-      await page.waitForSelector("text=Launch control");
-    },
-  },
-  {
-    name: "workspace-artifacts",
-    path: "/o/local/w/local/artifacts",
-    workspaceMode: "workspace-default",
-    thresholdRatio: 0.018,
-    waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Artifacts")');
+      await page.waitForSelector('h1:has-text("Tasks")');
     },
   },
   {
@@ -297,7 +278,10 @@ const QA_SCENES = [
     waitFor: async (page) => {
       await page.waitForSelector('h1:has-text("Launch checklist")');
       await page.waitForSelector("text=Operator-facing launch checklist");
-      await page.waitForSelector("text=Discussion");
+      // Desktop (1440px) uses the document rail; the dock header is lg:hidden.
+      // Do not use text=Discussion: it matches the hidden settings hint
+      // "Workspace projects and discussions" first and never becomes visible.
+      await page.waitForSelector("aside.dd-rail");
       await page.waitForSelector("text=Check the OAuth callback copy");
       await page.waitForSelector("text=Keep this wording exact");
     },
@@ -332,7 +316,7 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-populated",
     waitFor: async (page) => {
-      await page.waitForSelector('[data-testid="inbox-card-inbox-ask-auth"]');
+      await page.waitForSelector('[data-testid="inbox-row-inbox-ask-auth"]');
       await page.click(".shell-search-trigger");
       await page.fill(".cmd-input", "launch");
       await page.waitForSelector(".cmd-result-row");
@@ -340,14 +324,14 @@ const QA_SCENES = [
   },
   {
     name: "confirm-modal-open",
-    path: "/o/local/w/local/artifacts",
+    path: "/o/local/w/local/docs",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Artifacts")');
+      await page.waitForSelector('h1:has-text("Docs")');
       await page.getByRole("button", { name: "Select" }).click();
-      await page.locator('[aria-label="Select Cutover review packet"]').click();
+      await page.locator('[aria-label="Select Launch checklist"]').click();
       await page.getByRole("button", { name: "Archive" }).click();
-      await page.waitForSelector("text=Archive 1 artifacts");
+      await page.waitForSelector("text=Archive 1 documents");
     },
   },
 ];
@@ -1252,13 +1236,32 @@ async function handleWorkspaceApiRoute(
       );
       return;
     }
-    const items = scenario.inboxState === "populated" ? QA_INBOX_POPULATED : [];
+    const status = url.searchParams.get("status") || "open";
+    const items =
+      scenario.inboxState === "populated" && status !== "completed"
+        ? QA_INBOX_POPULATED
+        : [];
     await route.fulfill(
       jsonResponse(200, {
         items,
         generated_at: QA_FIXED_NOW_ISO,
       }),
     );
+    return;
+  }
+
+  if (pathname === "/work" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { work: [], next_cursor: "" }));
+    return;
+  }
+
+  if (pathname === "/pm/decisions" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { items: [], has_more: false }));
+    return;
+  }
+
+  if (pathname === "/pm/actions" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { items: [], has_more: false }));
     return;
   }
 

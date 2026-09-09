@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `123`
+- Commands: `159`
 
 ## `actors.create`
 
@@ -761,6 +761,83 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
+
+## `docs.comments.create`
+
+- CLI path: `docs comment`
+- HTTP: `POST /docs/{document_id}/comments`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Post a comment on a document so another agent can read it later.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comment }`.
+- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
+- Examples:
+  - Post a comment: `anx docs comment doc:runbook "Host B found this"`
+
+## `docs.comments.delete`
+
+- CLI path: `docs comments delete`
+- HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Remove a comment you authored from the document discussion.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Output: Returns `{ comment }` with the trashed comment.
+- Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
+- Examples:
+  - Delete own comment: `anx docs comments delete doc:runbook event:note`
+
+## `docs.comments.list`
+
+- CLI path: `docs comments`
+- HTTP: `GET /docs/{document_id}/comments`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read the document discussion thread with stable comment ids.
+- Concepts: `docs`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comments, next_cursor? }`.
+- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.
+- Examples:
+  - List comments: `anx docs comments doc:runbook`
+
+## `docs.comments.reply`
+
+- CLI path: `docs comments reply`
+- HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Reply in a document comment thread without leaving the docs surface.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ comment }`.
+- Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+- Examples:
+  - Reply in thread: `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+## `docs.comments.update`
+
+- CLI path: `docs comments edit`
+- HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Edit a comment you authored without changing its stable ref.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Output: Returns `{ comment }`.
+- Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+- Examples:
+  - Edit own comment: `anx docs comments edit doc:runbook event:note --body "Corrected"`
 
 ## `docs.create`
 
@@ -773,6 +850,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
 
 ## `docs.get`
 
@@ -785,6 +864,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document, revision }`.
+- Agent notes: Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
+- Examples:
+  - Print markdown body: `anx docs get kb-shared --format md`
 
 ## `docs.list`
 
@@ -797,6 +879,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ documents }`.
+- Examples:
+  - List knowledge docs: `anx docs list --knowledge`
 
 ## `docs.patch`
 
@@ -809,6 +893,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`, `concurrency`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Patch knowledge hosts: `anx docs patch kb-shared --from-file patch.json`
 
 ## `docs.purge`
 
@@ -821,6 +907,23 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
+- Examples:
+  - Purge a trashed document: `anx docs purge doc:runbook`
+
+## `docs.put`
+
+- CLI path: `docs put`
+- HTTP: `PUT /docs/{document_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Output: Returns `{ document, revision }`.
+- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
+- Examples:
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
 
 ## `docs.restore`
 
@@ -833,6 +936,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Restore a trashed document: `anx docs restore doc:runbook`
 
 ## `docs.revisions.create`
 
@@ -845,6 +950,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `revisions`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
 
 ## `docs.revisions.get`
 
@@ -869,6 +976,23 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
+- Examples:
+  - List revision history: `anx docs history doc:runbook`
+
+## `docs.search`
+
+- CLI path: `docs search`
+- HTTP: `GET /docs/search`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
+- Concepts: `docs`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
+- Agent notes: SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).
+- Examples:
+  - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
 
 ## `docs.trash`
 
@@ -881,6 +1005,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
 
 ## `docs.unarchive`
 
@@ -893,6 +1019,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Unarchive a document: `anx docs unarchive doc:runbook`
 
 ## `events.archive`
 
@@ -1201,6 +1329,266 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns usage envelope JSON.
 
+## `pm.actions.get`
+
+- CLI path: `pm actions get`
+- HTTP: `GET /pm/actions/{action_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read an action and its receipts.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMAction`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.actions.list`
+
+- CLI path: `pm actions list`
+- HTTP: `GET /pm/actions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List action receipts and attempts.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMActionListResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.actions.reconcile`
+
+- CLI path: `pm actions reconcile`
+- HTTP: `POST /pm/actions/{action_id}/reconcile`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Read back an action outcome without resending.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMAction`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.bindings.create`
+
+- CLI path: `pm bindings create`
+- HTTP: `POST /pm/bindings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Bind an exact channel identity to a workspace principal.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMBinding`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.bindings.list`
+
+- CLI path: `pm bindings list`
+- HTTP: `GET /pm/bindings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMBindingListResponse`.
+- Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
+
+## `pm.context`
+
+- CLI path: `pm context`
+- HTTP: `GET /pm/context`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read bounded authorized PM context.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMContextResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.conversations.create`
+
+- CLI path: `pm conversations create`
+- HTTP: `POST /pm/conversations`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Create a durable PM conversation.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMConversation`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.conversations.get`
+
+- CLI path: `pm conversations get`
+- HTTP: `GET /pm/conversations/{conversation_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read PM conversation and turns.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMConversationDetailResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.conversations.list`
+
+- CLI path: `pm conversations list`
+- HTTP: `GET /pm/conversations`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List PM conversations.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMConversationListResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.conversations.messages.create`
+
+- CLI path: `pm conversations messages create`
+- HTTP: `POST /pm/conversations/{conversation_id}/messages`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Queue a contextual PM turn.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.decisions.answer`
+
+- CLI path: `pm decisions answer`
+- HTTP: `POST /pm/decisions/{decision_id}/answer`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Answer and authorize a scoped decision.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMDecision`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.decisions.create`
+
+- CLI path: `pm decisions create`
+- HTTP: `POST /pm/decisions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Propose a scoped PM decision.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMDecision`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.decisions.dispatch`
+
+- CLI path: `pm decisions dispatch`
+- HTTP: `POST /pm/decisions/{decision_id}/dispatch`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Hand off an authorized source action.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMAction`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.decisions.get`
+
+- CLI path: `pm decisions get`
+- HTTP: `GET /pm/decisions/{decision_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read a PM decision.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMDecision`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.decisions.list`
+
+- CLI path: `pm decisions list`
+- HTTP: `GET /pm/decisions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: List durable PM decisions.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMDecisionListResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.turns.claim`
+
+- CLI path: `pm turns claim`
+- HTTP: `POST /pm/turns/claim`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Claim one queued turn for the selected PM agent so two runners never answer it.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
+
+## `pm.turns.complete`
+
+- CLI path: `pm turns complete`
+- HTTP: `POST /pm/turns/{turn_id}/complete`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Record a selected PM agent response.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.turns.context`
+
+- CLI path: `pm turns context`
+- HTTP: `GET /pm/turns/{turn_id}/context`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read requesting principal context as selected PM agent.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMContextResponse`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.turns.decisions.create`
+
+- CLI path: `pm turns decisions create`
+- HTTP: `POST /pm/turns/{turn_id}/decisions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Record a selected PM agent proposal.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMDecision`.
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+
+## `pm.turns.fail`
+
+- CLI path: `pm turns fail`
+- HTTP: `POST /pm/turns/{turn_id}/fail`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Record a selected PM agent failure reason without inventing a reply.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
+
 ## `ref_edges.list`
 
 - CLI path: `ref-edges list`
@@ -1482,4 +1870,121 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `ops`, `quotas`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns v1 usage summary JSON.
+
+## `work.capabilities`
+
+- CLI path: `work capabilities`
+- HTTP: `GET /work/capabilities`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Inspect work tracking capabilities.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkCapabilitiesResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.create`
+
+- CLI path: `work create`
+- HTTP: `POST /work`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Register a card-backed commitment.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.get`
+
+- CLI path: `work get`
+- HTTP: `GET /work/{card_ref}`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read a commitment and its evidence.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.list`
+
+- CLI path: `work list`
+- HTTP: `GET /work`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: List heterogeneous commitments.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkListResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.observations.list`
+
+- CLI path: `work observations list`
+- HTTP: `GET /work/{card_ref}/observations`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: List append-only work observations.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkObservationListResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.observations.submit`
+
+- CLI path: `work observations submit`
+- HTTP: `POST /work/{card_ref}/observations`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Submit an attributed source observation.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkObservationResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.patch`
+
+- CLI path: `work patch`
+- HTTP: `PATCH /work/{card_ref}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Update local commitment annotations.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.refresh.get`
+
+- CLI path: `work refresh get`
+- HTTP: `GET /work/{card_ref}/refresh`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Inspect durable refresh lifecycle.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkRefreshResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.refresh.request`
+
+- CLI path: `work refresh request`
+- HTTP: `POST /work/{card_ref}/refresh`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Queue or coalesce a read-only refresh.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns `WorkRefreshResponse`.
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 

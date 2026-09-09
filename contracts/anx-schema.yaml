@@ -214,6 +214,9 @@ primitives:
         card_created:
           family: card_created
           required_payload_fields: [card_id]
+        card_updated:
+          family: card_updated
+          required_payload_fields: [card_id]
         card_moved:
           family: card_moved
           required_payload_fields: [card_id, from_column_key, column_key]
@@ -391,7 +394,13 @@ resources:
       Canonical mutable document lineage anchored to a typed subject ref. The
       contract surface is `subject_ref`, `head_revision_ref`, `state`, and
       `refs` plus standard lifecycle/provenance fields. `state` is the sole
-      document lifecycle field and uses enums.lifecycle_state.
+      document lifecycle field and uses enums.lifecycle_state. Docs are the
+      cross-machine knowledge base for agents: `source` points at the canonical
+      origin when a doc aggregates, and `tags` (including `knowledge`) mark
+      agent-facing entries. Comments are the backing-thread discussion, exposed
+      with stable event refs (`event:<handle>`) that survive document revisions.
+      Threaded replies use `reply_to`. Authors may edit or delete their own comments.
+      Git-repo ingest/sync is a follow-up, not this contract.
     fields:
       ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
       handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
@@ -403,6 +412,31 @@ resources:
         description: >
           Optional short blurb for list and detail headers; stored on the document row
           (distinct from per-revision artifact summary).
+      source:
+        type: string
+        required: false
+        description: >
+          Canonical origin this document aggregates: a URL or typed ref. Empty when
+          the document itself is the source of truth. Knowledge docs should always set this.
+      tags:
+        type: "list<string>"
+        required: false
+        description: >
+          Operator/agent labels. Tag `knowledge` marks docs meant for agents
+          (see `GET /docs?knowledge=true` and `tag=`).
+      hosts:
+        type: "list<string>"
+        required: false
+        description: >
+          Host names this knowledge fact applies to (machine hostname or operator alias).
+          Empty means unspecified. `GET /docs/search?host=` matches documents whose
+          `hosts` list contains that name.
+      verified_at:
+        type: datetime
+        required: false
+        description: >
+          When an agent last verified this knowledge fact on the recorded hosts.
+          Omitted when never verified.
       subject_ref: { type: typed_ref, required: true }
       head_revision_ref: { type: typed_ref, required: true }
       state:
@@ -437,6 +471,16 @@ resources:
           Derived `/documents` list enrichment when backing `thread_id` is present (`message_posted`
           timeline, excluding trashed events). Not returned from document-by-id payloads; clients treat
           omission as zero for list rows.
+      last_comment:
+        type: object
+        required: false
+        description: >
+          Derived `/documents` list enrichment: the most recent `message_posted` comment on the
+          backing thread (excluding trashed events). Omitted when the document has no comments.
+        fields:
+          body: { type: string, required: true }
+          created_at: { type: datetime, required: true }
+          created_by: { type: string, required: false }
 
   document_revision:
     description: >
@@ -748,3 +792,41 @@ staleness:
     core does not infer staleness from backing-thread bodies. Operators may still
     record `exception_raised` with subtype `stale_topic` manually; derived inbox
     treats that like other risk exceptions.
+
+# Unified work tracking extends cards, never a second commitment identity.
+work_tracking:
+  version: "1"
+  canonical_entity: card
+  project_entity: topic
+  source_identity: [authority, connection_id, native_id]
+  source_authority_immutable: true
+  phase: [backlog, ready, in_progress, blocked, review, done, cancelled, unknown]
+  freshness: [unknown, fresh, stale, error]
+  observation_status: [reported, verified, uncertain, error]
+  remote_verification: reported
+  local_annotations: [project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
+  invariants:
+    - External workflow fields can only be projected from attributed observations.
+    - Observation timestamps do not imply source activity or meaningful progress.
+    - Failed refreshes retain the last good observation with its age and error.
+    - Replay keys bind content; conflicting reuse is rejected.
+    - Source sequence wins over observer clocks; older observations remain in history.
+    - Native completion uses the existing card evidence gate.
+    - Source completion is an attributed claim, not independent acceptance verification.
+    - Queued refresh is not a successful read.
+
+conversational_pm:
+  storage: workspace_sqlite
+  work_identity: card
+  conversation_scope: [workspace_id, actor_id]
+  decision_status: [awaiting_answer, answered, superseded]
+  action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
+  channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
+  invariants:
+    - Human approval and scope-specific authority are required for downstream actions.
+    - Answer and durable delivery intent are atomic; an answer is not an applied outcome.
+    - Revalidate source revision before dispatch; source tools must enforce the same precondition.
+    - Unknown remote sends require reconciliation and cannot be blindly replayed.
+    - Read-back evidence is required for independent verification.
+    - Channel mappings are exact and do not inherit personal credentials or permission.
+    - Missing PM provider or action executor returns unavailable, never fabricated success.

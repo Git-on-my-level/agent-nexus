@@ -148,7 +148,7 @@ export function createWorkspaceListSelection(options = {}) {
     return () => document.removeEventListener("keydown", onEsc);
   });
 
-  /** Optional: Topics route exposes both /topics and /threads — clear selection without toggling UI */
+  /** Optional: clear selection without toggling UI */
   function exitSelectionMode() {
     selectMode = false;
     clearSelection();

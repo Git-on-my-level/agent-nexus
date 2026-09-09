@@ -26,6 +26,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
 - `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
+- `work` (group): Query commitments, evidence, freshness and refresh state
+- `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Register, inspect, and manage auth state
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
@@ -69,7 +71,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards cards create-batch` (command): Batch create cards on board
 - `boards cards get` (command): Get board-scoped card
 - `docs list` (command): List documents
-- `docs get` (command): Get document
 - `docs history` (command): List document revisions
 - `docs revision` (group): Nested generated help topic.
 - `docs archive` (command): Archive document
@@ -115,6 +116,35 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
+- `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
+- `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
+- `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
+- `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
+- `pm bindings create` (command): Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
+- `pm bindings list` (command): List channel identity bindings for this workspace; an operator check, never a send.
+- `pm conversations create` (command): Create a durable conversation using request_key, title and optional work_ref.
+- `pm conversations get` (command): Read a conversation and its durable turns.
+- `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
+- `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+- `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
+- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
+- `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+- `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
+- `pm decisions list` (command): List durable decisions with principal-bound pagination.
+- `pm turns claim` (command): Claim the next queued turn with an exclusive runner lease. 204 means none.
+- `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
+- `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
+- `pm turns fail` (command): Mark a claimed turn failed with a reason; does not complete work.
+- `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
+- `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
+- `work create` (command): Register a native commitment or canonical external source on an existing board.
+- `work get` (command): Read one work card, source authority, executions and current evidence.
+- `work list` (command): List work cards across sources in the authenticated workspace.
+- `work patch` (command): Update work metadata with if_version; external status remains source-owned.
+- `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
+- `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
+- `work refresh get` (command): Read refresh state without queueing work.
+- `work refresh request` (command): Request a bounded refresh; queued is not a successful observation.
 - `secret list` (command): List secrets
 - `secret create` (command): Create secret
 - `secret delete` (command): Delete secret
@@ -131,6 +161,15 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards create` (local-helper): Create an active-work Board from flags, optionally tied to a Topic.
 - `cards list` (local-helper): List cards across the workspace, or list one board's cards with --board.
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
+- `docs search` (local-helper): Search documents by title, body, source, tags, and comments.
+- `docs put` (local-helper): Create or replace a document by handle from a local file or stdin.
+- `docs ingest` (local-helper): Upsert markdown files under a directory as knowledge docs with source pointers.
+- `docs comment` (local-helper): Post a document comment (or a reply with `--reply-to`).
+- `docs comments` (local-helper): List document comments as a thread with stable ids.
+- `docs comments reply` (local-helper): Reply to a document comment.
+- `docs get` (local-helper): Get a document lineage and its current head revision.
+- `docs comments edit` (local-helper): Edit a document comment you authored. The comment ref stays stable.
+- `docs comments delete` (local-helper): Delete a document comment you authored.
 - `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
 - `cards patch` (local-helper): Patch card metadata from scalar flags, or from advanced JSON.
 - `cards message` (local-helper): Post a message to a Card conversation without hand-authoring event JSON.
@@ -177,6 +216,11 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
+- `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
+- `pm ask` (local-helper): Create a PM conversation and post one human question.
+- `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
+- `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
 
 ## `onboarding`
@@ -1401,6 +1445,67 @@ Output conventions
 - `apply` writes payload previews plus `apply-results.json` and `apply-commands.sh`.
 ```
 
+## `work`
+
+Query commitments, evidence, freshness and refresh state
+
+```text
+Local Help: work
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+  anx work capabilities        Read capabilities actually advertised by the authenticated central API.
+  anx work context             Compose work, a bounded observation page and refresh status using read-only requests.
+  anx work create              Register a native commitment or canonical external source on an existing board.
+  anx work freshness           Inspect last observed, source activity and meaningful progress independently.
+  anx work get                 Read one work card, source authority, executions and current evidence.
+  anx work list                List work cards across sources in the authenticated workspace.
+  anx work observations list   Read append-only evidence for a work card, preserving pagination and uncertainty.
+  anx work observations submit Submit an authenticated remote observation; preserve its idempotency key on retry.
+  anx work patch               Update work metadata with if_version; external status remains source-owned.
+  anx work refresh get         Read refresh state without queueing work.
+  anx work refresh request     Request a bounded refresh; queued is not a successful observation.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm`
+
+Read and operate durable PM conversations, decisions and action receipts
+
+```text
+Local Help: pm
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+  anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
+  anx pm actions list          Report durable action and receipt statuses with principal-bound pagination.
+  anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
+  anx pm bindings create       Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
+  anx pm bindings list         List channel identity bindings for this workspace; an operator check, never a send.
+  anx pm context               Read bounded authorized PM context; partial coverage stays explicit.
+  anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
+  anx pm conversations get     Read a conversation and its durable turns.
+  anx pm conversations list    List durable PM conversations with principal-bound pagination.
+  anx pm conversations message Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+  anx pm decisions answer      Answer with revision, approve and text; the server requires an authorized human principal.
+  anx pm decisions create      Propose an instruction bound to work, scope and target_revision; never approves it.
+  anx pm decisions dispatch    Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+  anx pm decisions get         Read an instruction, authorization scope, revision and answer status.
+  anx pm decisions list        List durable decisions with principal-bound pagination.
+  anx pm turns claim           Claim the next queued turn with an exclusive runner lease. 204 means none.
+  anx pm turns complete        Selected PM agent records response text and evidence_refs; does not complete work.
+  anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
+  anx pm turns fail            Mark a claimed turn failed with a reason; does not complete work.
+  anx pm turns propose         Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `auth`
 
 Register, inspect, and manage auth state
@@ -1535,23 +1640,32 @@ Generated Help: docs
 
 Commands:
   docs archive             Archive document
+  docs comment             Post a document comment
+  docs comments            List document comments
   docs create              Create document
   docs get                 Get document
   docs history             List document revisions
   docs list                List documents
   docs purge               Permanently delete trashed document
+  docs put                 Create or replace a document by handle
   docs restore             Restore document from trash
   docs revise              Create document revision
+  docs search              Search documents
   docs trash               Move document to trash
   docs unarchive           Unarchive document
 
 Local inspection helpers:
   docs content             Show current document content with revision metadata.
+  docs search              Search title, body, source, tags, and comments.
+  docs comments            List document comments with stable ids.
+  docs comment             Post a document comment (`--reply-to` for a reply).
   docs message             Post a document conversation message.
   docs messages            List document conversation messages.
   docs reply               Reply to a specific document message.
   Mutation flow:
   docs create              Create durable context from flags plus `--body` / `--body-file`, or from advanced JSON.
+  docs put                 Idempotent create-or-replace by handle from a local file.
+  docs ingest              Upsert a markdown tree as knowledge docs with source pointers.
   docs revise              Revise from `--body-file`; stages a diff proposal by default, or direct-writes with `--apply`.
    Tip: agents should draft Markdown locally and pass `--body-file <path>`. `docs revise doc:<handle> --body-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
@@ -2630,40 +2744,14 @@ Generated Help: docs list
 - Output: Returns `{ documents }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List knowledge docs: `anx docs list --knowledge`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs get`
-
-Get document
-
-```text
-Generated Help: docs get
-
-- Command ID: `docs.get`
-- CLI path: `docs get`
-- HTTP: `GET /docs/{document_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve a document lineage and its current head revision.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2683,7 +2771,9 @@ Generated Help: docs history
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List revision history: `anx docs history doc:runbook`
 
 Inputs:
   Required:
@@ -2729,7 +2819,9 @@ Generated Help: docs archive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
 
 Inputs:
   Required:
@@ -2759,7 +2851,9 @@ Generated Help: docs unarchive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
+- Examples:
+  - Unarchive a document: `anx docs unarchive doc:runbook`
 
 Inputs:
   Required:
@@ -2789,7 +2883,9 @@ Generated Help: docs restore
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Restore a trashed document: `anx docs restore doc:runbook`
 
 Inputs:
   Required:
@@ -2820,7 +2916,9 @@ Generated Help: docs purge
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Purge a trashed document: `anx docs purge doc:runbook`
 
 Inputs:
   Required:
@@ -2850,7 +2948,7 @@ Generated Help: docs revision get
 - Output: Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs search`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3978,6 +4076,1109 @@ Global flags:
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `pm context`
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+```text
+Generated Help: pm context
+
+- Command ID: `pm.context`
+- CLI path: `pm context`
+- HTTP: `GET /pm/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read bounded authorized PM context.
+- Output: Returns `PMContextResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read bounded authorized PM context; partial coverage stays explicit.
+
+Usage: anx pm context
+  --work-ref <value>
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions get`
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+```text
+Generated Help: pm actions get
+
+- Command ID: `pm.actions.get`
+- CLI path: `pm actions get`
+- HTTP: `GET /pm/actions/{action_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read an action and its receipts.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `action_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read authorization, attempts and receipt; source_reported is not verified.
+
+Usage: anx pm actions get <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions list`
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+```text
+Generated Help: pm actions list
+
+- Command ID: `pm.actions.list`
+- CLI path: `pm actions list`
+- HTTP: `GET /pm/actions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List action receipts and attempts.
+- Output: Returns `PMActionListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Report durable action and receipt statuses with principal-bound pagination.
+
+Usage: anx pm actions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions reconcile`
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+```text
+Generated Help: pm actions reconcile
+
+- Command ID: `pm.actions.reconcile`
+- CLI path: `pm actions reconcile`
+- HTTP: `POST /pm/actions/{action_id}/reconcile`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Read back an action outcome without resending.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `action_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request authoritative read-back of an action receipt; does not resend the action.
+
+Usage: anx pm actions reconcile <ref> (or --action-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm bindings create`
+
+Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
+
+```text
+Generated Help: pm bindings create
+
+- Command ID: `pm.bindings.create`
+- CLI path: `pm bindings create`
+- HTTP: `POST /pm/bindings`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Bind an exact channel identity to a workspace principal.
+- Output: Returns `PMBinding`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Optional:
+  - body `actor_id` (string)
+  - body `can_approve` (boolean)
+  - body `created_at` (string)
+  - body `enabled` (boolean)
+  - body `id` (string)
+  - body `origin.channel_id` (string)
+  - body `origin.external_user_id` (string)
+  - body `origin.tenant_id` (string)
+  - body `origin.thread_id` (string)
+  - body `origin.transport` (string)
+  - body `revision` (integer)
+  - body `work_ref` (string)
+  - body `workspace_id` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
+
+Usage: anx pm bindings create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm bindings list`
+
+List channel identity bindings for this workspace; an operator check, never a send.
+
+```text
+Generated Help: pm bindings list
+
+- Command ID: `pm.bindings.list`
+- CLI path: `pm bindings list`
+- HTTP: `GET /pm/bindings`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
+- Output: Returns `PMBindingListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List channel identity bindings for this workspace; an operator check, never a send.
+
+Usage: anx pm bindings list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations create`
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+```text
+Generated Help: pm conversations create
+
+- Command ID: `pm.conversations.create`
+- CLI path: `pm conversations create`
+- HTTP: `POST /pm/conversations`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Create a durable PM conversation.
+- Output: Returns `PMConversation`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - body `request_key` (string)
+  - body `title` (string)
+  Optional:
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Create a durable conversation using request_key, title and optional work_ref.
+
+Usage: anx pm conversations create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations get`
+
+Read a conversation and its durable turns.
+
+```text
+Generated Help: pm conversations get
+
+- Command ID: `pm.conversations.get`
+- CLI path: `pm conversations get`
+- HTTP: `GET /pm/conversations/{conversation_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read PM conversation and turns.
+- Output: Returns `PMConversationDetailResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `conversation_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read a conversation and its durable turns.
+
+Usage: anx pm conversations get <ref> (or --conversation-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations list`
+
+List durable PM conversations with principal-bound pagination.
+
+```text
+Generated Help: pm conversations list
+
+- Command ID: `pm.conversations.list`
+- CLI path: `pm conversations list`
+- HTTP: `GET /pm/conversations`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List PM conversations.
+- Output: Returns `PMConversationListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable PM conversations with principal-bound pagination.
+
+Usage: anx pm conversations list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm conversations message`
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+```text
+Generated Help: pm conversations message
+
+- Command ID: `pm.conversations.messages.create`
+- CLI path: `pm conversations message`
+- HTTP: `POST /pm/conversations/{conversation_id}/messages`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Queue a contextual PM turn.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `conversation_id`
+  - body `request_key` (string)
+  - body `text` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+
+Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions answer`
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+```text
+Generated Help: pm decisions answer
+
+- Command ID: `pm.decisions.answer`
+- CLI path: `pm decisions answer`
+- HTTP: `POST /pm/decisions/{decision_id}/answer`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Answer and authorize a scoped decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `decision_id`
+  - body `approve` (boolean)
+  - body `revision` (integer)
+  - body `text` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Answer with revision, approve and text; the server requires an authorized human principal.
+
+Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions create`
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+```text
+Generated Help: pm decisions create
+
+- Command ID: `pm.decisions.create`
+- CLI path: `pm decisions create`
+- HTTP: `POST /pm/decisions`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Propose a scoped PM decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - body `instruction` (string)
+  - body `request_key` (string)
+  - body `scope` (string)
+  - body `target_revision` (string)
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Propose an instruction bound to work, scope and target_revision; never approves it.
+
+Usage: anx pm decisions create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions dispatch`
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+```text
+Generated Help: pm decisions dispatch
+
+- Command ID: `pm.decisions.dispatch`
+- CLI path: `pm decisions dispatch`
+- HTTP: `POST /pm/decisions/{decision_id}/dispatch`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Hand off an authorized source action.
+- Output: Returns `PMAction`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `decision_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
+
+Usage: anx pm decisions dispatch <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions get`
+
+Read an instruction, authorization scope, revision and answer status.
+
+```text
+Generated Help: pm decisions get
+
+- Command ID: `pm.decisions.get`
+- CLI path: `pm decisions get`
+- HTTP: `GET /pm/decisions/{decision_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a PM decision.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `decision_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read an instruction, authorization scope, revision and answer status.
+
+Usage: anx pm decisions get <ref> (or --decision-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm decisions list`
+
+List durable decisions with principal-bound pagination.
+
+```text
+Generated Help: pm decisions list
+
+- Command ID: `pm.decisions.list`
+- CLI path: `pm decisions list`
+- HTTP: `GET /pm/decisions`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List durable PM decisions.
+- Output: Returns `PMDecisionListResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List durable decisions with principal-bound pagination.
+
+Usage: anx pm decisions list
+  --limit <value>
+  --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns claim`
+
+Claim the next queued turn with an exclusive runner lease. 204 means none.
+
+```text
+Generated Help: pm turns claim
+
+- Command ID: `pm.turns.claim`
+- CLI path: `pm turns claim`
+- HTTP: `POST /pm/turns/claim`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Claim one queued turn for the selected PM agent so two runners never answer it.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Optional:
+  - body `runner_id` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Claim the next queued turn with an exclusive runner lease. 204 means none.
+
+Usage: anx pm turns claim
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns complete`
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+```text
+Generated Help: pm turns complete
+
+- Command ID: `pm.turns.complete`
+- CLI path: `pm turns complete`
+- HTTP: `POST /pm/turns/{turn_id}/complete`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Record a selected PM agent response.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `text` (string)
+  Optional:
+  - body `evidence_refs` (list<string>)
+  - body `lease_token` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent records response text and evidence_refs; does not complete work.
+
+Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns context`
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+```text
+Generated Help: pm turns context
+
+- Command ID: `pm.turns.context`
+- CLI path: `pm turns context`
+- HTTP: `GET /pm/turns/{turn_id}/context`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read requesting principal context as selected PM agent.
+- Output: Returns `PMContextResponse`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `turn_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read context as the requesting actor; only the selected PM agent may call this.
+
+Usage: anx pm turns context <ref> (or --turn-id <ref>)
+  --query <value>
+  --limit <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns fail`
+
+Mark a claimed turn failed with a reason; does not complete work.
+
+```text
+Generated Help: pm turns fail
+
+- Command ID: `pm.turns.fail`
+- CLI path: `pm turns fail`
+- HTTP: `POST /pm/turns/{turn_id}/fail`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Record a selected PM agent failure reason without inventing a reply.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `reason` (string)
+  Optional:
+  - body `lease_token` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Mark a claimed turn failed with a reason; does not complete work.
+
+Usage: anx pm turns fail <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns propose`
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+```text
+Generated Help: pm turns propose
+
+- Command ID: `pm.turns.decisions.create`
+- CLI path: `pm turns propose`
+- HTTP: `POST /pm/turns/{turn_id}/decisions`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Record a selected PM agent proposal.
+- Output: Returns `PMDecision`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `instruction` (string)
+  - body `request_key` (string)
+  - body `scope` (string)
+  - body `target_revision` (string)
+  - body `work_ref` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Selected PM agent proposes an instruction for the requesting actor, never approval.
+
+Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work capabilities`
+
+Read capabilities actually advertised by the authenticated central API.
+
+```text
+Generated Help: work capabilities
+
+- Command ID: `work.capabilities`
+- CLI path: `work capabilities`
+- HTTP: `GET /work/capabilities`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect work tracking capabilities.
+- Output: Returns `WorkCapabilitiesResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read capabilities actually advertised by the authenticated central API.
+
+Usage: anx work capabilities
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work create`
+
+Register a native commitment or canonical external source on an existing board.
+
+```text
+Generated Help: work create
+
+- Command ID: `work.create`
+- CLI path: `work create`
+- HTTP: `POST /work`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Register a card-backed commitment.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - body `board_ref` (string)
+  - body `title` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `blockers` (list<string>)
+  - body `definition_of_done` (list<string>)
+  - body `due_at` (string)
+  - body `executions` (list<object>)
+  - body `next_action` (string)
+  - body `next_actor` (string)
+  - body `owner` (string)
+  - body `phase` (string)
+  - body `priority` (string)
+  - body `project_ref` (string)
+  - body `relations` (list<object>)
+  - body `source.authority` (string)
+  - body `source.connection_id` (string)
+  - body `source.native_id` (string)
+  - body `source.native_status` (string)
+  - body `source.revision` (string)
+  - body `source.url` (string)
+  - body `start_at` (string)
+  - body `summary` (string)
+  - body `wake_condition` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Register a native commitment or canonical external source on an existing board.
+
+Usage: anx work create --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work get`
+
+Read one work card, source authority, executions and current evidence.
+
+```text
+Generated Help: work get
+
+- Command ID: `work.get`
+- CLI path: `work get`
+- HTTP: `GET /work/{card_ref}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a commitment and its evidence.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read one work card, source authority, executions and current evidence.
+
+Usage: anx work get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work list`
+
+List work cards across sources in the authenticated workspace.
+
+```text
+Generated Help: work list
+
+- Command ID: `work.list`
+- CLI path: `work list`
+- HTTP: `GET /work`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List heterogeneous commitments.
+- Output: Returns `WorkListResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+List work cards across sources in the authenticated workspace.
+
+Usage: anx work list
+  --project-ref <value>
+  --source <value>
+  --owner <value>
+  --phase <value>
+  --freshness <value>
+  --q <value>
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work patch`
+
+Update work metadata with if_version; external status remains source-owned.
+
+```text
+Generated Help: work patch
+
+- Command ID: `work.patch`
+- CLI path: `work patch`
+- HTTP: `PATCH /work/{card_ref}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Update local commitment annotations.
+- Output: Returns `WorkResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  Optional:
+  - body `actor_id` (string)
+  - body `patch.blockers` (list<string>)
+  - body `patch.due_at` (string)
+  - body `patch.executions` (list<object>)
+  - body `patch.next_action` (string)
+  - body `patch.next_actor` (string)
+  - body `patch.priority` (string)
+  - body `patch.project_ref` (string)
+  - body `patch.relations` (list<object>)
+  - body `patch.start_at` (string)
+  - body `patch.wake_condition` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Update work metadata with if_version; external status remains source-owned.
+
+Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations list`
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+```text
+Generated Help: work observations list
+
+- Command ID: `work.observations.list`
+- CLI path: `work observations list`
+- HTTP: `GET /work/{card_ref}/observations`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List append-only work observations.
+- Output: Returns `WorkObservationListResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read append-only evidence for a work card, preserving pagination and uncertainty.
+
+Usage: anx work observations list <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work observations submit`
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+```text
+Generated Help: work observations submit
+
+- Command ID: `work.observations.submit`
+- CLI path: `work observations submit`
+- HTTP: `POST /work/{card_ref}/observations`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Submit an attributed source observation.
+- Output: Returns `WorkObservationResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `observation.idempotency_key` (string)
+  - body `observation.observed_at` (string)
+  - body `observation.reader_id` (string)
+  - body `observation.reader_revision` (string)
+  - body `observation.status` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `observation.actor_id` (string)
+  - body `observation.coverage` (object)
+  - body `observation.error.code` (string)
+  - body `observation.error.message` (string)
+  - body `observation.evidence` (list<object>)
+  - body `observation.facts` (object)
+  - body `observation.id` (string)
+  - body `observation.meaningful_progress_at` (string)
+  - body `observation.received_at` (string)
+  - body `observation.source_activity_at` (string)
+  - body `observation.source_revision` (string)
+  - body `observation.source_sequence` (integer)
+  - body `observation.stale_after_seconds` (integer)
+  - body `observation.uncertainty` (list<string>)
+  - body `observation.verification` (string)
+  - body `observation.work_ref` (string)
+  Enum values: observation.status: error, reported, uncertain, verified; observation.verification: reported
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Submit an authenticated remote observation; preserve its idempotency key on retry.
+
+Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
+Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh get`
+
+Read refresh state without queueing work.
+
+```text
+Generated Help: work refresh get
+
+- Command ID: `work.refresh.get`
+- CLI path: `work refresh get`
+- HTTP: `GET /work/{card_ref}/refresh`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect durable refresh lifecycle.
+- Output: Returns `WorkRefreshResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read refresh state without queueing work.
+
+Usage: anx work refresh get <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work refresh request`
+
+Request a bounded refresh; queued is not a successful observation.
+
+```text
+Generated Help: work refresh request
+
+- Command ID: `work.refresh.request`
+- CLI path: `work refresh request`
+- HTTP: `POST /work/{card_ref}/refresh`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Queue or coalesce a read-only refresh.
+- Output: Returns `WorkRefreshResponse`.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  Optional:
+  - body `actor_id` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Request a bounded refresh; queued is not a successful observation.
+
+Usage: anx work refresh request <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `secret list`
 
 List secrets
@@ -4591,7 +5792,9 @@ Generated Help: docs create
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
 
 Inputs:
   Required:
@@ -4600,12 +5803,17 @@ Inputs:
   - body `document.title` (string)
   Optional:
   - body `actor_id` (string)
+  - body `document.handle` (string)
+  - body `document.hosts` (list<string>)
   - body `document.provenance.by_field` (object)
   - body `document.provenance.notes` (string)
   - body `document.provenance.sources` (list<string>)
   - body `document.refs` (list<any>)
+  - body `document.source` (string)
   - body `document.subject_ref` (string)
   - body `document.summary` (string)
+  - body `document.tags` (list<string>)
+  - body `document.verified_at` (datetime)
   - body `refs` (list<any>)
   - body `request_key` (string)
   Enum values: content_type: binary, structured, text
@@ -4613,6 +5821,445 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs search`
+
+Search documents by title, body, source, tags, and comments.
+
+```text
+Local Help: docs search
+
+- Kind: `local helper`
+- Summary: Search documents by title, body, source, tags, and comments.
+- Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
+- JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
+- Examples:
+  - `anx docs search "runbook" --knowledge --host m4-air`
+  - `anx docs search "alphawhiz" --knowledge --host m4-air --limit 20`
+
+Flags:
+  <q>                          Search query; also accepted as `--q`.
+  --q <text>                   Search query over title, body, and comments.
+  --knowledge                  Only documents tagged knowledge.
+  --tag <tag>                  Restrict results to one tag.
+  --host <name>                Restrict results to documents whose hosts list includes this name.
+  --limit <n>                  Page size; omit to return up to 50 hits.
+  --cursor <cursor>            Pagination cursor from a previous search response.
+
+Generated Help: docs search
+
+- Command ID: `docs.search`
+- CLI path: `docs search`
+- HTTP: `GET /docs/search`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
+- Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Concepts: `docs`
+- Agent notes: SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Examples:
+  - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs search ... ; anx --json docs search ... ; anx docs search ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs put`
+
+Create or replace a document by handle from a local file or stdin.
+
+```text
+Local Help: docs put
+
+- Kind: `local helper`
+- Summary: Create or replace a document by handle from a local file or stdin.
+- Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
+- JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
+- Examples:
+  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+  - `anx docs put - --handle kb-shared --title "Note" --tags knowledge`
+
+Flags:
+  <path>                       Markdown/text file, or `-` for stdin.
+  --title <text>               Document title.
+  --source <url-or-ref>        Canonical source URL or ref when this doc aggregates.
+  --tags <tag>                 Tags, repeatable or comma-separated. Use `knowledge` for agent-facing docs.
+  --hosts <name>               Host names this knowledge fact applies to.
+  --verified-at <rfc3339>      When this knowledge fact was last verified.
+  --handle <handle>            Public handle used as the idempotency key.
+  --body <text>                Inline body when not passing a path.
+  --body-file <path>           Load body from a file or stdin with `-`.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+Generated Help: docs put
+
+- Command ID: `docs.put`
+- CLI path: `docs put`
+- HTTP: `PUT /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
+- Concepts: `docs`, `write`
+- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - body `content` (any)
+  - body `content_type` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `document.hosts` (list<string>)
+  - body `document.provenance.by_field` (object)
+  - body `document.provenance.notes` (string)
+  - body `document.provenance.sources` (list<string>)
+  - body `document.refs` (list<any>)
+  - body `document.source` (string)
+  - body `document.subject_ref` (string)
+  - body `document.summary` (string)
+  - body `document.tags` (list<string>)
+  - body `document.title` (string)
+  - body `document.verified_at` (datetime)
+  - body `refs` (list<any>)
+  Enum values: content_type: binary, structured, text
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs put ... ; anx --json docs put ... ; anx docs put ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs ingest`
+
+Upsert markdown files under a directory as knowledge docs with source pointers.
+
+```text
+Local Help: docs ingest
+
+- Kind: `local helper`
+- Summary: Upsert markdown files under a directory as knowledge docs with source pointers.
+- Composition: Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.
+- JSON body: Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.
+- Examples:
+  - `anx docs ingest ./kb --source https://example.invalid/kb`
+
+Flags:
+  <path>                       Directory of markdown files, or a single markdown file.
+  --source <url-prefix>        Required. Joined with each relative path as the canonical source pointer.
+  --tags <tag>                 Extra tags. `knowledge` is always applied.
+  --hosts <name>               Host names this knowledge tree applies to.
+  --verified-at <rfc3339>      When this knowledge tree was last verified.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs ingest ... ; anx --json docs ingest ... ; anx docs ingest ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comment`
+
+Post a document comment (or a reply with `--reply-to`).
+
+```text
+Local Help: docs comment
+
+- Kind: `local helper`
+- Summary: Post a document comment (or a reply with `--reply-to`).
+- Composition: Writes a `message_posted` event on the document backing thread. Comment ids are stable event ids.
+- JSON body: POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.
+- Examples:
+  - `anx docs comment doc:runbook "Host B found this"`
+  - `anx docs comment doc:runbook --body "Acknowledged" --reply-to <comment-id>`
+
+Flags:
+  <ref>                        Document ref, handle, or id.
+  <text>                       Comment body; also accepted as `--body`.
+  --body <text>                Comment text.
+  --reply-to <comment-id>      Parent comment id for a reply.
+  --document-id <id>           Document id when not using the positional.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+Generated Help: docs comment
+
+- Command ID: `docs.comments.create`
+- CLI path: `docs comment`
+- HTTP: `POST /docs/{document_id}/comments`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Post a comment on a document so another agent can read it later.
+- Output: Returns `{ comment }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `docs`, `write`
+- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
+- Adjacent commands: `docs archive`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Post a comment: `anx docs comment doc:runbook "Host B found this"`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `parent_id` (string)
+  - body `reply_to` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comment ... ; anx --json docs comment ... ; anx docs comment ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments`
+
+List document comments as a thread with stable ids.
+
+```text
+Local Help: docs comments
+
+- Kind: `local helper`
+- Summary: List document comments as a thread with stable ids.
+- Composition: Reads `message_posted` events on the document backing thread.
+- JSON body: GET `/docs/{document_id}/comments` returning `{ comments, next_cursor? }`.
+- Examples:
+  - `anx docs comments doc:runbook`
+  - `anx docs comments doc:runbook --limit 20`
+
+Flags:
+  <ref>                        Document ref, handle, or id.
+  --document-id <id>           Document id when not using the positional.
+  --limit <n>                  Page size.
+  --cursor <cursor>            Pagination cursor from a previous comments response.
+
+Generated Help: docs comments
+
+- Command ID: `docs.comments.list`
+- CLI path: `docs comments`
+- HTTP: `GET /docs/{document_id}/comments`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read the document discussion thread with stable comment ids.
+- Output: Returns `{ comments, next_cursor? }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `docs`
+- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List comments: `anx docs comments doc:runbook`
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments reply`
+
+Reply to a document comment.
+
+```text
+Local Help: docs comments reply
+
+- Kind: `local helper`
+- Summary: Reply to a document comment.
+- Composition: Writes a `message_posted` reply with `reply_to` set to the parent comment ref.
+- JSON body: POST `/docs/{document_id}/comments/{comment_id}/replies` with `{ text }`.
+- Examples:
+  - `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Parent comment ref (`event:<handle>`) or id.
+  --body <text>                Reply text.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+Generated Help: docs comments reply
+
+- Command ID: `docs.comments.reply`
+- CLI path: `docs comments reply`
+- HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reply in a document comment thread without leaving the docs surface.
+- Output: Returns `{ comment }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `docs`, `write`
+- Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Reply in thread: `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+  - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `parent_id` (string)
+  - body `reply_to` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments reply ... ; anx --json docs comments reply ... ; anx docs comments reply ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs get`
+
+Get a document lineage and its current head revision.
+
+```text
+Local Help: docs get
+
+- Kind: `local helper`
+- Summary: Get a document lineage and its current head revision.
+- Composition: `--format md` prints only the markdown body, suitable for piping.
+- JSON body: GET `/docs/{document_id}` returning `{ document, revision }`.
+- Examples:
+  - `anx docs get kb-shared --format md`
+
+Flags:
+  <ref>                        Document ref, handle, or id.
+  --document-id <id>           Document id when not using the positional.
+  --format md                  Print only the current revision body.
+
+Generated Help: docs get
+
+- Command ID: `docs.get`
+- CLI path: `docs get`
+- HTTP: `GET /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve a document lineage and its current head revision.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`
+- Agent notes: Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Print markdown body: `anx docs get kb-shared --format md`
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments edit`
+
+Edit a document comment you authored. The comment ref stays stable.
+
+```text
+Local Help: docs comments edit
+
+- Kind: `local helper`
+- Summary: Edit a document comment you authored. The comment ref stays stable.
+- Composition: Only the original author may edit. Deep-links keep working because `ref` does not change.
+- JSON body: PATCH `/docs/{document_id}/comments/{comment_id}` with `{ text }`.
+- Examples:
+  - `anx docs comments edit doc:runbook event:note --body "Corrected"`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Comment ref (`event:<handle>`) or id.
+  --body <text>                Replacement comment text.
+  --actor-id <actor-id>        Actor id; defaults from the active profile.
+
+Generated Help: docs comments edit
+
+- Command ID: `docs.comments.update`
+- CLI path: `docs comments edit`
+- HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Edit a comment you authored without changing its stable ref.
+- Output: Returns `{ comment }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Concepts: `docs`, `write`
+- Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Edit own comment: `anx docs comments edit doc:runbook event:note --body "Corrected"`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+  - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments edit ... ; anx --json docs comments edit ... ; anx docs comments edit ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments delete`
+
+Delete a document comment you authored.
+
+```text
+Local Help: docs comments delete
+
+- Kind: `local helper`
+- Summary: Delete a document comment you authored.
+- Composition: Only the original author may delete. The comment is trashed on the backing thread.
+- JSON body: DELETE `/docs/{document_id}/comments/{comment_id}`.
+- Examples:
+  - `anx docs comments delete doc:runbook event:note`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Comment ref (`event:<handle>`) or id.
+  --actor-id <actor-id>        Actor id; defaults from the active profile.
+
+Generated Help: docs comments delete
+
+- Command ID: `docs.comments.delete`
+- CLI path: `docs comments delete`
+- HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Remove a comment you authored from the document discussion.
+- Output: Returns `{ comment }` with the trashed comment.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Concepts: `docs`, `write`
+- Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Delete own comment: `anx docs comments delete doc:runbook event:note`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments delete ... ; anx --json docs comments delete ... ; anx docs comments delete ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5625,7 +7272,9 @@ Generated Help: docs revise
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `revisions`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
 
 Inputs:
   Required:
@@ -5682,7 +7331,9 @@ Generated Help: docs trash
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
+- Examples:
+  - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
 
 Inputs:
   Required:
@@ -6260,4 +7911,125 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm serve`
+
+Claim queued PM turns and run them through agentctl with the anx CLI as tools.
+
+```text
+Local Help: pm serve
+
+- Kind: `local helper`
+- Summary: Claim queued PM turns and run them through agentctl with the anx CLI as tools.
+- Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
+- JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
+- Examples:
+  - `anx --agent pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
+  - `anx --agent pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'`
+
+Flags:
+  --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path.
+  --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used.
+  --poll-interval <duration>   Sleep between empty claims (default 2s).
+  --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Core also bounds workspace sending turns.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx pm serve ... ; anx --json pm serve ... ; anx pm serve ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm ask`
+
+Create a PM conversation and post one human question.
+
+```text
+Local Help: pm ask
+
+- Kind: `local helper`
+- Summary: Create a PM conversation and post one human question.
+- Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
+- JSON body: `conversation`, `turn`
+- Examples:
+  - `anx --agent maya pm ask "What needs my decision?"`
+  - `anx --agent maya pm ask --wait "What needs my decision?"`
+
+Flags:
+  --wait                       Poll until the turn has a response, fails, or the deadline passes.
+  --work-ref <ref>             Optional work/card ref to attach to the conversation.
+  --title <text>               Conversation title (defaults to a prefix of the question).
+  --request-key <key>          Stable request key for create+message replay.
+  --conversation-id <id>       Post into an existing conversation instead of creating one.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx pm ask ... ; anx --json pm ask ... ; anx pm ask ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `pm channels doctor`
+
+Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+
+```text
+Local Help: pm channels doctor
+
+- Kind: `local helper`
+- Summary: Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- Composition: Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.
+- JSON body: `checks`, `ok`
+- Examples:
+  - `anx pm channels doctor`
+  - `anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord`
+
+Flags:
+  --telegram-webhook-url <url> Telegram ingress URL to probe with GET (fake or core). Does not POST an update.
+  --discord-webhook-url <url>  Discord interactions URL to probe with GET (fake or core). Does not POST an interaction.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `work context`
+
+Compose work, a bounded observation page and refresh status using read-only requests.
+
+```text
+Local Help: work context
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Compose work, a bounded observation page and refresh status using read-only requests.
+
+Usage: anx work context <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work freshness`
+
+Inspect last observed, source activity and meaningful progress independently.
+
+```text
+Local Help: work freshness
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Inspect last observed, source activity and meaningful progress independently.
+
+Usage: anx work freshness <ref> (or --work-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
 ```

@@ -63,15 +63,6 @@ describe("deep link targets", () => {
       messageEventHref({
         workspaceHref,
         eventId: "evt-1",
-        topicId: "topic-1",
-        threadId: "thread-1",
-      }),
-    ).toBe("/w/topics/topic-1?tab=messages#message-evt-1");
-
-    expect(
-      messageEventHref({
-        workspaceHref,
-        eventId: "evt-1",
         threadId: "thread-1",
       }),
     ).toBe("/w/threads/thread-1?tab=messages#message-evt-1");
@@ -96,6 +87,6 @@ describe("deep link targets", () => {
         },
         { workspaceHref },
       ),
-    ).toBe("/w/topics/topic-1?tab=messages#message-evt-1");
+    ).toBe("/w/threads/thread-1?tab=messages#message-evt-1");
   });
 });

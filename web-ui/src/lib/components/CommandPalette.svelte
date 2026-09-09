@@ -1,19 +1,15 @@
 <script>
   import { goto } from "$app/navigation";
   import {
-    searchTopics,
     searchDocuments,
-    searchBoards,
-    searchArtifacts,
+    searchWork,
     documentSearchPickerSubtitle,
-    boardSearchPickerSubtitle,
   } from "$lib/searchHelpers";
-  import { kindLabel } from "$lib/artifactKinds";
-  import { shortMimeBadge } from "$lib/attachmentDisplay.js";
   import {
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
+  import { workKey } from "$lib/pm/presentation.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let {
@@ -23,7 +19,7 @@
   } = $props();
 
   let query = $state("");
-  let results = $state({ topics: [], docs: [], boards: [], artifacts: [] });
+  let results = $state({ docs: [], tasks: [] });
   let loading = $state(false);
   let activeIndex = $state(-1);
   let inputEl = $state(null);
@@ -34,21 +30,13 @@
 
   function buildFlatResults(r) {
     const flat = [];
-    if (r.topics.length) {
-      flat.push({ type: "header", label: "Topics" });
-      for (const t of r.topics) flat.push({ type: "topic", item: t });
+    if (r.tasks.length) {
+      flat.push({ type: "header", label: "Tasks" });
+      for (const t of r.tasks) flat.push({ type: "task", item: t });
     }
     if (r.docs.length) {
       flat.push({ type: "header", label: "Docs" });
       for (const d of r.docs) flat.push({ type: "doc", item: d });
-    }
-    if (r.boards.length) {
-      flat.push({ type: "header", label: "Boards" });
-      for (const b of r.boards) flat.push({ type: "board", item: b });
-    }
-    if (r.artifacts.length) {
-      flat.push({ type: "header", label: "Artifacts" });
-      for (const a of r.artifacts) flat.push({ type: "artifact", item: a });
     }
     return flat;
   }
@@ -68,7 +56,7 @@
   $effect(() => {
     if (!open) {
       query = "";
-      results = { topics: [], docs: [], boards: [], artifacts: [] };
+      results = { docs: [], tasks: [] };
       loading = false;
       activeIndex = -1;
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -89,7 +77,7 @@
     if (debounceTimer) clearTimeout(debounceTimer);
     const trimmed = q.trim();
     if (!trimmed) {
-      results = { topics: [], docs: [], boards: [], artifacts: [] };
+      results = { docs: [], tasks: [] };
       loading = false;
       return;
     }
@@ -100,22 +88,18 @@
   async function executeSearch(q) {
     const requestId = ++latestRequestId;
     try {
-      const [topics, docs, boards, artifacts] = await Promise.allSettled([
-        searchTopics(q, 5),
+      const [docs, tasks] = await Promise.allSettled([
         searchDocuments(q, 5),
-        searchBoards(q, 5),
-        searchArtifacts(q, 5),
+        searchWork(q, 5),
       ]);
       if (requestId !== latestRequestId) return;
       results = {
-        topics: topics.status === "fulfilled" ? topics.value : [],
         docs: docs.status === "fulfilled" ? docs.value : [],
-        boards: boards.status === "fulfilled" ? boards.value : [],
-        artifacts: artifacts.status === "fulfilled" ? artifacts.value : [],
+        tasks: tasks.status === "fulfilled" ? tasks.value : [],
       };
     } catch {
       if (requestId !== latestRequestId) return;
-      results = { topics: [], docs: [], boards: [], artifacts: [] };
+      results = { docs: [], tasks: [] };
     } finally {
       if (requestId === latestRequestId) loading = false;
     }
@@ -124,10 +108,8 @@
   function navigate(entry) {
     if (!organizationSlug || !workspaceSlug || entry.type === "header") return;
     const paths = {
-      topic: `/topics/${encodeURIComponent(resourceRouteSegment(entry.item, "topic"))}`,
       doc: `/docs/${encodeURIComponent(resourceRouteSegment(entry.item, "document"))}`,
-      board: `/boards/${encodeURIComponent(resourceRouteSegment(entry.item, "board"))}`,
-      artifact: `/artifacts/${encodeURIComponent(resourceRouteSegment(entry.item, "artifact"))}`,
+      task: `/tasks/${encodeURIComponent(workKey(entry.item))}`,
     };
     const target = paths[entry.type];
     if (target) {
@@ -175,11 +157,6 @@
   }
 
   function resultTitle(entry) {
-    if (entry.type === "artifact") {
-      const summary = String(entry.item.summary ?? "").trim();
-      if (summary) return summary;
-      return `${kindLabel(entry.item.kind)} artifact`;
-    }
     return (
       entry.item.title ||
       entry.item.display_name ||
@@ -188,11 +165,10 @@
   }
 
   function resultSubtitle(entry) {
-    if (entry.type === "topic") {
-      const parts = [];
-      const life = String(entry.item.state ?? "").trim();
-      if (life) parts.push(life);
-      return parts.join(" · ") || entry.item.ref || entry.item.handle || "";
+    if (entry.type === "task") {
+      return [entry.item.phase, entry.item.ref || workKey(entry.item)]
+        .filter(Boolean)
+        .join(" · ");
     }
     if (entry.type === "doc") {
       const sub = documentSearchPickerSubtitle(entry.item);
@@ -200,23 +176,6 @@
       return entry.item.head_version
         ? `v${entry.item.head_version}`
         : entry.item.ref || entry.item.handle || "";
-    }
-    if (entry.type === "board") {
-      const sub = boardSearchPickerSubtitle(entry.item);
-      return sub || entry.item.ref || entry.item.handle || "";
-    }
-    if (entry.type === "artifact") {
-      const item = entry.item ?? {};
-      const fn = String(
-        item.original_filename ?? item.originalFilename ?? "",
-      ).trim();
-      const mime = String(item.content_type ?? item.contentType ?? "").trim();
-      const badge = shortMimeBadge(mime);
-      const parts = [];
-      if (fn) parts.push(fn);
-      if (badge) parts.push(badge);
-      if (parts.length) return parts.join(" · ");
-      return kindLabel(item.kind);
     }
     return "";
   }
@@ -227,19 +186,13 @@
   }
 
   const typeIcons = {
-    topic:
-      "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+    task: "M3 6h4v12H3V6zm7 0h4v12h-4V6zm7 0h4v12h-4V6z",
     doc: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z",
-    board: "M3 6h4v12H3V6zm7 0h4v12h-4V6zm7 0h4v12h-4V6z",
-    artifact:
-      "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
   };
 
   const typeLabels = {
-    topic: "Topic",
+    task: "Task",
     doc: "Doc",
-    board: "Board",
-    artifact: "Artifact",
   };
 </script>
 
@@ -271,7 +224,7 @@
           bind:this={inputEl}
           class="cmd-input"
           type="text"
-          placeholder="Search topics, docs, boards, artifacts..."
+          placeholder="Search tasks and docs…"
           value={query}
           oninput={handleInput}
           spellcheck="false"
@@ -321,11 +274,7 @@
                 <span class="cmd-result-title">{resultTitle(entry)}</span>
                 <span class="cmd-result-subtitle">{resultSubtitle(entry)}</span>
               </div>
-              <span class="cmd-result-badge"
-                >{entry.type === "artifact"
-                  ? kindLabel(entry.item.kind)
-                  : typeLabels[entry.type]}</span
-              >
+              <span class="cmd-result-badge">{typeLabels[entry.type]}</span>
             </button>
           {/if}
         {/each}

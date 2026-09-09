@@ -11,6 +11,30 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 	if len(args) == 0 || hasHelpToken(args) {
 		return "", nil
 	}
+	if isWorkCommandRoot(args[0]) {
+		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
+			commandName := "pm " + args[1]
+			if err := preflightFlagUsage(args[2:], preflightFlagSpecs()[commandName]); err != nil {
+				return commandName, err
+			}
+			return commandName, nil
+		}
+		if len(args) >= 2 && args[0] == "pm" && args[1] == "channels" {
+			commandName := "pm channels"
+			if len(args) >= 3 && args[2] == "doctor" {
+				commandName = "pm channels doctor"
+				if err := preflightFlagUsage(args[3:], preflightFlagSpecs()[commandName]); err != nil {
+					return commandName, err
+				}
+			}
+			return commandName, nil
+		}
+		if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
+			return topic, nil
+		}
+		parsed, err := parseWorkCommand(args)
+		return parsed.name, err
+	}
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
 		args = rewritten
 	}
@@ -23,6 +47,11 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 	}
 	if err := preflightFlagUsage(commandArgs, preflightFlagSpecs()[commandName]); err != nil {
 		return commandName, err
+	}
+	if commandName == "docs ingest" {
+		if err := preflightDocsIngestArgs(commandArgs); err != nil {
+			return commandName, err
+		}
 	}
 	return commandName, nil
 }
@@ -120,6 +149,14 @@ func preflightKnownCommandShape(args []string) error {
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return preflightSubcommand(args[2:], docsRevisionSubcommandSpec)
 		}
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" {
+			token := docsCommentsSubcommandSpec.normalize(args[2])
+			for _, valid := range docsCommentsSubcommandSpec.valid {
+				if token == valid {
+					return preflightSubcommand(args[2:], docsCommentsSubcommandSpec)
+				}
+			}
+		}
 	case "events":
 		return preflightSubcommand(args[1:], eventsSubcommandSpec)
 	case "inbox":
@@ -199,6 +236,14 @@ func preflightShapeCommandName(args []string) string {
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {
 			return "docs revision"
 		}
+		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "comments" {
+			token := docsCommentsSubcommandSpec.normalize(args[2])
+			for _, valid := range docsCommentsSubcommandSpec.valid {
+				if token == valid {
+					return "docs comments " + token
+				}
+			}
+		}
 	case "meta":
 		if len(args) >= 3 && metaSubcommandSpec.normalize(args[1]) == "ops" {
 			return "meta ops"
@@ -271,6 +316,39 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 		}
 	}
 	return validateLifecycleFilterFlags(seen["include-archived"], seen["archived-only"], seen["include-trashed"], seen["trashed-only"])
+}
+
+func preflightDocsIngestArgs(args []string) error {
+	hasPath := false
+	hasSource := false
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--source" {
+			hasSource = true
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--source=") {
+			hasSource = true
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		hasPath = true
+	}
+	if !hasPath {
+		return errnorm.Usage("invalid_request", "path is required; pass a directory of markdown files")
+	}
+	if !hasSource {
+		return errnorm.Usage("invalid_request", "`--source` is required; pass a URL prefix joined with each relative path")
+	}
+	return nil
 }
 
 func preflightRootCommands() map[string]struct{} {
@@ -465,6 +543,8 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"docs list": merge(map[string]preflightFlagSpec{
 			"thread-id": valueFlag,
 			"q":         valueFlag,
+			"tag":       valueFlag,
+			"knowledge": boolFlag,
 			"limit":     valueFlag,
 			"cursor":    valueFlag,
 		}, lifecycle),
@@ -518,6 +598,64 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"docs message":  {"document-id": valueFlag},
 		"docs messages": {"document-id": valueFlag},
 		"docs reply":    {"document-id": valueFlag},
+		"docs search": {
+			"q":         valueFlag,
+			"tag":       valueFlag,
+			"host":      valueFlag,
+			"knowledge": boolFlag,
+			"limit":     valueFlag,
+			"cursor":    valueFlag,
+		},
+		"docs put": {
+			"title":       valueFlag,
+			"source":      valueFlag,
+			"tags":        valueFlag,
+			"hosts":       valueFlag,
+			"verified-at": valueFlag,
+			"handle":      valueFlag,
+			"body":        valueFlag,
+			"body-file":   valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs ingest": {
+			"source":      valueFlag,
+			"tags":        valueFlag,
+			"hosts":       valueFlag,
+			"verified-at": valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs get": {
+			"document-id": valueFlag,
+			"format":      valueFlag,
+		},
+		"docs comment": {
+			"document-id": valueFlag,
+			"body":        valueFlag,
+			"reply-to":    valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments": {
+			"document-id": valueFlag,
+			"limit":       valueFlag,
+			"cursor":      valueFlag,
+		},
+		"docs comments reply": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
+			"body":        valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments edit": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
+			"body":        valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs comments delete": {
+			"document-id": valueFlag,
+			"comment-id":  valueFlag,
+			"actor-id":    valueFlag,
+		},
 		"docs revise": {
 			"document-id": valueFlag,
 			"proposal-id": valueFlag,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,9 @@ async function main() {
   const personas = Array.isArray(bundle?.personas) ? bundle.personas : [];
   const selected = personas.filter((persona) => {
     const personaID = String(persona?.persona_id ?? "").trim();
-    if (!personaID || !String(persona?.refresh_token ?? "").trim()) {
+    const hasAccess = String(persona?.access_token ?? "").trim();
+    const hasRefresh = String(persona?.refresh_token ?? "").trim();
+    if (!personaID || (!hasAccess && !hasRefresh)) {
       return false;
     }
     if (onlyPersonas.size > 0 && !onlyPersonas.has(personaID)) {
@@ -53,21 +55,34 @@ async function main() {
   const entries = [];
   for (const persona of selected) {
     const personaID = String(persona.persona_id).trim();
-    const tokens = await refreshSeededPersonaToken(persona);
+    const tokens = await tokensForSeededPersona(persona);
     const homeDir = path.join(outputRoot, personaID);
     const profileDir = path.join(homeDir, ".config", "anx", "profiles");
     await mkdir(profileDir, { recursive: true });
 
     const now = new Date().toISOString();
+    const keyID = String(persona.key_id ?? "").trim();
+    const privateKey = String(persona.private_key ?? "").trim();
+    const agentID = String(persona.agent_id ?? "").trim();
+    if (!agentID || !keyID || !privateKey) {
+      throw new Error(
+        `persona ${personaID}: identity bundle is missing agent_id/key_id/private_key; re-run make serve so seed writes CLI assertion material`,
+      );
+    }
+    const keysDir = path.join(homeDir, ".config", "anx", "keys");
+    await mkdir(keysDir, { recursive: true, mode: 0o700 });
+    const privateKeyPath = path.join(keysDir, `${personaID}.ed25519`);
+    await writeFile(privateKeyPath, `${privateKey}\n`, { mode: 0o600 });
+    await chmod(privateKeyPath, 0o600);
     const profile = {
       version: 1,
       agent: personaID,
       base_url: baseUrl,
       username: persona.auth_username,
-      agent_id: persona.agent_id,
+      agent_id: agentID,
       actor_id: persona.actor_id,
-      key_id: "",
-      private_key_path: "",
+      key_id: keyID,
+      private_key_path: privateKeyPath,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_type: tokens.token_type || "Bearer",
@@ -111,6 +126,20 @@ async function main() {
       `${entry.persona_id}: HOME=${entry.home} anx --agent ${entry.agent} auth whoami`,
     );
   }
+}
+
+async function tokensForSeededPersona(persona) {
+  const accessToken = String(persona?.access_token ?? "").trim();
+  const refreshToken = String(persona?.refresh_token ?? "").trim();
+  if (accessToken && refreshToken) {
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: "Bearer",
+      expires_at: String(persona?.expires_at ?? "").trim(),
+    };
+  }
+  return refreshSeededPersonaToken(persona);
 }
 
 async function refreshSeededPersonaToken(persona) {

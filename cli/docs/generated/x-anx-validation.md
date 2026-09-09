@@ -4,13 +4,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `123`
-- Baseline-allowed required-field gaps: `125`
-- Missing recommended examples: `123`
+- Command operations: `159`
+- Baseline-allowed required-field gaps: `124`
+- Missing recommended examples: `141`
 
 ## Baseline gap counts
 
-- `x-anx-agent-notes`: `116`
+- `x-anx-agent-notes`: `115`
 - `x-anx-cli-path`: `3`
 - `x-anx-concepts`: `1`
 - `x-anx-error-codes`: `4`
@@ -83,7 +83,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `derived.rebuild` `POST /derived/rebuild` missing `x-anx-agent-notes`
 - `docs.archive` `POST /docs/{document_id}/archive` missing `x-anx-agent-notes`
 - `docs.create` `POST /docs` missing `x-anx-agent-notes`
-- `docs.get` `GET /docs/{document_id}` missing `x-anx-agent-notes`
 - `docs.list` `GET /docs` missing `x-anx-agent-notes`
 - `docs.patch` `PATCH /docs/{document_id}` missing `x-anx-agent-notes`
 - `docs.purge` `POST /docs/{document_id}/purge` missing `x-anx-agent-notes`
@@ -208,18 +207,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.timeline` `GET /cards/{card_id}/timeline`
 - `cards.trash` `POST /cards/{card_id}/trash`
 - `derived.rebuild` `POST /derived/rebuild`
-- `docs.archive` `POST /docs/{document_id}/archive`
-- `docs.create` `POST /docs`
-- `docs.get` `GET /docs/{document_id}`
-- `docs.list` `GET /docs`
-- `docs.patch` `PATCH /docs/{document_id}`
-- `docs.purge` `POST /docs/{document_id}/purge`
-- `docs.restore` `POST /docs/{document_id}/restore`
-- `docs.revisions.create` `POST /docs/{document_id}/revisions`
 - `docs.revisions.get` `GET /docs/{document_id}/revisions/{revision_id}`
-- `docs.revisions.list` `GET /docs/{document_id}/revisions`
-- `docs.trash` `POST /docs/{document_id}/trash`
-- `docs.unarchive` `POST /docs/{document_id}/unarchive`
 - `events.archive` `POST /events/{event_id}/archive`
 - `events.create` `POST /events`
 - `events.get` `GET /events/{event_id}`
@@ -246,6 +234,26 @@ Generated from `contracts/anx-openapi.yaml`.
 - `ops.blob.usage.rebuild` `POST /ops/blob-usage/rebuild`
 - `ops.health` `GET /ops/health`
 - `ops.usage.summary` `GET /ops/usage-summary`
+- `pm.actions.get` `GET /pm/actions/{action_id}`
+- `pm.actions.list` `GET /pm/actions`
+- `pm.actions.reconcile` `POST /pm/actions/{action_id}/reconcile`
+- `pm.bindings.create` `POST /pm/bindings`
+- `pm.bindings.list` `GET /pm/bindings`
+- `pm.context` `GET /pm/context`
+- `pm.conversations.create` `POST /pm/conversations`
+- `pm.conversations.get` `GET /pm/conversations/{conversation_id}`
+- `pm.conversations.list` `GET /pm/conversations`
+- `pm.conversations.messages.create` `POST /pm/conversations/{conversation_id}/messages`
+- `pm.decisions.answer` `POST /pm/decisions/{decision_id}/answer`
+- `pm.decisions.create` `POST /pm/decisions`
+- `pm.decisions.dispatch` `POST /pm/decisions/{decision_id}/dispatch`
+- `pm.decisions.get` `GET /pm/decisions/{decision_id}`
+- `pm.decisions.list` `GET /pm/decisions`
+- `pm.turns.claim` `POST /pm/turns/claim`
+- `pm.turns.complete` `POST /pm/turns/{turn_id}/complete`
+- `pm.turns.context` `GET /pm/turns/{turn_id}/context`
+- `pm.turns.decisions.create` `POST /pm/turns/{turn_id}/decisions`
+- `pm.turns.fail` `POST /pm/turns/{turn_id}/fail`
 - `ref_edges.list` `GET /ref-edges`
 - `secrets.create` `POST /secrets`
 - `secrets.delete` `DELETE /secrets/{secret_id}`
@@ -269,3 +277,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - `topics.unarchive` `POST /topics/{topic_id}/unarchive`
 - `topics.workspace` `GET /topics/{topic_id}/workspace`
 - `usage.summary.v1` `GET /v1/usage/summary`
+- `work.capabilities` `GET /work/capabilities`
+- `work.create` `POST /work`
+- `work.get` `GET /work/{card_ref}`
+- `work.list` `GET /work`
+- `work.observations.list` `GET /work/{card_ref}/observations`
+- `work.observations.submit` `POST /work/{card_ref}/observations`
+- `work.patch` `PATCH /work/{card_ref}`
+- `work.refresh.get` `GET /work/{card_ref}/refresh`
+- `work.refresh.request` `POST /work/{card_ref}/refresh`

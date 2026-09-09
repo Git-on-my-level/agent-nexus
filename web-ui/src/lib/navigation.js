@@ -1,10 +1,10 @@
+/**
+ * Primary navigation: the three product primitives — Inbox, Tasks, Docs.
+ * The PM conversation is an action ("Ask PM" in the sidebar header and the
+ * mobile bottom bar), not a destination category. Settings (Access, Secrets,
+ * Integrations, Audit) live in the sidebar footer and the mobile More hub.
+ */
 export const navigationItems = [
-  {
-    label: "Home",
-    href: "/",
-    icon: "home",
-    hint: "Overview",
-  },
   {
     label: "Inbox",
     href: "/inbox",
@@ -12,64 +12,67 @@ export const navigationItems = [
     hint: "Needs attention",
   },
   {
-    label: "Topics",
-    href: "/topics",
-    icon: "topics",
-    hint: "Ongoing work",
-  },
-  {
-    label: "Boards",
-    href: "/boards",
-    icon: "boards",
-    hint: "Kanban boards",
+    label: "Tasks",
+    href: "/tasks",
+    icon: "tasks",
+    hint: "Table and board",
   },
   {
     label: "Docs",
     href: "/docs",
     icon: "docs",
-    hint: "Docs and versioned content",
+    hint: "Shared knowledge",
   },
 ];
 
-/** Secondary destinations grouped with the identity panel (sidebar bottom). */
-export const settingsNavItems = [
+/** Secondary destinations, grouped. Rendered in the sidebar footer and on /more. */
+export const settingsNavGroups = [
   {
-    label: "Events",
-    href: "/events",
-    icon: "events",
-    hint: "Full workspace history",
-  },
-  {
-    label: "Artifacts",
-    href: "/artifacts",
-    icon: "artifacts",
-    hint: "Revision artifacts and payloads",
-  },
-  {
-    label: "Trash",
-    href: "/trash",
-    icon: "trash",
-    hint: "Trashed and restorable items",
-  },
-  {
-    label: "Access",
-    href: "/access",
-    icon: "access",
-    hint: "Manage principals and invites",
-  },
-  {
-    label: "Secrets",
-    href: "/secrets",
-    icon: "secrets",
-    hint: "Manage workspace credentials",
+    label: "Settings",
+    items: [
+      {
+        label: "Access",
+        href: "/access",
+        icon: "access",
+        hint: "Principals and invites",
+      },
+      {
+        label: "Secrets",
+        href: "/secrets",
+        icon: "secrets",
+        hint: "Workspace credentials",
+      },
+      {
+        label: "Integrations",
+        href: "/integrations",
+        icon: "integrations",
+        hint: "Source freshness and coverage",
+      },
+      {
+        label: "Audit",
+        href: "/events",
+        icon: "audit",
+        hint: "Workspace history",
+      },
+    ],
   },
 ];
+
+/** Flat view of the secondary destinations (kept for existing consumers). */
+export const settingsNavItems = settingsNavGroups.flatMap(
+  (group) => group.items,
+);
 
 const SHELL_CONTENT_RULES = [
   {
-    match: /^\/$/,
-    mode: "wide",
-    maxWidth: "92rem",
+    match: /^\/pm(\/|$)/,
+    mode: "standard",
+    maxWidth: "56rem",
+  },
+  {
+    match: /^\/(work|tasks|inbox|integrations)(\/|$)/,
+    mode: "fluid",
+    maxWidth: "112rem",
   },
   {
     match: /^\/access$/,
@@ -77,19 +80,9 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "84rem",
   },
   {
-    match: /^\/topics\/[^/]+/,
-    mode: "fluid",
-    maxWidth: "112rem",
-  },
-  {
     match: /^\/threads\/[^/]+/,
     mode: "fluid",
     maxWidth: "112rem",
-  },
-  {
-    match: /^\/artifacts\/[^/]+/,
-    mode: "wide",
-    maxWidth: "96rem",
   },
   {
     match: /^\/docs\/[^/]+/,
@@ -97,27 +90,12 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "112rem",
   },
   {
-    match: /^\/trash$/,
+    match: /^\/docs$/,
     mode: "wide",
     maxWidth: "88rem",
   },
   {
-    match: /^\/(threads|topics|events|artifacts|docs|boards)$/,
-    mode: "wide",
-    maxWidth: "88rem",
-  },
-  {
-    match: /^\/boards\/[^/]+/,
-    mode: "fluid",
-    maxWidth: "112rem",
-  },
-  {
-    match: /^\/inbox$/,
-    mode: "wide",
-    maxWidth: "84rem",
-  },
-  {
-    match: /^\/more$/,
+    match: /^\/(more|settings)$/,
     mode: "standard",
     maxWidth: "42rem",
   },
@@ -140,9 +118,13 @@ function normalizePathname(pathname) {
   return pathname;
 }
 
+/** Live routes that are not nav items: the Ask PM action target. */
+const NON_NAV_ROUTES = ["/pm"];
+
 export function isKnownSection(pathname) {
   const normalizedPathname = normalizePathname(pathname);
   return (
+    NON_NAV_ROUTES.includes(normalizedPathname) ||
     navigationItems.some((item) => normalizedPathname === item.href) ||
     settingsNavItems.some((item) => normalizedPathname === item.href)
   );
@@ -151,7 +133,7 @@ export function isKnownSection(pathname) {
 /** When true, the mobile bottom "More" tab should read as active (hub + settings destinations). */
 export function isMoreHubActivePath(pathname) {
   const p = normalizePathname(pathname);
-  if (p === "/more" || p.startsWith("/more/")) {
+  if (p === "/more" || p.startsWith("/more/") || p === "/settings") {
     return true;
   }
   return settingsNavItems.some(

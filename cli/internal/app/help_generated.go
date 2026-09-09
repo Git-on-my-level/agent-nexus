@@ -29,6 +29,8 @@ type localHelperTopic struct {
 }
 
 var runtimeGeneratedTopics = []runtimeHelpTopic{
+	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
+	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Register, inspect, and manage auth state"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
@@ -248,6 +250,156 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body <text>", Description: "Inline document body text (Markdown/text) when not using --body-file."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
+		},
+	},
+	{
+		Path:        "docs search",
+		Summary:     "Search documents by title, body, source, tags, and comments.",
+		JSONShape:   "GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.",
+		Composition: "SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.",
+		Examples: []string{
+			"anx docs search \"runbook\" --knowledge --host m4-air",
+			"anx docs search \"alphawhiz\" --knowledge --host m4-air --limit 20",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<q>", Description: "Search query; also accepted as `--q`."},
+			{Name: "--q <text>", Description: "Search query over title, body, and comments."},
+			{Name: "--knowledge", Description: "Only documents tagged knowledge."},
+			{Name: "--tag <tag>", Description: "Restrict results to one tag."},
+			{Name: "--host <name>", Description: "Restrict results to documents whose hosts list includes this name."},
+			{Name: "--limit <n>", Description: "Page size; omit to return up to 50 hits."},
+			{Name: "--cursor <cursor>", Description: "Pagination cursor from a previous search response."},
+		},
+	},
+	{
+		Path:        "docs put",
+		Summary:     "Create or replace a document by handle from a local file or stdin.",
+		JSONShape:   "PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.",
+		Composition: "Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.",
+		Examples: []string{
+			"anx docs put runbook.md --title \"Runbook\" --tags knowledge --source https://example.invalid/runbook.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z",
+			"anx docs put - --handle kb-shared --title \"Note\" --tags knowledge",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<path>", Description: "Markdown/text file, or `-` for stdin."},
+			{Name: "--title <text>", Description: "Document title."},
+			{Name: "--source <url-or-ref>", Description: "Canonical source URL or ref when this doc aggregates."},
+			{Name: "--tags <tag>", Description: "Tags, repeatable or comma-separated. Use `knowledge` for agent-facing docs."},
+			{Name: "--hosts <name>", Description: "Host names this knowledge fact applies to."},
+			{Name: "--verified-at <rfc3339>", Description: "When this knowledge fact was last verified."},
+			{Name: "--handle <handle>", Description: "Public handle used as the idempotency key."},
+			{Name: "--body <text>", Description: "Inline body when not passing a path."},
+			{Name: "--body-file <path>", Description: "Load body from a file or stdin with `-`."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs ingest",
+		Summary:     "Upsert markdown files under a directory as knowledge docs with source pointers.",
+		JSONShape:   "Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.",
+		Composition: "Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.",
+		Examples: []string{
+			"anx docs ingest ./kb --source https://example.invalid/kb",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<path>", Description: "Directory of markdown files, or a single markdown file."},
+			{Name: "--source <url-prefix>", Description: "Required. Joined with each relative path as the canonical source pointer."},
+			{Name: "--tags <tag>", Description: "Extra tags. `knowledge` is always applied."},
+			{Name: "--hosts <name>", Description: "Host names this knowledge tree applies to."},
+			{Name: "--verified-at <rfc3339>", Description: "When this knowledge tree was last verified."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs comment",
+		Summary:     "Post a document comment (or a reply with `--reply-to`).",
+		JSONShape:   "POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.",
+		Composition: "Writes a `message_posted` event on the document backing thread. Comment ids are stable event ids.",
+		Examples: []string{
+			"anx docs comment doc:runbook \"Host B found this\"",
+			"anx docs comment doc:runbook --body \"Acknowledged\" --reply-to <comment-id>",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id."},
+			{Name: "<text>", Description: "Comment body; also accepted as `--body`."},
+			{Name: "--body <text>", Description: "Comment text."},
+			{Name: "--reply-to <comment-id>", Description: "Parent comment id for a reply."},
+			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs comments",
+		Summary:     "List document comments as a thread with stable ids.",
+		JSONShape:   "GET `/docs/{document_id}/comments` returning `{ comments, next_cursor? }`.",
+		Composition: "Reads `message_posted` events on the document backing thread.",
+		Examples: []string{
+			"anx docs comments doc:runbook",
+			"anx docs comments doc:runbook --limit 20",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id."},
+			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
+			{Name: "--limit <n>", Description: "Page size."},
+			{Name: "--cursor <cursor>", Description: "Pagination cursor from a previous comments response."},
+		},
+	},
+	{
+		Path:        "docs comments reply",
+		Summary:     "Reply to a document comment.",
+		JSONShape:   "POST `/docs/{document_id}/comments/{comment_id}/replies` with `{ text }`.",
+		Composition: "Writes a `message_posted` reply with `reply_to` set to the parent comment ref.",
+		Examples: []string{
+			"anx docs comments reply doc:runbook event:note --body \"Acknowledged\"",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<doc>", Description: "Document ref, handle, or id."},
+			{Name: "<comment>", Description: "Parent comment ref (`event:<handle>`) or id."},
+			{Name: "--body <text>", Description: "Reply text."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
+		Path:        "docs get",
+		Summary:     "Get a document lineage and its current head revision.",
+		JSONShape:   "GET `/docs/{document_id}` returning `{ document, revision }`.",
+		Composition: "`--format md` prints only the markdown body, suitable for piping.",
+		Examples: []string{
+			"anx docs get kb-shared --format md",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<ref>", Description: "Document ref, handle, or id."},
+			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
+			{Name: "--format md", Description: "Print only the current revision body."},
+		},
+	},
+	{
+		Path:        "docs comments edit",
+		Summary:     "Edit a document comment you authored. The comment ref stays stable.",
+		JSONShape:   "PATCH `/docs/{document_id}/comments/{comment_id}` with `{ text }`.",
+		Composition: "Only the original author may edit. Deep-links keep working because `ref` does not change.",
+		Examples: []string{
+			"anx docs comments edit doc:runbook event:note --body \"Corrected\"",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<doc>", Description: "Document ref, handle, or id."},
+			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
+			{Name: "--body <text>", Description: "Replacement comment text."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
+		},
+	},
+	{
+		Path:        "docs comments delete",
+		Summary:     "Delete a document comment you authored.",
+		JSONShape:   "DELETE `/docs/{document_id}/comments/{comment_id}`.",
+		Composition: "Only the original author may delete. The comment is trashed on the backing thread.",
+		Examples: []string{
+			"anx docs comments delete doc:runbook event:note",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<doc>", Description: "Document ref, handle, or id."},
+			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
 		},
 	},
 	{
@@ -827,6 +979,8 @@ Core Commands:
   human         Surface ask, review, or escalation items to the human Inbox
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
+  work          Query commitments, context, freshness, refresh and capabilities
+  pm            Query PM context, decisions, conversations and action receipts
   workspace     Summarize workspace boards and counts for first-run orientation
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
@@ -873,6 +1027,9 @@ Global Flags:
 
 func helpTopicText(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
+	if text, ok := workHelpText(topic); ok {
+		return text, true
+	}
 	if dotConverted := strings.ReplaceAll(topic, ".", " "); dotConverted != topic {
 		if text, ok := helpTopicText(dotConverted); ok {
 			return text, true
@@ -1259,11 +1416,16 @@ Lower-level helpers:
 	case "docs":
 		return strings.TrimSpace(`Local inspection helpers:
   docs content             Show current document content with revision metadata.
+  docs search              Search title, body, source, tags, and comments.
+  docs comments            List document comments with stable ids.
+  docs comment             Post a document comment (` + "`--reply-to`" + ` for a reply).
   docs message             Post a document conversation message.
   docs messages            List document conversation messages.
   docs reply               Reply to a specific document message.
   Mutation flow:
   docs create              Create durable context from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `, or from advanced JSON.
+  docs put                 Idempotent create-or-replace by handle from a local file.
+  docs ingest              Upsert a markdown tree as knowledge docs with source pointers.
   docs revise              Revise from ` + "`--body-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
    Tip: agents should draft Markdown locally and pass ` + "`--body-file <path>`" + `. ` + "`docs revise doc:<handle> --body-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":
@@ -1720,7 +1882,7 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 }
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
-	return []subcommandSpec{
+	specs := []subcommandSpec{
 		{
 			command:  "auth",
 			valid:    []string{"register"},
@@ -1738,6 +1900,7 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		boardsCardsSubcommandSpec,
 		docsSubcommandSpec,
 		docsRevisionSubcommandSpec,
+		docsCommentsSubcommandSpec,
 		cardsSubcommandSpec,
 		threadsSubcommandSpec,
 		eventsSubcommandSpec,
@@ -1753,6 +1916,23 @@ func runtimeGeneratedHelpSpecs() []subcommandSpec {
 		},
 		metaOpsSubcommandSpec,
 	}
+	groups := map[string][]string{}
+	for name := range workCommands {
+		parts := strings.Fields(name)
+		group := strings.Join(parts[:len(parts)-1], " ")
+		groups[group] = append(groups[group], parts[len(parts)-1])
+	}
+	names := make([]string, 0, len(groups))
+	for name := range groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		sort.Strings(groups[name])
+		specs = append(specs, subcommandSpec{command: name, valid: groups[name]})
+	}
+	return specs
+
 }
 
 func runtimeGeneratedRegistryPaths() []string {
@@ -1849,17 +2029,19 @@ func mapRuntimePathToRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"events tail":           "events stream",
-		"inbox tail":            "inbox stream",
-		"threads get":           "threads inspect",
-		"artifacts get":         "artifacts inspect",
-		"artifacts content get": "artifacts content",
-		"artifacts download":    "artifacts content",
-		"secret get":            "secret get --reveal",
-		"meta commands":         "meta commands list",
-		"meta command":          "meta commands get",
-		"meta concepts":         "meta concepts list",
-		"meta concept":          "meta concepts get",
+		"pm conversations message": "pm conversations messages create",
+		"pm turns propose":         "pm turns decisions create",
+		"events tail":              "events stream",
+		"inbox tail":               "inbox stream",
+		"threads get":              "threads inspect",
+		"artifacts get":            "artifacts inspect",
+		"artifacts content get":    "artifacts content",
+		"artifacts download":       "artifacts content",
+		"secret get":               "secret get --reveal",
+		"meta commands":            "meta commands list",
+		"meta command":             "meta commands get",
+		"meta concepts":            "meta concepts list",
+		"meta concept":             "meta concepts get",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten
@@ -1875,11 +2057,13 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"auth agents register": "auth register",
-		"meta commands list":   "meta commands",
-		"meta commands get":    "meta command",
-		"meta concepts list":   "meta concepts",
-		"meta concepts get":    "meta concept",
+		"pm conversations messages create": "pm conversations message",
+		"pm turns decisions create":        "pm turns propose",
+		"auth agents register":             "auth register",
+		"meta commands list":               "meta commands",
+		"meta commands get":                "meta command",
+		"meta concepts list":               "meta concepts",
+		"meta concepts get":                "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten

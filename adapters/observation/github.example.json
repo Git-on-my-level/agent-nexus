@@ -1,0 +1,13 @@
+{
+  "target": {
+    "workspace_id": "example-workspace",
+    "connection_id": "public-github",
+    "source": "github",
+    "kind": "issue",
+    "repository": "octocat/Hello-World",
+    "native_id": "1"
+  },
+  "max_pages": 5,
+  "max_bytes": 1048576,
+  "timeout_seconds": 30
+}

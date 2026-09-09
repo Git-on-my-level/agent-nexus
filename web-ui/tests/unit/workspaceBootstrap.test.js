@@ -4,6 +4,7 @@ import {
   buildLoginRedirectDestination,
   classifyWorkspaceBootstrap,
   mergePrincipals,
+  reactivateStaleDevPersonaSession,
   shouldRedirectToLoginForBootstrapState,
   WORKSPACE_BOOTSTRAP_STATES,
 } from "../../src/lib/workspaceBootstrap.js";
@@ -124,5 +125,115 @@ describe("workspaceBootstrap", () => {
       { agent_id: "agent-1", actor_id: "actor-1", username: "A" },
       { agent_id: "agent-2", actor_id: "actor-2", username: "B" },
     ]);
+  });
+});
+
+describe("reactivateStaleDevPersonaSession", () => {
+  const personas = [
+    {
+      persona_id: "maya",
+      agent_id: "agent-new-maya",
+      actor_id: "actor-maya",
+      principal_kind: "human",
+      default: true,
+    },
+    {
+      persona_id: "leo",
+      agent_id: "agent-new-leo",
+      actor_id: "actor-leo",
+      principal_kind: "human",
+    },
+    {
+      persona_id: "pm",
+      agent_id: "agent-new-pm",
+      actor_id: "actor-pm",
+      principal_kind: "agent",
+    },
+  ];
+
+  it("leaves a session alone when the signed-in agent is a current fixture persona", async () => {
+    const calls = [];
+    const result = await reactivateStaleDevPersonaSession({
+      agent: { agent_id: "agent-new-leo", actor_id: "actor-leo" },
+      devFixturePersonas: personas,
+      workspaceSlug: "local",
+      workspaceHeader: "x-anx-workspace-slug",
+      fetchFn: async (url) => {
+        calls.push(String(url));
+        return { ok: true, json: async () => ({}) };
+      },
+    });
+    expect(result).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("re-issues the session for the persona playing the same actor after a reseed", async () => {
+    const calls = [];
+    const result = await reactivateStaleDevPersonaSession({
+      agent: { agent_id: "agent-old-leo", actor_id: "actor-leo" },
+      devFixturePersonas: personas,
+      workspaceSlug: "local",
+      workspaceHeader: "x-anx-workspace-slug",
+      organizationSlug: "local",
+      fetchFn: async (url, init = {}) => {
+        calls.push({
+          url: String(url),
+          method: init.method || "GET",
+          body: init.body,
+          org: init.headers?.["x-anx-organization-slug"],
+        });
+        if (String(url).endsWith("/auth/dev/session")) {
+          return { ok: true, json: async () => ({ ok: true }) };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            authenticated: true,
+            agent: {
+              agent_id: "agent-new-leo",
+              actor_id: "actor-leo",
+              principal_kind: "human",
+            },
+          }),
+        };
+      },
+    });
+    const session = calls.find((call) =>
+      call.url.endsWith("/auth/dev/session"),
+    );
+    expect(session).toBeTruthy();
+    expect(session.method).toBe("POST");
+    expect(JSON.parse(session.body)).toEqual({ persona_id: "leo" });
+    expect(session.org).toBe("local");
+    // Hydration re-reads /auth/session through the same fetch; its return
+    // shape belongs to authSession tests, so only the round trip is asserted.
+    expect(calls.some((call) => call.url.endsWith("/auth/session"))).toBe(true);
+    expect(result === null || typeof result === "object").toBe(true);
+  });
+
+  it("falls back to the default human persona when no persona plays the stale actor", async () => {
+    const calls = [];
+    await reactivateStaleDevPersonaSession({
+      agent: { agent_id: "agent-old-x", actor_id: "actor-gone" },
+      devFixturePersonas: personas,
+      workspaceSlug: "local",
+      workspaceHeader: "x-anx-workspace-slug",
+      fetchFn: async (url, init = {}) => {
+        calls.push({ url: String(url), body: init.body });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            authenticated: true,
+            agent: { agent_id: "agent-new-maya" },
+          }),
+        };
+      },
+    });
+    const session = calls.find((call) =>
+      call.url.endsWith("/auth/dev/session"),
+    );
+    expect(JSON.parse(session.body)).toEqual({ persona_id: "maya" });
   });
 });

@@ -80,6 +80,9 @@ func handleThreadWorkspace(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
+	if !requireAccessibleThreadID(w, r, opts, resolvedID, "thread") {
+		return
+	}
 
 	body, err := buildThreadWorkspacePayload(r.Context(), opts, resolvedID, options)
 	if err != nil {

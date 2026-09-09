@@ -13,21 +13,10 @@
   } from "$lib/actorSession";
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
+  import { navIconPath } from "$lib/icons.js";
   import { settingsNavItems } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
-
-  const navIconPathByType = {
-    events: "M12 6v6l4 2m5-2a9 9 0 11-18 0a9 9 0 0118 0z",
-    artifacts:
-      "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    trash:
-      "M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0",
-    access:
-      "M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z",
-    secrets:
-      "M15 7a2 2 0 0 1 2 2m4 0a6 6 0 0 1-7.743 5.743L11 17H9v2H7v2H4a1 1 0 0 1-1-1v-2.586a1 1 0 0 1 .293-.707l5.964-5.964A6 6 0 1 1 21 9z",
-  };
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
@@ -108,11 +97,7 @@
 <div class="space-y-3 sm:space-y-4">
   <!-- Settings navigation -->
   <section>
-    <p
-      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
-    >
-      Settings
-    </p>
+    <p class="ui-label mb-1.5 sm:mb-2">Settings</p>
     <div class="overflow-hidden rounded-md border border-line bg-panel">
       {#each settingsNavItems as item, i}
         <a
@@ -134,7 +119,7 @@
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              d={navIconPathByType[item.icon] ?? ""}
+              d={navIconPath(item.icon)}
             />
           </svg>
           <span class="flex-1">{item.label}</span>
@@ -164,11 +149,7 @@
 
   {#if hostedMode}
     <section>
-      <p
-        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
-      >
-        Account
-      </p>
+      <p class="ui-label mb-1.5 sm:mb-2">Account</p>
       <div class="overflow-hidden rounded-md border border-line bg-panel">
         <a
           class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3"
@@ -185,7 +166,7 @@
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
-              d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M19.5 3v6m0 0h-6m6 0l-9 9"
+              d={navIconPath("account")}
             />
           </svg>
           <span class="flex-1">Account</span>
@@ -214,11 +195,7 @@
   <!-- Workspace switcher (multi-workspace only) -->
   {#if hasMultipleWorkspaces}
     <section>
-      <p
-        class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
-      >
-        Workspace
-      </p>
+      <p class="ui-label mb-1.5 sm:mb-2">Workspace</p>
       <div class="overflow-hidden rounded-md border border-line bg-panel">
         {#each workspaces as ws, i}
           {@const isCurrent = ws.slug === workspaceSlug}
@@ -231,7 +208,7 @@
             type="button"
           >
             <span
-              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-accent-solid text-[0.5625rem] font-bold text-white"
+              class="inline-grid h-6 w-6 shrink-0 place-items-center rounded bg-accent-solid text-micro font-bold text-white"
               aria-hidden="true"
             >
               {workspaceInitials(ws.label)}
@@ -259,17 +236,13 @@
 
   <!-- Identity -->
   <section>
-    <p
-      class="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-muted sm:mb-2"
-    >
-      Identity
-    </p>
+    <p class="ui-label mb-1.5 sm:mb-2">Identity</p>
     <div class="overflow-hidden rounded-md border border-line bg-panel">
       <div
         class="flex items-center gap-2.5 border-b border-line px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3"
       >
         <span
-          class="inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#4a5060] text-[0.625rem] font-bold text-white sm:h-8 sm:w-8"
+          class="inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-line-strong text-micro font-bold text-fg sm:h-8 sm:w-8"
           aria-hidden="true"
         >
           {initials}
@@ -280,7 +253,7 @@
           </p>
           {#if shellIdentity.secondaryLabel}
             <p
-              class="truncate font-mono text-[0.6875rem] text-fg-subtle"
+              class="truncate font-mono text-micro text-fg-subtle"
               title={shellIdentity.secondaryLabel}
             >
               {shellIdentity.secondaryLabel}
@@ -307,7 +280,7 @@
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"
+            d={navIconPath("signOut")}
           />
         </svg>
         {$authenticatedAgent ? "Sign out" : "Switch identity"}

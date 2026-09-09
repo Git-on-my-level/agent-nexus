@@ -4,16 +4,40 @@ This document captures the durable product and architecture decisions that defin
 
 ## Product Position
 
-### Agent Nexus is a manager / executive operating system
+### Agent Nexus is a unified work tracker and conversational PM
 
-Agent Nexus is primarily a **manager and executive operating system**, not a generic work-management tool or a general-purpose collaboration clone.
+Agent Nexus is the human and agent front door for heterogeneous commitments,
+evidence, decisions, and follow-through. Inbox, board, table, and PM conversation
+are complementary views of the same durable workspace state. A commitment
+survives retries, delegation, machine changes, and chat resets; a successful run
+does not establish that its acceptance criteria were met.
 
-The system is designed to help managers and executives maintain organizational memory, track open work on topics and cards, and ensure follow-through on critical decisions. It optimizes for:
-- **High-leverage oversight**: giving managers visibility into the state of topics, cards, risks, and decisions across their scope of responsibility.
-- **Evidence-based progress**: ensuring that claims of completion or status change are grounded in receipts, decisions, or verifiable artifacts.
-- **Minimal active maintenance**: the system should surface what needs attention without requiring constant manual grooming.
+Existing cards are the work identity and topics organize projects. Nexus owns
+native commitments and local annotations. External source systems such as
+GitHub and Multica retain authority over their own workflow fields. Source
+identity, not title matching, deduplicates imported commitments. Board layout
+never grants permission to mutate a source.
 
-This positioning shapes what Agent Nexus does not try to be: a ticket tracker, a chat platform, a project management system, or a general-purpose workspace where any kind of work can happen. Those tools exist. Agent Nexus focuses on the manager's specific problem: maintaining durable institutional memory and ensuring follow-through in environments where agents and humans collaborate.
+Read-only collectors and bounded investigators publish attributed observations.
+They do not repair source systems. Last observed, source activity, and meaningful
+progress are distinct. Failed reads retain the last good evidence and expose
+its age and failure; missing evidence is unknown. Remote reports remain claims
+unless independent verification establishes the outcome.
+
+The conversational PM uses durable workspace context and explicit authorization
+for downstream actions. An answer, a delivered instruction, an acknowledgement,
+a source-reported outcome, and a verified result are separate states. Web,
+Telegram, and Discord share this PM experience with explicit identity mappings;
+channel membership never inherits a personal credential or approval scope.
+
+Generated readers may activate within a preapproved, enforceable capability
+envelope after validation and a real read-only canary. Unsupported isolation
+fails closed. Existing agent runtimes continue to own execution; core owns
+canonical commitments, observations, refresh intent, decisions, and receipts.
+
+This direction supersedes historical exclusions of project management, work
+tracking, and conversation from the product. It does not turn Nexus into a
+replacement for every source workflow or a separate distributed tracker DB.
 
 ## Core Architecture Decisions
 

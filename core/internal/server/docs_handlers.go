@@ -46,12 +46,18 @@ func handleListDocuments(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		}
 		threadID = resolved.ID
 	}
+	knowledge, knowledgeOK := parseOptionalBoolQuery(w, query.Get("knowledge"), "knowledge")
+	if !knowledgeOK {
+		return
+	}
 	documents, nextCursor, err := opts.primitiveStore.ListDocuments(r.Context(), primitives.DocumentListFilter{
-		States:   states,
-		ThreadID: threadID,
-		Query:    strings.TrimSpace(query.Get("q")),
-		Limit:    limitFilter,
-		Cursor:   strings.TrimSpace(query.Get("cursor")),
+		States:    states,
+		ThreadID:  threadID,
+		Query:     strings.TrimSpace(query.Get("q")),
+		Tag:       strings.TrimSpace(query.Get("tag")),
+		Knowledge: knowledge,
+		Limit:     limitFilter,
+		Cursor:    strings.TrimSpace(query.Get("cursor")),
 	})
 	if err != nil {
 		if errors.Is(err, primitives.ErrInvalidCursor) {
@@ -918,6 +924,352 @@ func handlePurgeDocument(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"purged": true, "document_id": documentID})
+}
+
+func parseOptionalBoolQuery(w http.ResponseWriter, raw, name string) (bool, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false, true
+	}
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", name+" must be a boolean")
+		return false, false
+	}
+	return parsed, true
+}
+
+func handleSearchDocuments(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	query := r.URL.Query()
+	q := strings.TrimSpace(query.Get("q"))
+	if q == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "q is required")
+		return
+	}
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(query.Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+	knowledge, ok := parseOptionalBoolQuery(w, query.Get("knowledge"), "knowledge")
+	if !ok {
+		return
+	}
+	documents, nextCursor, err := opts.primitiveStore.SearchDocuments(r.Context(), primitives.DocumentSearchFilter{
+		Query:     q,
+		Tag:       strings.TrimSpace(query.Get("tag")),
+		Host:      strings.TrimSpace(query.Get("host")),
+		Knowledge: knowledge,
+		Limit:     limitFilter,
+		Cursor:    strings.TrimSpace(query.Get("cursor")),
+	})
+	if err != nil {
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to search documents")
+		return
+	}
+	response := map[string]any{"documents": documents}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func handlePutDocument(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	if opts.contract == nil {
+		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
+		return
+	}
+	var req struct {
+		ActorID     string         `json:"actor_id"`
+		Document    map[string]any `json:"document"`
+		Content     any            `json:"content"`
+		ContentType string         `json:"content_type"`
+		Refs        any            `json:"refs"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if req.Content == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "content is required")
+		return
+	}
+	if err := validateDocumentContentType(req.ContentType); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if req.Document == nil {
+		req.Document = map[string]any{}
+	}
+	handleKey := strings.TrimSpace(strings.TrimPrefix(documentID, "document:"))
+	if handleKey == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "document handle is required")
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	refs, err := optionalRefs(req.Refs)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	if err := schema.ValidateTypedRefs(opts.contract, refs); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	var hygiene markdownHygieneCollector
+	if !hygiene.normalizeMapString(w, "document.summary", req.Document, "summary") {
+		return
+	}
+	if !normalizeAnyMarkdownContent(w, &hygiene, "content", req.ContentType, &req.Content) {
+		return
+	}
+
+	resolved, resolveErr := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "document", Ref: documentID})
+	if resolveErr != nil && !errors.Is(resolveErr, primitives.ErrNotFound) && !errors.Is(resolveErr, primitives.ErrInvalidResourceRef) {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve document")
+		return
+	}
+	if resolveErr == nil {
+		existing, revision, err := opts.primitiveStore.GetDocument(r.Context(), resolved.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load document")
+			return
+		}
+		baseRevision := firstNonEmptyString(revision["revision_id"], existing["head_revision_id"])
+		patch := map[string]any{}
+		if title := strings.TrimSpace(anyString(req.Document["title"])); title != "" {
+			patch["title"] = title
+		}
+		if _, has := req.Document["summary"]; has {
+			patch["summary"] = req.Document["summary"]
+		}
+		if _, has := req.Document["source"]; has {
+			patch["source"] = req.Document["source"]
+		}
+		if _, has := req.Document["tags"]; has {
+			patch["tags"] = req.Document["tags"]
+		}
+		if _, has := req.Document["hosts"]; has {
+			patch["hosts"] = req.Document["hosts"]
+		}
+		if _, has := req.Document["verified_at"]; has {
+			patch["verified_at"] = req.Document["verified_at"]
+		}
+		document, nextRevision, err := opts.primitiveStore.UpdateDocument(r.Context(), actorID, resolved.ID, patch, baseRevision, req.Content, req.ContentType, refs, nil)
+		if err != nil {
+			if writePrimitiveQuotaViolationError(w, err) {
+				return
+			}
+			if errors.Is(err, primitives.ErrConflict) {
+				writeError(w, http.StatusConflict, "conflict", "document revision conflict")
+				return
+			}
+			if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update document")
+			return
+		}
+		enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+		writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"document": document, "revision": nextRevision}))
+		return
+	}
+
+	if strings.TrimSpace(anyString(req.Document["title"])) == "" {
+		req.Document["title"] = handleKey
+	}
+	req.Document["handle"] = handleKey
+	document, revision, err := opts.primitiveStore.CreateDocument(r.Context(), actorID, req.Document, req.Content, req.ContentType, refs)
+	if err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
+			return
+		}
+		if errors.Is(err, primitives.ErrConflict) {
+			writeError(w, http.StatusConflict, "conflict", "document already exists")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document")
+		return
+	}
+	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{documentBackingThreadID(document)}, time.Now().UTC())
+	writeJSON(w, http.StatusCreated, hygiene.attach(map[string]any{"document": document, "revision": revision}))
+}
+
+func handleListDocumentComments(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	var limitFilter *int
+	limitRaw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 1 || parsed > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 1000")
+			return
+		}
+		limitFilter = &parsed
+	}
+	comments, nextCursor, err := opts.primitiveStore.ListDocumentComments(r.Context(), documentID, limitFilter, strings.TrimSpace(r.URL.Query().Get("cursor")))
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list document comments")
+		return
+	}
+	response := map[string]any{"comments": comments}
+	if nextCursor != "" {
+		response["next_cursor"] = nextCursor
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func handleCreateDocumentComment(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, parentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	var req struct {
+		ActorID  string `json:"actor_id"`
+		Text     string `json:"text"`
+		ParentID string `json:"parent_id"`
+		ReplyTo  string `json:"reply_to"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	if parentID == "" {
+		parentID = firstNonEmptyString(req.ReplyTo, req.ParentID)
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	comment, err := opts.primitiveStore.CreateDocumentComment(r.Context(), actorID, documentID, req.Text, parentID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "document not found")
+			return
+		}
+		if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create document comment")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"comment": comment})
+}
+
+func handleUpdateDocumentComment(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, commentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	var req struct {
+		ActorID string `json:"actor_id"`
+		Text    string `json:"text"`
+	}
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, req.ActorID)
+	if !ok {
+		return
+	}
+	comment, err := opts.primitiveStore.UpdateDocumentComment(r.Context(), actorID, documentID, commentID, req.Text)
+	if err != nil {
+		writeDocumentCommentMutationError(w, err, "failed to update document comment")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comment": comment})
+}
+
+func handleDeleteDocumentComment(w http.ResponseWriter, r *http.Request, opts handlerOptions, documentID, commentID string) {
+	if opts.primitiveStore == nil {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
+		return
+	}
+	var ok bool
+	documentID, ok = resolveHTTPResourceID(w, r, opts, "document", documentID, "document")
+	if !ok {
+		return
+	}
+	actorID, ok := resolveWriteActorID(w, r, opts, "")
+	if !ok {
+		return
+	}
+	comment, err := opts.primitiveStore.DeleteDocumentComment(r.Context(), actorID, documentID, commentID)
+	if err != nil {
+		writeDocumentCommentMutationError(w, err, "failed to delete document comment")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comment": comment})
+}
+
+func writeDocumentCommentMutationError(w http.ResponseWriter, err error, fallback string) {
+	if errors.Is(err, primitives.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "comment not found")
+		return
+	}
+	if errors.Is(err, primitives.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden", "only the comment author may change this comment")
+		return
+	}
+	if errors.Is(err, primitives.ErrInvalidDocumentRequest) {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "internal_error", fallback)
 }
 
 func optionalRefs(raw any) ([]string, error) {

@@ -314,6 +314,7 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
 		payloadItems = append(payloadItems, payload)
 	}
+	payloadItems = filterAccessibleInboxItems(r, opts, payloadItems, projected)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":               "open",
@@ -373,6 +374,9 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+		return
+	}
+	if !requireAccessibleThreadID(w, r, opts, item.ThreadID, "inbox item") {
 		return
 	}
 

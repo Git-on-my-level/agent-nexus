@@ -205,7 +205,33 @@ export function isSyntheticAnxHandle(raw) {
   if (/^agent_ext_[0-9a-f]{8,128}$/i.test(s)) {
     return true;
   }
+  // Dev passkey registrations mint `passkey.<slug>.<hex>` usernames; they are
+  // machine identifiers, never a person's name.
+  if (/^passkey\.[a-z0-9.]+\.[0-9a-f]{6,}$/i.test(s)) {
+    return true;
+  }
   return false;
+}
+
+/**
+ * Human label for an owner / actor field that may arrive as `actor:<id>`,
+ * a bare actor id, or an already-readable name.
+ */
+export function actorDisplayLabel(
+  value,
+  actors,
+  principals = get(principalRegistry),
+) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const id = raw.replace(/^actor:/, "");
+  const resolved = lookupActorDisplayName(id, actors, principals);
+  if (resolved && resolved !== "Unknown actor" && resolved !== id) {
+    return resolved;
+  }
+  return humanizeUnmappedActorIdForUi(id) || id;
 }
 
 function pickBetterActorDisplayLabel(existing, candidate) {

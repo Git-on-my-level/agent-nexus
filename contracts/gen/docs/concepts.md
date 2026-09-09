@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `30`
+- Concepts: `31`
 
 ## `actors`
 
@@ -96,7 +96,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `16`
+- Commands: `45`
 - Command IDs:
   - `boards.cards.batch_add`
   - `boards.cards.get`
@@ -114,6 +114,35 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `pm.actions.get`
+  - `pm.actions.list`
+  - `pm.actions.reconcile`
+  - `pm.bindings.create`
+  - `pm.bindings.list`
+  - `pm.context`
+  - `pm.conversations.create`
+  - `pm.conversations.get`
+  - `pm.conversations.list`
+  - `pm.conversations.messages.create`
+  - `pm.decisions.answer`
+  - `pm.decisions.create`
+  - `pm.decisions.dispatch`
+  - `pm.decisions.get`
+  - `pm.decisions.list`
+  - `pm.turns.claim`
+  - `pm.turns.complete`
+  - `pm.turns.context`
+  - `pm.turns.decisions.create`
+  - `pm.turns.fail`
+  - `work.capabilities`
+  - `work.create`
+  - `work.get`
+  - `work.list`
+  - `work.observations.list`
+  - `work.observations.submit`
+  - `work.patch`
+  - `work.refresh.get`
+  - `work.refresh.request`
 
 ## `compatibility`
 
@@ -137,18 +166,25 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `12`
+- Commands: `19`
 - Command IDs:
   - `docs.archive`
+  - `docs.comments.create`
+  - `docs.comments.delete`
+  - `docs.comments.list`
+  - `docs.comments.reply`
+  - `docs.comments.update`
   - `docs.create`
   - `docs.get`
   - `docs.list`
   - `docs.patch`
   - `docs.purge`
+  - `docs.put`
   - `docs.restore`
   - `docs.revisions.create`
   - `docs.revisions.get`
   - `docs.revisions.list`
+  - `docs.search`
   - `docs.trash`
   - `docs.unarchive`
 
@@ -166,6 +202,40 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.unarchive`
   - `home.read`
   - `home.unread`
+
+## `evidence`
+
+- Commands: `29`
+- Command IDs:
+  - `pm.actions.get`
+  - `pm.actions.list`
+  - `pm.actions.reconcile`
+  - `pm.bindings.create`
+  - `pm.bindings.list`
+  - `pm.context`
+  - `pm.conversations.create`
+  - `pm.conversations.get`
+  - `pm.conversations.list`
+  - `pm.conversations.messages.create`
+  - `pm.decisions.answer`
+  - `pm.decisions.create`
+  - `pm.decisions.dispatch`
+  - `pm.decisions.get`
+  - `pm.decisions.list`
+  - `pm.turns.claim`
+  - `pm.turns.complete`
+  - `pm.turns.context`
+  - `pm.turns.decisions.create`
+  - `pm.turns.fail`
+  - `work.capabilities`
+  - `work.create`
+  - `work.get`
+  - `work.list`
+  - `work.observations.list`
+  - `work.observations.submit`
+  - `work.patch`
+  - `work.refresh.get`
+  - `work.refresh.request`
 
 ## `health`
 
@@ -326,7 +396,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `49`
+- Commands: `54`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -354,9 +424,14 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.create`
   - `cards.trash`
   - `docs.archive`
+  - `docs.comments.create`
+  - `docs.comments.delete`
+  - `docs.comments.reply`
+  - `docs.comments.update`
   - `docs.create`
   - `docs.patch`
   - `docs.purge`
+  - `docs.put`
   - `docs.restore`
   - `docs.revisions.create`
   - `docs.trash`

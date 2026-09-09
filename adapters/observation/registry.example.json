@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "registrations": [
+    {
+      "card_ref": "card:example-external-work",
+      "target": {
+        "workspace_id": "example-workspace",
+        "connection_id": "public-github",
+        "source": "github",
+        "kind": "issue",
+        "repository": "octocat/Hello-World",
+        "native_id": "1"
+      },
+      "connection": { "transport": "https", "max_pages": 5, "max_bytes": 1048576 },
+      "policy": {
+        "interval_seconds": 300,
+        "stale_after_seconds": 900,
+        "timeout_seconds": 30,
+        "max_backoff_seconds": 3600
+      }
+    }
+  ]
+}

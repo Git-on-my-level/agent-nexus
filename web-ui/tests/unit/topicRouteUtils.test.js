@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  boardCardInspectNav,
   boardRowInspectNav,
   boardWorkspaceContextLinkLabel,
   boardWorkspaceInspectNav,
   inboxTopicRouteSegment,
   resolveBoardCardThreadIdField,
   shouldShowBoardWorkspaceContextLink,
-  topicDetailPathFromRef,
-  topicDetailPathFromSubject,
   topicRouteSegmentFromBackingThread,
   topicRouteSegmentFromBoardCardRow,
   topicRouteSegmentFromBoardWorkspace,
@@ -45,88 +42,6 @@ describe("topicRouteUtils", () => {
           id: "thread-a",
         }),
       ).toBe("");
-    });
-  });
-
-  describe("topicDetailPathFromRef", () => {
-    it("routes topic refs to topic detail", () => {
-      expect(topicDetailPathFromRef("topic:topic-1")).toBe("/topics/topic-1");
-    });
-
-    it("routes thread refs through the legacy thread redirect", () => {
-      expect(topicDetailPathFromRef("thread:thread-1")).toBe(
-        "/threads/thread-1",
-      );
-    });
-  });
-
-  describe("topicDetailPathFromSubject", () => {
-    it("prefers explicit topic ids", () => {
-      expect(
-        topicDetailPathFromSubject({
-          topicId: "topic-7",
-          threadId: "thread-7",
-        }),
-      ).toBe("/topics/topic-7");
-    });
-
-    it("falls back to thread detail when only a backing thread is known", () => {
-      expect(
-        topicDetailPathFromSubject({
-          threadId: "thread-7",
-        }),
-      ).toBe("/threads/thread-7");
-    });
-  });
-
-  describe("boardCardInspectNav", () => {
-    it("uses membership.topic_ref for topic kind", () => {
-      expect(
-        boardCardInspectNav(
-          {
-            topic_ref: "topic:top-1",
-            thread_id: "thread-x",
-          },
-          { id: "thread-x", topic_ref: "topic:top-2" },
-        ),
-      ).toEqual({ kind: "topic", segment: "top-1" });
-    });
-
-    it("uses first topic: in related_refs", () => {
-      expect(
-        boardCardInspectNav(
-          {
-            thread_id: "thread-x",
-            related_refs: ["board:b1", "topic:top-from-ref"],
-          },
-          null,
-        ),
-      ).toEqual({ kind: "topic", segment: "top-from-ref" });
-    });
-
-    it("uses backing thread topic_ref when membership has no topic hint", () => {
-      expect(
-        boardCardInspectNav(
-          { thread_id: "thread-x" },
-          {
-            id: "thread-x",
-            topic_ref: "topic:via-backing",
-          },
-        ),
-      ).toEqual({ kind: "topic", segment: "via-backing" });
-    });
-
-    it("uses thread kind when only membership.thread_id", () => {
-      expect(boardCardInspectNav({ thread_id: "thread-z" }, null)).toEqual({
-        kind: "thread",
-        segment: "thread-z",
-      });
-    });
-
-    it("returns null when only legacy parent_thread is set", () => {
-      expect(
-        boardCardInspectNav({ parent_thread: "thread-legacy" }, null),
-      ).toBe(null);
     });
   });
 

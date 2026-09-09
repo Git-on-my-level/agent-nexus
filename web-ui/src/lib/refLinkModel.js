@@ -263,41 +263,24 @@ function normalizeEventRoute(route, eventId, options = {}) {
   };
 }
 
+// Surfaces deleted from the product (topics, boards, artifacts) intentionally
+// resolve to no href: refs render as inert text instead of 404 links.
 const LINK_RESOLVERS = {
-  artifact: ({ workspaceSlug, organizationSlug, value }) =>
-    buildInternalHref(
-      workspaceSlug,
-      `/artifacts/${asPathSegment(value)}`,
-      organizationSlug,
-    ),
+  artifact: () => "",
   thread: ({ workspaceSlug, organizationSlug, value }) =>
     buildInternalHref(
       workspaceSlug,
       `/threads/${asPathSegment(value)}`,
       organizationSlug,
     ),
-  topic: ({ workspaceSlug, organizationSlug, value }) =>
+  topic: () => "",
+  card: () => "",
+  message: ({ workspaceSlug, organizationSlug, threadId, value }) =>
     buildInternalHref(
       workspaceSlug,
-      `/topics/${asPathSegment(value)}`,
-      organizationSlug,
-    ),
-  card: ({ workspaceSlug, organizationSlug, boardId, value }) =>
-    boardId
-      ? buildInternalHref(
-          workspaceSlug,
-          `/boards/${asPathSegment(boardId)}?card=${asPathSegment(value)}`,
-          organizationSlug,
-        )
-      : "",
-  message: ({ workspaceSlug, organizationSlug, topicId, threadId, value }) =>
-    buildInternalHref(
-      workspaceSlug,
-      topicId
-        ? `/topics/${asPathSegment(topicId)}?tab=messages#message-${asPathSegment(value)}`
-        : threadId
-          ? `/threads/${asPathSegment(threadId)}?tab=messages#message-${asPathSegment(value)}`
-          : `/events#${asPathSegment(value)}`,
+      threadId
+        ? `/threads/${asPathSegment(threadId)}?tab=messages#message-${asPathSegment(value)}`
+        : `/events#${asPathSegment(value)}`,
       organizationSlug,
     ),
   event: ({ workspaceSlug, organizationSlug, value }) =>
@@ -325,12 +308,7 @@ const LINK_RESOLVERS = {
       `/docs/revisions/${asPathSegment(value)}`,
       organizationSlug,
     ),
-  board: ({ workspaceSlug, organizationSlug, value }) =>
-    buildInternalHref(
-      workspaceSlug,
-      `/boards/${asPathSegment(value)}`,
-      organizationSlug,
-    ),
+  board: () => "",
 };
 
 function createResolvedLink(raw, prefix, value, labels, { href, isExternal }) {

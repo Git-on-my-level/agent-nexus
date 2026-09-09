@@ -199,7 +199,7 @@
     class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2"
   >
     <div class="min-w-0">
-      <h1 class="text-subtitle font-semibold text-fg">Events</h1>
+      <h1 class="text-title text-fg">Audit</h1>
       <p class="mt-0.5 text-meta text-fg-muted">
         Full workspace event history.
       </p>
