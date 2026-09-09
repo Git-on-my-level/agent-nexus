@@ -5,7 +5,6 @@ import {
   createAnxCoreClient,
   verifyCoreSchemaVersion,
 } from "../../src/lib/anxCoreClient.js";
-import { buildTopicCreatePayloadFromDraft } from "../../src/lib/topicCreatePayload.js";
 
 describe("anxCoreClient error messaging", () => {
   it("sends empty actor_id for writes when session locks identity and provider is empty", async () => {
@@ -23,12 +22,7 @@ describe("anxCoreClient error messaging", () => {
       },
     });
 
-    await client.createTopic(
-      buildTopicCreatePayloadFromDraft({
-        title: "x",
-        summary: "",
-      }),
-    );
+    await client.createTopic({ topic: { title: "x", summary: "" } });
 
     expect(seenBodies.length).toBe(1);
     expect(JSON.parse(seenBodies[0])).toMatchObject({ actor_id: "" });
@@ -92,6 +86,33 @@ describe("anxCoreClient error messaging", () => {
     await client.listActors({ q: "alice", limit: 7 });
 
     expect(seenUrls).toEqual(["http://core.test/actors?q=alice&limit=7"]);
+  });
+
+  it("searchDocuments GETs /docs/search with query filters", async () => {
+    const seenUrls = [];
+    const seenMethods = [];
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url, init) => {
+        seenUrls.push(String(url));
+        seenMethods.push(String(init?.method ?? "GET").toUpperCase());
+        return new Response(JSON.stringify({ documents: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    const data = await client.searchDocuments({
+      q: "runbook",
+      tag: "knowledge",
+    });
+
+    expect(seenUrls).toEqual([
+      "http://core.test/docs/search?q=runbook&tag=knowledge",
+    ]);
+    expect(seenMethods).toEqual(["GET"]);
+    expect(data).toEqual({ documents: [] });
   });
 
   it("returns actionable guidance when core is unreachable", async () => {

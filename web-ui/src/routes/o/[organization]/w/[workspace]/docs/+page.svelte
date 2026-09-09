@@ -69,6 +69,7 @@
   let createError = $state("");
   let searchQuery = $state("");
   let searchDraft = $state("");
+  let searchQueryTrimmed = $derived(String(searchQuery ?? "").trim());
 
   let draft = $state({
     title: "",
@@ -154,6 +155,15 @@
     const segment = resourceRouteSegment(documents[i], "document");
     return workspaceHref(`/docs/${encodeURIComponent(segment)}`);
   }
+  /** Truncate to a quiet single-line preview (adds an ellipsis when cut). */
+  function previewText(value, max = 80) {
+    const text = String(value ?? "").trim();
+    return text.length <= max ? text : `${text.slice(0, max).trimEnd()}…`;
+  }
+
+  function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value ?? "").trim());
+  }
 
   async function loadDocuments(isRetry = false) {
     const loadToken = ++activeDocumentListLoadToken;
@@ -163,15 +173,21 @@
     error = "";
     retrying = isRetry;
     try {
-      const f = docFiltersApplied;
-      const filters = {
-        state: f.states ?? ["active"],
-      };
-      const q = String(searchQuery ?? "").trim();
-      if (q) filters.q = q;
-      const threadFromUrl = String(scopedThreadId ?? "").trim();
-      if (threadFromUrl) filters.thread_id = threadFromUrl;
-      const data = await coreClient.listDocuments(filters);
+      const q = searchQueryTrimmed;
+      let data;
+      if (q) {
+        // /docs/search takes q/knowledge/tag/cursor/limit only (no state or
+        // thread_id per contracts/anx-openapi.yaml), so the lifecycle filter
+        // and thread scope are dropped while searching.
+        data = await coreClient.searchDocuments({ q });
+      } else {
+        const filters = {
+          state: docFiltersApplied.states ?? ["active"],
+        };
+        const threadFromUrl = String(scopedThreadId ?? "").trim();
+        if (threadFromUrl) filters.thread_id = threadFromUrl;
+        data = await coreClient.listDocuments(filters);
+      }
       if (
         loadToken !== activeDocumentListLoadToken ||
         loadWorkspaceSlug !== workspaceSlug ||
@@ -570,11 +586,84 @@
       class="mb-4"
     />
   {:else if documents.length === 0}
-    <StateEmpty
-      title="No docs yet"
-      helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
-    />
+    {#if searchQueryTrimmed}
+      <StateEmpty
+        title="No matching docs"
+        helper={`No documents match "${searchQueryTrimmed}". Search covers titles, bodies, and comments.`}
+      />
+    {:else}
+      <StateEmpty
+        title="No docs yet"
+        helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
+      />
+    {/if}
   {/if}
+
+  {#snippet docEnrichment(doc, sourceAsLink)}
+    {@const source = String(doc?.source ?? "").trim()}
+    {@const tags = (Array.isArray(doc?.tags) ? doc.tags : [])
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean)}
+    {#if source || tags.length > 0}
+      <div
+        class="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+      >
+        {#if source}
+          {#if sourceAsLink && isHttpUrl(source)}
+            <a
+              class="inline-flex min-w-0 max-w-[20rem] items-center gap-1 font-mono text-micro text-fg-muted transition-colors hover:text-accent-text"
+              href={source}
+              target="_blank"
+              rel="noreferrer"
+              title={source}
+            >
+              <span aria-hidden="true">↗</span>
+              <span class="truncate">{source}</span>
+            </a>
+          {:else}
+            <span
+              class="min-w-0 max-w-[20rem] truncate font-mono text-micro text-fg-subtle"
+              title={source}
+            >
+              {source}
+            </span>
+          {/if}
+        {/if}
+        {#each tags as tag (tag)}
+          {#if tag === "knowledge"}
+            <span
+              class="inline-flex shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-micro font-semibold text-accent-text"
+            >
+              Knowledge
+            </span>
+          {:else}
+            <span
+              class="inline-flex shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+            >
+              {tag}
+            </span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+  {/snippet}
+
+  {#snippet docLastComment(doc)}
+    {@const comment = doc?.last_comment}
+    {@const commentBody = String(comment?.body ?? "").trim()}
+    {#if commentBody}
+      <p class="mt-1 flex min-w-0 items-baseline gap-1.5 text-micro">
+        <span class="shrink-0 text-fg-subtle">Last comment</span>
+        <span class="min-w-0 truncate text-fg-muted" title={commentBody}>
+          {previewText(commentBody)}
+        </span>
+        <span aria-hidden="true" class="shrink-0 text-fg-subtle">·</span>
+        <span class="shrink-0 tabular-nums text-fg-muted">
+          {formatTimestamp(comment.created_at) || "—"}
+        </span>
+      </p>
+    {/if}
+  {/snippet}
 
   {#snippet docRow(doc, index, showBorderTop)}
     {@const selected = docSel.selectedIds.has(doc.id)}
@@ -636,7 +725,9 @@
                 >
               </div>
             </div>
+            {@render docEnrichment(doc, false)}
             <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
+            {@render docLastComment(doc)}
           </div>
         </div>
       </div>
@@ -657,13 +748,15 @@
         ]}
       >
         {#snippet row()}
-          <a
-            class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
-            href={workspaceHref(
-              `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
-            )}
+          <div
+            class="min-w-0 flex-1 px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
           >
-            <div class="min-w-0 flex-1">
+            <a
+              class="block min-w-0"
+              href={workspaceHref(
+                `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+              )}
+            >
               <WorkspaceResourceListRow
                 title={resourceDisplayLabel(doc)}
                 description={doc.summary ?? ""}
@@ -685,11 +778,13 @@
                   {/if}
                 {/snippet}
               </WorkspaceResourceListRow>
-              <InlineWorkspaceMetricStrip
-                items={documentListMetricItems(doc)}
-              />
-            </div>
-          </a>
+            </a>
+            {@render docEnrichment(doc, true)}
+            <InlineWorkspaceMetricStrip
+              items={documentListMetricItems(doc)}
+            />
+            {@render docLastComment(doc)}
+          </div>
         {/snippet}
         {#snippet meta()}
           <span class="w-14 text-right text-fg-muted"

@@ -16,7 +16,10 @@
     workKey,
     errorMessage,
   } from "$lib/pm/presentation.js";
-  import { applyTaskPhaseMove } from "$lib/taskBoardMove.js";
+  import {
+    applyTaskPhaseMove,
+    requestedDecisionMap,
+  } from "$lib/taskBoardMove.js";
 
   let records = $state([]),
     loading = $state(true),
@@ -25,6 +28,9 @@
     loaded = $state(false),
     now = $state(Date.now());
   let requested = $state({});
+  let decisions = $state([]);
+  let decisionsLoaded = $state(false);
+  let shortcutsOpen = $state(false);
   let moveError = $state("");
   let requestId = 0;
   let workspaceHref = $derived(
@@ -48,6 +54,7 @@
   let staleCount = $derived(
     records.filter((work) => workFreshness(work, now).key !== "fresh").length,
   );
+  let requestedDecisions = $derived(requestedDecisionMap(decisions, records));
   let search = $state("");
   $effect(() => {
     search = filters.q;
@@ -88,10 +95,20 @@
         ...new Map(rows.map((work) => [workKey(work), work])).values(),
       ];
       nextCursor = result.next_cursor || "";
+      if (!decisionsLoaded) void loadDecisions();
     } catch (err) {
       if (id === requestId) error = errorMessage(err);
     } finally {
       if (id === requestId) loading = false;
+    }
+  }
+  async function loadDecisions() {
+    decisionsLoaded = true;
+    try {
+      const result = await coreClient.listPmDecisions({ limit: 200 });
+      decisions = Array.isArray(result?.items) ? result.items : [];
+    } catch {
+      // Fail soft: the Requested badge link degrades, the page stays usable.
     }
   }
   async function moveTask(work, phase) {
@@ -106,11 +123,83 @@
         const next = { ...requested };
         delete next[key];
         requested = next;
+        decisions = decisions.filter(
+          (decision) => decision.work_ref !== work.ref,
+        );
       } else if (result.kind === "requested") {
         requested = { ...requested, [key]: phase };
+        if (result.decision) decisions = [...decisions, result.decision];
       }
     } catch (err) {
       moveError = errorMessage(err);
+    }
+  }
+  function isTextEntryTarget(target) {
+    return (
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+    );
+  }
+  function taskFocusTargets() {
+    return view === "board"
+      ? [...document.querySelectorAll('[data-work-ref][tabindex="0"]')]
+      : [...document.querySelectorAll('tr[data-work-ref] a[href]')];
+  }
+  function moveTaskFocus(delta) {
+    const targets = taskFocusTargets();
+    if (!targets.length) return;
+    const active = document.activeElement;
+    const currentIndex = targets.findIndex(
+      (target) => target === active || target.contains(active),
+    );
+    const nextIndex =
+      currentIndex < 0
+        ? 0
+        : Math.min(targets.length - 1, Math.max(0, currentIndex + delta));
+    targets[nextIndex].focus();
+  }
+  function setViewFromKeyboard(next) {
+    if (view === next) return;
+    void goto(queryHref({ view: next }), { keepFocus: true, noScroll: true });
+  }
+  function handleShortcutKeydown(event) {
+    if (event.key === "Escape") {
+      if (shortcutsOpen) {
+        event.preventDefault();
+        shortcutsOpen = false;
+      }
+      return;
+    }
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      isTextEntryTarget(event.target) ||
+      (!shortcutsOpen && document.querySelector('[aria-modal="true"]'))
+    )
+      return;
+    if (shortcutsOpen) {
+      if (event.key === "?") {
+        event.preventDefault();
+        shortcutsOpen = false;
+      }
+      return;
+    }
+    if (event.key === "?") {
+      event.preventDefault();
+      shortcutsOpen = true;
+    } else if (event.key === "j") {
+      event.preventDefault();
+      moveTaskFocus(1);
+    } else if (event.key === "k") {
+      event.preventDefault();
+      moveTaskFocus(-1);
+    } else if (event.key === "b") {
+      setViewFromKeyboard("board");
+    } else if (event.key === "t") {
+      setViewFromKeyboard("table");
     }
   }
   onMount(() => {
@@ -143,9 +232,31 @@
     ["git", "Git"],
     ["other", "Other"],
   ];
+  const SHORTCUTS = [
+    ["Next task", ["J"]],
+    ["Previous task", ["K"]],
+    ["Open focused task", ["Enter"]],
+    ["Board view", ["B"]],
+    ["Table view", ["T"]],
+    ["Shortcut help", ["?"]],
+    ["Close this help", ["Esc"]],
+  ];
+  let shortcutsDialog = $state(null);
+  let shortcutsHint = $state(null);
+  let shortcutsWereOpen = false;
+  $effect(() => {
+    if (shortcutsOpen) {
+      shortcutsDialog?.focus();
+      shortcutsWereOpen = true;
+    } else if (shortcutsWereOpen) {
+      shortcutsWereOpen = false;
+      shortcutsHint?.focus();
+    }
+  });
 </script>
 
 <svelte:head><title>Tasks · Agent Nexus</title></svelte:head>
+<svelte:window onkeydown={handleShortcutKeydown} />
 <WorkspacePageShell>
   <WorkspacePageHeader title="Tasks">
     {#snippet subtitle()}
@@ -163,6 +274,14 @@
       {/if}
     {/snippet}
     {#snippet actions()}
+      <button
+        bind:this={shortcutsHint}
+        class="ui-btn-secondary min-h-0 px-2.5 py-1"
+        onclick={() => (shortcutsOpen = true)}
+        aria-label="Keyboard shortcuts"
+        aria-keyshortcuts="?"
+        title="Keyboard shortcuts">?</button
+      >
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
       <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
     {/snippet}
@@ -340,6 +459,7 @@
       {workspaceHref}
       {now}
       {requested}
+      {requestedDecisions}
       onMove={moveTask}
     />
   {/if}
@@ -350,5 +470,42 @@
       onclick={() => load(true)}
       disabled={loading}>{loading ? "Loading…" : "Load more"}</button
     >
+  {/if}
+  {#if shortcutsOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      bind:this={shortcutsDialog}
+      class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] outline-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      tabindex="-1"
+      onclick={(event) => {
+        if (event.target === event.currentTarget) shortcutsOpen = false;
+      }}
+    >
+      <div class="w-full max-w-xs rounded-md border border-line bg-panel p-4">
+        <h2
+          class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
+        >
+          Keyboard shortcuts
+        </h2>
+        <dl class="mt-3 space-y-1.5 text-meta">
+          {#each SHORTCUTS as [action, keys] (action)}
+            <div class="flex items-baseline justify-between gap-6">
+              <dt class="text-fg-muted">{action}</dt>
+              <dd class="flex gap-1">
+                {#each keys as key (key)}
+                  <kbd
+                    class="rounded border border-line bg-accent-soft px-1.5 py-0.5 font-mono text-micro text-accent-text"
+                    >{key}</kbd
+                  >
+                {/each}
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </div>
+    </div>
   {/if}
 </WorkspacePageShell>

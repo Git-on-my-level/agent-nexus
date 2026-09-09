@@ -88,6 +88,38 @@ async function setup(page, overrides = {}) {
       created_at: stamp(2),
     },
   ];
+  const documents = [
+    {
+      id: "document-runbook",
+      handle: "release-runbook",
+      ref: "document:release-runbook",
+      title: "Release runbook",
+      summary: "How to cut a workspace release safely.",
+      source: "https://example.test/runbook.md",
+      tags: ["knowledge", "ops"],
+      state: "active",
+      head_revision_number: 3,
+      revision_count: 3,
+      timeline_message_count: 2,
+      updated_at: stamp(4),
+      last_comment: {
+        body: "Updated the rollback step after the last incident.",
+        created_at: stamp(3),
+        created_by: "actor-sample",
+      },
+    },
+    {
+      id: "document-notes",
+      handle: "standup-notes",
+      ref: "document:standup-notes",
+      title: "Standup notes",
+      summary: "Rolling operator notes.",
+      tags: [],
+      state: "active",
+      head_revision_number: 1,
+      updated_at: stamp(26),
+    },
+  ];
   const actions = [];
   const conversations = [];
   const turns = [];
@@ -159,6 +191,21 @@ async function setup(page, overrides = {}) {
     if (path === "/boards")
       return reply({
         boards: [{ ref: "board:sample", title: "Sample board" }],
+      });
+    if (path === "/docs" || path === "/docs/search")
+      return reply({ documents });
+    if (path.startsWith("/docs/") && path.endsWith("/revisions"))
+      return reply({ revisions: [] });
+    if (path.startsWith("/docs/"))
+      return reply({
+        document: documents[0],
+        revision: {
+          revision_id: "revision-runbook-3",
+          revision_number: 3,
+          content:
+            "# Release runbook\n\n1. Freeze the board\n2. Run the checks\n3. Tag and announce",
+          created_at: stamp(4),
+        },
       });
     if (
       path === "/work" ||
@@ -504,14 +551,19 @@ for (const viewport of [
   }, testInfo) => {
     await page.setViewportSize(viewport);
     await setup(page);
-    for (const path of [
-      "/tasks",
-      "/inbox?item=decision:decision-sample",
-      "/pm",
-      "/integrations",
+    for (const route of [
+      { path: "/tasks", name: "tasks" },
+      {
+        path: "/inbox?item=decision:decision-sample",
+        name: "inbox",
+      },
+      { path: "/pm", name: "pm" },
+      { path: "/docs", name: "docs" },
+      { path: "/docs/release-runbook", name: "docs-detail" },
+      { path: "/integrations", name: "integrations" },
     ]) {
-      await page.goto(`${root}${path}`);
-      await expect(page.locator("h1")).toBeVisible();
+      await page.goto(`${root}${route.path}`);
+      await expect(page.locator("h1").first()).toBeVisible();
       await expect(
         page.getByText("Loading commitments and evidence…"),
       ).toHaveCount(0);
@@ -530,9 +582,7 @@ for (const viewport of [
       ).violations;
       expect(violations).toEqual([]);
       await page.screenshot({
-        path: testInfo.outputPath(
-          `${path.split("?")[0].slice(1)}-${viewport.width}.png`,
-        ),
+        path: testInfo.outputPath(`${route.name}-${viewport.width}.png`),
         fullPage: true,
       });
     }
