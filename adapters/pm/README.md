@@ -121,6 +121,15 @@ Neither handler polls Telegram updates, opens a Discord gateway, registers
 commands/webhooks, or changes any existing bot configuration. A deployment
 owner must wire approved dedicated channels before a live canary.
 
+Local tests use `tests/channels/` fakes that speak the real Bot API and
+Discord REST/interaction wire. Point outbound delivery at those fakes with
+`ANX_PM_TELEGRAM_API_BASE` / `ANX_PM_DISCORD_API_BASE` (never in production).
+`anx pm channels doctor` checks secrets, GET webhook reachability, and
+bindings without sending a chat message. Unbound identities get a bind-first
+reply. Decision cards use Telegram inline keyboards and Discord components;
+stale revisions are rejected with a fresh card. 429/409 retry with capped
+backoff; unknown outcomes are not auto-retried.
+
 Natural-language agreement remains discussion. Explicit Telegram approval:
 
 ```

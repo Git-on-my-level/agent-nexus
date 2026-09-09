@@ -34,6 +34,11 @@ func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionI
 		}
 		return prior, nil
 	}
+	if d.Origin != nil {
+		if _, err = s.QueueDecisionCard(ctx, d, ""); err != nil {
+			return d, err
+		}
+	}
 	return d, nil
 }
 func (s *Service) decision(ctx context.Context, p Principal, id, permission string) (Decision, error) {

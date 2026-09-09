@@ -501,3 +501,39 @@ For cross-lane validation only, the real-binary harness accepts
 `ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the
 harness builds this checkout's core. This is not a mock backend; record the core
 source revision when using the override.
+
+### PM channels (`anx pm channels doctor`)
+
+Telegram and Discord ingress are webhook/interaction only. Bind a channel
+identity before the PM will accept messages:
+
+```sh
+anx pm bindings create --from-file binding.json
+anx pm channels doctor \
+  --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram \
+  --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord
+```
+
+Doctor reads env (never prints token values), probes those URLs with GET, and
+lists `/pm/bindings`. It does not POST an update, send a Bot API message, or
+open a Discord gateway.
+
+Core env (set on `anx-core`, not in Git):
+
+| Env | Role |
+|---|---|
+| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters |
+| `ANX_PM_TELEGRAM_BOT_ID` | Expected bot / tenant id |
+| `ANX_PM_TELEGRAM_BOT_TOKEN` | Outbound `sendMessage` |
+| `ANX_PM_DISCORD_PUBLIC_KEY` | 32-byte hex Ed25519 public key |
+| `ANX_PM_DISCORD_APPLICATION_ID` | Expected application id |
+| `ANX_PM_DISCORD_BOT_TOKEN` | Outbound REST `Bot` token |
+| `ANX_PM_TELEGRAM_API_BASE` | Test-only Bot API base (local fake) |
+| `ANX_PM_DISCORD_API_BASE` | Test-only Discord REST base (local fake, include `/api/v10`) |
+| `ANX_PM_TELEGRAM_WEBHOOK_URL` | Optional doctor GET target |
+| `ANX_PM_DISCORD_WEBHOOK_URL` | Optional doctor GET target |
+
+When dedicated bots exist: create the bots, set the env vars, register the
+webhook/interactions URL at core ingress, bind each human identity, then run
+doctor. Do not point existing production bot streams at this workspace. Local
+proof uses `tests/channels/` fakes, not live Telegram or Discord.

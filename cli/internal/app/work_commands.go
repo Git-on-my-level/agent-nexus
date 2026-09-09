@@ -175,6 +175,12 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		case "ask":
 			result, err := a.runPMAsk(ctx, args[2:], cfg)
 			return result, "pm ask", err
+		case "channels":
+			if len(args) >= 3 && args[2] == "doctor" {
+				result, err := a.runPMChannelsDoctor(ctx, args[3:], cfg)
+				return result, "pm channels doctor", err
+			}
+			return nil, "pm channels", errnorm.Usage("subcommand_required", "usage: anx pm channels doctor")
 		}
 	}
 	if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {

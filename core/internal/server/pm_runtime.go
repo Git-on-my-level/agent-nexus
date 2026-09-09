@@ -33,9 +33,11 @@ type PMRuntimeConfig struct {
 	TelegramWebhookSecret   string
 	TelegramBotID           string
 	TelegramBotToken        string
+	TelegramAPIBase         string
 	DiscordPublicKeyHex     string
 	DiscordApplicationID    string
 	DiscordBotToken         string
+	DiscordAPIBase          string
 }
 
 // PMRuntime is the mounted PM HTTP surface plus the durable service used by
@@ -281,8 +283,10 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		runtime.Sender = pm.HTTPSender{
 			TelegramToken:        cfg.TelegramBotToken,
 			TelegramBotID:        cfg.TelegramBotID,
+			TelegramAPIBase:      cfg.TelegramAPIBase,
 			DiscordToken:         cfg.DiscordBotToken,
 			DiscordApplicationID: cfg.DiscordApplicationID,
+			DiscordAPIBase:       cfg.DiscordAPIBase,
 		}
 	}
 	return runtime, nil

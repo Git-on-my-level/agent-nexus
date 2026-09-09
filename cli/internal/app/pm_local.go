@@ -55,6 +55,20 @@ func init() {
 				{Name: "--conversation-id <id>", Description: "Post into an existing conversation instead of creating one."},
 			},
 		},
+		localHelperTopic{
+			Path:        "pm channels doctor",
+			Summary:     "Check PM channel secrets, webhook reachability, and binding state without sending a chat message.",
+			JSONShape:   "`checks`, `ok`",
+			Composition: "Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.",
+			Examples: []string{
+				"anx pm channels doctor",
+				"anx pm channels doctor --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord",
+			},
+			Flags: []localHelperFlag{
+				{Name: "--telegram-webhook-url <url>", Description: "Telegram ingress URL to probe with GET (fake or core). Does not POST an update."},
+				{Name: "--discord-webhook-url <url>", Description: "Discord interactions URL to probe with GET (fake or core). Does not POST an interaction."},
+			},
+		},
 	)
 }
 

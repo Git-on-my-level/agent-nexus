@@ -7,6 +7,46 @@ import (
 	"time"
 )
 
+const deliveryBackoffCap = 5 * time.Minute
+
+type retryLaterError struct {
+	after    time.Duration
+	hasAfter bool
+	status   int
+}
+
+func (e retryLaterError) Error() string {
+	return "channel asked to retry later"
+}
+
+func retryAfterOf(err error) (time.Duration, bool, bool) {
+	var r retryLaterError
+	if errors.As(err, &r) {
+		return r.after, r.hasAfter, true
+	}
+	return 0, false, false
+}
+
+func deliveryBackoff(attempts int, retryAfter time.Duration, hasAfter bool) time.Duration {
+	if hasAfter {
+		if retryAfter > deliveryBackoffCap {
+			return deliveryBackoffCap
+		}
+		if retryAfter < 0 {
+			return 0
+		}
+		return retryAfter
+	}
+	if attempts < 1 {
+		attempts = 1
+	}
+	wait := time.Second << (attempts - 1)
+	if wait > deliveryBackoffCap || wait <= 0 {
+		return deliveryBackoffCap
+	}
+	return wait
+}
+
 type deliveryRetry struct {
 	DeliveryID          string    `json:"delivery_id"`
 	ActorID             string    `json:"actor_id"`
