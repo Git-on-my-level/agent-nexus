@@ -16,10 +16,11 @@ func fixtureJITPolicy() JITPolicy {
 }
 
 // isolationTestPolicy is for real sandbox-exec/bwrap runs. The 1s fixture
-// timeout is enough for the fake isolator but flakes under full-suite load.
+// timeout is enough for the fake isolator but flakes under full-suite load
+// when sandboxd is contended. Wall timeout matches the live canary policy.
 func isolationTestPolicy() JITPolicy {
 	p := fixtureJITPolicy()
-	p.Limits.Timeout = 15 * time.Second
+	p.Limits.Timeout = 30 * time.Second
 	p.Limits.CPUSeconds = 5
 	p.Limits.InputBytes = 1 << 20
 	p.Limits.OutputBytes = 1 << 20

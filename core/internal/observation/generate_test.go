@@ -37,6 +37,21 @@ func TestParseHarnessRejectsSubstitutedModel(t *testing.T) {
 	}
 }
 
+func TestParseHarnessAcceptsApprovedPairEitherOrder(t *testing.T) {
+	provider, model := ParseHarnessModel([]byte(`{"model":"glm-5.3","provider":"zai"}`))
+	if provider != "zai" || model != "glm-5.3" {
+		t.Fatalf("approved pair: %s %s", provider, model)
+	}
+}
+
+func TestParseOmpLogModelFromAgentEndLine(t *testing.T) {
+	raw := []byte(`{"message":"agent_end maintenance routing","provider":"zai","model":"glm-5.3"}`)
+	provider, model := ParseOmpLogModel(raw)
+	if provider != "zai" || model != "glm-5.3" {
+		t.Fatalf("omp log pair: %s %s", provider, model)
+	}
+}
+
 func TestHarnessExecutionID(t *testing.T) {
 	raw := []byte(`{"ok":true,"result":{"id":"exec-fixture-id","state":"running"}}`)
 	if harnessExecutionID(raw) != "exec-fixture-id" {

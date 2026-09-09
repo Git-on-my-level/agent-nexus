@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -163,7 +164,7 @@ func TestLiveGeneratedGitHubCanary(t *testing.T) {
 		t.Skip("set ANX_OBSERVATION_GITHUB_CANARY=1 to run the public GitHub generated canary")
 	}
 	_ = isolationRunnerOrSkip(t)
-	root := filepath.Join(t.TempDir(), "managed")
+	root := filepath.Join(isolationWorkDir(t), "managed")
 	policy := JITPolicy{MaxArtifactBytes: 16 << 20, Limits: IsolationLimits{Timeout: 30 * time.Second, MemoryBytes: 128 << 20, OutputBytes: 65536, InputBytes: 1 << 20, CPUSeconds: 5, Processes: 8, FileBytes: 1 << 20}, FailureThreshold: 2}
 	manager, err := NewJITManager(root, policy)
 	if err != nil {
@@ -179,11 +180,15 @@ func TestLiveGeneratedGitHubCanary(t *testing.T) {
 	t.Logf("generated github canary title=%q native=%s revision=%s language=%s", read.Title, read.NativeStatus, version.Revision, GeneratedLanguage)
 }
 
-func TestLiveGeneratedMulticaCanary(t *testing.T) {
-	if os.Getenv("ANX_OBSERVATION_MULTICA_CANARY") != "1" {
-		t.Skip("set ANX_OBSERVATION_MULTICA_CANARY=1 with ANX_MULTICA_PROFILE, ANX_MULTICA_WORKSPACE_ID, ANX_MULTICA_ISSUE_ID (read-only)")
+func envOr(name, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+		return v
 	}
-	_ = isolationRunnerOrSkip(t)
+	return fallback
+}
+
+func liveMulticaReader(t *testing.T) (Target, *MulticaCLIReader) {
+	t.Helper()
 	bin := os.Getenv("ANX_MULTICA_BIN")
 	if bin == "" {
 		resolved, err := exec.LookPath("multica")
@@ -195,25 +200,33 @@ func TestLiveGeneratedMulticaCanary(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	profile := os.Getenv("ANX_MULTICA_PROFILE")
-	workspace := os.Getenv("ANX_MULTICA_WORKSPACE_ID")
-	issue := os.Getenv("ANX_MULTICA_ISSUE_ID")
-	base := os.Getenv("ANX_MULTICA_BASE_URL")
-	if profile == "" || workspace == "" || issue == "" || base == "" {
-		t.Fatal("ANX_MULTICA_PROFILE, ANX_MULTICA_WORKSPACE_ID, ANX_MULTICA_ISSUE_ID and ANX_MULTICA_BASE_URL are required")
+	// David's read-only canary: profile desktop-multica-01.tail76ea03.ts.net,
+	// workspace slug scaling-forever, issue SCA-453. Never comment or change status.
+	profile := envOr("ANX_MULTICA_PROFILE", "desktop-multica-01.tail76ea03.ts.net")
+	workspace := envOr("ANX_MULTICA_WORKSPACE_ID", "f895fd35-edb9-44e2-8e5a-7f78bd93f47e")
+	issue := envOr("ANX_MULTICA_ISSUE_ID", "SCA-453")
+	base := envOr("ANX_MULTICA_BASE_URL", "https://multica-01.tail76ea03.ts.net")
+	target := Target{WorkspaceID: "ws_main", ConnectionID: "multica-main", Source: "multica", Kind: "issue", NativeID: issue}
+	reader, err := NewMulticaCLIReader(MulticaCLIConfig{Binary: bin, Profile: profile, BaseURL: base, WorkspaceID: target.WorkspaceID, ConnectionID: target.ConnectionID, SourceWorkspaceID: workspace, Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatal(err)
 	}
-	root := filepath.Join(t.TempDir(), "managed")
+	return target, reader
+}
+
+func TestLiveGeneratedMulticaCanary(t *testing.T) {
+	if os.Getenv("ANX_OBSERVATION_MULTICA_CANARY") != "1" {
+		t.Skip("set ANX_OBSERVATION_MULTICA_CANARY=1 to run the read-only Multica generated canary")
+	}
+	_ = isolationRunnerOrSkip(t)
+	root := filepath.Join(isolationWorkDir(t), "managed")
 	policy := JITPolicy{MaxArtifactBytes: 16 << 20, Limits: IsolationLimits{Timeout: 30 * time.Second, MemoryBytes: 128 << 20, OutputBytes: 65536, InputBytes: 1 << 20, CPUSeconds: 5, Processes: 8, FileBytes: 1 << 20}, FailureThreshold: 2}
 	manager, err := NewJITManager(root, policy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := Target{WorkspaceID: "ws_main", ConnectionID: "multica-main", Source: "multica", Kind: "issue", NativeID: issue}
+	target, reader := liveMulticaReader(t)
 	version := stageGenerated(t, manager, Manifest{AdapterID: "multica-issue-transform", Target: target, Limits: policy.Limits}, generatedTransformSource(t))
-	reader, err := NewMulticaCLIReader(MulticaCLIConfig{Binary: bin, Profile: profile, BaseURL: base, WorkspaceID: target.WorkspaceID, ConnectionID: target.ConnectionID, SourceWorkspaceID: workspace, Timeout: 30 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
 	read := lifecycleGenerated(t, manager, "multica-issue-transform", version, reader)
 	t.Logf("generated multica canary title=%q native=%s revision=%s", read.Title, read.NativeStatus, version.Revision)
 }
@@ -223,12 +236,13 @@ func TestLiveGenerateHarnessGitHub(t *testing.T) {
 		t.Skip("set ANX_OBSERVATION_GENERATE_CANARY=1 to generate a transform with agentctl/omp glm-5.3")
 	}
 	_ = isolationRunnerOrSkip(t)
-	root := filepath.Join(t.TempDir(), "managed")
+	workRoot := isolationWorkDir(t)
+	root := filepath.Join(workRoot, "managed")
 	policy := JITPolicy{MaxArtifactBytes: 16 << 20, Limits: IsolationLimits{Timeout: 30 * time.Second, MemoryBytes: 128 << 20, OutputBytes: 65536, InputBytes: 1 << 20, CPUSeconds: 5, Processes: 8, FileBytes: 1 << 20}, FailureThreshold: 2}
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	workspace := filepath.Join(root, "github-issue-transform", ".generate")
+	workspace := filepath.Join(workRoot, "generate")
 	target := Target{WorkspaceID: "ws_main", ConnectionID: "github-main", Source: "github", Kind: "issue", NativeID: "208", Repository: "Git-on-my-level/agent-nexus"}
 	manifest := Manifest{AdapterID: "github-issue-transform", Target: target, Limits: policy.Limits}
 	reader, err := NewGitHubReader(HTTPConfig{BaseURL: "https://api.github.com", WorkspaceID: target.WorkspaceID, ConnectionID: target.ConnectionID, Timeout: 30 * time.Second, MaxPages: 5, MaxBytes: 1 << 20})
@@ -252,6 +266,9 @@ func TestLiveGenerateHarnessGitHub(t *testing.T) {
 	if generated.Language != GeneratedLanguage {
 		t.Fatalf("language %q", generated.Language)
 	}
+	if generated.Provider != "zai" || generated.Model != "glm-5.3" {
+		t.Fatalf("unapproved harness model provider=%s model=%s", generated.Provider, generated.Model)
+	}
 	t.Logf("harness provider=%s model=%s source_bytes=%d artifact_bytes=%d", generated.Provider, generated.Model, len(generated.Source), len(generated.Binary))
 	manager, err := NewJITManager(root, policy)
 	if err != nil {
@@ -263,4 +280,13 @@ func TestLiveGenerateHarnessGitHub(t *testing.T) {
 	}
 	read := lifecycleGenerated(t, manager, "github-issue-transform", version, reader)
 	t.Logf("model-generated github canary title=%q revision=%s", read.Title, version.Revision)
+
+	mtarget, mreader := liveMulticaReader(t)
+	mmanifest := Manifest{AdapterID: "multica-issue-transform", Target: mtarget, Limits: policy.Limits}
+	mversion, err := manager.Stage(mmanifest, generated.Binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mread := lifecycleGenerated(t, manager, "multica-issue-transform", mversion, mreader)
+	t.Logf("model-generated multica canary title=%q native=%s revision=%s", mread.Title, mread.NativeStatus, mversion.Revision)
 }

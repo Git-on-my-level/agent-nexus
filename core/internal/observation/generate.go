@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -189,12 +190,62 @@ func CompileGeneratedC(dir string, source []byte) (string, error) {
 }
 
 func ParseHarnessModel(raw []byte) (provider, model string) {
-	re := regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
-	m := re.FindSubmatch(raw)
-	if len(m) == 3 {
-		return string(m[1]), string(m[2])
+	hasZai := regexp.MustCompile(`"provider"\s*:\s*"zai"`).Match(raw)
+	hasGlm := regexp.MustCompile(`"model"\s*:\s*"glm-5\.3"`).Match(raw)
+	if hasZai && hasGlm {
+		return "zai", "glm-5.3"
 	}
-	return "", ""
+	if p := regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"`).FindSubmatch(raw); len(p) == 2 {
+		provider = string(p[1])
+	}
+	if m := regexp.MustCompile(`"model"\s*:\s*"([^"]+)"`).FindSubmatch(raw); len(m) == 2 {
+		model = string(m[1])
+	}
+	return provider, model
+}
+
+// ParseOmpLogModel reads omp agent_end lines. agentctl's result envelope does
+// not retain the native `"provider","model"` pair the PM skill requires.
+func ParseOmpLogModel(raw []byte) (provider, model string) {
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		if !bytes.Contains(line, []byte("agent_end")) {
+			continue
+		}
+		p, m := ParseHarnessModel(line)
+		if p != "" {
+			provider, model = p, m
+		}
+	}
+	return provider, model
+}
+
+func readRecentOmpLogs(after time.Time) []byte {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	dir := filepath.Join(home, ".omp", "logs")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var b []byte
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "omp.") || !strings.HasSuffix(e.Name(), ".log") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.ModTime().Before(after) {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		b = append(b, raw...)
+		b = append(b, '\n')
+	}
+	return b
 }
 
 func ParseHarnessText(raw []byte) []byte {
@@ -309,10 +360,8 @@ func RunGenerateHarness(ctx context.Context, req GenerateRequest) (GeneratedArti
 	cmd := exec.CommandContext(ctx, bin, args[1:]...)
 	cmd.Dir = req.Workspace
 	cmd.Env = os.Environ()
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return GeneratedArtifact{}, failure(ErrUnavailable, "generation harness failed")
-	}
+	started := time.Now().Add(-time.Second)
+	out, runErr := cmd.CombinedOutput()
 	if id := harnessExecutionID(out); id != "" {
 		_ = exec.CommandContext(ctx, bin, "await", id).Run()
 		result := exec.CommandContext(ctx, bin, "result", id, "--content", "--allow-empty")
@@ -322,11 +371,16 @@ func RunGenerateHarness(ctx context.Context, req GenerateRequest) (GeneratedArti
 		}
 	}
 	_ = os.WriteFile(filepath.Join(req.Workspace, "harness.out"), out, 0600)
-	if harnessFailed(out) {
+	if runErr != nil || harnessFailed(out) {
 		return GeneratedArtifact{}, failure(ErrUnavailable, "generation harness failed")
 	}
 	provider, model := ParseHarnessModel(out)
-	if provider != "" && (provider != "zai" || model != "glm-5.3") {
+	if provider != "zai" || model != "glm-5.3" {
+		if p, m := ParseOmpLogModel(readRecentOmpLogs(started)); p != "" {
+			provider, model = p, m
+		}
+	}
+	if provider != "zai" || model != "glm-5.3" {
 		return GeneratedArtifact{}, failure(ErrPolicy, "generation harness used an unapproved model")
 	}
 	source, err := ExtractGeneratedC(ParseHarnessText(out))
