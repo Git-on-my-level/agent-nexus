@@ -229,7 +229,7 @@
       case "unknown":
         return ["Dispatch uncertain · response not established", "warn"];
       case "failed":
-        return ["PM response failed", "warn"];
+        return ["PM response failed", "danger"];
       default:
         return [
           `Response not available · ${turn.status || "unknown"}`,
@@ -429,12 +429,15 @@
               />
             {:else}
               <SignalBadge tone={statusTone}>{statusLabel}</SignalBadge>
+              {#if turn.status === "failed" && turn.failure}
+                <p class="mt-1 text-meta text-danger-text">{turn.failure}</p>
+              {/if}
             {/if}
             {#if turn.evidence_refs?.length}
               <ul class="mt-2 flex flex-wrap gap-1.5 text-micro">
-                {#each turn.evidence_refs as ref}
+                {#each turn.evidence_refs as ref (ref)}
                   <li class="rounded bg-bg-soft px-1.5 py-0.5 font-mono">
-                    {#if ref.startsWith("card:")}
+                    {#if ref.startsWith("card:") || ref.startsWith("work:")}
                       <a
                         class="ui-prose-link"
                         href={workspaceHref(`/work/${encodeURIComponent(ref)}`)}

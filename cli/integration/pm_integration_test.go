@@ -3,8 +3,12 @@
 package integration
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +55,123 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 		t.Fatalf("queued turn status: %s", response.Stdout)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "pm", "conversations", "get", conversationID)
+}
+
+func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
+	h := newLiveCoreHarness(t)
+	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	invite := h.createInviteToken(t, "pm")
+	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
+
+	script := filepath.Join(t.TempDir(), "fake-harness.sh")
+	body := "#!/bin/sh\n" +
+		"cat \"$1\" >/dev/null\n" +
+		"printf '%s\\n' 'Synthetic PM reply. See card:fixture-card and decision:pm_testdecision.'\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(t.TempDir(), "pm-runner")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	serveCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serve := exec.CommandContext(serveCtx, h.cliBin,
+		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"pm", "serve",
+		"--work-dir", workDir,
+		"--poll-interval", "200ms",
+		"--runner", script+" {prompt}",
+	)
+	serve.Env = append(os.Environ(),
+		"HOME="+h.homeDir,
+		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
+	)
+	serveLog := filepath.Join(t.TempDir(), "pm-serve.log")
+	logFile, err := os.Create(serveLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logFile.Close()
+	serve.Stdout = logFile
+	serve.Stderr = logFile
+	if err := serve.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		_, _ = serve.Process.Wait()
+	}()
+
+	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
+	status := mustStringPath(t, asked.Payload, "data.turn.status")
+	if status != "delivered" {
+		t.Fatalf("fake harness turn status %s stdout=%s stderr=%s serve=%s", status, asked.Stdout, asked.Stderr, readFileOrEmpty(serveLog))
+	}
+	response := mustStringPath(t, asked.Payload, "data.turn.response")
+	if !strings.Contains(response, "card:fixture-card") {
+		t.Fatalf("response %q", response)
+	}
+	refs, _ := getPathValue(asked.Payload, "data.turn.evidence_refs")
+	joined := fmt.Sprint(refs)
+	if !strings.Contains(joined, "card:fixture-card") || !strings.Contains(joined, "decision:pm_testdecision") {
+		t.Fatalf("evidence refs %v", refs)
+	}
+}
+
+func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
+	h := newLiveCoreHarness(t)
+	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	invite := h.createInviteToken(t, "pm")
+	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
+
+	script := filepath.Join(t.TempDir(), "fail-harness.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho harness exploded >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(t.TempDir(), "pm-runner")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	serveCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serve := exec.CommandContext(serveCtx, h.cliBin,
+		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"pm", "serve",
+		"--work-dir", workDir,
+		"--poll-interval", "200ms",
+		"--runner", script+" {prompt}",
+	)
+	serve.Env = append(os.Environ(),
+		"HOME="+h.homeDir,
+		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
+	)
+	if err := serve.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		_, _ = serve.Process.Wait()
+	}()
+
+	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
+	status := mustStringPath(t, asked.Payload, "data.turn.status")
+	if status != "failed" {
+		t.Fatalf("expected failed, got %s stdout=%s", status, asked.Stdout)
+	}
+	failure := mustStringPath(t, asked.Payload, "data.turn.failure")
+	if !strings.Contains(failure, "harness exploded") && !strings.Contains(failure, "exit status 1") {
+		t.Fatalf("failure %q", failure)
+	}
+}
+
+func readFileOrEmpty(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1330,14 +1331,76 @@ function normalizeEventPayload(type, payload) {
   return next;
 }
 
-async function ed25519PublicKeyBase64() {
-  const pair = await globalThis.crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"],
-  );
-  const raw = await globalThis.crypto.subtle.exportKey("raw", pair.publicKey);
-  return Buffer.from(raw).toString("base64");
+// CLI profiles store Go's ed25519.PrivateKey (seed||public, 64 bytes, base64).
+function generateCliEd25519KeyPair() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const spki = publicKey.export({ type: "spki", format: "der" });
+  const pkcs8 = privateKey.export({ type: "pkcs8", format: "der" });
+  if (spki.length < 32) {
+    throw new Error("ed25519 spki too short");
+  }
+  const pubRaw = spki.subarray(spki.length - 32);
+  const seed = ed25519SeedFromPkcs8(pkcs8);
+  const privRaw = Buffer.concat([seed, pubRaw]);
+  if (privRaw.length !== 64) {
+    throw new Error("ed25519 private key must be 64 bytes");
+  }
+  return {
+    publicKeyBase64: pubRaw.toString("base64"),
+    privateKeyBase64: privRaw.toString("base64"),
+  };
+}
+
+function ed25519SeedFromPkcs8(der) {
+  if (
+    der.length >= 34 &&
+    der[der.length - 34] === 0x04 &&
+    der[der.length - 33] === 0x20
+  ) {
+    return der.subarray(der.length - 32);
+  }
+  throw new Error("unexpected ed25519 pkcs8 encoding");
+}
+
+function pkcs8FromCliPrivateKey(privateKeyBase64) {
+  const raw = Buffer.from(privateKeyBase64, "base64");
+  if (raw.length !== 64) {
+    throw new Error("ed25519 private key must be 64 bytes");
+  }
+  return Buffer.concat([
+    Buffer.from("302e020100300506032b657004220420", "hex"),
+    raw.subarray(0, 32),
+  ]);
+}
+
+async function issueAssertionTokens(agentID, keyID, privateKeyBase64) {
+  const signedAt = new Date().toISOString();
+  const message = `anx-auth-token|${agentID}|${keyID}|${signedAt}`;
+  const key = createPrivateKey({
+    key: pkcs8FromCliPrivateKey(privateKeyBase64),
+    format: "der",
+    type: "pkcs8",
+  });
+  const signature = sign(null, Buffer.from(message), key).toString("base64");
+  const body = await requestJson(coreBaseUrl, "POST", "/auth/token", {
+    grant_type: "assertion",
+    agent_id: agentID,
+    key_id: keyID,
+    signed_at: signedAt,
+    signature,
+  });
+  const tokens = body?.tokens ?? {};
+  const accessToken = String(tokens.access_token ?? "").trim();
+  const refreshToken = String(tokens.refresh_token ?? "").trim();
+  if (!accessToken || !refreshToken) {
+    throw new Error("assertion token response missing access_token/refresh_token");
+  }
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: String(tokens.token_type ?? "Bearer").trim() || "Bearer",
+    expires_at: String(tokens.expires_at ?? "").trim(),
+  };
 }
 
 const cliDogfoodInviteSlots = [
@@ -1477,6 +1540,8 @@ async function seedDevFixtureIdentities() {
       String(p.principal_kind).toLowerCase() === "human" &&
       status?.dev_passkey_bypass_available === true;
 
+    const keyPair = generateCliEd25519KeyPair();
+    let keyID = "";
     let reg;
     if (usePasskeyDevHuman) {
       reg = await requestJson(
@@ -1491,10 +1556,9 @@ async function seedDevFixtureIdentities() {
         [201],
       );
     } else {
-      const publicKey = await ed25519PublicKeyBase64();
       const body = {
         username: p.auth_username,
-        public_key: publicKey,
+        public_key: keyPair.publicKeyBase64,
         existing_actor_id: p.actor_id,
       };
       if (i === 0) {
@@ -1517,6 +1581,7 @@ async function seedDevFixtureIdentities() {
         body,
         [201],
       );
+      keyID = String(reg?.key?.key_id ?? "").trim();
     }
     if (reg?.tokens?.access_token) {
       // Invites require a human or auth-admin principal. The bootstrap
@@ -1556,18 +1621,55 @@ async function seedDevFixtureIdentities() {
     }
     const agent = reg.agent ?? {};
     const coreUsername = String(agent.username ?? "").trim();
+    let accessToken = String(reg.tokens?.access_token ?? "").trim();
+    let refreshToken = String(reg.tokens?.refresh_token ?? "").trim();
+    let expiresAt = String(reg.tokens?.expires_at ?? "").trim();
+    if (accessToken && !keyID) {
+      const rotated = await requestAuthJson(
+        "POST",
+        "/agents/me/keys/rotate",
+        { public_key: keyPair.publicKeyBase64 },
+        accessToken,
+        [200],
+      );
+      keyID = String(rotated?.key?.key_id ?? "").trim();
+      const agentID = String(agent.agent_id ?? "").trim();
+      if (keyID && agentID) {
+        const fresh = await issueAssertionTokens(
+          agentID,
+          keyID,
+          keyPair.privateKeyBase64,
+        );
+        if (inviteIssuerAccess === accessToken) {
+          inviteIssuerAccess = fresh.access_token;
+        }
+        if (humanInviteIssuerAccess === accessToken) {
+          humanInviteIssuerAccess = fresh.access_token;
+        }
+        accessToken = fresh.access_token;
+        refreshToken = fresh.refresh_token;
+        expiresAt = fresh.expires_at;
+      }
+    }
+    if (!keyID) {
+      throw new Error(
+        `persona ${p.persona_id}: registration did not return a key_id for CLI assertion auth`,
+      );
+    }
     bundle.push({
       persona_id: p.persona_id,
       actor_id: p.actor_id,
       agent_id: agent.agent_id,
+      key_id: keyID,
+      private_key: keyPair.privateKeyBase64,
       auth_username: coreUsername || p.auth_username,
       display_label: p.display_label,
       principal_kind: p.principal_kind,
       default: p.default === true,
       dev_bridge: p.dev_bridge,
-      access_token: reg.tokens?.access_token,
-      refresh_token: reg.tokens?.refresh_token,
-      expires_at: reg.tokens?.expires_at,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: expiresAt,
     });
   }
 

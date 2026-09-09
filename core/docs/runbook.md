@@ -129,7 +129,11 @@ the Studio PM agent (`actor-gds-pm` / `dev.pm`), sets `ANX_PM_AGENT_ACTOR_ID`
 and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
-`lease_token`. See `cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe.
+`lease_token`. Past-deadline sending turns expire to `failed` on claim.
+`ANX_PM_MAX_CONCURRENT` (default 2) bounds in-flight sending turns. Channel
+ingress turns carry `origin` and use this same claim pipeline. See
+`cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe and `{prompt}` Hermes
+or Codex argv.
 
 ## PM channels (Telegram and Discord)
 
