@@ -93,6 +93,7 @@ type Turn struct {
 	LeaseOwner     string    `json:"lease_owner,omitempty"`
 	LeaseExpiresAt time.Time `json:"lease_expires_at,omitempty"`
 	MaxOutputBytes int       `json:"max_output_bytes,omitempty"`
+	Origin         *Origin   `json:"origin,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
 	Deadline       time.Time `json:"deadline"`
 	Revision       int       `json:"revision"`

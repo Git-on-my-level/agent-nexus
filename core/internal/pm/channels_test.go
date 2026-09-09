@@ -49,6 +49,9 @@ func TestExplicitChannelIdentityAndDeliveryRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if turn.Origin == nil || *turn.Origin != o {
+		t.Fatalf("channel turn missing origin %+v", turn.Origin)
+	}
 	if _, err = s.ReceiveChannel(ctx, o, "1", "What changed?"); err != nil || *count != 1 {
 		t.Fatalf("replay %v %d", err, *count)
 	}

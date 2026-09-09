@@ -4371,7 +4371,7 @@ Generated Help: pm conversations message
 - Output: Returns `PMTurn`.
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 - Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
 
 Inputs:
@@ -4588,7 +4588,7 @@ Generated Help: pm turns claim
 - Output: Returns `PMTurn`.
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Lease expiry is bounded by the turn deadline and pm.Config turn timeout.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
 - Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
 
 Inputs:
@@ -7644,11 +7644,13 @@ Local Help: pm serve
 - JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
 - Examples:
   - `anx --agent pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
+  - `anx --agent pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'`
 
 Flags:
-  --runner <argv>              Native harness argv after `agentctl run --`. Example: omp -p --mode json --model zai/glm-5.3 --auto-approve.
-  --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root.
+  --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path.
+  --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used.
   --poll-interval <duration>   Sleep between empty claims (default 2s).
+  --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Core also bounds workspace sending turns.
 
 
 Global flags:

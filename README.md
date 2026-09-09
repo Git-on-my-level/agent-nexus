@@ -135,12 +135,18 @@ Validate the running seeded scenario with:
 make scenario-validate
 ```
 
-Materialize temporary CLI profile homes for seeded agent personas with:
+Materialize temporary CLI profile homes for every seeded persona (humans and
+agents) with:
 
 ```bash
 make dev-profile-homes
+HOME="$PWD/.tmp/anx-dev-profile-homes/maya" anx --agent maya auth whoami
 HOME="$PWD/.tmp/anx-dev-profile-homes/leo" anx --agent leo auth whoami
 ```
+
+Profiles include `agent_id`, `key_id`, and a local Ed25519 key so assertion
+refresh works after the seeded access token expires. Re-run `make serve` to
+refresh the identity bundle, then `make dev-profile-homes`.
 
 ## Local HTTP Recording
 

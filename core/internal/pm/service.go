@@ -186,7 +186,7 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 		return Turn{}, ErrUnavailable
 	}
 	now := time.Now().UTC()
-	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, MaxOutputBytes: s.cfg.MaxOutputBytes, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
+	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, MaxOutputBytes: s.cfg.MaxOutputBytes, Origin: c.Origin, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
 	inserted, err := s.store.insertTurn(ctx, t, s.cfg.MaxConcurrent)
 	if err != nil {
 		return Turn{}, err
@@ -332,10 +332,14 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 		return Turn{}, ErrInvalid
 	}
 	now := time.Now().UTC()
+	if err := s.expireStaleTurns(ctx, p, now); err != nil {
+		return Turn{}, err
+	}
 	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, "", "")
 	if err != nil {
 		return Turn{}, err
 	}
+	held := 0
 	for _, t := range turns {
 		if t.LeaseOwner == runner && leaseHeld(t, now) && (t.Status == Sending || t.Status == Unknown) {
 			if s.cfg.AgentActorID != "" && t.AgentActorID != s.cfg.AgentActorID {
@@ -343,6 +347,12 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 			}
 			return t, nil
 		}
+		if leaseHeld(t, now) && (t.Status == Sending || t.Status == Unknown) {
+			held++
+		}
+	}
+	if held >= s.cfg.MaxConcurrent {
+		return Turn{}, ErrEmpty
 	}
 	for _, t := range turns {
 		if t.Status != Sending && t.Status != Unknown {
@@ -375,6 +385,34 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 		return t, nil
 	}
 	return Turn{}, ErrEmpty
+}
+func (s *Service) expireStaleTurns(ctx context.Context, p Principal, now time.Time) error {
+	turns, err := listRecords[Turn](ctx, s.store, "turn", p.WorkspaceID, "", "")
+	if err != nil {
+		return err
+	}
+	for _, t := range turns {
+		if t.Status != Sending && t.Status != Unknown {
+			continue
+		}
+		if s.cfg.AgentActorID != "" && t.AgentActorID != "" && t.AgentActorID != s.cfg.AgentActorID && t.AgentActorID != p.ActorID {
+			continue
+		}
+		if !now.After(t.Deadline) {
+			continue
+		}
+		old := t.Revision
+		t.Status = Failed
+		t.Failure = "deadline passed before a runner completed the turn"
+		t.LeaseToken = ""
+		t.LeaseOwner = ""
+		t.LeaseExpiresAt = time.Time{}
+		t.Revision++
+		if err = s.store.cas(ctx, "turn", t.ID, old, t); err != nil && !errors.Is(err, ErrConflict) {
+			return err
+		}
+	}
+	return nil
 }
 func leaseHeld(t Turn, now time.Time) bool {
 	return t.LeaseToken != "" && !t.LeaseExpiresAt.IsZero() && t.LeaseExpiresAt.After(now)

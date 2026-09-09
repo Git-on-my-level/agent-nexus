@@ -28,10 +28,21 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose"} {
+	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "work_ref", "decision:"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
+	}
+}
+
+func TestExpandPromptPlaceholder(t *testing.T) {
+	argv := []string{"/bin/echo", "{prompt}"}
+	if !runnerUsesPromptPlaceholder(argv) {
+		t.Fatal("expected placeholder")
+	}
+	got := expandPromptPlaceholder(argv, "/tmp/turn.md")
+	if strings.Join(got, " ") != "/bin/echo /tmp/turn.md" {
+		t.Fatalf("got %v", got)
 	}
 }
 
@@ -45,8 +56,8 @@ func TestExtractProviderModelAndAssistantText(t *testing.T) {
 	if !strings.Contains(text, "emergency-restock") {
 		t.Fatalf("assistant text %q", text)
 	}
-	refs := extractEvidenceRefs(text)
-	if len(refs) != 1 || refs[0] != "card:emergency-restock" {
+	refs := extractEvidenceRefs(text + " decision:pm_abc123")
+	if len(refs) != 2 {
 		t.Fatalf("refs %v", refs)
 	}
 }
