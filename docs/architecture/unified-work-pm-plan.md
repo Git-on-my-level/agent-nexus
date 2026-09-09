@@ -199,7 +199,8 @@ until then, end-to-end proof and dogfood run on web and CLI.
 
 ### Receipts
 
-Fourteen machine states remain in the record. The UI shows four: needs you,
+The record keeps its eleven machine states (three decision, eight action); the
+earlier "fourteen" was stale. The UI shows four: needs you,
 delivered, done, failed. Everything else sits behind a disclosure.
 
 ### Order of work

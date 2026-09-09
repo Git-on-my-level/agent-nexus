@@ -151,11 +151,6 @@
         )}
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <ReceiptSignal signal={state} />
-          {#if !verified}
-            <span class="text-micro text-fg-subtle"
-              >Outcome not independently verified</span
-            >
-          {/if}
         </div>
         {#if action.receipt?.detail}
           <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg">

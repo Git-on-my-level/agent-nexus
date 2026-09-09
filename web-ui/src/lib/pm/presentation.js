@@ -81,10 +81,7 @@ const RECEIPT_PRIMARY = {
 const RECEIPT_FOLDED = {
   answered: "Answered",
   pending_delivery: "Pending delivery",
-  pending: "Pending",
-  queued: "Queued",
   acknowledged: "Acknowledged",
-  applied: "Applied; verification pending",
   source_reported: "Source reported; not independently verified",
   sending: "Delivery in progress",
   unknown: "Delivery uncertain",

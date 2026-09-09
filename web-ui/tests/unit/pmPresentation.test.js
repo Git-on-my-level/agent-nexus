@@ -98,7 +98,7 @@ describe("PM evidence presentation", () => {
       verified: false,
     });
     expect(receiptSignal("acknowledged").verified).toBe(false);
-    expect(receiptSignal("applied").verified).toBe(false);
+    expect(receiptSignal("acknowledged").verified).toBe(false);
     expect(receiptSignal("pending_delivery").primary).toBe(false);
     expect(receiptSignal("new_remote_state")).toMatchObject({
       label: "new_remote_state",
