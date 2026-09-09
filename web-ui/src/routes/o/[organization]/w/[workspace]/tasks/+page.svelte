@@ -307,15 +307,14 @@
       {#if records.length}
         <span class="text-fg-muted"
           >{records.length}{nextCursor ? "+" : ""} tracked</span
-        >{#if blockedCount}
-          · <a
+        >{#if blockedCount}<span class="mx-1 text-fg-subtle">·</span><a
             class="ui-prose-link text-warn-text"
             href={queryHref({ phase: "blocked" })}>{blockedCount} blocked</a
-          >{/if}{#if neverCheckedCount}
-          · <a class="ui-prose-link" href={queryHref({ freshness: "unknown" })}
+          >{/if}{#if neverCheckedCount}<span class="mx-1 text-fg-subtle">·</span
+          ><a class="ui-prose-link" href={queryHref({ freshness: "unknown" })}
             >{neverCheckedCount} never checked</a
-          >{/if}{#if unreachableCount}
-          · <a
+          >{/if}{#if unreachableCount}<span class="mx-1 text-fg-subtle">·</span
+          ><a
             class="ui-prose-link text-warn-text"
             href={workspaceHref("/integrations")}
             >{unreachableCount} can't reach source</a

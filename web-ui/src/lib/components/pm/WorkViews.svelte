@@ -3,6 +3,11 @@
   import SignalBadge from "./SignalBadge.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
+  import {
     phaseGroups,
     label,
     PHASE_LABELS,
@@ -283,10 +288,15 @@
                 </span>
               {/if}
             </td>
-            <td class="max-w-40 px-3 py-1.5">
+            <td class="max-w-40 overflow-hidden px-3 py-1.5">
               {#if work.owner}
                 <ActorLabel
-                  label={work.owner}
+                  class="max-w-full"
+                  label={actorDisplayLabel(
+                    work.owner,
+                    $actorRegistry,
+                    $principalRegistry,
+                  )}
                   seed={work.owner}
                   size="xs"
                   nameClass="text-meta text-fg truncate"

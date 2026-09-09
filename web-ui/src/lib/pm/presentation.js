@@ -159,7 +159,16 @@ function parseStructuredInstruction(text) {
  * a JSON payload (`{"next_action":"…"}`); a JSON blob is never a title —
  * prefer an instruction summary field, then the task title, then a generic.
  */
+function sentenceCase(text) {
+  const s = String(text ?? "").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 export function decisionTitle(item, taskTitle = "") {
+  return sentenceCase(decisionTitleRaw(item, taskTitle));
+}
+
+function decisionTitleRaw(item, taskTitle = "") {
   const instruction = String(item?.instruction ?? "").trim();
   const structured = parseStructuredInstruction(instruction);
   if (structured) {

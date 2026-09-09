@@ -152,7 +152,7 @@ describe("PM evidence presentation", () => {
     ).toBe("Release");
     expect(decisionTitle({ instruction: "[1,2]" }, "Release")).toBe("Release");
     expect(decisionTitle({ instruction: "not json { still plain" })).toBe(
-      "not json { still plain",
+      "Not json { still plain",
     );
     expect(decisionTitle({}, "Release")).toBe("Release");
     expect(decisionTitle({})).toBe("Decision");

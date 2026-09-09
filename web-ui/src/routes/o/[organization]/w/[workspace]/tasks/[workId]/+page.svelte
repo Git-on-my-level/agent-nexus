@@ -9,6 +9,11 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
+  import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import {
@@ -239,7 +244,12 @@
             <h2 class="ui-label">Next</h2>
             <p class="text-meta text-fg">
               {#if work.next_actor}<ActorLabel
-                  label={work.next_actor}
+                  label={actorDisplayLabel(
+                    work.next_actor,
+                    $actorRegistry,
+                    $principalRegistry,
+                  )}
+                  seed={work.next_actor}
                   size="xs"
                 />{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
               {#if work.next_action}
@@ -381,7 +391,11 @@
               >{loading ? "Loading…" : "Older observations"}</button
             >{/if}
         </section>
-        <section>
+        <section
+          class={!decisionsLoading && !decisions.length && !decisionsError
+            ? "hidden"
+            : ""}
+        >
           <h2 class="ui-label">Decisions</h2>
           {#if decisionsError}<div class="mt-3">
               <StateError
@@ -395,11 +409,6 @@
               role="status"
             >
               Loading decisions…
-            </p>{/if}
-          {#if !decisionsLoading && !decisions.length && !decisionsError}<p
-              class="mt-3 text-meta text-fg-muted"
-            >
-              No decisions recorded for this task.
             </p>{/if}
           <ul
             class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
@@ -558,17 +567,22 @@
               <dt class="text-micro text-fg-subtle">Owner</dt>
               <dd>
                 {#if work.owner}<ActorLabel
-                    label={work.owner}
+                    label={actorDisplayLabel(
+                      work.owner,
+                      $actorRegistry,
+                      $principalRegistry,
+                    )}
+                    seed={work.owner}
                     size="xs"
                   />{:else}<span class="text-fg-muted">Not assigned</span>{/if}
               </dd>
             </div>
-            <div>
-              <dt class="text-micro text-fg-subtle">Project</dt>
-              <dd class="break-words text-fg">
-                {work.project_ref || "—"}
-              </dd>
-            </div>
+            {#if work.project_ref}
+              <div>
+                <dt class="text-micro text-fg-subtle">Project</dt>
+                <dd class="break-words text-fg">{work.project_ref}</dd>
+              </div>
+            {/if}
             {#each [["start_at", "Start"], ["due_at", "Due"]] as [field, title]}{#if work[field]}<div
                 >
                   <dt class="text-micro text-fg-subtle">{title}</dt>

@@ -465,7 +465,9 @@
       class="grid min-h-[30rem] overflow-hidden rounded-md border border-line bg-panel lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]"
     >
       <section
-        class="border-line lg:border-r {selectedId ? 'hidden lg:block' : ''}"
+        class="min-w-0 border-line lg:border-r {selectedId
+          ? 'hidden lg:block'
+          : ''}"
         aria-label="Inbox list"
       >
         <ul class="divide-y divide-line-subtle">
@@ -473,7 +475,7 @@
             {@const badge = inboxRowBadge(row, now)}
             <li>
               <a
-                class="flex h-[52px] flex-col justify-center gap-0.5 border-l-2 px-4 {selected?.id ===
+                class="flex h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 {selected?.id ===
                 row.id
                   ? 'border-accent bg-bg-soft'
                   : 'border-transparent hover:bg-panel-hover'}"

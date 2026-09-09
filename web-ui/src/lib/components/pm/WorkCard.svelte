@@ -2,6 +2,11 @@
   import SignalBadge from "./SignalBadge.svelte";
   import { sourceLabel } from "$lib/pm/presentation.js";
   import { formatTimestamp } from "$lib/formatDate";
+  import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
 
   /**
    * One board card: a title and one meta line. Everything else a card used to
@@ -10,7 +15,9 @@
    */
   let { work, href, boardTitle = "" } = $props();
 
-  let ownerLabel = $derived(String(work?.owner ?? "").trim());
+  let ownerLabel = $derived(
+    actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
+  );
   let boardLabel = $derived(
     boardTitle || String(work?.board_ref ?? "").replace(/^board:/, ""),
   );

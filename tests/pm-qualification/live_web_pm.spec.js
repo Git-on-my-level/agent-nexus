@@ -52,27 +52,41 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
     },
     data: { persona_id: "maya" },
   });
-  expect(session.ok(), `dev session failed: ${await session.text()}`).toBeTruthy();
+  expect(
+    session.ok(),
+    `dev session failed: ${await session.text()}`,
+  ).toBeTruthy();
 
   await page.goto("/o/local/w/local/pm");
   await expect(page.getByRole("link", { name: "Ask PM" }).first()).toBeVisible({
     timeout: 30_000,
   });
-  const primaryNav = page.getByRole("navigation", { name: "Primary", exact: true });
-  const navLabels = await primaryNav.locator("a").evaluateAll((nodes) =>
-    nodes.map((node) => (node.getAttribute("aria-label") || "").trim()),
-  );
-  const primaryHrefs = await primaryNav.locator("a").evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("href") || ""),
-  );
-  const bottomNav = page.getByRole("navigation", { name: "Primary navigation" });
-  const bottomLabels = await bottomNav.locator("a, button").evaluateAll((nodes) =>
-    nodes.map((node) =>
-      (node.getAttribute("aria-label") || node.textContent || "")
-        .replace(/\s+/g, " ")
-        .trim(),
-    ),
-  );
+  const primaryNav = page.getByRole("navigation", {
+    name: "Primary",
+    exact: true,
+  });
+  const navLabels = await primaryNav
+    .locator("a")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => (node.getAttribute("aria-label") || "").trim()),
+    );
+  const primaryHrefs = await primaryNav
+    .locator("a")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("href") || ""),
+    );
+  const bottomNav = page.getByRole("navigation", {
+    name: "Primary navigation",
+  });
+  const bottomLabels = await bottomNav
+    .locator("a, button")
+    .evaluateAll((nodes) =>
+      nodes.map((node) =>
+        (node.getAttribute("aria-label") || node.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      ),
+    );
   writeEvidence("primary-nav.local.json", {
     navLabels,
     primaryHrefs,
@@ -82,9 +96,9 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
     navLabels,
     `sidebar primary nav must be Inbox, Tasks, Docs: ${JSON.stringify(navLabels)}`,
   ).toEqual(["Inbox", "Tasks", "Docs"]);
-  await expect(primaryNav.getByRole("link", { name: "PM", exact: true })).toHaveCount(
-    0,
-  );
+  await expect(
+    primaryNav.getByRole("link", { name: "PM", exact: true }),
+  ).toHaveCount(0);
   expect(
     primaryHrefs.some((href) => href.includes("/pm")),
     `sidebar primary still links /pm: ${JSON.stringify(primaryHrefs)}`,
@@ -96,9 +110,9 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
     timeout: 15_000,
   });
   await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByRole("button", { name: "Sending…" })).toBeVisible({
-    timeout: 15_000,
-  });
+  // The redesigned composer keeps its icon button; the pending state is the
+  // live "Thinking" row under the reply slot.
+  await expect(page.getByText(/^Thinking/)).toBeVisible({ timeout: 15_000 });
 
   const response = page.locator(".pm-response").last();
   await expect(response).toBeVisible({ timeout: 10 * 60 * 1000 });
@@ -116,7 +130,9 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
     proposedCount > 0 ? ((await proposed.innerText()) || "").trim() : "";
   const evidenceHrefs = await page
     .locator(".pm-turn--pm a[href]")
-    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href") || ""));
+    .evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("href") || ""),
+    );
   writeEvidence("pm-proposed-decisions.local.json", {
     proposedCount,
     proposedText: proposedText.slice(0, 800),
@@ -138,7 +154,7 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   const titles = (await inboxRows.allInnerTexts()).map((text) =>
     text.replace(/\s+/g, " ").trim(),
   );
-  const foldedInList = await page.locator('[data-inbox-row] details').count();
+  const foldedInList = await page.locator("[data-inbox-row] details").count();
   const hedgingInList = await page
     .getByText("Outcome not independently verified")
     .count();
@@ -159,7 +175,11 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
       .getByText("Outcome not independently verified")
       .count();
     const panelHtml = (
-      (await page.locator(".space-y-6").first().innerHTML().catch(() => "")) || ""
+      (await page
+        .locator(".space-y-6")
+        .first()
+        .innerHTML()
+        .catch(() => "")) || ""
     ).slice(0, 1200);
     writeEvidence("inbox-decision-panel.local.json", {
       panelHedging,
@@ -168,12 +188,14 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   }
 
   await page.goto("/o/local/w/local/inbox?mailbox=watching");
-  const watchingFolded = await page.locator('[data-inbox-row] details').count();
+  const watchingFolded = await page.locator("[data-inbox-row] details").count();
   const watchingQuiet = await page
-    .locator('[data-inbox-row] .text-fg-subtle')
+    .locator("[data-inbox-row] .text-fg-subtle")
     .allInnerTexts();
   writeEvidence("inbox-watching.local.json", {
     watchingFolded,
-    watchingQuiet: watchingQuiet.map((text) => text.replace(/\s+/g, " ").trim()),
+    watchingQuiet: watchingQuiet.map((text) =>
+      text.replace(/\s+/g, " ").trim(),
+    ),
   });
 });
