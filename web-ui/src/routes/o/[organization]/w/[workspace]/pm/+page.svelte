@@ -40,8 +40,8 @@
   );
   let selectedId = $derived($page.url.searchParams.get("conversation") || "");
   let workRef = $derived($page.url.searchParams.get("work_ref") || "");
-   let selectedKey = $derived(`${selectedId}\n${workRef}`);
-   let activeWorkRef = $derived(conversation?.work_ref || workRef);
+  let selectedKey = $derived(`${selectedId}\n${workRef}`);
+  let activeWorkRef = $derived(conversation?.work_ref || workRef);
   let turnDecisionIds = $derived(
     turns.flatMap((turn) => decisionIdsFromTurn(turn)),
   );
@@ -512,20 +512,20 @@
                           class="font-mono text-micro text-fg-muted hover:text-accent-text"
                           href={workspaceHref(
                             `/tasks/${encodeURIComponent(record.work_ref)}`,
-                          )}
-                          >{record.work_ref}</a
+                          )}>{record.work_ref}</a
                         >
                       {/if}
                       {#if record}
                         {@const signal = receiptSignal(record.status)}
-                        <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
+                        <SignalBadge tone={signal.tone}
+                          >{signal.label}</SignalBadge
+                        >
                         {#if record.status === "awaiting_answer"}
                           <a
                             class="ui-prose-link text-micro"
                             href={workspaceHref(
                               `/inbox?item=decision:${encodeURIComponent(id)}`,
-                            )}
-                            >Answer</a
+                            )}>Answer</a
                           >
                         {/if}
                       {:else if record === null}

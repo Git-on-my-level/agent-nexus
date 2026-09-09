@@ -144,7 +144,7 @@
   function taskFocusTargets() {
     return view === "board"
       ? [...document.querySelectorAll('[data-work-ref][tabindex="0"]')]
-      : [...document.querySelectorAll('tr[data-work-ref] a[href]')];
+      : [...document.querySelectorAll("tr[data-work-ref] a[href]")];
   }
   function moveTaskFocus(delta) {
     const targets = taskFocusTargets();

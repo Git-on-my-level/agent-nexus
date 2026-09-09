@@ -93,9 +93,11 @@
     }
   }
   function decisionSignal(status) {
-    if (status === "awaiting_answer") return { tone: "warn", label: "Needs you" };
+    if (status === "awaiting_answer")
+      return { tone: "warn", label: "Needs you" };
     if (status === "answered") return { tone: "ok", label: "Answered" };
-    if (status === "superseded") return { tone: "neutral", label: "Superseded" };
+    if (status === "superseded")
+      return { tone: "neutral", label: "Superseded" };
     return { tone: "neutral", label: status || "Unknown status" };
   }
   async function loadMore() {
@@ -380,7 +382,9 @@
             >
               No decisions recorded for this task.
             </p>{/if}
-          <ul class="mt-3 divide-y divide-line-subtle border-t border-line-subtle">
+          <ul
+            class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
+          >
             {#each decisions as decision (decision.id)}
               {@const decisionBadge = decisionSignal(decision.status)}
               <li class="py-3">
@@ -388,7 +392,8 @@
                   {decision.instruction}
                 </p>
                 <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                  <SignalBadge tone={decisionBadge.tone}>{decisionBadge.label}</SignalBadge
+                  <SignalBadge tone={decisionBadge.tone}
+                    >{decisionBadge.label}</SignalBadge
                   ><time
                     class="text-micro text-fg-muted"
                     datetime={decision.created_at}

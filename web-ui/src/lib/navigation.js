@@ -85,11 +85,6 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "84rem",
   },
   {
-    match: /^\/topics\/[^/]+/,
-    mode: "fluid",
-    maxWidth: "112rem",
-  },
-  {
     match: /^\/threads\/[^/]+/,
     mode: "fluid",
     maxWidth: "112rem",

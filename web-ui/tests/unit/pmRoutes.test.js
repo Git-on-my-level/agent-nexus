@@ -239,7 +239,10 @@ describe("PM operator interactions", () => {
         .getAttribute("href"),
     ).toBe("/o/local/w/local/inbox?item=decision:d-new");
     const rows = [
-      ...screen.getByText("Newer question").closest("ul").querySelectorAll("li"),
+      ...screen
+        .getByText("Newer question")
+        .closest("ul")
+        .querySelectorAll("li"),
     ];
     expect(rows.map((row) => row.querySelector("p").textContent)).toEqual([
       "Newer question",

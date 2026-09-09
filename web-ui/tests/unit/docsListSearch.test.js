@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
@@ -171,9 +177,7 @@ describe("docs list search", () => {
 
   it("renders a non-URL source as plain text without a link", async () => {
     coreClientMock.listDocuments.mockResolvedValue({
-      documents: [
-        doc("doc-2", "Typed ref doc", { source: "document:launch" }),
-      ],
+      documents: [doc("doc-2", "Typed ref doc", { source: "document:launch" })],
     });
 
     render(DocsListPage);

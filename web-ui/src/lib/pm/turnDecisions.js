@@ -19,7 +19,9 @@ export function decisionIdsFromTurn(turn) {
     if (!String(ref).startsWith("decision:")) continue;
     // Sentence punctuation trailing the match (`decision:x.`) is not part of
     // the id; interior separators stay.
-    const id = String(ref).slice("decision:".length).replace(/[._:-]+$/, "");
+    const id = String(ref)
+      .slice("decision:".length)
+      .replace(/[._:-]+$/, "");
     if (id && !seen.has(id)) {
       seen.add(id);
       ids.push(id);

@@ -1387,15 +1387,12 @@
               >
               {#if parentTopic}
                 <span class="shrink-0 text-fg-subtle">/</span>
-                <a
-                  class="min-w-0 max-w-[5.5rem] shrink truncate sm:max-w-[12rem] transition-colors hover:text-fg"
-                  href={workspaceHref(
-                    `/topics/${encodeURIComponent(resourceRouteSegment(parentTopic, "topic"))}`,
-                  )}
+                <span
+                  class="min-w-0 max-w-[5.5rem] shrink truncate text-fg-muted sm:max-w-[12rem]"
                   title={parentTopic.title}
                 >
                   {parentTopic.title}
-                </a>
+                </span>
               {/if}
               <span class="shrink-0 text-fg-subtle">/</span>
               <div class="flex min-h-0 min-w-0 flex-1 items-center gap-1.5">

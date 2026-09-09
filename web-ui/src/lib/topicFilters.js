@@ -1,4 +1,4 @@
-/** Lifecycle filter values for GET /topics and GET /threads (`state` query params, OR semantics). */
+/** Lifecycle filter values for GET /threads (`state` query params, OR semantics). */
 export const TOPIC_STATUSES = ["active", "archived", "trashed"];
 
 const DEFAULT_TOPIC_LIST_STATES = ["active"];
@@ -72,7 +72,7 @@ export function parseTopicListSearchParams(searchParams) {
   return { states, q };
 }
 
-/** Serialize list filters for `/topics` and `/threads` URL query strings. */
+/** Serialize list filters for the `/threads` URL query string. */
 export function buildTopicListSearchString(state = {}) {
   const params = new URLSearchParams();
 
@@ -88,19 +88,6 @@ export function buildTopicListSearchString(state = {}) {
   }
 
   return params.toString();
-}
-
-/**
- * Query object for GET /topics (`listTopics`); passes `state` as string[] for repeated query keys.
- */
-export function buildTopicListApiQueryParams(state = {}) {
-  const states = normalizeLifecycleStates(state.states ?? state.state);
-  const query = { state: states };
-  const q = String(state.q ?? "").trim();
-  if (q) {
-    query.q = q;
-  }
-  return query;
 }
 
 /**

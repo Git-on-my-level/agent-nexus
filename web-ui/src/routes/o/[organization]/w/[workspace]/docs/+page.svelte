@@ -605,9 +605,7 @@
       .map((tag) => String(tag ?? "").trim())
       .filter(Boolean)}
     {#if source || tags.length > 0}
-      <div
-        class="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"
-      >
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
         {#if source}
           {#if sourceAsLink && isHttpUrl(source)}
             <a
@@ -780,9 +778,7 @@
               </WorkspaceResourceListRow>
             </a>
             {@render docEnrichment(doc, true)}
-            <InlineWorkspaceMetricStrip
-              items={documentListMetricItems(doc)}
-            />
+            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
             {@render docLastComment(doc)}
           </div>
         {/snippet}

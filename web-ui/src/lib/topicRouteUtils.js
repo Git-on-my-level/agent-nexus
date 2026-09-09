@@ -12,55 +12,8 @@ export function resolveBoardCardThreadIdField(row) {
   return String(r.thread_id ?? "").trim();
 }
 
-function encodeRouteSegment(value) {
-  return encodeURIComponent(String(value ?? "").trim());
-}
-
-export function topicDetailPathFromRef(refValue) {
-  const { prefix, id } = splitTypedRef(String(refValue ?? "").trim());
-  if (prefix === "topic" && id) {
-    return `/topics/${encodeRouteSegment(id)}`;
-  }
-  if (prefix === "thread" && id) {
-    return `/threads/${encodeRouteSegment(id)}`;
-  }
-  return "";
-}
-
-export function topicDetailPathFromSubject({
-  topicId,
-  topicRef,
-  subjectRef,
-  relatedRefs,
-  threadId,
-} = {}) {
-  const explicitTopicId = String(topicId ?? "").trim();
-  if (explicitTopicId) {
-    return `/topics/${encodeRouteSegment(explicitTopicId)}`;
-  }
-
-  const candidates = [
-    topicRef,
-    subjectRef,
-    ...(Array.isArray(relatedRefs) ? relatedRefs : []),
-  ];
-  for (const candidate of candidates) {
-    const path = topicDetailPathFromRef(candidate);
-    if (path) {
-      return path;
-    }
-  }
-
-  const explicitThreadId = String(threadId ?? "").trim();
-  if (explicitThreadId) {
-    return `/threads/${encodeRouteSegment(explicitThreadId)}`;
-  }
-
-  return "";
-}
-
 /**
- * Path segment for `/topics/:segment` from a backing-thread inspect payload.
+ * Topic id segment from a backing-thread inspect payload.
  * Returns a topic id only when `thread.topic_ref` is a `topic:` ref; backing-only
  * threads have no topic segment (empty string).
  */
@@ -139,7 +92,7 @@ export function boardCardInspectNav(membership, backingThread) {
 }
 
 /**
- * Board header / context line: canonical topic id for linking to `/topics/...`.
+ * Board header / context line: canonical topic id for topic refs.
  */
 export function topicRouteSegmentFromBoardWorkspace(workspace) {
   const nav = boardWorkspaceInspectNav(workspace);

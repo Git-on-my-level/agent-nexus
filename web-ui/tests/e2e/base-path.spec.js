@@ -53,28 +53,27 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/inbox/?$`),
   );
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Inbox", exact: true }),
+  ).toBeVisible();
 
   await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/inbox")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/tasks")}"]`).first(),
   ).toBeVisible();
   await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/topics")}"]`).first(),
-  ).toBeVisible();
-  await expect(
-    page.locator(`a[href="${appPath("/o/local/w/local/artifacts")}"]`).first(),
+    page.locator(`a[href="${appPath("/o/local/w/local/docs")}"]`).first(),
   ).toBeVisible();
 
   await page
-    .locator(`a[href="${appPath("/o/local/w/local/topics")}"]`)
+    .locator(`a[href="${appPath("/o/local/w/local/docs")}"]`)
     .first()
     .click();
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/topics/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/docs/?$`),
   );
   await expect(
-    page.getByRole("heading", { name: "Topics", exact: true }),
+    page.getByRole("heading", { name: "Docs", exact: true }),
   ).toBeVisible();
 });

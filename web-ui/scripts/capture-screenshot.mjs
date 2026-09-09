@@ -36,7 +36,7 @@ Examples:
   node scripts/capture-screenshot.mjs --capture signin=/hosted/signin
   node scripts/capture-screenshot.mjs --fixture topic-messages \\
     --capture signin=/hosted/signin \\
-    --capture messages='/o/local/w/local/topics/0ae18e22-f?qa=1'
+    --capture messages='/o/local/w/local/threads/0ae18e22-f?qa=1'
 `.trim(),
   );
 }
@@ -215,7 +215,7 @@ async function installTopicMessagesFixture(page) {
       }),
     }),
   );
-  await page.route(/\/topics\/0ae18e22-f\/workspace(\?.*)?$/, (route) =>
+  await page.route(/\/(threads|topics)\/0ae18e22-f\/workspace(\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -249,7 +249,7 @@ async function installTopicMessagesFixture(page) {
       }),
     }),
   );
-  await page.route(/\/topics\/0ae18e22-f\/timeline$/, (route) =>
+  await page.route(/\/(threads|topics)\/0ae18e22-f\/timeline$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
