@@ -3262,6 +3262,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Archive a document",
+        "command": "anx docs archive doc:runbook --reason \"superseded\""
+      }
+    ],
     "body_schema": {
       "optional": [
         {
@@ -3276,6 +3282,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3320,7 +3328,13 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Posts a `message_posted` event on the document backing thread. Optional `parent_id` creates a reply. Comment ids are stable event ids/refs.",
+    "agent_notes": "Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:\u003chandle\u003e`) are stable across document revisions and are the deep-link identity.",
+    "examples": [
+      {
+        "title": "Post a comment",
+        "command": "anx docs comment doc:runbook \"Host B found this\""
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -3336,6 +3350,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "parent_id",
           "type": "string"
+        },
+        {
+          "name": "reply_to",
+          "type": "string"
         }
       ]
     },
@@ -3345,6 +3363,8 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "docs.archive",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3362,6 +3382,67 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "DocsCommentsCreate",
     "ts_method": "docsCommentsCreate"
+  },
+  {
+    "command_id": "docs.comments.delete",
+    "cli_path": "docs comments delete",
+    "group": "docs",
+    "method": "DELETE",
+    "path": "/docs/{document_id}/comments/{comment_id}",
+    "operation_id": "deleteDocumentComment",
+    "summary": "Delete one's own document comment",
+    "why": "Remove a comment you authored from the document discussion.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ comment }` with the trashed comment.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "forbidden"
+    ],
+    "concepts": [
+      "docs",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.",
+    "examples": [
+      {
+        "title": "Delete own comment",
+        "command": "anx docs comments delete doc:runbook event:note"
+      }
+    ],
+    "path_params": [
+      "document_id",
+      "comment_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.comments.create",
+      "docs.comments.list",
+      "docs.comments.update",
+      "docs.comments.reply",
+      "docs.create",
+      "docs.get",
+      "docs.revisions.list",
+      "docs.list",
+      "docs.patch",
+      "docs.purge",
+      "docs.put",
+      "docs.restore",
+      "docs.revisions.create",
+      "docs.revisions.get",
+      "docs.search",
+      "docs.trash",
+      "docs.unarchive"
+    ],
+    "go_method": "DocsCommentsDelete",
+    "ts_method": "docsCommentsDelete"
   },
   {
     "command_id": "docs.comments.list",
@@ -3388,13 +3469,21 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Comments are the document backing-thread `message_posted` events, projected with stable event ids. `parent_id` is set for replies. Visibility of the document is unchanged.",
+    "agent_notes": "Comments are the document backing-thread `message_posted` events, projected with stable `event:\u003chandle\u003e` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.",
+    "examples": [
+      {
+        "title": "List comments",
+        "command": "anx docs comments doc:runbook"
+      }
+    ],
     "path_params": [
       "document_id"
     ],
     "adjacent_commands": [
       "docs.archive",
       "docs.comments.create",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3439,7 +3528,13 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.",
+    "agent_notes": "Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.",
+    "examples": [
+      {
+        "title": "Reply in thread",
+        "command": "anx docs comments reply doc:runbook event:note --body \"Acknowledged\""
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -3455,6 +3550,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "parent_id",
           "type": "string"
+        },
+        {
+          "name": "reply_to",
+          "type": "string"
         }
       ]
     },
@@ -3466,6 +3565,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.create",
       "docs.get",
       "docs.revisions.list",
@@ -3482,6 +3583,81 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "DocsCommentsReply",
     "ts_method": "docsCommentsReply"
+  },
+  {
+    "command_id": "docs.comments.update",
+    "cli_path": "docs comments edit",
+    "group": "docs",
+    "method": "PATCH",
+    "path": "/docs/{document_id}/comments/{comment_id}",
+    "operation_id": "updateDocumentComment",
+    "summary": "Edit one's own document comment",
+    "why": "Edit a comment you authored without changing its stable ref.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ comment }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "not_found",
+      "forbidden"
+    ],
+    "concepts": [
+      "docs",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.",
+    "examples": [
+      {
+        "title": "Edit own comment",
+        "command": "anx docs comments edit doc:runbook event:note --body \"Corrected\""
+      }
+    ],
+    "body_schema": {
+      "required": [
+        {
+          "name": "text",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "document_id",
+      "comment_id"
+    ],
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.comments.create",
+      "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.reply",
+      "docs.create",
+      "docs.get",
+      "docs.revisions.list",
+      "docs.list",
+      "docs.patch",
+      "docs.purge",
+      "docs.put",
+      "docs.restore",
+      "docs.revisions.create",
+      "docs.revisions.get",
+      "docs.search",
+      "docs.trash",
+      "docs.unarchive"
+    ],
+    "go_method": "DocsCommentsUpdate",
+    "ts_method": "docsCommentsUpdate"
   },
   {
     "command_id": "docs.create",
@@ -3508,6 +3684,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Create from a local file",
+        "command": "anx docs create --topic topic:launch --title \"Runbook\" --body-file runbook.md"
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -3536,6 +3718,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "document.handle",
           "type": "string"
+        },
+        {
+          "name": "document.hosts",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "document.provenance.by_field",
@@ -3570,6 +3756,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "list\u003cstring\u003e"
         },
         {
+          "name": "document.verified_at",
+          "type": "datetime"
+        },
+        {
           "name": "refs",
           "type": "list\u003cany\u003e"
         },
@@ -3583,6 +3773,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.get",
       "docs.revisions.list",
@@ -3624,6 +3816,13 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "agent_notes": "Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.",
+    "examples": [
+      {
+        "title": "Print markdown body",
+        "command": "anx docs get kb-shared --format md"
+      }
+    ],
     "path_params": [
       "document_id"
     ],
@@ -3631,6 +3830,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.revisions.list",
@@ -3672,10 +3873,18 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "List knowledge docs",
+        "command": "anx docs list --knowledge"
+      }
+    ],
     "adjacent_commands": [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3721,6 +3930,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Patch knowledge hosts",
+        "command": "anx docs patch kb-shared --from-file patch.json"
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -3729,6 +3944,10 @@ export const commandRegistry: CommandSpec[] = [
         }
       ],
       "optional": [
+        {
+          "name": "patch.hosts",
+          "type": "list\u003cstring\u003e"
+        },
         {
           "name": "patch.source",
           "type": "string"
@@ -3744,6 +3963,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.title",
           "type": "string"
+        },
+        {
+          "name": "patch.verified_at",
+          "type": "datetime"
         }
       ]
     },
@@ -3754,6 +3977,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3798,6 +4023,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Purge a trashed document",
+        "command": "anx docs purge doc:runbook"
+      }
+    ],
     "body_schema": {
       "optional": [
         {
@@ -3813,6 +4044,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3856,7 +4089,13 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Path `{document_id}` is the public handle (or `document:\u003chandle\u003e`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged.",
+    "agent_notes": "Path `{document_id}` is the public handle (or `document:\u003chandle\u003e`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.",
+    "examples": [
+      {
+        "title": "Publish from stdin",
+        "command": "anx docs put - --handle kb-shared --title \"Note\" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z"
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -3877,6 +4116,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "actor_id",
           "type": "string"
+        },
+        {
+          "name": "document.hosts",
+          "type": "list\u003cstring\u003e"
         },
         {
           "name": "document.provenance.by_field",
@@ -3915,6 +4158,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "document.verified_at",
+          "type": "datetime"
+        },
+        {
           "name": "refs",
           "type": "list\u003cany\u003e"
         }
@@ -3927,6 +4174,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -3971,6 +4220,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Restore a trashed document",
+        "command": "anx docs restore doc:runbook"
+      }
+    ],
     "body_schema": {
       "optional": [
         {
@@ -3990,6 +4245,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4035,6 +4292,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Revise from a local file",
+        "command": "anx docs revise doc:runbook --body-file runbook.md"
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -4089,6 +4352,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4139,6 +4404,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4181,6 +4448,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "List revision history",
+        "command": "anx docs history doc:runbook"
+      }
+    ],
     "path_params": [
       "document_id"
     ],
@@ -4188,6 +4461,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4229,11 +4504,19 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags, head-revision body (capped at 64KiB of stored search text), and backing-thread comments. No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over `docs.list?q=` when matching body or comments.",
+    "agent_notes": "SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).",
+    "examples": [
+      {
+        "title": "Search knowledge",
+        "command": "anx docs search \"runbook\" --knowledge --limit 20"
+      }
+    ],
     "adjacent_commands": [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4278,6 +4561,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Trash a document",
+        "command": "anx docs trash doc:runbook --reason \"obsolete\""
+      }
+    ],
     "body_schema": {
       "required": [
         {
@@ -4299,6 +4588,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -4343,6 +4634,12 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
+    "examples": [
+      {
+        "title": "Unarchive a document",
+        "command": "anx docs unarchive doc:runbook"
+      }
+    ],
     "body_schema": {
       "optional": [
         {
@@ -4358,6 +4655,8 @@ export const commandRegistry: CommandSpec[] = [
       "docs.archive",
       "docs.comments.create",
       "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
       "docs.comments.reply",
       "docs.create",
       "docs.get",
@@ -8757,12 +9056,20 @@ export class AnxClient {
     return this.invoke("docs.comments.create", pathParams, options);
   }
 
+  docsCommentsDelete(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.comments.delete", pathParams, options);
+  }
+
   docsCommentsList(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.comments.list", pathParams, options);
   }
 
   docsCommentsReply(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.comments.reply", pathParams, options);
+  }
+
+  docsCommentsUpdate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.comments.update", pathParams, options);
   }
 
   docsCreate(options: RequestOptions = {}): Promise<InvokeResult> {

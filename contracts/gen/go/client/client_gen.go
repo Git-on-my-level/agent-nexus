@@ -753,7 +753,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Archive a document",
+				Command: "anx docs archive doc:runbook --reason \"superseded\"",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.comments.create",
@@ -765,7 +771,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Post a comment",
+				Command: "anx docs comment doc:runbook \"Host B found this\"",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.comments.delete",
+		CLIPath:    "docs comments delete",
+		Group:      "docs",
+		Method:     "DELETE",
+		Path:       "/docs/{document_id}/comments/{comment_id}",
+		PathParams: []string{"document_id", "comment_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Delete own comment",
+				Command: "anx docs comments delete doc:runbook event:note",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.comments.list",
@@ -777,7 +807,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "List comments",
+				Command: "anx docs comments doc:runbook",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.comments.reply",
@@ -789,7 +825,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Reply in thread",
+				Command: "anx docs comments reply doc:runbook event:note --body \"Acknowledged\"",
+			},
+		},
+	},
+	{
+		CommandID:  "docs.comments.update",
+		CLIPath:    "docs comments edit",
+		Group:      "docs",
+		Method:     "PATCH",
+		Path:       "/docs/{document_id}/comments/{comment_id}",
+		PathParams: []string{"document_id", "comment_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "write"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Edit own comment",
+				Command: "anx docs comments edit doc:runbook event:note --body \"Corrected\"",
+			},
+		},
 	},
 	{
 		CommandID: "docs.create",
@@ -800,7 +860,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"docs", "write"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Create from a local file",
+				Command: "anx docs create --topic topic:launch --title \"Runbook\" --body-file runbook.md",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.get",
@@ -812,7 +878,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Print markdown body",
+				Command: "anx docs get kb-shared --format md",
+			},
+		},
 	},
 	{
 		CommandID: "docs.list",
@@ -823,7 +895,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "List knowledge docs",
+				Command: "anx docs list --knowledge",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.patch",
@@ -835,7 +913,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write", "concurrency"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Patch knowledge hosts",
+				Command: "anx docs patch kb-shared --from-file patch.json",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.purge",
@@ -847,7 +931,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Purge a trashed document",
+				Command: "anx docs purge doc:runbook",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.put",
@@ -859,7 +949,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Publish from stdin",
+				Command: "anx docs put - --handle kb-shared --title \"Note\" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.restore",
@@ -871,7 +967,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Restore a trashed document",
+				Command: "anx docs restore doc:runbook",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.revisions.create",
@@ -883,7 +985,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Revise from a local file",
+				Command: "anx docs revise doc:runbook --body-file runbook.md",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.revisions.get",
@@ -895,7 +1003,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.search", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.list",
@@ -907,7 +1015,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "List revision history",
+				Command: "anx docs history doc:runbook",
+			},
+		},
 	},
 	{
 		CommandID: "docs.search",
@@ -918,7 +1032,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Search knowledge",
+				Command: "anx docs search \"runbook\" --knowledge --limit 20",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.trash",
@@ -930,7 +1050,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.unarchive"},
+		Examples: []Example{
+			{
+				Title:   "Trash a document",
+				Command: "anx docs trash doc:runbook --reason \"obsolete\"",
+			},
+		},
 	},
 	{
 		CommandID:  "docs.unarchive",
@@ -942,7 +1068,13 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash"},
+		Examples: []Example{
+			{
+				Title:   "Unarchive a document",
+				Command: "anx docs unarchive doc:runbook",
+			},
+		},
 	},
 	{
 		CommandID:  "events.archive",
@@ -2208,12 +2340,20 @@ func (c *Client) DocsCommentsCreate(ctx context.Context, pathParams map[string]s
 	return c.Invoke(ctx, "docs.comments.create", pathParams, opts)
 }
 
+func (c *Client) DocsCommentsDelete(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.comments.delete", pathParams, opts)
+}
+
 func (c *Client) DocsCommentsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.comments.list", pathParams, opts)
 }
 
 func (c *Client) DocsCommentsReply(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.comments.reply", pathParams, opts)
+}
+
+func (c *Client) DocsCommentsUpdate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.comments.update", pathParams, opts)
 }
 
 func (c *Client) DocsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

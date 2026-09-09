@@ -576,3 +576,38 @@ When dedicated bots exist: create the bots, set the env vars, register the
 webhook/interactions URL at core ingress, bind each human identity, then run
 doctor. Do not point existing production bot streams at this workspace. Local
 proof uses `tests/channels/` fakes, not live Telegram or Discord.
+
+## Docs as a cross-host knowledge base
+
+Docs are the workspace knowledge base. An agent on a host with no other access
+publishes what that host can see, then other hosts search and comment. Tag those
+documents `knowledge` and always set:
+
+- `--source` — canonical URL or `host://<hostname>/...` pointer
+- `--hosts` — which hosts the fact applies to
+- `--verified-at` — RFC3339 time of last verification
+
+```bash
+# Publish from this host (stdin body; handle is the idempotency key)
+printf 'SSH to proxmox is keyed in ~/.ssh/id_ed25519_proxmox\n' | \
+  anx docs put - \
+    --handle kb-proxmox-ssh \
+    --title "Proxmox SSH" \
+    --tags knowledge \
+    --source "host://$(hostname)/ssh" \
+    --hosts "$(hostname)" \
+    --verified-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Find and read knowledge another host wrote
+anx docs search "proxmox" --knowledge --host "$(hostname)" --limit 20
+anx docs get kb-proxmox-ssh --format md
+
+# Discussion survives later document revisions; comment refs are UI deep-links
+anx docs comment kb-proxmox-ssh "Verified from $(hostname)"
+anx docs comments kb-proxmox-ssh
+anx docs comments edit kb-proxmox-ssh event:<handle> --body "Corrected"
+```
+
+`anx docs search` is SQLite FTS5 over title, body, summary, source, tags, and
+comments. `--tag`, `--limit`, and `--cursor` paginate. `anx docs put -` reads
+stdin. `anx docs get <handle> --format md` prints the body only.

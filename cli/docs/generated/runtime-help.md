@@ -71,7 +71,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `boards cards create-batch` (command): Batch create cards on board
 - `boards cards get` (command): Get board-scoped card
 - `docs list` (command): List documents
-- `docs get` (command): Get document
 - `docs history` (command): List document revisions
 - `docs revision` (group): Nested generated help topic.
 - `docs archive` (command): Archive document
@@ -79,7 +78,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs restore` (command): Restore document from trash
 - `docs purge` (command): Permanently delete trashed document
 - `docs revision get` (command): Get document revision
-- `docs comments reply` (command): Reply to a document comment
 - `cards get` (command): Get card
 - `cards history` (command): List card revisions
 - `cards archive` (command): Archive card
@@ -165,6 +163,10 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs put` (local-helper): Create or replace a document by handle from a local file or stdin.
 - `docs comment` (local-helper): Post a document comment (or a reply with `--reply-to`).
 - `docs comments` (local-helper): List document comments as a thread with stable ids.
+- `docs comments reply` (local-helper): Reply to a document comment.
+- `docs get` (local-helper): Get a document lineage and its current head revision.
+- `docs comments edit` (local-helper): Edit a document comment you authored. The comment ref stays stable.
+- `docs comments delete` (local-helper): Delete a document comment you authored.
 - `cards create` (local-helper): Create a board work card from flags plus a local prose file, or from advanced JSON.
 - `cards patch` (local-helper): Patch card metadata from scalar flags, or from advanced JSON.
 - `cards message` (local-helper): Post a message to a Card conversation without hand-authoring event JSON.
@@ -2736,40 +2738,14 @@ Generated Help: docs list
 - Output: Returns `{ documents }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List knowledge docs: `anx docs list --knowledge`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs get`
-
-Get document
-
-```text
-Generated Help: docs get
-
-- Command ID: `docs.get`
-- CLI path: `docs get`
-- HTTP: `GET /docs/{document_id}`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Resolve a document lineage and its current head revision.
-- Output: Returns `{ document, revision }`.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2789,7 +2765,9 @@ Generated Help: docs history
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List revision history: `anx docs history doc:runbook`
 
 Inputs:
   Required:
@@ -2835,7 +2813,9 @@ Generated Help: docs archive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
 
 Inputs:
   Required:
@@ -2865,7 +2845,9 @@ Generated Help: docs unarchive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
+- Examples:
+  - Unarchive a document: `anx docs unarchive doc:runbook`
 
 Inputs:
   Required:
@@ -2895,7 +2877,9 @@ Generated Help: docs restore
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Restore a trashed document: `anx docs restore doc:runbook`
 
 Inputs:
   Required:
@@ -2926,7 +2910,9 @@ Generated Help: docs purge
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Purge a trashed document: `anx docs purge doc:runbook`
 
 Inputs:
   Required:
@@ -2956,7 +2942,7 @@ Generated Help: docs revision get
 - Output: Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs search`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -2966,40 +2952,6 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision get ... ; anx --json docs revision get ... ; anx docs revision get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `docs comments reply`
-
-Reply to a document comment
-
-```text
-Generated Help: docs comments reply
-
-- Command ID: `docs.comments.reply`
-- CLI path: `docs comments reply`
-- HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Reply in a document comment thread without leaving the docs surface.
-- Output: Returns `{ comment }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
-- Concepts: `docs`, `write`
-- Agent notes: Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
-
-Inputs:
-  Required:
-  - path `document_id`
-  - path `comment_id`
-  - body `text` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `parent_id` (string)
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx docs comments reply ... ; anx --json docs comments reply ... ; anx docs comments reply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -5754,7 +5706,9 @@ Generated Help: docs create
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
 
 Inputs:
   Required:
@@ -5764,6 +5718,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `document.handle` (string)
+  - body `document.hosts` (list<string>)
   - body `document.provenance.by_field` (object)
   - body `document.provenance.notes` (string)
   - body `document.provenance.sources` (list<string>)
@@ -5772,6 +5727,7 @@ Inputs:
   - body `document.subject_ref` (string)
   - body `document.summary` (string)
   - body `document.tags` (list<string>)
+  - body `document.verified_at` (datetime)
   - body `refs` (list<any>)
   - body `request_key` (string)
   Enum values: content_type: binary, structured, text
@@ -5791,17 +5747,18 @@ Local Help: docs search
 
 - Kind: `local helper`
 - Summary: Search documents by title, body, source, tags, and comments.
-- Composition: Ranked case-insensitive substring match. Use `--knowledge` for agent-facing docs tagged `knowledge`.
+- Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
 - Examples:
-  - `anx docs search "runbook"`
-  - `anx docs search "alphawhiz" --knowledge --limit 20`
+  - `anx docs search "runbook" --knowledge --host m4-air`
+  - `anx docs search "alphawhiz" --knowledge --host m4-air --limit 20`
 
 Flags:
   <q>                          Search query; also accepted as `--q`.
   --q <text>                   Search query over title, body, and comments.
   --knowledge                  Only documents tagged knowledge.
   --tag <tag>                  Restrict results to one tag.
+  --host <name>                Restrict results to documents whose hosts list includes this name.
   --limit <n>                  Page size; omit to return up to 50 hits.
   --cursor <cursor>            Pagination cursor from a previous search response.
 
@@ -5816,8 +5773,10 @@ Generated Help: docs search
 - Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
-- Agent notes: Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags, head-revision body (capped at 64KiB of stored search text), and backing-thread comments. No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over `docs.list?q=` when matching body or comments.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Agent notes: SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Examples:
+  - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -5834,18 +5793,19 @@ Local Help: docs put
 
 - Kind: `local helper`
 - Summary: Create or replace a document by handle from a local file or stdin.
-- Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags.
+- Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
 - Examples:
-  - `anx docs put runbook.md --title "Runbook" --tags knowledge`
-  - `anx docs put runbook.md --title "Runbook" --source https://example.invalid/runbook.md --tags knowledge`
-  - `anx docs put - --handle kb-shared --title "Note"`
+  - `anx docs put runbook.md --title "Runbook" --tags knowledge --source https://example.invalid/runbook.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
+  - `anx docs put - --handle kb-shared --title "Note" --tags knowledge`
 
 Flags:
   <path>                       Markdown/text file, or `-` for stdin.
   --title <text>               Document title.
   --source <url-or-ref>        Canonical source URL or ref when this doc aggregates.
   --tags <tag>                 Tags, repeatable or comma-separated. Use `knowledge` for agent-facing docs.
+  --hosts <name>               Host names this knowledge fact applies to.
+  --verified-at <rfc3339>      When this knowledge fact was last verified.
   --handle <handle>            Public handle used as the idempotency key.
   --body <text>                Inline body when not passing a path.
   --body-file <path>           Load body from a file or stdin with `-`.
@@ -5862,8 +5822,10 @@ Generated Help: docs put
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Concepts: `docs`, `write`
-- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
 
 Inputs:
   Required:
@@ -5872,6 +5834,7 @@ Inputs:
   - body `content_type` (string)
   Optional:
   - body `actor_id` (string)
+  - body `document.hosts` (list<string>)
   - body `document.provenance.by_field` (object)
   - body `document.provenance.notes` (string)
   - body `document.provenance.sources` (list<string>)
@@ -5881,6 +5844,7 @@ Inputs:
   - body `document.summary` (string)
   - body `document.tags` (list<string>)
   - body `document.title` (string)
+  - body `document.verified_at` (datetime)
   - body `refs` (list<any>)
   Enum values: content_type: binary, structured, text
 
@@ -5924,8 +5888,10 @@ Generated Help: docs comment
 - Output: Returns `{ comment }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `docs`, `write`
-- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `parent_id` creates a reply. Comment ids are stable event ids/refs.
-- Adjacent commands: `docs archive`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
+- Adjacent commands: `docs archive`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Post a comment: `anx docs comment doc:runbook "Host B found this"`
 
 Inputs:
   Required:
@@ -5934,6 +5900,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
   - body `parent_id` (string)
+  - body `reply_to` (string)
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -5973,8 +5940,10 @@ Generated Help: docs comments
 - Output: Returns `{ comments, next_cursor? }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `docs`
-- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable event ids. `parent_id` is set for replies. Visibility of the document is unchanged.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - List comments: `anx docs comments doc:runbook`
 
 Inputs:
   Required:
@@ -5983,6 +5952,199 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments reply`
+
+Reply to a document comment.
+
+```text
+Local Help: docs comments reply
+
+- Kind: `local helper`
+- Summary: Reply to a document comment.
+- Composition: Writes a `message_posted` reply with `reply_to` set to the parent comment ref.
+- JSON body: POST `/docs/{document_id}/comments/{comment_id}/replies` with `{ text }`.
+- Examples:
+  - `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Parent comment ref (`event:<handle>`) or id.
+  --body <text>                Reply text.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+Generated Help: docs comments reply
+
+- Command ID: `docs.comments.reply`
+- CLI path: `docs comments reply`
+- HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Reply in a document comment thread without leaving the docs surface.
+- Output: Returns `{ comment }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Concepts: `docs`, `write`
+- Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Reply in thread: `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+  - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `parent_id` (string)
+  - body `reply_to` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments reply ... ; anx --json docs comments reply ... ; anx docs comments reply ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs get`
+
+Get a document lineage and its current head revision.
+
+```text
+Local Help: docs get
+
+- Kind: `local helper`
+- Summary: Get a document lineage and its current head revision.
+- Composition: `--format md` prints only the markdown body, suitable for piping.
+- JSON body: GET `/docs/{document_id}` returning `{ document, revision }`.
+- Examples:
+  - `anx docs get kb-shared --format md`
+
+Flags:
+  <ref>                        Document ref, handle, or id.
+  --document-id <id>           Document id when not using the positional.
+  --format md                  Print only the current revision body.
+
+Generated Help: docs get
+
+- Command ID: `docs.get`
+- CLI path: `docs get`
+- HTTP: `GET /docs/{document_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Resolve a document lineage and its current head revision.
+- Output: Returns `{ document, revision }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `docs`
+- Agent notes: Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Print markdown body: `anx docs get kb-shared --format md`
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments edit`
+
+Edit a document comment you authored. The comment ref stays stable.
+
+```text
+Local Help: docs comments edit
+
+- Kind: `local helper`
+- Summary: Edit a document comment you authored. The comment ref stays stable.
+- Composition: Only the original author may edit. Deep-links keep working because `ref` does not change.
+- JSON body: PATCH `/docs/{document_id}/comments/{comment_id}` with `{ text }`.
+- Examples:
+  - `anx docs comments edit doc:runbook event:note --body "Corrected"`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Comment ref (`event:<handle>`) or id.
+  --body <text>                Replacement comment text.
+  --actor-id <actor-id>        Actor id; defaults from the active profile.
+
+Generated Help: docs comments edit
+
+- Command ID: `docs.comments.update`
+- CLI path: `docs comments edit`
+- HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Edit a comment you authored without changing its stable ref.
+- Output: Returns `{ comment }`.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Concepts: `docs`, `write`
+- Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Edit own comment: `anx docs comments edit doc:runbook event:note --body "Corrected"`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+  - body `text` (string)
+  Optional:
+  - body `actor_id` (string)
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments edit ... ; anx --json docs comments edit ... ; anx docs comments edit ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs comments delete`
+
+Delete a document comment you authored.
+
+```text
+Local Help: docs comments delete
+
+- Kind: `local helper`
+- Summary: Delete a document comment you authored.
+- Composition: Only the original author may delete. The comment is trashed on the backing thread.
+- JSON body: DELETE `/docs/{document_id}/comments/{comment_id}`.
+- Examples:
+  - `anx docs comments delete doc:runbook event:note`
+
+Flags:
+  <doc>                        Document ref, handle, or id.
+  <comment>                    Comment ref (`event:<handle>`) or id.
+  --actor-id <actor-id>        Actor id; defaults from the active profile.
+
+Generated Help: docs comments delete
+
+- Command ID: `docs.comments.delete`
+- CLI path: `docs comments delete`
+- HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Remove a comment you authored from the document discussion.
+- Output: Returns `{ comment }` with the trashed comment.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Concepts: `docs`, `write`
+- Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Delete own comment: `anx docs comments delete doc:runbook event:note`
+
+Inputs:
+  Required:
+  - path `document_id`
+  - path `comment_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs comments delete ... ; anx --json docs comments delete ... ; anx docs comments delete ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -6995,7 +7157,9 @@ Generated Help: docs revise
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `revisions`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Examples:
+  - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
 
 Inputs:
   Required:
@@ -7052,7 +7216,9 @@ Generated Help: docs trash
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
+- Examples:
+  - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
 
 Inputs:
   Required:

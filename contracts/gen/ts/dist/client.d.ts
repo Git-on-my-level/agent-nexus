@@ -119,8 +119,10 @@ export declare class AnxClient {
     derivedRebuild(options?: RequestOptions): Promise<InvokeResult>;
     docsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCommentsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsCommentsDelete(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCommentsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCommentsReply(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsCommentsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;

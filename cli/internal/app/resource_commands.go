@@ -1548,21 +1548,7 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		result, callErr := a.runDocsSearchCommand(ctx, args[1:], cfg)
 		return result, "docs search", callErr
 	case "get":
-		id, err := parseResourceIDArg(args[1:], "document-id", "document id", "document")
-		if err != nil {
-			return nil, "docs get", err
-		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(
-			ctx,
-			cfg,
-			"docs get",
-			"docs.get",
-			"document_id",
-			id,
-			documentIDLookupSpec,
-			nil,
-			nil,
-		)
+		result, callErr := a.runDocsGetCommand(ctx, args[1:], cfg)
 		return result, "docs get", callErr
 	case "comment":
 		result, callErr := a.runDocsCommentCommand(ctx, args[1:], cfg)
@@ -1571,6 +1557,14 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 		if len(args) >= 2 && docsCommentsSubcommandSpec.normalize(args[1]) == "reply" {
 			result, callErr := a.runDocsCommentsReplyCommand(ctx, args[2:], cfg)
 			return result, "docs comments reply", callErr
+		}
+		if len(args) >= 2 && docsCommentsSubcommandSpec.normalize(args[1]) == "edit" {
+			result, callErr := a.runDocsCommentsEditCommand(ctx, args[2:], cfg)
+			return result, "docs comments edit", callErr
+		}
+		if len(args) >= 2 && docsCommentsSubcommandSpec.normalize(args[1]) == "delete" {
+			result, callErr := a.runDocsCommentsDeleteCommand(ctx, args[2:], cfg)
+			return result, "docs comments delete", callErr
 		}
 		result, callErr := a.runDocsCommentsListCommand(ctx, args[1:], cfg)
 		return result, "docs comments", callErr

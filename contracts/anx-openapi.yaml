@@ -1987,6 +1987,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: List knowledge docs
+          command: anx docs list --knowledge
       parameters:
         - name: q
           in: query
@@ -2060,6 +2063,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Create from a local file
+          command: anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md
       requestBody:
         required: true
         content:
@@ -2093,11 +2099,14 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Search knowledge
+          command: anx docs search "runbook" --knowledge --limit 20
       x-anx-agent-notes: >
-        Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags,
-        head-revision body (capped at 64KiB of stored search text), and backing-thread comments.
-        No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over
-        `docs.list?q=` when matching body or comments.
+        SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments.
+        Query terms are AND-matched; punctuation is tokenized. Prefer this over
+        `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger
+        matches (title weighted above body, then summary/source/tags, then comments).
       parameters:
         - name: q
           in: query
@@ -2114,6 +2123,11 @@ paths:
           required: false
           schema: { type: string }
           description: Restrict results to documents that include this tag.
+        - name: host
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents whose `hosts` list includes this host name.
         - name: cursor
           in: query
           required: false
@@ -2154,6 +2168,12 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Print markdown body
+          command: anx docs get kb-shared --format md
+      x-anx-agent-notes: >
+        Returns `{ document, revision }` including the head revision body. CLI `--format md`
+        prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -2181,6 +2201,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write, concurrency]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Patch knowledge hosts
+          command: anx docs patch kb-shared --from-file patch.json
       requestBody:
         required: true
         content:
@@ -2218,10 +2241,14 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Publish from stdin
+          command: anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z
       x-anx-agent-notes: >
         Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists,
-        a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does
+        a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does
         not exist, the document is created with that handle. Visibility/lifecycle is unchanged.
+        CLI `anx docs put -` reads the body from stdin.
       requestBody:
         required: true
         content:
@@ -2265,6 +2292,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Archive a document
+          command: anx docs archive doc:runbook --reason "superseded"
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2304,6 +2334,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Unarchive a document
+          command: anx docs unarchive doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2343,6 +2376,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Trash a document
+          command: anx docs trash doc:runbook --reason "obsolete"
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2382,6 +2418,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Restore a trashed document
+          command: anx docs restore doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2421,6 +2460,9 @@ paths:
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Purge a trashed document
+          command: anx docs purge doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2460,6 +2502,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs, revisions]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: List revision history
+          command: anx docs history doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -2487,6 +2532,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, revisions, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Revise from a local file
+          command: anx docs revise doc:runbook --body-file runbook.md
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2556,9 +2604,13 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: List comments
+          command: anx docs comments doc:runbook
       x-anx-agent-notes: >
         Comments are the document backing-thread `message_posted` events, projected with stable
-        event ids. `parent_id` is set for replies. Visibility of the document is unchanged.
+        `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment
+        ref for threaded replies; `parent_id` is the same parent as an internal id.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
         - name: cursor
@@ -2598,9 +2650,13 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Post a comment
+          command: anx docs comment doc:runbook "Host B found this"
       x-anx-agent-notes: >
-        Posts a `message_posted` event on the document backing thread. Optional `parent_id`
-        creates a reply. Comment ids are stable event ids/refs.
+        Posts a `message_posted` event on the document backing thread. Optional `reply_to` or
+        `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document
+        revisions and are the deep-link identity.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -2623,6 +2679,88 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /docs/{document_id}/comments/{comment_id}:
+    patch:
+      operationId: updateDocumentComment
+      summary: Edit one's own document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.update
+      x-anx-cli-path: docs comments edit
+      x-anx-why: Edit a comment you authored without changing its stable ref.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Edit own comment
+          command: anx docs comments edit doc:runbook event:note --body "Corrected"
+      x-anx-agent-notes: >
+        Updates the comment body in place. Only the original author may edit. The comment
+        `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/CommentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDocumentCommentRequest'
+      responses:
+        '200':
+          description: Comment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      operationId: deleteDocumentComment
+      summary: Delete one's own document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.delete
+      x-anx-cli-path: docs comments delete
+      x-anx-why: Remove a comment you authored from the document discussion.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }` with the trashed comment."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Delete own comment
+          command: anx docs comments delete doc:runbook event:note
+      x-anx-agent-notes: >
+        Trashes the backing `message_posted` event. Only the original author may delete.
+        The comment ref stays stable; list omits trashed comments.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/CommentID'
+      responses:
+        '200':
+          description: Comment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
   /docs/{document_id}/comments/{comment_id}/replies:
     post:
       operationId: replyDocumentComment
@@ -2638,8 +2776,11 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Reply in thread
+          command: anx docs comments reply doc:runbook event:note --body "Acknowledged"
       x-anx-agent-notes: >
-        Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`.
+        Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`.
         Prefer `docs comment --reply-to` from the CLI.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
@@ -7041,6 +7182,14 @@ components:
           type: array
           items: { type: string }
           description: Operator/agent labels. Tag `knowledge` marks docs meant for agents.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Host names this knowledge fact applies to. Empty means unspecified.
+        verified_at:
+          type: string
+          format: date-time
+          description: When an agent last verified this knowledge fact. Omitted when never verified.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         state:
@@ -7083,8 +7232,8 @@ components:
         search_rank:
           type: integer
           description: >
-            Search-only enrichment from GET /docs/search: higher means a stronger match
-            (title > body > summary/source/tags > comments). Omitted on list/get.
+            Search-only enrichment from GET /docs/search: higher means a stronger FTS5 match
+            (title weighted above body, then summary/source/tags, then comments). Omitted on list/get.
       required:
         [ref, handle, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
 
@@ -7379,6 +7528,14 @@ components:
           type: array
           items: { type: string }
           description: Operator/agent labels. Include `knowledge` for agent-facing docs.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Host names this knowledge fact applies to.
+        verified_at:
+          type: string
+          format: date-time
+          description: When this knowledge fact was last verified.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         refs:
           type: array
@@ -7603,6 +7760,12 @@ components:
             tags:
               type: array
               items: { type: string }
+            hosts:
+              type: array
+              items: { type: string }
+            verified_at:
+              type: string
+              format: date-time
             subject_ref: { $ref: '#/components/schemas/TypedRef' }
             refs:
               type: array
@@ -7636,6 +7799,14 @@ components:
           type: array
           items: { type: string }
           description: Replaces the document tag list when present.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Replaces the host list this knowledge fact applies to when present.
+        verified_at:
+          type: string
+          format: date-time
+          description: When this knowledge fact was last verified; empty string clears.
 
     PatchDocumentRequest:
       type: object
@@ -8199,14 +8370,24 @@ components:
         id:
           allOf:
             - $ref: '#/components/schemas/InternalResourceUUID'
-          description: Stable comment id (backing event id).
+          description: Stable comment id (backing event id). The public deep-link is `ref`.
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         parent_id:
           type: string
           description: Parent comment id when this row is a reply.
+        reply_to:
+          type: string
+          description: Parent comment public ref (`event:<handle>`) when this row is a reply.
         body: { type: string }
         created_at: { type: string, format: date-time }
         created_by: { type: string }
+        edited_at:
+          type: string
+          format: date-time
+          description: Set when the author edited the comment body.
+        edited_by:
+          type: string
+          description: Actor who last edited the comment.
       required: [ref, handle, document_ref, body, created_at, created_by]
 
     DocumentCommentsResponse:
@@ -8232,6 +8413,16 @@ components:
         parent_id:
           type: string
           description: Optional parent comment id when posting a reply on create.
+        reply_to:
+          type: string
+          description: Optional parent comment ref (`event:<handle>`) or id; alias of `parent_id`.
+      required: [text]
+
+    UpdateDocumentCommentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        text: { type: string }
       required: [text]
 
     DocumentWithRevisionResponse:

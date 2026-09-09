@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 156
+- Command count: 158
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -18,7 +18,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | boards | 13 |
 | cards | 13 |
 | derived | 1 |
-| docs | 17 |
+| docs | 19 |
 | events | 8 |
 | home | 2 |
 | inbox | 4 |
@@ -37,7 +37,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 58 |
-| exposed_write | 55 |
+| exposed_write | 57 |
 | gated_admin | 15 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 6 |
@@ -49,7 +49,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 113 | exposed_read + exposed_write + adapted |
+| standalone default | 115 | exposed_read + exposed_write + adapted |
 | hosted default | 57 | explicit read-only private-app allowlist |
 | gated | 28 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -123,8 +123,10 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | derived.rebuild | derived | POST | /derived/rebuild | gated_admin | projection rebuild is maintenance/ops |
 | docs.archive | docs | POST | /docs/{document_id}/archive | exposed_write | ordinary reversible document lifecycle write |
 | docs.comments.create | docs | POST | /docs/{document_id}/comments | exposed_write | ordinary document comment write for cross-host knowledge |
+| docs.comments.delete | docs | DELETE | /docs/{document_id}/comments/{comment_id} | exposed_write | author delete of a document comment |
 | docs.comments.list | docs | GET | /docs/{document_id}/comments | exposed_read | document comment thread read |
 | docs.comments.reply | docs | POST | /docs/{document_id}/comments/{comment_id}/replies | exposed_write | ordinary document comment reply write |
+| docs.comments.update | docs | PATCH | /docs/{document_id}/comments/{comment_id} | exposed_write | author edit of a document comment |
 | docs.create | docs | POST | /docs | exposed_write | ordinary document creation |
 | docs.get | docs | GET | /docs/{document_id} | exposed_read | document read |
 | docs.list | docs | GET | /docs | exposed_read | document inventory read |

@@ -29,6 +29,8 @@ func TestDocsKnowledgeTwoProfileSearchAndComment(t *testing.T) {
 		"--title", "Lane docs knowledge runbook",
 		"--source", "https://example.invalid/kb/runbook.md",
 		"--tags", "knowledge",
+		"--hosts", "host-a",
+		"--verified-at", "2026-09-08T12:00:00Z",
 		"--handle", "kb-shared-runbook-"+token,
 	)
 	handle := firstStringPath(t, put.Payload, "data.body.document.handle", "data.document.handle")
@@ -45,13 +47,15 @@ func TestDocsKnowledgeTwoProfileSearchAndComment(t *testing.T) {
 		"--title", "Lane docs knowledge runbook",
 		"--source", "https://example.invalid/kb/runbook.md",
 		"--tags", "knowledge",
+		"--hosts", "host-a",
+		"--verified-at", "2026-09-08T12:00:00Z",
 		"--handle", "kb-shared-runbook-"+token,
 	)
 	if firstStringPath(t, again.Payload, "data.body.document.handle", "data.document.handle") != handle {
 		t.Fatalf("put was not idempotent by handle: %s vs %s", put.Stdout, again.Stdout)
 	}
 
-	search := h.runCLIExpectOK(t, "host-b", nil, "docs", "search", "alphawhiz-"+token, "--knowledge")
+	search := h.runCLIExpectOK(t, "host-b", nil, "docs", "search", "alphawhiz-"+token, "--knowledge", "--host", "host-a", "--limit", "20")
 	docs := firstSlicePath(t, search.Payload, "data.body.documents", "data.documents")
 	if !searchHasHandle(docs, handle) {
 		t.Fatalf("host-b search missed host-a doc: %s", search.Stdout)

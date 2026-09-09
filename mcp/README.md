@@ -69,39 +69,46 @@ Configure `anx-mcp` with the same profile (or `ANX_BASE_URL` + `ANX_ACCESS_TOKEN
 the `anx` CLI uses; MCP authorization is the workspace bearer token, not a
 separate MCP credential.
 
+A **knowledge** doc is a document tagged `knowledge`. Record:
+
+- `source` — canonical URL or ref when the fact aggregates material that lives elsewhere
+- `hosts` — which hosts the fact applies to (machine names). Empty means unspecified.
+- `verified_at` — RFC3339 time when an agent last verified the fact
+
 Hosted default tools for this slice (read):
 
-- `docs.search` — `GET /docs/search?q=` over title, body, source, tags, and comments
+- `docs.search` — `GET /docs/search?q=` SQLite FTS5 over title, body, summary, source, tags, and comments
 - `docs.get` — read one document and its head revision
-- `docs.comments.list` — read the document comment thread
+- `docs.comments.list` — read the document comment thread (`reply_to` for replies; `ref` is the UI deep-link)
 
 Write tools with the same workspace token (not in the hosted-default read set):
 
-- `docs.put` — idempotent create-or-replace by handle, with `source` and `tags`
-- `docs.comments.create` / `docs.comments.reply`
+- `docs.put` — idempotent create-or-replace by handle, with `source`, `tags`, `hosts`, and `verified_at`
+- `docs.comments.create` / `docs.comments.reply` / `docs.comments.update` / `docs.comments.delete`
 
-Tag agent-facing docs `knowledge`. `source` is a canonical URL or ref when the
-document aggregates material that lives elsewhere. Git-repo ingest is not in
-this slice.
-
-Example: two profiles on one core (stand-in for two hosts):
+Exact commands an agent on a host with no other access should run:
 
 ```bash
-# host A
-ANX_ACCESS_TOKEN="$TOKEN_A" anx --json docs put notes.md \
-  --title "Runbook" --source https://example.invalid/runbook.md --tags knowledge
+# Publish a fact this host can see and others cannot
+printf 'SSH to proxmox is keyed in ~/.ssh/id_ed25519_proxmox\n' | \
+  anx docs put - \
+    --handle kb-proxmox-ssh \
+    --title "Proxmox SSH" \
+    --tags knowledge \
+    --source host://$(hostname)/ssh \
+    --hosts "$(hostname)" \
+    --verified-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# host B
-ANX_ACCESS_TOKEN="$TOKEN_B" anx --json docs search "runbook" --knowledge
-ANX_ACCESS_TOKEN="$TOKEN_B" anx --json docs comment doc:notes "Found this on host B"
-
-# host A
-ANX_ACCESS_TOKEN="$TOKEN_A" anx --json docs comments kb-shared
+# Read knowledge another host published
+anx docs search "proxmox" --knowledge --host "$(hostname)" --limit 20
+anx docs get kb-proxmox-ssh --format md
+anx docs comments kb-proxmox-ssh
+anx docs comment kb-proxmox-ssh "Verified from $(hostname)"
 ```
 
 The MCP server exposes the same commands. After `initialize` / `tools/list`,
 call `docs.search`, `docs.get`, `docs.put`, and `docs.comments.create` with the
-catalog argument names.
+catalog argument names. `docs.search` accepts `host` to filter by `hosts`.
 
 Run the automated local smoke against an active workspace profile:
 

@@ -269,6 +269,12 @@ commands:
   "docs.comments.reply":
     classification: exposed_write
     reason: "ordinary document comment reply write"
+  "docs.comments.update":
+    classification: exposed_write
+    reason: "author edit of a document comment"
+  "docs.comments.delete":
+    classification: exposed_write
+    reason: "author delete of a document comment"
   "docs.create":
     classification: exposed_write
     reason: "ordinary document creation"

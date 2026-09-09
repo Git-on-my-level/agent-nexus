@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `156`
+- Commands: `158`
 
 ## `actors.create`
 
@@ -761,6 +761,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
 
 ## `docs.comments.create`
 
@@ -773,7 +775,24 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ comment }`.
-- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `parent_id` creates a reply. Comment ids are stable event ids/refs.
+- Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
+- Examples:
+  - Post a comment: `anx docs comment doc:runbook "Host B found this"`
+
+## `docs.comments.delete`
+
+- CLI path: `docs comments delete`
+- HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Remove a comment you authored from the document discussion.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Output: Returns `{ comment }` with the trashed comment.
+- Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
+- Examples:
+  - Delete own comment: `anx docs comments delete doc:runbook event:note`
 
 ## `docs.comments.list`
 
@@ -786,7 +805,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ comments, next_cursor? }`.
-- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable event ids. `parent_id` is set for replies. Visibility of the document is unchanged.
+- Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.
+- Examples:
+  - List comments: `anx docs comments doc:runbook`
 
 ## `docs.comments.reply`
 
@@ -799,7 +820,24 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ comment }`.
-- Agent notes: Posts a reply `message_posted` event with `parent_id` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+- Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
+- Examples:
+  - Reply in thread: `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
+
+## `docs.comments.update`
+
+- CLI path: `docs comments edit`
+- HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Edit a comment you authored without changing its stable ref.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`
+- Output: Returns `{ comment }`.
+- Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+- Examples:
+  - Edit own comment: `anx docs comments edit doc:runbook event:note --body "Corrected"`
 
 ## `docs.create`
 
@@ -812,6 +850,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
 
 ## `docs.get`
 
@@ -824,6 +864,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document, revision }`.
+- Agent notes: Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
+- Examples:
+  - Print markdown body: `anx docs get kb-shared --format md`
 
 ## `docs.list`
 
@@ -836,6 +879,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ documents }`.
+- Examples:
+  - List knowledge docs: `anx docs list --knowledge`
 
 ## `docs.patch`
 
@@ -848,6 +893,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`, `concurrency`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Patch knowledge hosts: `anx docs patch kb-shared --from-file patch.json`
 
 ## `docs.purge`
 
@@ -860,6 +907,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
+- Examples:
+  - Purge a trashed document: `anx docs purge doc:runbook`
 
 ## `docs.put`
 
@@ -872,7 +921,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
 - Output: Returns `{ document, revision }`.
-- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged.
+- Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
+- Examples:
+  - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z`
 
 ## `docs.restore`
 
@@ -885,6 +936,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Restore a trashed document: `anx docs restore doc:runbook`
 
 ## `docs.revisions.create`
 
@@ -897,6 +950,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `revisions`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
 
 ## `docs.revisions.get`
 
@@ -921,6 +976,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
+- Examples:
+  - List revision history: `anx docs history doc:runbook`
 
 ## `docs.search`
 
@@ -933,7 +990,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better).
-- Agent notes: Ranked case-insensitive substring match (SQLite LIKE) over title, summary, source, tags, head-revision body (capped at 64KiB of stored search text), and backing-thread comments. No stemming, no phrase operators; `%`/`_` in q are treated as literals. Prefer this over `docs.list?q=` when matching body or comments.
+- Agent notes: SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments. Query terms are AND-matched; punctuation is tokenized. Prefer this over `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger matches (title weighted above body, then summary/source/tags, then comments).
+- Examples:
+  - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
 
 ## `docs.trash`
 
@@ -946,6 +1005,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
 
 ## `docs.unarchive`
 
@@ -958,6 +1019,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `docs`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ document, revision }`.
+- Examples:
+  - Unarchive a document: `anx docs unarchive doc:runbook`
 
 ## `events.archive`
 

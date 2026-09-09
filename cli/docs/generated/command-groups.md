@@ -134,12 +134,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `17`
+- Commands: `19`
 - Command IDs:
   - `docs.archive` (`docs archive`)
   - `docs.comments.create` (`docs comment`)
+  - `docs.comments.delete` (`docs comments delete`)
   - `docs.comments.list` (`docs comments`)
   - `docs.comments.reply` (`docs comments reply`)
+  - `docs.comments.update` (`docs comments edit`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
   - `docs.list` (`docs list`)

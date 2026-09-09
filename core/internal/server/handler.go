@@ -89,6 +89,8 @@ type PrimitiveStore interface {
 	SearchDocuments(ctx context.Context, filter primitives.DocumentSearchFilter) ([]map[string]any, string, error)
 	ListDocumentComments(ctx context.Context, documentID string, limit *int, cursor string) ([]map[string]any, string, error)
 	CreateDocumentComment(ctx context.Context, actorID, documentID, text, parentID string) (map[string]any, error)
+	UpdateDocumentComment(ctx context.Context, actorID, documentID, commentID, text string) (map[string]any, error)
+	DeleteDocumentComment(ctx context.Context, actorID, documentID, commentID string) (map[string]any, error)
 	UpdateDocument(ctx context.Context, actorID string, documentID string, documentPatch map[string]any, ifBaseRevision string, content any, contentType string, refs []string, revisionProvenance map[string]any) (map[string]any, map[string]any, error)
 	ListDocumentHistory(ctx context.Context, documentID string) ([]map[string]any, error)
 	GetDocumentRevision(ctx context.Context, documentID string, revisionID string) (map[string]any, error)
@@ -1490,6 +1492,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.Contains(remainder, "/comments/"):
+			if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
 		case strings.Contains(remainder, "/"):
 			return routeAccessRequirement{}
 		case r.Method == http.MethodGet, r.Method == http.MethodPatch, r.Method == http.MethodPut:
@@ -1665,6 +1672,24 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return
 			}
 			handleCreateDocumentComment(w, r, opts, documentID, commentID)
+			return
+		}
+
+		if idx := strings.Index(remainder, "/comments/"); idx > 0 {
+			documentID := strings.TrimSpace(remainder[:idx])
+			commentID := strings.TrimSpace(remainder[idx+len("/comments/"):])
+			if documentID == "" || commentID == "" || strings.Contains(documentID, "/") || strings.Contains(commentID, "/") {
+				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+				return
+			}
+			switch r.Method {
+			case http.MethodPatch:
+				handleUpdateDocumentComment(w, r, opts, documentID, commentID)
+			case http.MethodDelete:
+				handleDeleteDocumentComment(w, r, opts, documentID, commentID)
+			default:
+				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only PATCH and DELETE are supported")
+			}
 			return
 		}
 

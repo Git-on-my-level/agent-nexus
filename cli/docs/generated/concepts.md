@@ -165,12 +165,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `17`
+- Commands: `19`
 - Command IDs:
   - `docs.archive`
   - `docs.comments.create`
+  - `docs.comments.delete`
   - `docs.comments.list`
   - `docs.comments.reply`
+  - `docs.comments.update`
   - `docs.create`
   - `docs.get`
   - `docs.list`
@@ -392,7 +394,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `52`
+- Commands: `54`
 - Command IDs:
   - `agent.notifications.dismiss`
   - `agent.notifications.read`
@@ -421,7 +423,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.trash`
   - `docs.archive`
   - `docs.comments.create`
+  - `docs.comments.delete`
   - `docs.comments.reply`
+  - `docs.comments.update`
   - `docs.create`
   - `docs.patch`
   - `docs.purge`
