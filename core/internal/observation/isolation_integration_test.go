@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,14 +26,36 @@ func isolationRunnerOrSkip(t *testing.T) isolatedExecutor {
 	return runner
 }
 
+// isolationWorkDir is the compile/stage root for real sandbox tests. This
+// host's TMPDIR is /Volumes/scratch/tmp, which the Seatbelt profile denies
+// for content reads. Under full-suite load, path aliasing of that volume
+// made sandbox-exec fail even after the runner copied the artifact.
+func isolationWorkDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		return t.TempDir()
+	}
+	dir, err := os.MkdirTemp(seatbeltTempRoot(), "anx-obs-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
 func compileIsolatedFixture(t *testing.T, dir, name, source string) string {
 	t.Helper()
+	_ = dir
+	outDir := isolationWorkDir(t)
 	cc, err := exec.LookPath("cc")
 	if err != nil {
 		t.Fatal("fixture compiler unavailable")
 	}
-	cfile := filepath.Join(dir, name+".c")
-	binary := filepath.Join(dir, name)
+	cfile := filepath.Join(outDir, name+".c")
+	binary := filepath.Join(outDir, name)
 	if err := os.WriteFile(cfile, []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -95,39 +116,31 @@ func TestNewIsolatedRunnerMatchesGOOS(t *testing.T) {
 
 func TestIsolationConformance(t *testing.T) {
 	runner := isolationRunnerOrSkip(t)
-	dir := t.TempDir()
+	dir := isolationWorkDir(t)
 	home := os.Getenv("HOME")
 	if home == "" {
 		t.Fatal("HOME is required for the home-denial fixture")
 	}
+	// Denied-path probes must be non-blocking. connect()/fork() in the success
+	// path hung or killed the fixture when sandboxd was slow under make check
+	// load; those denials stay in TestIsolationNegativeDenials.
 	readPath := home
-	writePath := filepath.Join(dir, "must-not-write")
+	writePath := filepath.Join(t.TempDir(), "must-not-write")
 	unshareCheck := ""
 	if runtime.GOOS == "linux" {
-		readPath = filepath.Join(dir, "private-fixture")
+		readPath = filepath.Join(t.TempDir(), "private-fixture")
 		if err := os.WriteFile(readPath, []byte("harmless fixture"), 0600); err != nil {
 			t.Fatal(err)
 		}
 		writePath = "/tmp/fixture"
 		unshareCheck = "if (unshare(CLONE_NEWUSER)==0) return 11;\n"
-	} else {
-		unshareCheck = "if (fork()>=0) return 14;\n"
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	port := listener.Addr().(*net.TCPAddr).Port
 	source := fmt.Sprintf(`#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #ifdef __linux__
 #include <sched.h>
 #endif
@@ -136,11 +149,9 @@ int main(void) {
  if (strstr(input,"reject")) { puts("{\"error\":\"fixture rejected\"}"); return 0; }
  if (open(%q,O_RDONLY)>=0 || getenv("ANX_FIXTURE_SECRET") || open(%q,O_WRONLY|O_CREAT,0600)>=0) return 10;
  %s
- int fd=socket(AF_INET,SOCK_STREAM,0); struct sockaddr_in a; memset(&a,0,sizeof(a)); a.sin_family=AF_INET; a.sin_port=htons(%d); a.sin_addr.s_addr=htonl(0x7f000001);
- if(fd>=0) { if(connect(fd,(struct sockaddr*)&a,sizeof(a))==0) { close(fd); return 12; } close(fd); }
  puts("{\"facts\":{\"fixture_denials_verified\":true},\"uncertainty\":[]}"); return 0;
 }
-`, readPath, writePath, unshareCheck, port)
+`, readPath, writePath, unshareCheck)
 	binary := compileIsolatedFixture(t, dir, "fixture-reader", source)
 	t.Setenv("ANX_FIXTURE_SECRET", "harmless-not-a-real-secret")
 	limits := isolationTestPolicy().Limits
@@ -172,7 +183,7 @@ int main(void) {
 
 func TestIsolationNegativeDenials(t *testing.T) {
 	runner := isolationRunnerOrSkip(t)
-	dir := t.TempDir()
+	dir := isolationWorkDir(t)
 	home := os.Getenv("HOME")
 	if home == "" {
 		t.Fatal("HOME is required")
@@ -203,12 +214,13 @@ int main(void){ FILE*f=fopen(%q,"w"); if(f){ fputs("x",f); fclose(f); puts("{\"f
 		}
 	})
 	t.Run("tcp", func(t *testing.T) {
-		src := `#include <stdio.h>
+		src := `#include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-int main(void){ int fd=socket(AF_INET,SOCK_STREAM,0); struct sockaddr_in a; memset(&a,0,sizeof(a)); a.sin_family=AF_INET; a.sin_port=htons(80); a.sin_addr.s_addr=htonl(0x08080808); if(fd>=0 && connect(fd,(struct sockaddr*)&a,sizeof(a))==0){ puts("{\"facts\":{\"tcp\":true},\"uncertainty\":[]}"); return 0;} return 13;}
+int main(void){ int fd=socket(AF_INET,SOCK_STREAM,0); if(fd>=0) fcntl(fd,F_SETFL,O_NONBLOCK); struct sockaddr_in a; memset(&a,0,sizeof(a)); a.sin_family=AF_INET; a.sin_port=htons(80); a.sin_addr.s_addr=htonl(0x08080808); if(fd>=0 && connect(fd,(struct sockaddr*)&a,sizeof(a))==0){ puts("{\"facts\":{\"tcp\":true},\"uncertainty\":[]}"); return 0;} return 13;}
 `
 		bin := compileIsolatedFixture(t, dir, "open-tcp", src)
 		_, err := runner.Run(context.Background(), bin, []byte(`{}`), limits)
@@ -238,7 +250,7 @@ int main(void){ for(int i=0;i<4096;i++) fputs("{\"facts\":{\"overflow\":true},\"
 
 func TestIsolatedTransformLifecycle(t *testing.T) {
 	_ = isolationRunnerOrSkip(t)
-	dir := t.TempDir()
+	dir := isolationWorkDir(t)
 	src := `#include <stdio.h>
 #include <string.h>
 int main(void){
@@ -312,7 +324,7 @@ int main(void){
 
 func TestRealCanaryFailureDoesNotActivate(t *testing.T) {
 	_ = isolationRunnerOrSkip(t)
-	dir := t.TempDir()
+	dir := isolationWorkDir(t)
 	policy := isolationTestPolicy()
 	manager, err := NewJITManager(filepath.Join(dir, "managed"), policy)
 	if err != nil {
@@ -386,7 +398,7 @@ int main(void){
 
 func TestRealPolicyViolationKeepsLastGood(t *testing.T) {
 	_ = isolationRunnerOrSkip(t)
-	dir := t.TempDir()
+	dir := isolationWorkDir(t)
 	policy := isolationTestPolicy()
 	manager, err := NewJITManager(filepath.Join(dir, "managed"), policy)
 	if err != nil {

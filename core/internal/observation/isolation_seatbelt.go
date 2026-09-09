@@ -90,16 +90,20 @@ func (r *SeatbeltRunner) probe() error {
 	if err != nil || !filepath.IsAbs(truePath) {
 		return failure(ErrIsolation, "sandbox-exec availability probe cannot resolve /usr/bin/true")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	deny := exec.CommandContext(ctx, r.sandbox, "-p", "(version 1)(deny default)", truePath)
+	// Separate budgets: a shared 3s context made the allow probe flake when
+	// deny was slow under full-suite load (parallel sandbox-exec).
+	denyCtx, denyCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer denyCancel()
+	deny := exec.CommandContext(denyCtx, r.sandbox, "-p", "(version 1)(deny default)", truePath)
 	deny.Env = []string{"PATH=/", "LANG=C"}
 	if err := deny.Run(); err == nil {
 		return failure(ErrIsolation, "sandbox-exec deny-default probe executed; isolation is not enforced")
 	}
-	allow := exec.CommandContext(ctx, r.sandbox, "-p", seatbeltProfile(truePath, ""), truePath)
+	allowCtx, allowCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer allowCancel()
+	allow := exec.CommandContext(allowCtx, r.sandbox, "-p", seatbeltProfile(truePath, ""), truePath)
 	allow.Env = []string{"PATH=/", "LANG=C"}
-	if err := allow.Run(); err != nil || ctx.Err() != nil {
+	if err := allow.Run(); err != nil || allowCtx.Err() != nil {
 		return failure(ErrIsolation, "sandbox-exec cannot exec a deny-default probe")
 	}
 	return nil

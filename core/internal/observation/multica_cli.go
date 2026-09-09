@@ -79,7 +79,7 @@ func (r *MulticaCLIReader) Read(ctx context.Context, t Target) (Report, error) {
 		if err != nil {
 			return nil, failure(ErrConfiguration, "existing Multica profile home unavailable")
 		}
-		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C", "NO_COLOR=1"}
+		cmd.Env = []string{"HOME=" + home, "PATH=" + filepath.Dir(c.Binary) + ":/usr/bin:/bin", "LANG=C", "NO_COLOR=1"}
 		stdout := &boundedBuffer{limit: c.MaxBytes - bytes}
 		stderr := &boundedBuffer{limit: 4096}
 		cmd.Stdout = stdout
