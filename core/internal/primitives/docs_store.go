@@ -976,6 +976,13 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nextDocProvJSON = inferredProvenanceJSON()
 	}
 
+	origTitle := nextTitle
+	origSummary := nextSummary
+	origSource := nextSource
+	origVerifiedAt := nextVerifiedAt
+	origTags := append([]string(nil), nextTags...)
+	origHosts := append([]string(nil), nextHosts...)
+
 	if documentPatch != nil {
 		if _, exists := documentPatch["id"]; exists {
 			return nil, nil, invalidDocumentRequest("document.id cannot be patched")
@@ -1075,11 +1082,39 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	}
 	searchText := documentSearchText(nextTitle, nextSummary, nextSource, nextTags, encodedContent, contentType)
 
+	contentHash := sha256Hex(encodedContent)
+	var currentHash, currentType string
+	hashErr := s.db.QueryRowContext(ctx,
+		`SELECT TRIM(a.content_hash), TRIM(a.content_type)
+		 FROM artifacts a
+		 JOIN document_revisions dr ON dr.artifact_id = a.id
+		 WHERE dr.document_id = ? AND dr.revision_id = ?`,
+		documentID, doc.HeadRevisionID,
+	).Scan(&currentHash, &currentType)
+	if hashErr == nil &&
+		currentHash == contentHash &&
+		currentType == contentType &&
+		origTitle == nextTitle &&
+		origSummary == nextSummary &&
+		origSource == nextSource &&
+		origVerifiedAt == nextVerifiedAt &&
+		stringSlicesEqual(origTags, nextTags) &&
+		stringSlicesEqual(origHosts, nextHosts) {
+		docMap, mapErr := doc.toMap()
+		if mapErr != nil {
+			return nil, nil, mapErr
+		}
+		revision, loadErr := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+		if loadErr != nil {
+			return nil, nil, loadErr
+		}
+		return docMap, revision, nil
+	}
+
 	nextRevisionNumber := doc.HeadRevisionNum + 1
 	artifactID := uuid.NewString()
 	revisionID := artifactID
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	contentHash := sha256Hex(encodedContent)
 	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
 	if err != nil {
 		return nil, nil, err
@@ -2607,6 +2642,18 @@ func setDocumentContentValue(out map[string]any, content []byte, contentType str
 	default:
 		out["content"] = string(content)
 	}
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func sortStringsStable(values []string) {

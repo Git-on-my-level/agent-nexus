@@ -187,6 +187,9 @@ func (a *App) upsertIngestDocument(
 	if existing == nil {
 		return "created", revisionNumber, nil
 	}
+	if revisionNumber == 0 || revisionNumber == existing.revisionNumber {
+		return "unchanged", existing.revisionNumber, nil
+	}
 	return "updated", revisionNumber, nil
 }
 
