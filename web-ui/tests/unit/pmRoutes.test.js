@@ -50,6 +50,12 @@ const client = vi.hoisted(() =>
       "answerPmDecision",
       "dispatchPmDecision",
       "reconcilePmAction",
+      "createPmDecision",
+      "moveBoardCard",
+      "listInboxItems",
+      "getHomeUnread",
+      "respondInboxItem",
+      "markHomeRead",
     ].map((key) => [key, vi.fn()]),
   ),
 );
@@ -66,10 +72,10 @@ vi.mock("$app/navigation", () => ({
   invalidate: vi.fn(),
   invalidateAll: vi.fn(),
 }));
-import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/work/+page.svelte";
-import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/work/[workId]/+page.svelte";
+import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+page.svelte";
+import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
-import Decisions from "../../src/routes/o/[organization]/w/[workspace]/decisions/+page.svelte";
+import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -90,10 +96,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   for (const mock of Object.values(client)) mock.mockReset();
   navigation.guards.length = 0;
-  state.route("/work");
+  state.route("/tasks");
   client.listWork.mockResolvedValue({ work: [], next_cursor: "" });
   client.listPmConversations.mockResolvedValue({ items: [] });
   client.listPmActions.mockResolvedValue({ items: [] });
+  client.listPmDecisions.mockResolvedValue({ items: [] });
+  client.listInboxItems.mockResolvedValue({ items: [] });
+  client.getHomeUnread.mockResolvedValue({ groups: [] });
 });
 afterEach(() => cleanup());
 
@@ -130,7 +139,7 @@ describe("PM operator interactions", () => {
     });
     render(WorkPage);
     await waitFor(() => expect(client.listWork).toHaveBeenCalledTimes(1));
-    state.route("/work?q=new");
+    state.route("/tasks?q=new");
     await waitFor(() => expect(screen.getByText("Current work")).toBeTruthy());
     old.resolve({ work: [work("card:old", "Old work")], next_cursor: "" });
     await Promise.resolve();
@@ -156,7 +165,7 @@ describe("PM operator interactions", () => {
     ).toBeTruthy();
   });
   it("does not promote the claimed verification field, and refresh only queues", async () => {
-    state.route("/work/card%3Aone", { workId: "card:one" });
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
       work: { ...work("card:one", "Claimed work"), refresh: { state: "idle" } },
     });
@@ -195,9 +204,9 @@ describe("PM operator interactions", () => {
     expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
       "SELECT",
     );
-    state.route("/work?view=board");
+    state.route("/tasks?view=board");
     await screen.findByRole("region", {
-      name: "Work board grouped by phase",
+      name: "Task board grouped by phase",
     });
     expect(screen.getByLabelText("Source", { exact: true }).tagName).toBe(
       "SELECT",
@@ -266,7 +275,7 @@ describe("PM operator interactions", () => {
     );
   });
   it("records a revision-bound answer without dispatching and retains failed follow-through", async () => {
-    state.route("/decisions?decision=decision-one");
+    state.route("/inbox?item=decision:decision-one");
     const decision = {
       id: "decision-one",
       work_ref: "card:one",
@@ -299,7 +308,7 @@ describe("PM operator interactions", () => {
     client.dispatchPmDecision.mockRejectedValue(
       new Error("Source unavailable"),
     );
-    render(Decisions);
+    render(InboxPage);
     await screen.findByRole("heading", { name: "Update sample note" });
     await fireEvent.click(screen.getByLabelText("Authorize this scope"));
     const input = screen.getByLabelText("Exact response");
@@ -307,7 +316,7 @@ describe("PM operator interactions", () => {
       target: { value: "Within the stated scope" },
     });
     await fireEvent.submit(input.closest("form"));
-    await screen.findByText("Pending delivery");
+    await screen.findByText("Pending delivery", { exact: true });
     expect(client.answerPmDecision).toHaveBeenCalledWith("decision-one", {
       revision: 2,
       approve: true,
@@ -322,7 +331,7 @@ describe("PM operator interactions", () => {
     expect(screen.queryByText("Outcome verified")).toBeNull();
   });
   it("loads a directly linked decision and receipt beyond the partial list", async () => {
-    state.route("/decisions?decision=older-decision");
+    state.route("/inbox?item=decision:older-decision");
     client.listPmDecisions.mockResolvedValue({ items: [], has_more: true });
     client.getPmDecision.mockResolvedValue({
       id: "older-decision",
@@ -338,7 +347,7 @@ describe("PM operator interactions", () => {
       status: "unknown",
       receipt: { detail: "Delivery uncertain" },
     });
-    render(Decisions);
+    render(InboxPage);
     await screen.findByRole("heading", { name: "Older sample instruction" });
     expect(client.getPmDecision).toHaveBeenCalledWith("older-decision");
     expect(
@@ -347,37 +356,23 @@ describe("PM operator interactions", () => {
     ).toBeGreaterThan(0);
     expect(client.getPmAction).toHaveBeenCalledWith("older-action");
   });
-  it("can discover a later decision through canonical pagination", async () => {
-    state.route("/decisions");
-    client.listPmDecisions
-      .mockResolvedValueOnce({
-        items: [],
-        has_more: true,
-        next_cursor: "next-decisions",
-      })
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: "later",
-            instruction: "Later sample instruction",
-            status: "awaiting_answer",
-            work_ref: "card:one",
-          },
-        ],
-        next_cursor: "",
-        has_more: false,
-      });
-    render(Decisions);
-    await fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Load more",
-      }),
-    );
-    await screen.findByRole("heading", { name: "Later sample instruction" });
-    expect(client.listPmDecisions).toHaveBeenLastCalledWith({
-      limit: 50,
-      cursor: "next-decisions",
+  it("places awaiting decisions in Needs you", async () => {
+    state.route("/inbox");
+    client.listPmDecisions.mockResolvedValue({
+      items: [
+        {
+          id: "later",
+          instruction: "Later sample instruction",
+          status: "awaiting_answer",
+          work_ref: "card:one",
+        },
+      ],
     });
+    render(InboxPage);
+    await screen.findByRole("heading", { name: "Later sample instruction" });
+    expect(
+      screen.getAllByRole("link", { name: /Needs you/ }).length,
+    ).toBeGreaterThan(0);
   });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");
@@ -420,7 +415,7 @@ describe("PM operator interactions", () => {
     );
   });
   it("clears an old refresh request state when navigating to another commitment", async () => {
-    state.route("/work/card%3Aone", { workId: "card:one" });
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork
       .mockResolvedValueOnce({ work: work("card:one", "First commitment") })
       .mockResolvedValueOnce({ work: work("card:two", "Second commitment") });
@@ -432,7 +427,7 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Request source refresh" }),
     );
-    state.route("/work/card%3Atwo", { workId: "card:two" });
+    state.route("/tasks/card%3Atwo", { workId: "card:two" });
     await screen.findByRole("heading", { name: "Second commitment" });
     expect(
       screen.getByRole("button", { name: "Request source refresh" }).disabled,

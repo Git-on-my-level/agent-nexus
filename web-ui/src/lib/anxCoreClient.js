@@ -338,6 +338,11 @@ const adapterCommandTable = [
     (filters) => ({ options: q(filters) }),
   ],
   [
+    "createPmDecision",
+    "pm.decisions.create",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
     "getPmDecision",
     "pm.decisions.get",
     (id) => p(pathParams({ decision_id: id })),

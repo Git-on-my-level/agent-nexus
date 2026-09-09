@@ -242,8 +242,21 @@ async function setup(page, overrides = {}) {
             source: { authority: "nexus" },
           },
         });
+      if (path === "/pm/decisions" && method === "POST") {
+        const item = {
+          id: "decision-created",
+          ...body,
+          status: "awaiting_answer",
+        };
+        decisions.push(item);
+        return reply(item, 201);
+      }
       if (path === "/pm/decisions")
         return reply({ items: decisions, has_more: false });
+      if (path.startsWith("/pm/decisions/") && method === "GET")
+        return reply(
+          decisions.find((item) => path.endsWith(item.id)) || decisions[0],
+        );
       if (path === "/pm/actions")
         return reply({ items: actions, has_more: false });
       if (path.endsWith("/answer")) {
@@ -299,7 +312,7 @@ test("board and table preserve source states and show the same commitments", asy
   page,
 }) => {
   const { calls } = await setup(page);
-  await page.goto(`${root}/work`);
+  await page.goto(`${root}/tasks`);
   await expect(
     page.getByRole("link", {
       name: "Release the sample workspace",
@@ -314,7 +327,7 @@ test("board and table preserve source states and show the same commitments", asy
   ).toBeVisible();
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(
-    page.getByRole("region", { name: "Work board grouped by phase" }),
+    page.getByRole("region", { name: "Task board grouped by phase" }),
   ).toBeVisible();
   expect(
     await page
@@ -330,7 +343,7 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
   page,
 }) => {
   const { calls } = await setup(page);
-  await page.goto(`${root}/work/card%3Arelease`);
+  await page.goto(`${root}/tasks/card%3Arelease`);
   await expect(
     page.getByRole("heading", { name: "Release the sample workspace" }),
   ).toBeVisible();
@@ -365,7 +378,7 @@ test("failed list reload keeps visible work and names stale display", async ({
       }
     },
   });
-  await page.goto(`${root}/work`);
+  await page.goto(`${root}/tasks`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   fail = true;
   await page.getByRole("button", { name: "Reload", exact: true }).click();
@@ -426,7 +439,7 @@ test("answer and failed delivery remain separately inspectable", async ({
       }
     },
   });
-  await page.goto(`${root}/decisions?decision=decision-sample`);
+  await page.goto(`${root}/inbox?item=decision:decision-sample`);
   await page.getByLabel("Authorize this scope").check();
   await page
     .getByLabel("Exact response")
@@ -460,8 +473,8 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await setup(page);
     for (const path of [
-      "/work",
-      "/decisions?decision=decision-sample",
+      "/tasks",
+      "/inbox?item=decision:decision-sample",
       "/pm",
       "/integrations",
     ]) {

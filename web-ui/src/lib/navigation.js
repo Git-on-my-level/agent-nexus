@@ -1,15 +1,9 @@
 /**
- * Primary navigation: the four places a person actually goes.
- * Everything else lives in the secondary groups below (sidebar footer and
- * the mobile More hub).
+ * Primary navigation: Inbox, Tasks, Docs, and the PM conversation surface.
+ * Settings (Access, Secrets, Integrations, Audit) live in the sidebar footer
+ * and the mobile More hub.
  */
 export const navigationItems = [
-  {
-    label: "Home",
-    href: "/",
-    icon: "home",
-    hint: "What changed",
-  },
   {
     label: "Inbox",
     href: "/inbox",
@@ -17,10 +11,16 @@ export const navigationItems = [
     hint: "Needs attention",
   },
   {
-    label: "Work",
-    href: "/work",
+    label: "Tasks",
+    href: "/tasks",
     icon: "boards",
     hint: "Table and board",
+  },
+  {
+    label: "Docs",
+    href: "/docs",
+    icon: "docs",
+    hint: "Shared knowledge",
   },
   {
     label: "PM",
@@ -33,59 +33,7 @@ export const navigationItems = [
 /** Secondary destinations, grouped. Rendered in the sidebar footer and on /more. */
 export const settingsNavGroups = [
   {
-    label: "Follow-through",
-    items: [
-      {
-        label: "Decisions",
-        href: "/decisions",
-        icon: "inbox",
-        hint: "Answers, delivery, receipts",
-      },
-      {
-        label: "Integrations",
-        href: "/integrations",
-        icon: "events",
-        hint: "Source freshness and coverage",
-      },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      {
-        label: "Topics",
-        href: "/topics",
-        icon: "topics",
-        hint: "Projects and discussions",
-      },
-      {
-        label: "Boards",
-        href: "/boards",
-        icon: "boards",
-        hint: "Card boards",
-      },
-      {
-        label: "Docs",
-        href: "/docs",
-        icon: "docs",
-        hint: "Versioned documents",
-      },
-      {
-        label: "Events",
-        href: "/events",
-        icon: "events",
-        hint: "Full workspace history",
-      },
-      {
-        label: "Artifacts",
-        href: "/artifacts",
-        icon: "artifacts",
-        hint: "Revision artifacts and payloads",
-      },
-    ],
-  },
-  {
-    label: "Admin",
+    label: "Settings",
     items: [
       {
         label: "Access",
@@ -100,10 +48,16 @@ export const settingsNavGroups = [
         hint: "Workspace credentials",
       },
       {
-        label: "Trash",
-        href: "/trash",
-        icon: "trash",
-        hint: "Trashed and restorable items",
+        label: "Integrations",
+        href: "/integrations",
+        icon: "events",
+        hint: "Source freshness and coverage",
+      },
+      {
+        label: "Audit",
+        href: "/events",
+        icon: "events",
+        hint: "Workspace history",
       },
     ],
   },
@@ -121,14 +75,9 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "56rem",
   },
   {
-    match: /^\/(work|decisions|integrations)(\/|$)/,
+    match: /^\/(work|tasks|inbox|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
-  },
-  {
-    match: /^\/$/,
-    mode: "wide",
-    maxWidth: "92rem",
   },
   {
     match: /^\/access$/,
@@ -146,37 +95,17 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "112rem",
   },
   {
-    match: /^\/artifacts\/[^/]+/,
-    mode: "wide",
-    maxWidth: "96rem",
-  },
-  {
     match: /^\/docs\/[^/]+/,
     mode: "fluid",
     maxWidth: "112rem",
   },
   {
-    match: /^\/trash$/,
+    match: /^\/docs$/,
     mode: "wide",
     maxWidth: "88rem",
   },
   {
-    match: /^\/(threads|topics|events|artifacts|docs|boards)$/,
-    mode: "wide",
-    maxWidth: "88rem",
-  },
-  {
-    match: /^\/boards\/[^/]+/,
-    mode: "fluid",
-    maxWidth: "112rem",
-  },
-  {
-    match: /^\/inbox$/,
-    mode: "wide",
-    maxWidth: "84rem",
-  },
-  {
-    match: /^\/more$/,
+    match: /^\/(more|settings)$/,
     mode: "standard",
     maxWidth: "42rem",
   },
@@ -210,7 +139,7 @@ export function isKnownSection(pathname) {
 /** When true, the mobile bottom "More" tab should read as active (hub + settings destinations). */
 export function isMoreHubActivePath(pathname) {
   const p = normalizePathname(pathname);
-  if (p === "/more" || p.startsWith("/more/")) {
+  if (p === "/more" || p.startsWith("/more/") || p === "/settings") {
     return true;
   }
   return settingsNavItems.some(

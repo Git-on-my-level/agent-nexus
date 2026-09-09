@@ -186,17 +186,9 @@ function workspaceShellPrefix(opts) {
 function getDefaultRoutes(opts) {
   const shell = workspaceShellPrefix(opts);
   return [
-    { name: "home", path: "/", description: "Workspace dashboard / chooser" },
     { name: "inbox", path: `${shell}/inbox`, description: "Inbox triage view" },
-    { name: "topics", path: `${shell}/topics`, description: "Topic list" },
-    { name: "boards", path: `${shell}/boards`, description: "Board list" },
+    { name: "tasks", path: `${shell}/tasks`, description: "Tasks" },
     { name: "docs", path: `${shell}/docs`, description: "Documents list" },
-    {
-      name: "artifacts",
-      path: `${shell}/artifacts`,
-      description: "Artifacts list",
-    },
-    { name: "trash", path: `${shell}/trash`, description: "Trash" },
     {
       name: "access",
       path: `${shell}/access`,

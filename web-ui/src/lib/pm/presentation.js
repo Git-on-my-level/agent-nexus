@@ -71,28 +71,70 @@ export function workFreshness(work, now = Date.now()) {
   );
 }
 
+const RECEIPT_PRIMARY = {
+  awaiting_answer: ["Needs you", "warn", "needs_you"],
+  delivered: ["Delivered", "neutral", "delivered"],
+  verified: ["Done", "ok", "done"],
+  failed: ["Failed", "danger", "failed"],
+};
+
+const RECEIPT_FOLDED = {
+  answered: "Answered",
+  pending_delivery: "Pending delivery",
+  pending: "Pending",
+  queued: "Queued",
+  acknowledged: "Acknowledged",
+  applied: "Applied; verification pending",
+  source_reported: "Source reported; not independently verified",
+  sending: "Delivery in progress",
+  unknown: "Delivery uncertain",
+  superseded: "Superseded",
+};
+
 export function receiptSignal(state) {
-  const states = {
-    awaiting_answer: ["Needs your decision", "warn"],
-    answered: ["Answered", "neutral"],
-    pending_delivery: ["Pending delivery", "warn"],
-    pending: ["Pending", "warn"],
-    queued: ["Queued", "neutral"],
-    delivered: ["Delivered", "neutral"],
-    acknowledged: ["Acknowledged", "neutral"],
-    applied: ["Applied; verification pending", "neutral"],
-    source_reported: ["Source reported; not independently verified", "neutral"],
-    sending: ["Delivery in progress", "neutral"],
-    verified: ["Outcome verified", "ok"],
-    failed: ["Failed", "danger"],
-    unknown: ["Delivery uncertain", "warn"],
-    superseded: ["Superseded", "neutral"],
+  const primary = RECEIPT_PRIMARY[state];
+  if (primary) {
+    const [display, tone, key] = primary;
+    return {
+      label: display,
+      tone,
+      key,
+      primary: true,
+      verified: state === "verified",
+    };
+  }
+  return {
+    label: RECEIPT_FOLDED[state] || String(state || "Unknown"),
+    tone: "neutral",
+    key: "other",
+    primary: false,
+    verified: false,
   };
-  const [display, tone] = states[state] ?? [
-    String(state || "Unknown"),
-    "neutral",
-  ];
-  return { label: display, tone, verified: state === "verified" };
+}
+
+export function isNexusOwned(work) {
+  return String(work?.source?.authority ?? "").toLowerCase() === "nexus";
+}
+
+export function taskDetailPath(work) {
+  return `/tasks/${encodeURIComponent(workKey(work))}`;
+}
+
+export function cardIdFromWork(work) {
+  const id = String(work?.id ?? "").trim();
+  if (id) return id;
+  const ref = String(work?.ref ?? work?.handle ?? "").trim();
+  if (ref.startsWith("card:")) return ref.slice("card:".length);
+  return ref;
+}
+
+export function workTargetRevision(work) {
+  return String(
+    work?.source?.revision ||
+      work?.freshness?.source_revision ||
+      work?.version ||
+      "0",
+  );
 }
 
 export function phaseGroups(records) {

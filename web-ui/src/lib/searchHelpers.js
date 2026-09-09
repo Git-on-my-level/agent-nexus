@@ -84,6 +84,14 @@ export async function searchDocuments(query, limit = 20) {
   return filterTopLevelDocuments(response.documents);
 }
 
+export async function searchWork(query, limit = 20) {
+  const response = await coreClient.listWork({
+    q: query,
+    limit,
+  });
+  return Array.isArray(response.work) ? response.work : [];
+}
+
 /** Subtitle line for document rows in search pickers (state, summary, backing thread). */
 export function documentSearchPickerSubtitle(document) {
   if (!document || typeof document !== "object") {
