@@ -10,6 +10,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
 
   let conversations = $state([]),
     conversation = $state(null),
@@ -422,11 +423,10 @@
           <div class="pm-turn pm-turn--pm">
             <p class="pm-turn-meta">PM</p>
             {#if turn.response}
-              <p
-                class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
-              >
-                {turn.response}
-              </p>
+              <MarkdownRenderer
+                source={turn.response}
+                class="pm-response text-meta leading-relaxed text-fg"
+              />
             {:else}
               <SignalBadge tone={statusTone}>{statusLabel}</SignalBadge>
             {/if}
@@ -502,6 +502,29 @@
   .pm-turn--pm {
     padding-left: 0.75rem;
     border-left: 2px solid var(--accent-solid);
+  }
+  :global(.pm-response) {
+    overflow-wrap: anywhere;
+  }
+  :global(.pm-response p) {
+    margin: 0 0 0.6rem;
+  }
+  :global(.pm-response ul),
+  :global(.pm-response ol) {
+    margin: 0 0 0.6rem;
+    padding-left: 1.25rem;
+  }
+  :global(.pm-response hr) {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 0.75rem 0;
+  }
+  :global(.pm-response code) {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--bg-soft);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
   }
   .pm-turn-meta {
     margin-bottom: 0.25rem;
