@@ -301,6 +301,24 @@
       });
       await loadList();
       ready = true;
+      // Landing on an empty composer while a conversation already exists
+      // reads as "nothing happened". Open the most recent one instead; the
+      // composer still sends into it, and New starts a fresh thread.
+      if (!selectedId && !workRef && conversations.length > 0) {
+        const latest = [...conversations].sort((a, b) =>
+          String(b.updated_at || b.created_at || "").localeCompare(
+            String(a.updated_at || a.created_at || ""),
+          ),
+        )[0];
+        if (latest?.id) {
+          await goto(
+            workspaceHref(`/pm?conversation=${encodeURIComponent(latest.id)}`),
+            { replaceState: true },
+          );
+          return;
+        }
+      }
+      if (!selectedId) loading = false;
     } catch (err) {
       error = errorMessage(err);
       loading = false;

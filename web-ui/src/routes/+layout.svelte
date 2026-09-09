@@ -426,6 +426,7 @@
     await hydrateWorkspaceBootstrap({
       workspaceSlug,
       workspaceHeader: WORKSPACE_HEADER,
+      organizationSlug: activeOrganizationSlug,
       coreClient,
       storage: localStorage,
       onActorError: (message) => {

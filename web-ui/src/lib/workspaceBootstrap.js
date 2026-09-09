@@ -393,6 +393,7 @@ export async function refreshWorkspacePrincipals({
 export async function hydrateWorkspaceBootstrap({
   workspaceSlug,
   workspaceHeader,
+  organizationSlug = "",
   coreClient,
   storage,
   fetchFn = globalThis.fetch.bind(globalThis),
@@ -428,10 +429,27 @@ export async function hydrateWorkspaceBootstrap({
       onDevFixturePersonas([]);
     }
 
+    if (devActorModeEnabled && agent && devFixturePersonas.length > 0) {
+      const reissued = await reactivateStaleDevPersonaSession({
+        agent,
+        devFixturePersonas,
+        workspaceSlug,
+        workspaceHeader,
+        organizationSlug,
+        fetchFn,
+        onDevPersonaBusy,
+      });
+      if (reissued) {
+        agent = reissued;
+        replacePrincipalRegistry([agent], workspaceSlug);
+      }
+    }
+
     if (devActorModeEnabled && !agent) {
       agent = await activateDefaultDevPersonaSession({
         workspaceSlug,
         workspaceHeader,
+        organizationSlug,
         fetchFn,
         onDevPersonaBusy,
       });
@@ -466,15 +484,77 @@ export async function hydrateWorkspaceBootstrap({
   }
 }
 
+/**
+ * A dev session outlives `make serve`: the browser still holds a session for
+ * a registration the new seed no longer recognises, so every PM call answers
+ * "permission denied" and Retry cannot help. When the signed-in agent is not
+ * one of the current fixture personas, re-issue the session for the persona
+ * that plays the same actor (or the default human) and hydrate again.
+ */
+export async function reactivateStaleDevPersonaSession({
+  agent,
+  devFixturePersonas,
+  workspaceSlug,
+  workspaceHeader,
+  organizationSlug = "",
+  fetchFn = globalThis.fetch.bind(globalThis),
+  onDevPersonaBusy = () => {},
+}) {
+  const agentId = String(agent?.agent_id ?? "").trim();
+  const personas = Array.isArray(devFixturePersonas) ? devFixturePersonas : [];
+  if (!agentId || personas.length === 0) return null;
+  const known = personas.some(
+    (persona) => String(persona?.agent_id ?? "").trim() === agentId,
+  );
+  if (known) return null;
+  const actorId = String(agent?.actor_id ?? "").trim();
+  const humans = personas.filter(
+    (persona) =>
+      String(persona?.principal_kind ?? "").toLowerCase() === "human",
+  );
+  const replacement =
+    humans.find((persona) => String(persona?.actor_id ?? "") === actorId) ??
+    humans.find((persona) => persona?.default === true) ??
+    humans[0];
+  const personaId = String(replacement?.persona_id ?? "").trim();
+  if (!personaId) return null;
+  let reissued = null;
+  const result = await activateDevPersonaSession({
+    personaId,
+    workspaceSlug,
+    workspaceHeader,
+    organizationSlug,
+    fetchFn,
+    setBusy: onDevPersonaBusy,
+    onHydrate: async () => {
+      reissued = await initializeAuthSession({
+        fetchFn,
+        workspaceSlug,
+        authDriver: "layout",
+      });
+    },
+  });
+  return result.ok ? reissued : null;
+}
+
 async function activateDefaultDevPersonaSession({
   workspaceSlug,
   workspaceHeader,
+  organizationSlug = "",
   fetchFn,
   onDevPersonaBusy,
 }) {
+  // Both dev auth routes resolve the organization as well as the workspace;
+  // without the organization header the session POST answers 404 and a
+  // restarted stack leaves the browser signed out with every PM call 403.
+  const headers = devRouteHeaders({
+    workspaceHeader,
+    workspaceSlug,
+    organizationSlug,
+  });
   try {
     const response = await fetchFn(appPath("/auth/dev/default-persona"), {
-      headers: { [workspaceHeader]: workspaceSlug },
+      headers,
     });
     if (!response.ok) {
       return null;
@@ -489,10 +569,7 @@ async function activateDefaultDevPersonaSession({
     try {
       const sessionResponse = await fetchFn(appPath("/auth/dev/session"), {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [workspaceHeader]: workspaceSlug,
-        },
+        headers: { "content-type": "application/json", ...headers },
         body: JSON.stringify({ persona_id: personaId }),
       });
       if (!sessionResponse.ok) {
