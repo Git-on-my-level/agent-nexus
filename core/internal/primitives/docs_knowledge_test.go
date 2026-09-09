@@ -131,6 +131,23 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 		t.Fatalf("last_comment.created_by: %#v", lastComment)
 	}
 
+	searchWithLast, _, err := store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "alphawhiz"})
+	if err != nil {
+		t.Fatalf("search documents for last_comment: %v", err)
+	}
+	var searchLastComment map[string]any
+	for _, document := range searchWithLast {
+		if strings.TrimSpace(anyString(document["handle"])) == "kb-shared-runbook" {
+			searchLastComment, _ = document["last_comment"].(map[string]any)
+		}
+	}
+	if searchLastComment == nil {
+		t.Fatalf("expected last_comment enrichment on search hit, got %#v", searchWithLast)
+	}
+	if strings.TrimSpace(anyString(searchLastComment["body"])) != "ack from host A" {
+		t.Fatalf("search last_comment.body: %#v", searchLastComment)
+	}
+
 	head := strings.TrimSpace(anyString(knowledge["head_revision_id"]))
 	updated, nextRev, err := store.UpdateDocument(ctx, "actor-a", docID, map[string]any{
 		"title":  "Lane docs knowledge runbook",

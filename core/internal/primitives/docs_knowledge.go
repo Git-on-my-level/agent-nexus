@@ -168,7 +168,7 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 			  AND LOWER(COALESCE(e.payload_json, '')) LIKE ? ESCAPE '\'
 		) THEN 10 ELSE 0 END)`
 	rankArgs := []any{pattern, pattern, pattern, pattern, pattern, pattern}
-	query := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.slug, d.supersedes_json,
+	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -179,6 +179,44 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 		  AND (` + rankExpr + `) > 0
 		ORDER BY search_rank DESC, d.updated_at DESC, d.id ASC
 		LIMIT ?`
+	// Same page-scoped enrichment joins as ListDocuments so search rows carry
+	// revision_count, timeline_message_count, and last_comment.
+	query := `WITH doc_page AS (` + inner + `)
+SELECT dp.*,
+	COALESCE(rc.revision_cnt, 0),
+	COALESCE(tmc.timeline_msg_cnt, 0),
+	tml.last_body, tml.last_at, tml.last_by
+FROM doc_page dp
+LEFT JOIN (
+	SELECT dr2.document_id, COUNT(*) AS revision_cnt FROM document_revisions dr2
+	WHERE dr2.document_id IN (SELECT id FROM doc_page)
+	GROUP BY dr2.document_id
+) rc ON dp.id = rc.document_id
+LEFT JOIN (
+	SELECT trim(COALESCE(e.thread_id,'')) AS tid, COUNT(*) AS timeline_msg_cnt FROM events e
+	WHERE e.type = 'message_posted'
+	  AND COALESCE(trim(e.thread_id),'') <> ''
+	  AND COALESCE(trim(e.trashed_at),'') = ''
+	  AND trim(COALESCE(e.thread_id,'')) IN (
+		SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
+	  )
+	GROUP BY tid
+) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid
+LEFT JOIN (
+	SELECT tid, last_body, last_at, last_by FROM (
+		SELECT trim(COALESCE(e.thread_id,'')) AS tid,
+			TRIM(COALESCE(NULLIF(json_extract(e.payload_json, '$.text'), ''), json_extract(e.payload_json, '$.summary'))) AS last_body,
+			e.ts AS last_at, e.actor_id AS last_by,
+			ROW_NUMBER() OVER (PARTITION BY trim(COALESCE(e.thread_id,'')) ORDER BY e.ts DESC, e.id DESC) AS rn
+		FROM events e
+		WHERE e.type = 'message_posted'
+		  AND COALESCE(trim(e.thread_id),'') <> ''
+		  AND COALESCE(trim(e.trashed_at),'') = ''
+		  AND trim(COALESCE(e.thread_id,'')) IN (
+			SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
+		  )
+	) ranked WHERE rn = 1
+) tml ON trim(COALESCE(dp.thread_id,'')) = tml.tid`
 	args := make([]any, 0, len(rankArgs)*2+len(tagArgs)+2)
 	args = append(args, rankArgs...)
 	args = append(args, tagArgs...)
@@ -225,6 +263,11 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 			&row.ArchivedAt,
 			&row.ArchivedBy,
 			&rank,
+			&row.ListRevisionCount,
+			&row.ListTimelineMessageCount,
+			&row.ListLastCommentBody,
+			&row.ListLastCommentAt,
+			&row.ListLastCommentBy,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan document search row: %w", err)
 		}
