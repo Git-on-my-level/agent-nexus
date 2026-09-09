@@ -437,7 +437,8 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
   await expect(
     page.getByText("Verified evidence", { exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Request source refresh" }).click();
+  // The refresh button names the source it will read.
+  await page.getByRole("button", { name: "Check GitHub now" }).click();
   await expect(
     page.getByText(
       "Refresh queued. Evidence changes only after a reader reports back.",
