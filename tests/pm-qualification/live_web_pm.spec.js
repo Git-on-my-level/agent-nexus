@@ -55,6 +55,11 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
   expect(session.ok(), `dev session failed: ${await session.text()}`).toBeTruthy();
 
   await page.goto("/o/local/w/local/pm");
+  const navLabels = (await page.locator("nav a").allInnerTexts()).map((text) =>
+    text.replace(/\s+/g, " ").trim(),
+  );
+  writeEvidence("primary-nav.local.json", { navLabels });
+  await expect(page.getByRole("link", { name: "PM", exact: true })).toBeVisible();
   await expect(page.locator("#pm-message")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: prompt, exact: true }).click();
   await expect(page.locator("#pm-message")).toHaveValue(prompt);
@@ -74,6 +79,16 @@ test("Maya asks the live PM and Inbox shows proposed decisions", async ({
 
   const userTurn = page.locator(".pm-turn--you").last();
   await expect(userTurn).toContainText(prompt);
+  const proposed = page.getByRole("list", {
+    name: "Decisions proposed in this reply",
+  });
+  const proposedCount = await proposed.count();
+  const proposedText =
+    proposedCount > 0 ? ((await proposed.innerText()) || "").trim() : "";
+  writeEvidence("pm-proposed-decisions.local.json", {
+    proposedCount,
+    proposedText: proposedText.slice(0, 800),
+  });
 
   await page.goto("/o/local/w/local/inbox?mailbox=needs-you");
   await expect(
