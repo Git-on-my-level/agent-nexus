@@ -27,6 +27,8 @@
   } from "$lib/authSession";
   import SessionEndedOverlay from "$lib/components/SessionEndedOverlay.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
+  import { navIconPath } from "$lib/icons.js";
+  import { commandPaletteRequests } from "$lib/stores/commandPalette.js";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { coreClient } from "$lib/coreClient";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
@@ -34,7 +36,6 @@
     getShellContentConfig,
     isMoreHubActivePath,
     navigationItems,
-    settingsNavGroups,
     settingsNavItems,
   } from "$lib/navigation";
   import {
@@ -73,25 +74,6 @@
 
   let { children, data } = $props();
 
-  const navIconPathByType = {
-    home: "M3 11.5L12 4l9 7.5M5.5 10.5V20h13v-9.5M9.25 20v-5.5h5.5V20",
-    inbox:
-      "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
-    threads:
-      "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
-    topics: "M4.5 6.75h15M4.5 12h15M4.5 17.25h9.5",
-    boards: "M3 6h4v12H3V6zm7 0h4v12h-4V6zm7 0h4v12h-4V6z",
-    artifacts:
-      "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    trash:
-      "M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0",
-    access:
-      "M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z",
-    secrets:
-      "M15 7a2 2 0 0 1 2 2m4 0a6 6 0 0 1-7.743 5.743L11 17H9v2H7v2H4a1 1 0 0 1-1-1v-2.586a1 1 0 0 1 .293-.707l5.964-5.964A6 6 0 1 1 21 9z",
-    docs: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z",
-  };
-
   let actorError = $state("");
   let loadingActors = $state(false);
   let creatingActor = $state(false);
@@ -99,6 +81,8 @@
   let hydratedWorkspaceSlug = $state("");
   let workspacePickerOpen = $state(false);
   let commandPaletteOpen = $state(false);
+  let accountMenuOpen = $state(false);
+  let personaSubmenuOpen = $state(false);
   let devFixturePersonas = $state([]);
   let devPersonaBusy = $state(false);
 
@@ -276,6 +260,17 @@
     browser,
   });
   const loginRedirectController = createLoginRedirectController();
+
+  let handledPaletteRequests = 0;
+  $effect(() => {
+    const requested = $commandPaletteRequests;
+    if (requested > handledPaletteRequests) {
+      handledPaletteRequests = requested;
+      if (activeWorkspaceSlug) {
+        commandPaletteOpen = true;
+      }
+    }
+  });
 
   $effect(() => {
     if (!browser) {
@@ -567,10 +562,6 @@
     await goto(destination);
   }
 
-  function iconPath(iconType) {
-    return navIconPathByType[iconType] || navIconPathByType.inbox;
-  }
-
   /** @param {string} href */
   function dataTourForNav(href) {
     switch (String(href)) {
@@ -617,6 +608,14 @@
       }
       return;
     }
+    // Ask PM is the product's primary verb; it gets a global shortcut.
+    if (event.key === "j" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      if (activeWorkspaceSlug) {
+        void goto(workspaceHref("/pm"));
+      }
+      return;
+    }
     if (!event.defaultPrevented) {
       handleModSave(event, { commandPaletteOpen });
     }
@@ -625,6 +624,10 @@
     }
     if (!event.defaultPrevented) {
       handleModEnterBlurCommit(event, { commandPaletteOpen });
+    }
+    if (event.key === "Escape" && accountMenuOpen) {
+      closeAccountMenu();
+      return;
     }
     if (event.key === "Escape" && workspacePickerOpen) {
       closeWorkspacePicker();
@@ -635,7 +638,25 @@
     }
   }
 
+  function closeAccountMenu() {
+    accountMenuOpen = false;
+    personaSubmenuOpen = false;
+  }
+
+  function toggleAccountMenu() {
+    accountMenuOpen = !accountMenuOpen;
+    if (!accountMenuOpen) {
+      personaSubmenuOpen = false;
+    }
+  }
+
   function handleWindowClick(event) {
+    if (accountMenuOpen) {
+      const account = document.getElementById("shell-account-container");
+      if (account && !account.contains(event.target)) {
+        closeAccountMenu();
+      }
+    }
     if (workspacePickerOpen) {
       const picker = document.getElementById("workspace-picker-container");
       if (picker && !picker.contains(event.target)) {
@@ -761,40 +782,39 @@
           >
             <svg
               class="shell-search-trigger-icon"
-              viewBox="0 0 20 20"
-              fill="currentColor"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path
-                fill-rule="evenodd"
-                d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-                clip-rule="evenodd"
-              />
+              <path d={navIconPath("search")} />
             </svg>
-            <span>Search</span>
+            <span class="shell-nav-copy">Search</span>
             <kbd class="shell-search-kbd">⌘K</kbd>
           </button>
           <a
-            class="shell-search-trigger"
+            class="shell-ask-pm"
             href={workspaceHref("/pm")}
             data-tour="pm"
             aria-label="Ask PM"
           >
             <svg
-              class="shell-search-trigger-icon"
+              class="shell-ask-pm-icon"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
-              stroke-width="1.75"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M8.25 9h7.5m-7.5 4.5h4.5m-9.75 7.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v11.25A2.25 2.25 0 004.5 19.5z"
-              />
+              <path d={navIconPath("askPm")} />
             </svg>
-            <span>Ask PM</span>
+            <span class="shell-nav-copy">Ask PM</span>
+            <kbd class="shell-search-kbd">⌘J</kbd>
           </a>
         </div>
 
@@ -916,14 +936,12 @@
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  stroke-width="1.75"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                   aria-hidden="true"
                 >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d={iconPath(item.icon)}
-                  />
+                  <path d={navIconPath(item.icon)} />
                 </svg>
                 <span class="shell-nav-copy">
                   <span>{item.label}</span>
@@ -937,125 +955,189 @@
         </div>
 
         <div class="shell-sidebar-footer">
-          <div
-            class="shell-actor-panel"
-            aria-label="Identity and workspace links"
-          >
-            {#if $devActorMode && devFixturePersonas.length > 0}
-              <div class="shell-dev-personas">
-                <p class="shell-actor-label">Fixture persona</p>
-                <select
-                  class="shell-dev-persona-select"
-                  aria-label="Switch fixture persona"
-                  disabled={devPersonaBusy}
-                  onchange={(event) => {
-                    const value = String(
-                      event.currentTarget.value ?? "",
-                    ).trim();
-                    if (value) {
-                      void switchDevFixturePersona(value);
-                    }
-                    event.currentTarget.value = "";
-                  }}
-                >
-                  <option value="">Switch session…</option>
-                  {#each devFixturePersonas as persona}
-                    <option value={persona.persona_id}
-                      >{persona.display_label}</option
-                    >
-                  {/each}
-                </select>
-              </div>
-            {/if}
-            <nav class="shell-secondary-nav" aria-label="Workspace">
-              {#each settingsNavGroups as group}
-                <p class="shell-settings-group-label">{group.label}</p>
-                <div class="shell-settings-links">
-                  {#each group.items as item}
-                    {@const active = isActive(item.href)}
-                    {@const tour = dataTourForNav(item.href)}
-                    <a
-                      class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
-                      href={workspaceHref(item.href)}
-                      aria-label={item.label}
-                      data-tour={tour}
-                    >
-                      <svg
-                        class="shell-settings-icon"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        stroke-width="1.75"
-                        aria-hidden="true"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d={iconPath(item.icon)}
-                        />
-                      </svg>
-                      <span class="shell-settings-link-text">
-                        <span>{item.label}</span>
-                        {#if item.hint}
-                          <span class="shell-settings-link-hint"
-                            >{item.hint}</span
-                          >
-                        {/if}
-                      </span>
-                    </a>
-                  {/each}
-                </div>
-              {/each}
-            </nav>
-            {#if hostedMode}
-              <a class="shell-account-link" href={hostedAccountPath}>
-                <svg
-                  class="shell-account-icon"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="1.75"
-                  aria-hidden="true"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M19.5 3v6m0 0h-6m6 0l-9 9"
-                  />
-                </svg>
-                <span class="shell-account-link-text">
-                  <span>Account</span>
-                  <span class="shell-account-hint"
-                    >Manage workspaces & billing</span
-                  >
-                </span>
-              </a>
-            {/if}
-            <div class="shell-actor-identity">
-              <p class="shell-actor-label">
-                {$authenticatedAgent
-                  ? "Authenticated principal"
-                  : "Signed in as"}
-              </p>
-              <div class="shell-actor-row">
-                <span class="shell-actor-avatar" aria-hidden="true"
-                  >{initials}</span
-                >
-                <div class="shell-actor-copy">
-                  <p>{shellIdentity.primaryLabel}</p>
+          <div class="shell-account" id="shell-account-container">
+            {#if accountMenuOpen}
+              <div class="shell-account-menu" role="menu">
+                <div class="shell-account-menu-header">
+                  <p class="shell-account-menu-identity">
+                    {shellIdentity.primaryLabel}
+                  </p>
                   {#if shellIdentity.secondaryLabel}
                     <p
-                      class="shell-actor-handle"
+                      class="shell-account-menu-handle"
                       title={shellIdentity.secondaryLabel}
                     >
                       {shellIdentity.secondaryLabel}
                     </p>
                   {/if}
                 </div>
+
+                <div class="shell-account-menu-section">
+                  {#each settingsNavItems as item}
+                    {@const active = isActive(item.href)}
+                    {@const tour = dataTourForNav(item.href)}
+                    <a
+                      class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
+                      href={workspaceHref(item.href)}
+                      role="menuitem"
+                      data-tour={tour}
+                      onclick={closeAccountMenu}
+                    >
+                      <svg
+                        class="shell-settings-icon"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d={navIconPath(item.icon)} />
+                      </svg>
+                      <span class="shell-settings-link-text">{item.label}</span>
+                    </a>
+                  {/each}
+                </div>
+
+                {#if $devActorMode && devFixturePersonas.length > 0}
+                  <div class="shell-account-menu-divider"></div>
+                  <button
+                    class="shell-account-menu-action"
+                    type="button"
+                    aria-expanded={personaSubmenuOpen}
+                    disabled={devPersonaBusy}
+                    onclick={() => (personaSubmenuOpen = !personaSubmenuOpen)}
+                  >
+                    <svg
+                      class="shell-account-icon"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d={navIconPath("persona")} />
+                    </svg>
+                    <span class="shell-nav-copy">Switch fixture persona</span>
+                    <svg
+                      class={`shell-account-menu-chevron ${personaSubmenuOpen ? "shell-account-menu-chevron--open" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {#if personaSubmenuOpen}
+                    <div class="shell-account-persona-list">
+                      {#each devFixturePersonas as persona}
+                        <button
+                          class="shell-account-menu-action"
+                          type="button"
+                          disabled={devPersonaBusy}
+                          onclick={() => {
+                            closeAccountMenu();
+                            void switchDevFixturePersona(persona.persona_id);
+                          }}
+                        >
+                          <span class="shell-nav-copy"
+                            >{persona.display_label}</span
+                          >
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                {/if}
+
+                <div class="shell-account-menu-divider"></div>
+                <div class="shell-account-menu-section">
+                  {#if hostedMode}
+                    <a
+                      class="shell-account-link"
+                      href={hostedAccountPath}
+                      role="menuitem"
+                      onclick={closeAccountMenu}
+                    >
+                      <svg
+                        class="shell-account-icon"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d={navIconPath("account")} />
+                      </svg>
+                      <span class="shell-account-link-text">Account</span>
+                    </a>
+                  {/if}
+                  <button
+                    class="shell-account-menu-action shell-account-menu-action--danger"
+                    type="button"
+                    onclick={() => {
+                      closeAccountMenu();
+                      void switchIdentity();
+                    }}
+                  >
+                    <svg
+                      class="shell-account-icon"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d={navIconPath("signOut")} />
+                    </svg>
+                    <span class="shell-nav-copy"
+                      >{$authenticatedAgent
+                        ? "Sign out"
+                        : "Switch identity"}</span
+                    >
+                  </button>
+                </div>
               </div>
-            </div>
-            <button onclick={switchIdentity} type="button">
-              {$authenticatedAgent ? "Sign out" : "Switch identity"}
+            {/if}
+
+            <button
+              class={`shell-account-row ${accountMenuOpen ? "shell-account-row--open" : ""}`}
+              type="button"
+              aria-expanded={accountMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Account menu"
+              onclick={toggleAccountMenu}
+            >
+              <span class="shell-account-avatar" aria-hidden="true"
+                >{initials}</span
+              >
+              <span
+                class="shell-account-name"
+                title={shellIdentity.primaryLabel}
+                >{shellIdentity.primaryLabel}</span
+              >
+              <svg
+                class="shell-account-chevron"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
           </div>
         </div>
@@ -1089,51 +1171,33 @@
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
-            stroke-width="1.75"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             aria-hidden="true"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d={iconPath(item.icon)}
-            />
+            <path d={navIconPath(item.icon)} />
           </svg>
           <span>{item.label}</span>
         </a>
       {/each}
-      <button
-        class="shell-bottom-nav-item shell-bottom-nav-button"
-        aria-label="Search workspace"
-        onclick={() => (commandPaletteOpen = true)}
-        type="button"
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path
-            fill-rule="evenodd"
-            d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-            clip-rule="evenodd"
-          />
-        </svg>
-        <span>Search</span>
-      </button>
       <a
-        class="shell-bottom-nav-item"
+        class="shell-bottom-nav-item shell-bottom-nav-item--accent"
         href={workspaceHref("/pm")}
         aria-current={isActive("/pm") ? "page" : undefined}
       >
-        <svg
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          stroke-width="1.75"
-          aria-hidden="true"
-        >
-          <path
+        <span class="shell-bottom-nav-accent-glyph" aria-hidden="true">
+          <svg
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="1.5"
             stroke-linecap="round"
             stroke-linejoin="round"
-            d="M8.25 9h7.5m-7.5 4.5h4.5m-9.75 7.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v11.25A2.25 2.25 0 004.5 19.5z"
-          />
-        </svg>
+          >
+            <path d={navIconPath("askPm")} />
+          </svg>
+        </span>
         <span>Ask PM</span>
       </a>
       <a
@@ -1143,10 +1207,16 @@
         href={workspaceHref("/more")}
         aria-current={moreBottomNavActive ? "page" : undefined}
       >
-        <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="5" cy="12" r="1.5" />
-          <circle cx="12" cy="12" r="1.5" />
-          <circle cx="19" cy="12" r="1.5" />
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d={navIconPath("more")} />
         </svg>
         <span>More</span>
       </a>

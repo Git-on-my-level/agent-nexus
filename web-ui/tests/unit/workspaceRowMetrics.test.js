@@ -57,25 +57,25 @@ describe("workspaceRowMetrics", () => {
       expect(
         items.map((i) => ({ l: i.label, c: i.count, dv: i.displayValue })),
       ).toEqual([
-        { l: "Messages", c: 2, dv: undefined },
-        { l: "Revisions", c: 5, dv: undefined },
-        { l: "Characters", c: 120, dv: undefined },
+        { l: "Comments", c: 2, dv: undefined },
+        { l: "Versions", c: 5, dv: undefined },
       ]);
     });
 
-    it("falls back revisions to head_revision_number without revision_count", () => {
+    it("falls back versions to head_revision_number without revision_count", () => {
       const items = documentListMetricItems({
         head_revision_number: 3,
       });
-      const rev = items.find((i) => i.label === "Revisions");
+      const rev = items.find((i) => i.label === "Versions");
       expect(rev?.count).toBe(3);
     });
 
-    it("shows dash when head character enrichment is omitted", () => {
-      const items = documentListMetricItems({ revision_count: 1 });
-      const ch = items.find((i) => i.label === "Characters");
-      expect(ch?.displayValue).toBe("—");
-      expect(ch?.count).toBeUndefined();
+    it("never offers a character count", () => {
+      const items = documentListMetricItems({
+        revision_count: 1,
+        head_revision_character_count: 120,
+      });
+      expect(items.some((i) => i.label === "Characters")).toBe(false);
     });
   });
 });

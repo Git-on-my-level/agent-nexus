@@ -12,10 +12,13 @@
   import {
     PHASES,
     label,
+    isNexusOwned,
     workFreshness,
     workKey,
     errorMessage,
   } from "$lib/pm/presentation.js";
+  import { navIconPath } from "$lib/icons.js";
+  import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import {
     applyTaskPhaseMove,
     requestedDecisionMap,
@@ -28,6 +31,8 @@
     loaded = $state(false),
     now = $state(Date.now());
   let requested = $state({});
+  let boards = $state([]);
+  let boardsLoaded = false;
   let decisions = $state([]);
   let decisionsLoaded = $state(false);
   let shortcutsOpen = $state(false);
@@ -51,8 +56,33 @@
   let blockedCount = $derived(
     records.filter((work) => work.phase === "blocked").length,
   );
-  let staleCount = $derived(
-    records.filter((work) => workFreshness(work, now).key !== "fresh").length,
+  // Three separate facts, three separate filters. They used to be blended into
+  // one "without fresh evidence" number, which merged "we have never looked"
+  // with "the source is down" — two problems with different fixes.
+  let neverCheckedCount = $derived(
+    records.filter(
+      (work) =>
+        !isNexusOwned(work) && workFreshness(work, now).key === "unknown",
+    ).length,
+  );
+  let unreachableCount = $derived(
+    records.filter((work) => workFreshness(work, now).key === "error").length,
+  );
+  let boardTitles = $derived(
+    Object.fromEntries(
+      boards
+        .map((entry) => entry?.board ?? entry)
+        .filter((board) => board && (board.ref || board.handle || board.id))
+        .map((board) => [
+          board.ref || board.handle || board.id,
+          board.title || board.name || board.handle || board.id,
+        ]),
+    ),
+  );
+  let filterCount = $derived(
+    ["source", "phase", "freshness", "project_ref", "owner"].filter(
+      (key) => filters[key],
+    ).length,
   );
   let requestedDecisions = $derived(requestedDecisionMap(decisions, records));
   let search = $state("");
@@ -96,10 +126,20 @@
       ];
       nextCursor = result.next_cursor || "";
       if (!decisionsLoaded) void loadDecisions();
+      if (!boardsLoaded) void loadBoards();
     } catch (err) {
       if (id === requestId) error = errorMessage(err);
     } finally {
       if (id === requestId) loading = false;
+    }
+  }
+  async function loadBoards() {
+    boardsLoaded = true;
+    try {
+      const result = await coreClient.listBoards({ limit: 200 });
+      boards = Array.isArray(result?.boards) ? result.boards : [];
+    } catch {
+      // Fail soft: the Board column falls back to the board_ref slug.
     }
   }
   async function loadDecisions() {
@@ -189,6 +229,7 @@
     }
     if (event.key === "?") {
       event.preventDefault();
+      shortcutsOpener = document.activeElement;
       shortcutsOpen = true;
     } else if (event.key === "j") {
       event.preventDefault();
@@ -242,15 +283,18 @@
     ["Close this help", ["Esc"]],
   ];
   let shortcutsDialog = $state(null);
-  let shortcutsHint = $state(null);
   let shortcutsWereOpen = false;
+  // The "?" button is gone — the overlay is a keyboard surface, opened and
+  // closed with "?" — so focus returns to whatever the reader was on.
+  let shortcutsOpener = null;
   $effect(() => {
     if (shortcutsOpen) {
       shortcutsDialog?.focus();
       shortcutsWereOpen = true;
     } else if (shortcutsWereOpen) {
       shortcutsWereOpen = false;
-      shortcutsHint?.focus();
+      shortcutsOpener?.focus?.();
+      shortcutsOpener = null;
     }
   });
 </script>
@@ -264,24 +308,41 @@
         <span class="text-fg-muted"
           >{records.length}{nextCursor ? "+" : ""} tracked</span
         >{#if blockedCount}
-          · <span class="text-warn-text">{blockedCount} blocked</span
-          >{/if}{#if staleCount}
           · <a
-            class="text-fg-muted underline decoration-line-strong underline-offset-2 hover:text-fg"
+            class="ui-prose-link text-warn-text"
+            href={queryHref({ phase: "blocked" })}>{blockedCount} blocked</a
+          >{/if}{#if neverCheckedCount}
+          · <a class="ui-prose-link" href={queryHref({ freshness: "unknown" })}
+            >{neverCheckedCount} never checked</a
+          >{/if}{#if unreachableCount}
+          · <a
+            class="ui-prose-link text-warn-text"
             href={workspaceHref("/integrations")}
-            >{staleCount} without fresh evidence</a
+            >{unreachableCount} can't reach source</a
           >{/if}
       {/if}
     {/snippet}
     {#snippet actions()}
       <button
-        bind:this={shortcutsHint}
-        class="ui-btn-secondary min-h-0 px-2.5 py-1"
-        onclick={() => (shortcutsOpen = true)}
-        aria-label="Keyboard shortcuts"
-        aria-keyshortcuts="?"
-        title="Keyboard shortcuts">?</button
+        class="ui-icon-btn"
+        onclick={openCommandPalette}
+        aria-label="Search workspace"
+        aria-keyshortcuts="Meta+K"
+        title="Search workspace (⌘K)"
+        type="button"
       >
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d={navIconPath("search")} />
+        </svg>
+      </button>
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
       <a class="ui-btn-primary" href={workspaceHref("/tasks/new")}>New task</a>
     {/snippet}
@@ -304,53 +365,21 @@
         placeholder="Search title, source ID or next action…"
       />
     </form>
-    <label class="sr-only" for="task-filter-source">Source</label>
-    <select
-      id="task-filter-source"
-      class="ui-input w-auto"
-      value={filters.source}
-      onchange={(event) => setFilter("source", event.currentTarget.value)}
-    >
-      <option value="">All sources</option>
-      {#each SOURCES as [value, title]}<option {value}>{title}</option>{/each}
-    </select>
-    <label class="sr-only" for="task-filter-phase">Phase</label>
-    <select
-      id="task-filter-phase"
-      class="ui-input w-auto"
-      value={filters.phase}
-      onchange={(event) => setFilter("phase", event.currentTarget.value)}
-    >
-      <option value="">All phases</option>
-      {#each PHASES as phase}<option value={phase}>{label(phase)}</option
-        >{/each}
-    </select>
-    <label class="sr-only" for="task-filter-freshness">Freshness</label>
-    <select
-      id="task-filter-freshness"
-      class="ui-input w-auto"
-      value={filters.freshness}
-      onchange={(event) => setFilter("freshness", event.currentTarget.value)}
-    >
-      <option value="">Any freshness</option>
-      <option value="fresh">Fresh</option>
-      <option value="stale">Stale</option>
-      <option value="error">Refresh failed</option>
-      <option value="unknown">Unknown</option>
-    </select>
+    <!-- The board is a desktop surface: 18rem columns cannot be dragged on a
+         390px screen, so the toggle that leads there is hidden below 640px. -->
     <nav
-      class="flex rounded-md border border-line bg-bg-soft p-0.5"
+      class="hidden rounded-md border border-line bg-bg-soft p-0.5 sm:flex"
       aria-label="Task view"
     >
       <a
-        class="rounded px-2.5 py-1 text-micro {view === 'table'
+        class="rounded px-2.5 py-1 text-micro font-medium {view === 'table'
           ? 'bg-panel text-fg'
           : 'text-fg-muted'}"
         href={queryHref({ view: "table" })}
         aria-current={view === "table" ? "page" : undefined}>Table</a
       >
       <a
-        class="rounded px-2.5 py-1 text-micro {view === 'board'
+        class="rounded px-2.5 py-1 text-micro font-medium {view === 'board'
           ? 'bg-panel text-fg'
           : 'text-fg-muted'}"
         href={queryHref({ view: "board" })}
@@ -365,16 +394,53 @@
     >
   </div>
 
-  <div
-    class="flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-fg-muted"
-  >
-    <details class="text-micro text-fg-muted">
-      <summary class="w-fit cursor-pointer"
-        >Project and owner{filters.project_ref || filters.owner
-          ? " · active"
-          : ""}</summary
+  <!--
+    One disclosure, not four control rows. Source, Status, Freshness and the
+    project/owner form were four separate always-open surfaces above a list
+    that most readers never filtered.
+  -->
+  <details class="text-micro text-fg-muted">
+    <summary class="w-fit cursor-pointer"
+      >Filters{#if filterCount}
+        · {filterCount} active{/if}</summary
+    >
+    <div class="mt-2 flex flex-wrap items-end gap-2">
+      <label class="ui-label mb-0" for="task-filter-source">Source</label>
+      <select
+        id="task-filter-source"
+        class="ui-input w-auto"
+        value={filters.source}
+        onchange={(event) => setFilter("source", event.currentTarget.value)}
       >
+        <option value="">All sources</option>
+        {#each SOURCES as [value, title]}<option {value}>{title}</option>{/each}
+      </select>
+      <label class="ui-label mb-0" for="task-filter-phase">Status</label>
+      <select
+        id="task-filter-phase"
+        class="ui-input w-auto"
+        value={filters.phase}
+        onchange={(event) => setFilter("phase", event.currentTarget.value)}
+      >
+        <option value="">All statuses</option>
+        {#each PHASES as phase}<option value={phase}>{label(phase)}</option
+          >{/each}
+      </select>
+      <label class="ui-label mb-0" for="task-filter-freshness">Freshness</label>
+      <select
+        id="task-filter-freshness"
+        class="ui-input w-auto"
+        value={filters.freshness}
+        onchange={(event) => setFilter("freshness", event.currentTarget.value)}
+      >
+        <option value="">Any freshness</option>
+        <option value="fresh">Checked recently</option>
+        <option value="stale">Not checked lately</option>
+        <option value="error">Can't reach source</option>
+        <option value="unknown">Never checked</option>
+      </select>
       <form
+        class="flex flex-wrap items-end gap-2"
         onsubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
@@ -385,7 +451,6 @@
             }),
           );
         }}
-        class="mt-2 flex flex-wrap items-end gap-2"
       >
         <label
           >Project reference<input
@@ -403,13 +468,13 @@
           /></label
         ><button class="ui-btn-secondary" type="submit">Apply</button>
       </form>
-    </details>
-    {#if activeFilters}
-      <a class="ui-prose-link" href={workspaceHref(`/tasks?view=${view}`)}
-        >Clear filters</a
-      >
-    {/if}
-  </div>
+      {#if activeFilters}
+        <a class="ui-prose-link" href={workspaceHref(`/tasks?view=${view}`)}
+          >Clear filters</a
+        >
+      {/if}
+    </div>
+  </details>
 
   {#if moveError}
     <StateError message={moveError} />
@@ -432,7 +497,7 @@
 
   {#if loading && !records.length}
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
-      Loading commitments and evidence…
+      Loading tasks…
     </p>
   {:else if !error && !records.length}
     <section class="py-14 text-center">
@@ -460,6 +525,7 @@
       {now}
       {requested}
       {requestedDecisions}
+      {boardTitles}
       onMove={moveTask}
     />
   {/if}

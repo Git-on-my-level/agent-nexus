@@ -128,7 +128,7 @@
   class="mb-3 flex max-md:mb-2 flex-wrap items-center justify-between gap-2 sm:items-start sm:gap-4"
 >
   <div class="min-w-0 flex-1">
-    <h1 class="text-subtitle font-semibold text-fg">Threads</h1>
+    <h1 class="text-title text-fg">Threads</h1>
     <p class="mt-1 hidden text-micro text-fg-muted sm:block">
       Diagnostic list of append-only backing threads (timelines). Not every
       thread is a topic.

@@ -75,8 +75,41 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
     page.getByRole("heading", { name: "Tasks", exact: true }),
   ).toBeVisible();
 
-  await bottomNav.getByRole("button", { name: "Search workspace" }).click();
+  // Search left the bottom bar: the bar carries the three primitives, Ask PM
+  // and More. Workspace search is ⌘K plus a button in each list header.
+  await expect(
+    bottomNav.getByRole("button", { name: "Search workspace" }),
+  ).toHaveCount(0);
+  for (const name of ["Inbox", "Tasks", "Docs", "Ask PM", "More"]) {
+    await expect(bottomNav.getByRole("link", { name })).toBeVisible();
+  }
+
+  await page.getByRole("button", { name: "Search workspace" }).click();
   await expect(
     page.getByRole("dialog", { name: "Command palette" }),
+  ).toBeVisible();
+});
+
+test("sidebar account menu reaches settings and sign out", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("workspaceTourSeen.local", "1");
+  });
+
+  await page.goto(`${WS_HOME}/inbox`);
+  await unlockShellWithActor(page, `Menu User ${Date.now()}`);
+
+  const sidebar = page.getByRole("complementary", { name: "Primary" });
+  // The footer is one account row; every settings destination and the identity
+  // action live in the menu it opens, not in a permanent block.
+  await expect(sidebar.getByRole("link", { name: "Access" })).toHaveCount(0);
+
+  await sidebar.getByRole("button", { expanded: false }).last().click();
+
+  const menu = page.getByRole("menu");
+  for (const name of ["Access", "Secrets", "Integrations", "Audit"]) {
+    await expect(menu.getByRole("menuitem", { name })).toBeVisible();
+  }
+  await expect(
+    menu.getByRole("button", { name: /Sign out|Switch identity/ }),
   ).toBeVisible();
 });

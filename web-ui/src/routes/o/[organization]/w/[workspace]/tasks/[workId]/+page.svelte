@@ -11,12 +11,12 @@
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
-  import EvidenceTimes from "$lib/components/pm/EvidenceTimes.svelte";
   import {
     decisionPayload,
     decisionTitle,
     safeSourceHref,
     sourceLabel,
+    isNexusOwned,
     workFreshness,
     workKey,
     label,
@@ -43,6 +43,28 @@
   let signal = $derived(workFreshness(work));
   let pmHref = $derived(
     workspaceHref(`/pm?work_ref=${encodeURIComponent(work?.ref || workId)}`),
+  );
+  let sourceName = $derived(sourceLabel(work?.source));
+  let nexusOwned = $derived(work ? isNexusOwned(work) : false);
+  let lastCheckedAt = $derived(work?.freshness?.last_observed_at || "");
+  let refreshPending = $derived(
+    ["queued", "running"].includes(work?.refresh?.state),
+  );
+  let refreshError = $derived.by(() => {
+    const raw = work?.refresh?.last_error;
+    if (!raw) return "";
+    return typeof raw === "string" ? raw : JSON.stringify(raw);
+  });
+  let hasNext = $derived(
+    Boolean(
+      work?.next_actor ||
+      work?.next_action ||
+      work?.blockers?.length ||
+      work?.wake_condition,
+    ),
+  );
+  let hasDetails = $derived(
+    Boolean(work?.relations?.length || work?.executions?.length),
   );
   $effect(() => {
     const id = workId;
@@ -175,11 +197,16 @@
           <SignalBadge tone={work.phase === "blocked" ? "warn" : "neutral"}
             >{label(work.phase)}</SignalBadge
           >
-          {#if work.source?.authority !== "nexus"}
+          {#if !nexusOwned}
             <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
           {/if}
           {#if work.source?.native_status}
             <SignalBadge>{work.source.native_status}</SignalBadge>
+          {/if}
+          {#if !work.definition_of_done?.length}
+            <!-- A badge, not a sentence: the reader needs the fact, not a
+                 lecture about what a finished run cannot do. -->
+            <SignalBadge tone="warn">No acceptance criteria</SignalBadge>
           {/if}
           <span class="font-mono text-micro text-fg-subtle">{work.ref}</span>
         </span>
@@ -192,60 +219,87 @@
     </WorkspacePageHeader>
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
       <div class="min-w-0 space-y-7">
-        <section>
-          {#if work.summary}
-            <p class="whitespace-pre-wrap break-words text-meta text-fg">
-              {work.summary}
-            </p>
-          {/if}
-          <h2
-            class="mt-4 text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Acceptance criteria
-          </h2>
-          {#if work.definition_of_done?.length}<ul
-              class="mt-2 list-disc space-y-1 pl-5 text-meta text-fg"
-            >
+        {#if work.summary}
+          <p class="whitespace-pre-wrap break-words text-meta text-fg">
+            {work.summary}
+          </p>
+        {/if}
+        {#if work.definition_of_done?.length}
+          <section>
+            <h2 class="ui-label">Done when</h2>
+            <ul class="list-disc space-y-1 pl-5 text-meta text-fg">
               {#each work.definition_of_done as criterion}<li>
                   {criterion}
                 </li>{/each}
-            </ul>{:else}<p class="mt-1 text-meta text-warn-text">
-              None recorded. A finished run cannot complete this work.
-            </p>{/if}
-        </section>
-        <section>
-          <h2
-            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Next
-          </h2>
-          <p class="mt-2 text-meta text-fg">
-            {#if work.next_actor}<ActorLabel
-                label={work.next_actor}
-                size="xs"
-              />{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
-            {#if work.next_action}
-              <span class="ml-1">— {work.next_action}</span>
-            {/if}
-          </p>
-          {#if work.blockers?.length}
-            <ul class="mt-2 list-disc space-y-1 pl-5 text-meta text-warn-text">
-              {#each work.blockers as blocker}<li>{blocker}</li>{/each}
             </ul>
-          {/if}
-          {#if work.wake_condition}<p class="mt-2 text-micro text-fg-muted">
-              Wakes when: {work.wake_condition}
-            </p>{/if}
-        </section>
+          </section>
+        {/if}
+        {#if hasNext}
+          <section>
+            <h2 class="ui-label">Next</h2>
+            <p class="text-meta text-fg">
+              {#if work.next_actor}<ActorLabel
+                  label={work.next_actor}
+                  size="xs"
+                />{:else}<span class="text-fg-muted">Nobody assigned</span>{/if}
+              {#if work.next_action}
+                <span class="ml-1">— {work.next_action}</span>
+              {/if}
+            </p>
+            {#if work.blockers?.length}
+              <ul
+                class="mt-2 list-disc space-y-1 pl-5 text-meta text-warn-text"
+              >
+                {#each work.blockers as blocker}<li>{blocker}</li>{/each}
+              </ul>
+            {/if}
+            {#if work.wake_condition}<p class="mt-2 text-micro text-fg-muted">
+                Wakes when: {work.wake_condition}
+              </p>{/if}
+          </section>
+        {/if}
         <section>
-          <div class="flex flex-wrap items-end justify-between gap-2">
-            <h2
-              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-            >
-              Evidence
-            </h2>
+          <h2 class="ui-label">Evidence</h2>
+          <!--
+            One line, not a three-up grid of timestamps beside a rail of
+            collection internals. A reader wants to know when we last read the
+            source and how to read it again; "Source activity", "Meaningful
+            progress", "Next due" and the collector's state machine were
+            answering a question nobody asked.
+          -->
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {#if nexusOwned && !lastCheckedAt}
+              <p class="text-meta text-fg-muted">
+                Created here — nothing to check
+              </p>
+            {:else}
+              <p class="text-meta text-fg">
+                Last checked {#if lastCheckedAt}<time
+                    datetime={lastCheckedAt}
+                    title={formatAbsoluteDateTime(lastCheckedAt)}
+                    >{formatTimestamp(lastCheckedAt)}</time
+                  >{:else}never{/if} · {sourceName}
+              </p>
+              <button
+                class="ui-btn-secondary"
+                onclick={refresh}
+                disabled={refreshing || refreshPending}
+                >{refreshing
+                  ? "Checking…"
+                  : refreshPending
+                    ? "Check pending"
+                    : `Check ${sourceName} now`}</button
+              >
+            {/if}
           </div>
-          <div class="mt-2"><EvidenceTimes freshness={work.freshness} /></div>
+          {#if refreshError}
+            <p class="mt-2 break-words text-micro text-warn-text">
+              {refreshError}
+            </p>
+          {/if}
+          {#if notice}<p class="mt-2 text-micro text-fg-muted" role="status">
+              {notice}
+            </p>{/if}
           {#if evidenceError}<div class="mt-3">
               <StateError
                 title="Evidence history unavailable"
@@ -253,13 +307,10 @@
                 onretry={() => load()}
               />
             </div>{/if}
-          {#if !observations.length && !evidenceError}<p
-              class="mt-3 text-meta text-fg-muted"
-            >
-              No observations yet.
-            </p>{/if}
           <ol
-            class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
+            class="mt-3 divide-y divide-line-subtle {observations.length
+              ? 'border-t border-line-subtle'
+              : ''}"
           >
             {#each observations as observation, index (observation.id || index)}
               <li class="py-3">
@@ -286,14 +337,6 @@
                     >{formatTimestamp(observation.observed_at) ||
                       "time unknown"}</time
                   >
-                  <span class="text-micro text-fg-subtle">
-                    {observation.reader_id ||
-                      "unknown reader"}{#if observation.reader_revision}
-                      @{observation.reader_revision}{/if}{#if observation.source_revision}
-                      · <span class="font-mono"
-                        >{observation.source_revision}</span
-                      >{/if}
-                  </span>
                 </div>
                 {#if observation.error}<p
                     class="mt-1.5 text-meta text-danger-text"
@@ -328,22 +371,6 @@
                       </li>{/each}
                   </ul>
                 {/if}
-                <details class="mt-2 text-micro text-fg-muted">
-                  <summary class="cursor-pointer">Facts and coverage</summary>
-                  <pre
-                    class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono text-micro">{JSON.stringify(
-                      {
-                        facts: observation.facts,
-                        coverage: observation.coverage,
-                        actor_id: observation.actor_id,
-                        received_at: observation.received_at,
-                        status: observation.status,
-                        verification: observation.verification,
-                      },
-                      null,
-                      2,
-                    )}</pre>
-                </details>
               </li>
             {/each}
           </ol>
@@ -355,11 +382,7 @@
             >{/if}
         </section>
         <section>
-          <h2
-            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Decisions
-          </h2>
+          <h2 class="ui-label">Decisions</h2>
           {#if decisionsError}<div class="mt-3">
               <StateError
                 title="Decisions unavailable"
@@ -415,66 +438,104 @@
             {/each}
           </ul>
         </section>
-        {#if work.executions?.length}<section>
-            <h2
-              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-            >
-              Runs
-            </h2>
-            <ul class="mt-2 divide-y divide-line-subtle">
-              {#each work.executions as execution}<li
-                  class="py-2 text-meta text-fg"
-                >
-                  {#if safeSourceHref(execution.url)}<a
-                      class="text-accent-text hover:underline"
-                      href={safeSourceHref(execution.url)}
-                      target="_blank"
-                      rel="noreferrer"
-                      >{execution.authority} · {execution.run_id} ↗</a
-                    >{:else}{execution.authority} · {execution.run_id}{/if}
-                  <p class="mt-0.5 text-micro text-fg-muted">
-                    {[
-                      execution.host,
-                      execution.harness,
-                      execution.agent,
-                      execution.model,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") ||
-                      "Context not reported"}{#if execution.result_ref}
-                      · <span class="font-mono">{execution.result_ref}</span
-                      >{/if}
-                  </p>
-                </li>{/each}
-            </ul>
-          </section>{/if}
-        {#if work.relations?.length}<section>
-            <h2
-              class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-            >
-              Related
-            </h2>
-            <ul class="mt-2 space-y-1 text-meta">
-              {#each work.relations as relation}<li class="break-words">
-                  <span class="text-fg-muted">{relation.kind}</span>
-                  {#if relation.ref?.startsWith("card:")}<a
-                      class="font-mono text-accent-text hover:underline"
-                      href={workspaceHref(
-                        `/tasks/${encodeURIComponent(relation.ref)}`,
-                      )}>{relation.ref}</a
-                    >{:else}<span class="font-mono text-fg">{relation.ref}</span
-                    >{/if}
-                </li>{/each}
-            </ul>
-          </section>{/if}
+        <!--
+          One Details disclosure. Relations, run provenance and the raw reader
+          reports are the answers to "prove it" — real, occasionally needed,
+          and not what the page is for.
+        -->
+        {#if hasDetails || observations.length}
+          <details class="text-micro text-fg-muted">
+            <summary class="w-fit cursor-pointer">Details</summary>
+            <div class="mt-3 space-y-5">
+              {#if work.relations?.length}
+                <section>
+                  <h2 class="ui-label">Related</h2>
+                  <ul class="space-y-1 text-meta">
+                    {#each work.relations as relation}<li class="break-words">
+                        <span class="text-fg-muted">{relation.kind}</span>
+                        {#if relation.ref?.startsWith("card:")}<a
+                            class="font-mono text-accent-text hover:underline"
+                            href={workspaceHref(
+                              `/tasks/${encodeURIComponent(relation.ref)}`,
+                            )}>{relation.ref}</a
+                          >{:else}<span class="font-mono text-fg"
+                            >{relation.ref}</span
+                          >{/if}
+                      </li>{/each}
+                  </ul>
+                </section>
+              {/if}
+              {#if work.executions?.length}
+                <section>
+                  <h2 class="ui-label">Runs</h2>
+                  <ul class="divide-y divide-line-subtle">
+                    {#each work.executions as execution}<li
+                        class="py-2 text-meta text-fg"
+                      >
+                        {#if safeSourceHref(execution.url)}<a
+                            class="text-accent-text hover:underline"
+                            href={safeSourceHref(execution.url)}
+                            target="_blank"
+                            rel="noreferrer"
+                            >{execution.authority} · {execution.run_id} ↗</a
+                          >{:else}{execution.authority} · {execution.run_id}{/if}
+                        <p class="mt-0.5 text-micro text-fg-muted">
+                          {[
+                            execution.host,
+                            execution.harness,
+                            execution.agent,
+                            execution.model,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") ||
+                            "Context not reported"}{#if execution.result_ref}
+                            · <span class="font-mono"
+                              >{execution.result_ref}</span
+                            >{/if}
+                        </p>
+                      </li>{/each}
+                  </ul>
+                </section>
+              {/if}
+              {#if observations.length}
+                <section>
+                  <h2 class="ui-label">Reader reports</h2>
+                  <ul class="space-y-3">
+                    {#each observations as observation, index (observation.id || index)}
+                      <li>
+                        <p class="text-micro text-fg-subtle">
+                          {observation.reader_id ||
+                            "unknown reader"}{#if observation.reader_revision}
+                            @{observation.reader_revision}{/if}{#if observation.source_revision}
+                            · <span class="font-mono"
+                              >{observation.source_revision}</span
+                            >{/if}
+                        </p>
+                        <pre
+                          class="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono text-micro">{JSON.stringify(
+                            {
+                              facts: observation.facts,
+                              coverage: observation.coverage,
+                              actor_id: observation.actor_id,
+                              received_at: observation.received_at,
+                              status: observation.status,
+                              verification: observation.verification,
+                            },
+                            null,
+                            2,
+                          )}</pre>
+                      </li>
+                    {/each}
+                  </ul>
+                </section>
+              {/if}
+            </div>
+          </details>
+        {/if}
       </div>
       <aside class="space-y-6 text-meta" aria-label="Source and follow-through">
         <section>
-          <h2
-            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Source
-          </h2>
+          <h2 class="ui-label">Source</h2>
           <dl class="mt-2 space-y-2">
             <div>
               <dt class="text-micro text-fg-subtle">Authority</dt>
@@ -524,51 +585,7 @@
           {/if}
         </section>
         <section>
-          <h2
-            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Collection
-          </h2>
-          <dl class="mt-2 space-y-2">
-            <div>
-              <dt class="text-micro text-fg-subtle">State</dt>
-              <dd class="text-fg">{work.refresh?.state || "unknown"}</dd>
-              {#if work.refresh?.last_error}<dd
-                  class="break-words text-micro text-warn-text"
-                >
-                  {typeof work.refresh.last_error === "string"
-                    ? work.refresh.last_error
-                    : JSON.stringify(work.refresh.last_error)}
-                </dd>{/if}
-            </div>
-            {#each [["last_attempt_at", "Last attempt"], ["last_success_at", "Last successful read"], ["next_due_at", "Next due"]] as [field, title]}<div
-              >
-                <dt class="text-micro text-fg-subtle">{title}</dt>
-                <dd class="text-fg">
-                  {formatTimestamp(work.refresh?.[field]) || "—"}
-                </dd>
-              </div>{/each}
-          </dl>
-          <button
-            class="ui-btn-secondary mt-3"
-            onclick={refresh}
-            disabled={refreshing ||
-              ["queued", "running"].includes(work.refresh?.state)}
-            >{refreshing
-              ? "Requesting refresh…"
-              : ["queued", "running"].includes(work.refresh?.state)
-                ? "Refresh pending"
-                : "Request source refresh"}</button
-          >{#if notice}<p class="mt-2 text-micro text-fg-muted" role="status">
-              {notice}
-            </p>{/if}
-        </section>
-        <section>
-          <h2
-            class="text-micro font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            Decisions
-          </h2>
+          <h2 class="ui-label">Decisions</h2>
           <a
             class="mt-2 inline-block text-accent-text hover:underline"
             href={workspaceHref(

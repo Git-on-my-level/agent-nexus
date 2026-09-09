@@ -187,7 +187,7 @@ describe("PM operator interactions", () => {
     await screen.findByText("Reported claim");
     expect(screen.queryByText("Verified evidence")).toBeNull();
     await fireEvent.click(
-      screen.getByRole("button", { name: "Request source refresh" }),
+      screen.getByRole("button", { name: "Check GitHub now" }),
     );
     await screen.findByText(
       "Refresh queued. Evidence changes only after a reader reports back.",
@@ -480,12 +480,12 @@ describe("PM operator interactions", () => {
     render(WorkDetail);
     await screen.findByRole("heading", { name: "First commitment" });
     await fireEvent.click(
-      screen.getByRole("button", { name: "Request source refresh" }),
+      screen.getByRole("button", { name: "Check GitHub now" }),
     );
     state.route("/tasks/card%3Atwo", { workId: "card:two" });
     await screen.findByRole("heading", { name: "Second commitment" });
     expect(
-      screen.getByRole("button", { name: "Request source refresh" }).disabled,
+      screen.getByRole("button", { name: "Check GitHub now" }).disabled,
     ).toBe(false);
     pending.resolve({ refresh: { state: "queued" } });
   });

@@ -47,7 +47,19 @@ describe("PM evidence presentation", () => {
         },
         now,
       ),
-    ).toMatchObject({ key: "error", label: "Refresh failed" });
+    ).toMatchObject({ key: "error", label: "Can't reach source" });
+    // The label names the source when we know which one we could not reach.
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T13:00:00Z",
+          error: "Access denied",
+          sourceName: "GitHub",
+        },
+        now,
+      ),
+    ).toMatchObject({ key: "error", label: "Can't reach GitHub" });
   });
   it("shows malformed dates and future-clock observations as unknown", () => {
     expect(

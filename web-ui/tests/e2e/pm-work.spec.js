@@ -413,6 +413,12 @@ test("board and table preserve source states and show the same commitments", asy
       .locator("[data-work-ref]")
       .evaluateAll((rows) => rows.map((row) => row.dataset.workRef).sort()),
   ).toEqual(tableRefs);
+  // Source now lives inside the single Filters disclosure.
+  await page
+    .getByRole("group")
+    .filter({ hasText: "Filters" })
+    .locator("summary")
+    .click();
   await page.getByLabel("Source", { exact: true }).selectOption("github");
   await expect(page.locator("[data-work-ref]")).toHaveCount(1);
   expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0);
@@ -431,7 +437,8 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
   await expect(
     page.getByText("Verified evidence", { exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Request source refresh" }).click();
+  // The refresh button names the source it will read.
+  await page.getByRole("button", { name: "Check GitHub now" }).click();
   await expect(
     page.getByText(
       "Refresh queued. Evidence changes only after a reader reports back.",
@@ -564,9 +571,7 @@ for (const viewport of [
     ]) {
       await page.goto(`${root}${route.path}`);
       await expect(page.locator("h1").first()).toBeVisible();
-      await expect(
-        page.getByText("Loading commitments and evidence…"),
-      ).toHaveCount(0);
+      await expect(page.getByText("Loading tasks…")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: /Loading health|Loading decisions/ }),
       ).toHaveCount(0);

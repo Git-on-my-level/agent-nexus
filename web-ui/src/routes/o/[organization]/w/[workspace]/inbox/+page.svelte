@@ -11,6 +11,9 @@
     taskDetailPath,
     workKey,
   } from "$lib/pm/presentation.js";
+  import { navIconPath } from "$lib/icons.js";
+  import { openCommandPalette } from "$lib/stores/commandPalette.js";
+  import { INBOX_CATEGORY_LABELS } from "$lib/inboxUtils.js";
   import {
     INBOX_MAILBOXES,
     buildInboxRows,
@@ -21,7 +24,7 @@
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
+  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
 
   let decisions = $state([]);
@@ -36,6 +39,7 @@
   let notice = $state("");
   let answer = $state("");
   let choice = $state("");
+  let reply = $state("");
   let requestId = 0;
   let selectionRequest = 0;
   let ready = $state(false);
@@ -97,6 +101,7 @@
     untrack(() => {
       answer = "";
       choice = "";
+      reply = "";
       notice = "";
     });
   });
@@ -326,6 +331,60 @@
     }
   }
 
+  /**
+   * Sends one response and moves the row to Handled, without leaving the pane.
+   * Same call the standalone item route makes; the proposals are the whole
+   * point of the item, so they belong where the item is read.
+   */
+  async function respondInbox(item, text) {
+    const body = String(text ?? "").trim();
+    if (!item?.id || !body || busy) return;
+    busy = true;
+    error = "";
+    try {
+      await coreClient.respondInboxItem(item.id, {
+        response_text: body,
+        notify_mode: "none",
+      });
+      inboxItems = inboxItems.map((entry) =>
+        entry.id === item.id
+          ? {
+              ...entry,
+              status: "completed",
+              responded_at: new Date().toISOString(),
+              response_text: body,
+            }
+          : entry,
+      );
+      reply = "";
+      notice = "Response sent.";
+    } catch (err) {
+      error = errorMessage(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function inboxKindLabel(row) {
+    const kind = String(row?.category ?? "").toLowerCase();
+    return (INBOX_CATEGORY_LABELS[kind] ?? kind ?? "").toUpperCase();
+  }
+
+  function taskBlockers(item) {
+    const raw = item?.blockers ?? item?.blocked_by ?? [];
+    return (Array.isArray(raw) ? raw : [raw])
+      .map((value) =>
+        typeof value === "string" ? value : String(value?.summary ?? ""),
+      )
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+
+  function taskLastChecked(item) {
+    const observed = item?.freshness?.last_observed_at;
+    return observed ? formatTimestamp(observed) : "never";
+  }
+
   onMount(() => {
     void load();
     const timer = setInterval(() => {
@@ -350,8 +409,27 @@
 <svelte:head><title>Inbox · Agent Nexus</title></svelte:head>
 <WorkspacePageShell data-tour="inbox">
   <WorkspacePageHeader title="Inbox">
-    {#snippet subtitle()}Needs you, watching, and handled.{/snippet}
     {#snippet actions()}
+      <button
+        class="ui-icon-btn"
+        onclick={openCommandPalette}
+        aria-label="Search workspace"
+        aria-keyshortcuts="Meta+K"
+        title="Search workspace (⌘K)"
+        type="button"
+      >
+        <svg
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d={navIconPath("search")} />
+        </svg>
+      </button>
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
       <button class="ui-btn-secondary" onclick={load} disabled={loading || busy}
         >{loading ? "Loading inbox…" : "Reload"}</button
@@ -395,7 +473,8 @@
             {@const badge = inboxRowBadge(row, now)}
             <li>
               <a
-                class="block border-l-2 px-4 py-2 {selected?.id === row.id
+                class="flex h-[52px] flex-col justify-center gap-0.5 border-l-2 px-4 {selected?.id ===
+                row.id
                   ? 'border-accent bg-bg-soft'
                   : 'border-transparent hover:bg-panel-hover'}"
                 href={href({ item: row.id })}
@@ -405,29 +484,47 @@
                   : `inbox-row-${row.id}`}
                 aria-current={selected?.id === row.id ? "page" : undefined}
               >
-                <p class="truncate text-meta font-medium text-fg">
-                  {row.title}
-                </p>
-                <div
-                  class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
-                >
-                  <span class="truncate">{row.source || row.kind}</span>
-                  {#if row.time}
-                    <time datetime={row.time}>{formatTimestamp(row.time)}</time>
+                <div class="flex min-w-0 items-center gap-2">
+                  <span
+                    class="min-w-0 flex-1 truncate text-meta font-medium text-fg"
+                    >{row.title}</span
+                  >
+                  {#if badge}
+                    <SignalBadge tone={badge.tone} class="shrink-0"
+                      >{badge.label}</SignalBadge
+                    >
                   {/if}
-                  <span class="ml-auto">
-                    <ReceiptSignal signal={badge} quiet />
-                  </span>
+                </div>
+                <div
+                  class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
+                >
+                  <span class="min-w-0 flex-1 truncate"
+                    >{row.source || row.kind}{#if row.requesterLabel}
+                      · from {row.requesterLabel}{/if}</span
+                  >
+                  {#if row.time}
+                    <time class="shrink-0 tabular-nums" datetime={row.time}
+                      >{formatTimestamp(row.time)}</time
+                    >
+                  {/if}
                 </div>
               </a>
             </li>
           {:else}
             <li class="px-5 py-10 text-center">
-              <p class="text-meta font-medium text-fg">
-                {mailbox === "needs-you"
-                  ? "Nothing needs you"
-                  : "Nothing in this mailbox"}
-              </p>
+              {#if mailbox === "needs-you"}
+                <p class="text-meta font-medium text-fg">
+                  You're clear.{#if counts.watching}
+                    <a
+                      class="ui-prose-link"
+                      href={href({ mailbox: "watching", item: "" })}
+                      >{counts.watching}
+                      {counts.watching === 1 ? "thing is" : "things are"} being watched.</a
+                    >{/if}
+                </p>
+              {:else}
+                <p class="text-meta font-medium text-fg">Nothing here</p>
+              {/if}
             </li>
           {/each}
         </ul>
@@ -454,7 +551,12 @@
               href={href({ item: visible[selectedIndex + 1].id })}>Next</a
             >
           {/if}
-          <span class="ml-auto text-fg-subtle"
+          {#if selected?.ref}
+            <span class="min-w-0 truncate font-mono text-mono text-fg-subtle"
+              >{selected.ref}</span
+            >
+          {/if}
+          <span class="ml-auto shrink-0 tabular-nums text-fg-subtle"
             >{selectedIndex >= 0
               ? `${selectedIndex + 1} of ${visible.length}`
               : ""}</span
@@ -478,47 +580,130 @@
             onRefreshReceipt={refreshReceipt}
           />
         {:else if selected?.kind === "task"}
+          {@const taskItem = selected.item}
+          {@const blockers = taskBlockers(taskItem)}
           <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle font-semibold text-fg">
-              {selected.title}
-            </h2>
-            <p class="text-micro text-fg-muted">{selected.source}</p>
-            <a
-              class="ui-btn-primary inline-flex"
-              href={workspaceHref(taskDetailPath(selected.item))}>Open task</a
-            >
+            <h2 class="text-subtitle text-fg">{selected.title}</h2>
+            {#if blockers.length}
+              <div>
+                <p class="ui-label">Blocked by</p>
+                <ul class="space-y-1 text-meta text-fg">
+                  {#each blockers as blocker}
+                    <li>{blocker}</li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
+            {#if taskItem?.next_action}
+              <p class="text-meta text-fg">
+                {#if taskItem.next_actor}<span class="text-fg-muted"
+                    >{taskItem.next_actor} —
+                  </span>{/if}{taskItem.next_action}
+              </p>
+            {/if}
+            <p class="text-micro text-fg-muted">
+              Last checked {taskLastChecked(taskItem)}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <a
+                class="ui-btn-primary"
+                href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(selected.ref)}`}
+                >Ask PM about this</a
+              >
+              <a
+                class="ui-btn-secondary"
+                href={workspaceHref(taskDetailPath(taskItem))}>Open task</a
+              >
+            </div>
           </div>
         {:else if selected?.kind === "inbox"}
           <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle font-semibold text-fg">
-              {selected.title}
-            </h2>
-            <p class="text-micro text-fg-muted">{selected.source}</p>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              {#if inboxKindLabel(selected)}
+                <span class="ui-label mb-0">{inboxKindLabel(selected)}</span>
+              {/if}
+              {#if selected.severity}
+                <SignalBadge
+                  tone={String(selected.severity).toLowerCase() === "critical"
+                    ? "danger"
+                    : "warn"}>{selected.severity}</SignalBadge
+                >
+              {/if}
+              {#if selected.requesterLabel}
+                <span class="text-micro text-fg-muted"
+                  >from {selected.requesterLabel}</span
+                >
+              {/if}
+            </div>
+            <h2 class="text-subtitle text-fg">{selected.title}</h2>
+            {#if selected.body}
+              <p class="whitespace-pre-wrap text-meta leading-relaxed text-fg">
+                {selected.body}
+              </p>
+            {/if}
+            {#if inboxItemNeedsResponse(selected.item)}
+              {#if selected.responseProposals.length}
+                <div>
+                  <p class="ui-label">Send one of these</p>
+                  <div class="flex flex-wrap gap-2">
+                    {#each selected.responseProposals as proposal}
+                      <button
+                        class="ui-btn-secondary"
+                        onclick={() => respondInbox(selected.item, proposal)}
+                        disabled={busy}
+                        type="button">{proposal}</button
+                      >
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              <form
+                class="space-y-2"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void respondInbox(selected.item, reply);
+                }}
+              >
+                <label class="ui-label" for="inbox-reply">Reply</label>
+                <textarea
+                  id="inbox-reply"
+                  class="ui-input min-h-20"
+                  bind:value={reply}
+                  placeholder="Reply…"
+                ></textarea>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    class="ui-btn-primary"
+                    type="submit"
+                    disabled={busy || !reply.trim()}>Send reply</button
+                  >
+                  <a
+                    class="ui-btn-secondary"
+                    href={workspaceHref(
+                      `/inbox/${encodeURIComponent(selected.item.id)}`,
+                    )}>Open item</a
+                  >
+                  <button
+                    class="ui-btn-secondary"
+                    onclick={() => dismissInbox(selected.item)}
+                    disabled={busy}
+                    type="button">Dismiss from Inbox</button
+                  >
+                </div>
+              </form>
+            {:else}
               <a
-                class="ui-btn-secondary"
+                class="ui-btn-secondary inline-flex"
                 href={workspaceHref(
                   `/inbox/${encodeURIComponent(selected.item.id)}`,
                 )}>Open item</a
               >
-              {#if inboxItemNeedsResponse(selected.item)}
-                <button
-                  class="ui-btn-secondary"
-                  onclick={() => dismissInbox(selected.item)}
-                  disabled={busy}>Dismiss</button
-                >
-              {/if}
-            </div>
-            <p class="text-micro text-fg-subtle">
-              Dismiss and read apply to the inbox only.
-            </p>
+            {/if}
           </div>
         {:else if selected?.kind === "update"}
           <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle font-semibold text-fg">
-              {selected.title}
-            </h2>
-            <p class="text-micro text-fg-muted">
+            <h2 class="text-subtitle text-fg">{selected.title}</h2>
+            <p class="text-meta text-fg-muted">
               {selected.count || 0} grouped updates
             </p>
             <button

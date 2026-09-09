@@ -206,7 +206,8 @@ const QA_SCENES = [
     path: "/o/local/w/local/inbox",
     workspaceMode: "inbox-empty",
     waitFor: async (page) => {
-      await page.waitForSelector("text=Nothing needs you");
+      // Empty Needs you now reads "You're clear." plus a link to Watching.
+      await page.waitForSelector("text=You're clear.");
     },
   },
   {
