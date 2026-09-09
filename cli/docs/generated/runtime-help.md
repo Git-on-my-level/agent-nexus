@@ -161,6 +161,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs create` (local-helper): Create a durable document lineage, with a file-first text-doc path for agents.
 - `docs search` (local-helper): Search documents by title, body, source, tags, and comments.
 - `docs put` (local-helper): Create or replace a document by handle from a local file or stdin.
+- `docs ingest` (local-helper): Upsert markdown files under a directory as knowledge docs with source pointers.
 - `docs comment` (local-helper): Post a document comment (or a reply with `--reply-to`).
 - `docs comments` (local-helper): List document comments as a thread with stable ids.
 - `docs comments reply` (local-helper): Reply to a document comment.
@@ -1660,6 +1661,7 @@ Local inspection helpers:
   Mutation flow:
   docs create              Create durable context from flags plus `--body` / `--body-file`, or from advanced JSON.
   docs put                 Idempotent create-or-replace by handle from a local file.
+  docs ingest              Upsert a markdown tree as knowledge docs with source pointers.
   docs revise              Revise from `--body-file`; stages a diff proposal by default, or direct-writes with `--apply`.
    Tip: agents should draft Markdown locally and pass `--body-file <path>`. `docs revise doc:<handle> --body-file <path>` discovers the base revision and returns an apply command for the staged proposal.
 
@@ -5851,6 +5853,35 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs put ... ; anx --json docs put ... ; anx docs put ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `docs ingest`
+
+Upsert markdown files under a directory as knowledge docs with source pointers.
+
+```text
+Local Help: docs ingest
+
+- Kind: `local helper`
+- Summary: Upsert markdown files under a directory as knowledge docs with source pointers.
+- Composition: Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.
+- JSON body: Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.
+- Examples:
+  - `anx docs ingest ./kb --source https://example.invalid/kb`
+
+Flags:
+  <path>                       Directory of markdown files, or a single markdown file.
+  --source <url-prefix>        Required. Joined with each relative path as the canonical source pointer.
+  --tags <tag>                 Extra tags. `knowledge` is always applied.
+  --hosts <name>               Host names this knowledge tree applies to.
+  --verified-at <rfc3339>      When this knowledge tree was last verified.
+  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx docs ingest ... ; anx --json docs ingest ... ; anx docs ingest ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

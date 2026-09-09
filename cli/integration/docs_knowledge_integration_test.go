@@ -108,6 +108,92 @@ func firstSlicePath(t *testing.T, payload map[string]any, paths ...string) []any
 	return nil
 }
 
+func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
+	h := newLiveCoreHarness(t)
+	token := runToken()
+	h.registerAgentBootstrap(t, "host-a", "host-a."+token)
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "lessons"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nowBody := "# Omi now\n\nSynthetic ingest token nowwhiz-" + token + "\n"
+	noteBody := "# Lesson note\n\nSynthetic ingest token lessonwhiz-" + token + "\n"
+	if err := os.WriteFile(filepath.Join(root, "NOW.md"), []byte(nowBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "lessons", "note.md"), []byte(noteBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	first := h.runCLIExpectOK(t, "host-a", nil,
+		"docs", "ingest", root,
+		"--source", "https://example.invalid/kb",
+	)
+	if firstIntPath(t, first.Payload, "data.created") != 2 {
+		t.Fatalf("first ingest created: %s", first.Stdout)
+	}
+	if firstIntPath(t, first.Payload, "data.updated") != 0 || firstIntPath(t, first.Payload, "data.unchanged") != 0 {
+		t.Fatalf("first ingest should only create: %s", first.Stdout)
+	}
+
+	second := h.runCLIExpectOK(t, "host-a", nil,
+		"docs", "ingest", root,
+		"--source", "https://example.invalid/kb",
+	)
+	if firstIntPath(t, second.Payload, "data.created") != 0 || firstIntPath(t, second.Payload, "data.updated") != 0 {
+		t.Fatalf("second ingest made new revisions: %s", second.Stdout)
+	}
+	if firstIntPath(t, second.Payload, "data.unchanged") != 2 {
+		t.Fatalf("second ingest unchanged: %s", second.Stdout)
+	}
+
+	search := h.runCLIExpectOK(t, "host-a", nil, "docs", "search", "NOW.md", "--knowledge", "--limit", "20")
+	docs := firstSlicePath(t, search.Payload, "data.body.documents", "data.documents")
+	if len(docs) == 0 {
+		t.Fatalf("search missed NOW.md: %s", search.Stdout)
+	}
+	handle := ingestHandleFromSearch(docs, "NOW.md")
+	if handle == "" {
+		t.Fatalf("search rows lacked NOW.md source: %s", search.Stdout)
+	}
+	history := h.runCLIExpectOK(t, "host-a", nil, "docs", "history", handle)
+	revisions := firstSlicePath(t, history.Payload, "data.body.revisions", "data.revisions")
+	if len(revisions) != 1 {
+		t.Fatalf("expected 1 revision after second ingest, got %d: %s", len(revisions), history.Stdout)
+	}
+}
+
+func firstIntPath(t *testing.T, payload map[string]any, path string) int {
+	t.Helper()
+	value, ok := getPathValue(payload, path)
+	if !ok {
+		t.Fatalf("missing %s in %#v", path, payload)
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		t.Fatalf("%s is %T %#v", path, value, value)
+		return 0
+	}
+}
+
+func ingestHandleFromSearch(documents []any, filename string) string {
+	for _, raw := range documents {
+		row, _ := raw.(map[string]any)
+		source := strings.TrimSpace(fmt.Sprint(row["source"]))
+		if strings.Contains(source, filename) {
+			return strings.TrimSpace(fmt.Sprint(row["handle"]))
+		}
+	}
+	return ""
+}
+
 func searchHasHandle(documents []any, handle string) bool {
 	for _, raw := range documents {
 		row, _ := raw.(map[string]any)

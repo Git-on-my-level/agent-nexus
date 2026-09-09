@@ -48,6 +48,11 @@ func preflightConfigIndependentUsage(args []string) (string, error) {
 	if err := preflightFlagUsage(commandArgs, preflightFlagSpecs()[commandName]); err != nil {
 		return commandName, err
 	}
+	if commandName == "docs ingest" {
+		if err := preflightDocsIngestArgs(commandArgs); err != nil {
+			return commandName, err
+		}
+	}
 	return commandName, nil
 }
 
@@ -311,6 +316,39 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 		}
 	}
 	return validateLifecycleFilterFlags(seen["include-archived"], seen["archived-only"], seen["include-trashed"], seen["trashed-only"])
+}
+
+func preflightDocsIngestArgs(args []string) error {
+	hasPath := false
+	hasSource := false
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--source" {
+			hasSource = true
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--source=") {
+			hasSource = true
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		hasPath = true
+	}
+	if !hasPath {
+		return errnorm.Usage("invalid_request", "path is required; pass a directory of markdown files")
+	}
+	if !hasSource {
+		return errnorm.Usage("invalid_request", "`--source` is required; pass a URL prefix joined with each relative path")
+	}
+	return nil
 }
 
 func preflightRootCommands() map[string]struct{} {
@@ -577,6 +615,13 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"handle":      valueFlag,
 			"body":        valueFlag,
 			"body-file":   valueFlag,
+			"actor-id":    valueFlag,
+		},
+		"docs ingest": {
+			"source":      valueFlag,
+			"tags":        valueFlag,
+			"hosts":       valueFlag,
+			"verified-at": valueFlag,
 			"actor-id":    valueFlag,
 		},
 		"docs get": {

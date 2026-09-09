@@ -237,6 +237,59 @@ func TestDocumentKnowledgeSearchCommentsAndPut(t *testing.T) {
 	_ = other
 }
 
+func TestUpdateDocumentNoopWhenContentAndMetadataMatch(t *testing.T) {
+	t.Parallel()
+
+	workspace, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+	ctx := context.Background()
+	doc, rev, err := store.CreateDocument(ctx, "actor-a", map[string]any{
+		"handle": "kb-noop",
+		"title":  "Noop",
+		"source": "https://example.invalid/kb/noop.md",
+		"tags":   []string{"knowledge"},
+	}, "same body", "text", nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	head := strings.TrimSpace(anyString(rev["revision_id"]))
+	if head == "" {
+		head = strings.TrimSpace(anyString(doc["head_revision_id"]))
+	}
+	again, next, err := store.UpdateDocument(ctx, "actor-a", anyString(doc["id"]), map[string]any{
+		"title":  "Noop",
+		"source": "https://example.invalid/kb/noop.md",
+		"tags":   []string{"knowledge"},
+	}, head, "same body", "text", nil, nil)
+	if err != nil {
+		t.Fatalf("noop update: %v", err)
+	}
+	if strings.TrimSpace(anyString(next["revision_id"])) != head {
+		t.Fatalf("expected unchanged revision, got %q vs %q", next["revision_id"], head)
+	}
+	if anyInt(next["revision_number"]) != 1 {
+		t.Fatalf("expected revision 1 after noop, doc=%#v rev=%#v", again, next)
+	}
+}
+
+func anyInt(raw any) int {
+	switch typed := raw.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, item := range values {
 		if item == want {
