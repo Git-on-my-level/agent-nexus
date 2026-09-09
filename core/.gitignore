@@ -3,6 +3,7 @@
 
 # Runtime workspace
 .anx-workspace/
+.anx-workspace-jit/
 # Ephemeral workspace roots from seed/verify scripts (unique path per run; same artifacts as above)
 .anx-workspace-seed-verify-*/
 

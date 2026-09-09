@@ -83,6 +83,26 @@ files are read in place. No forwarding, interactive prompts, caller-controlled
 commands, or source writes are introduced. SSH Git evidence establishes code
 state, not deployment success.
 
+## Generated readers and isolation
+
+`transport: "jit"` wraps a trusted built-in source reader. Generated code is a
+stdin/stdout transform over that snapshot: no network, no credentials, no host
+path grants. Linux executes the artifact under bubblewrap (`bwrap --unshare-all`,
+prlimit). macOS executes it under `sandbox-exec` with a deny-default Seatbelt
+profile: process-exec of the artifact, scratch writes, `(deny network*)`,
+`(deny process-fork)`, and content-read denials for `/Users`, `/Volumes` (except
+the artifact and scratch), keychains and `/private/etc`. Hosts without an
+enforced runner fail closed. A managed directory is not a sandbox.
+
+Seatbelt cannot set Darwin `RLIMIT_AS`/`DATA`/`RSS` (the kernel returns
+Invalid argument) and must not set `RLIMIT_NPROC` (it is user-global). CPU,
+file size, open files and core dumps are applied with `ulimit` in a trusted
+`/bin/sh` wrapper around `sandbox-exec`, analogous to Linux `prlimit`. Wall
+timeout and output bytes are enforced in Go.
+
+Example JIT target fields: `jit_state_root` (absolute 0700 directory),
+`jit_adapter_id`, and `jit_policy` with bounded isolation limits.
+
 ## Conversational PM runtime
 
 The PM service uses the same SQLite and the current workspace principal.

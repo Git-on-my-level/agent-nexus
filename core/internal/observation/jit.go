@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"debug/elf"
+	"debug/macho"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -147,7 +150,7 @@ func NewJITManager(root string, p JITPolicy) (*JITManager, error) {
 	if info.Mode().Perm()&0077 != 0 {
 		return nil, failure(ErrPolicy, "JIT state root must have private 0700 permissions")
 	}
-	return &JITManager{root: root, policy: p, runner: NewBubblewrapRunner()}, nil
+	return &JITManager{root: root, policy: p, runner: NewIsolatedRunner()}, nil
 }
 func (m *JITManager) IsolationAvailable() error { return m.runner.Available() }
 func (m *JITManager) locked(fn func() error) error {
@@ -228,6 +231,12 @@ func (m *JITManager) Status(id string) (state AdapterState, err error) {
 	err = m.locked(func() error { var e error; state, e = m.load(id); return e })
 	return
 }
+func validateArtifact(data []byte) error {
+	if runtime.GOOS == "darwin" {
+		return hostMachO(data)
+	}
+	return staticELF(data)
+}
 func staticELF(data []byte) error {
 	f, err := elf.NewFile(bytes.NewReader(data))
 	if err != nil {
@@ -248,6 +257,47 @@ func staticELF(data []byte) error {
 	}
 	return nil
 }
+
+func hostMachO(data []byte) error {
+	if _, err := macho.NewFatFile(bytes.NewReader(data)); err == nil {
+		return failure(ErrPolicy, "universal Mach-O artifacts are not permitted")
+	}
+	f, err := macho.NewFile(bytes.NewReader(data))
+	if err != nil {
+		return failure(ErrInvalidOutput, "generated artifact must be a thin Mach-O executable")
+	}
+	defer f.Close()
+	if f.Type != macho.TypeExec {
+		return failure(ErrPolicy, "generated artifact must be a Mach-O executable")
+	}
+	switch runtime.GOARCH {
+	case "arm64":
+		if f.Cpu != macho.CpuArm64 {
+			return failure(ErrPolicy, "generated artifact CPU does not match this host")
+		}
+	case "amd64":
+		if f.Cpu != macho.CpuAmd64 {
+			return failure(ErrPolicy, "generated artifact CPU does not match this host")
+		}
+	default:
+		return failure(ErrPolicy, "unsupported generated executable format")
+	}
+	for _, load := range f.Loads {
+		if _, ok := load.(*macho.Rpath); ok {
+			return failure(ErrPolicy, "generated executable rpath is not permitted")
+		}
+	}
+	libs, err := f.ImportedLibraries()
+	if err != nil {
+		return failure(ErrPolicy, "generated executable dependencies are not permitted")
+	}
+	for _, lib := range libs {
+		if strings.Contains(lib, "..") || strings.HasPrefix(lib, "@") || !(strings.HasPrefix(lib, "/usr/lib/") || strings.HasPrefix(lib, "/System/Library/")) {
+			return failure(ErrPolicy, "generated executable dependencies are not permitted")
+		}
+	}
+	return nil
+}
 func versionDigest(manifest Manifest, artifactDigest string) string {
 	b, _ := json.Marshal(manifest)
 	return digest(append(b, []byte(artifactDigest)...))
@@ -259,7 +309,7 @@ func (m *JITManager) Stage(manifest Manifest, artifact []byte) (v Version, err e
 	if len(artifact) == 0 || int64(len(artifact)) > m.policy.MaxArtifactBytes {
 		return v, failure(ErrLimit, "generated artifact exceeds byte limit")
 	}
-	if err = staticELF(artifact); err != nil {
+	if err = validateArtifact(artifact); err != nil {
 		return
 	}
 	hash := digest(artifact)
@@ -342,7 +392,7 @@ func (m *JITManager) artifact(v Version) (string, error) {
 	if digest(b) != v.ArtifactDigest {
 		return "", failure(ErrPolicy, "generated executable digest changed")
 	}
-	if err = staticELF(b); err != nil {
+	if err = validateArtifact(b); err != nil {
 		return "", err
 	}
 	return p, nil

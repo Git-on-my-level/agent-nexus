@@ -3,6 +3,7 @@ package observation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -64,7 +65,7 @@ func TestJITRequiresFixturesCanaryAndAtomicActivation(t *testing.T) {
 	manager.runner = fake
 	manifest := Manifest{AdapterID: "fixture", Target: fixtureTarget(), Envelope: Envelope{}, Limits: fixtureJITPolicy().Limits}
 	// minimalStaticELF is a harmless structurally valid ELF fixture, never executed.
-	first, err := manager.Stage(manifest, minimalStaticELF(1))
+	first, err := manager.Stage(manifest, stagedArtifact(t, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +129,25 @@ func (f *validationIsolator) Run(_ context.Context, _ string, in []byte, _ Isola
 	}
 	return f.output, nil
 }
+func stagedArtifact(t *testing.T, marker byte) []byte {
+	t.Helper()
+	if runtime.GOOS != "darwin" {
+		return minimalStaticELF(marker)
+	}
+	return compileIsolatedFixtureBytes(t, fmt.Sprintf("#include <stdio.h>\nint main(void){ return %d; }\n", marker))
+}
+
+func compileIsolatedFixtureBytes(t *testing.T, source string) []byte {
+	t.Helper()
+	dir := t.TempDir()
+	path := compileIsolatedFixture(t, dir, "artifact", source)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func minimalStaticELF(marker byte) []byte {
 	// ELF64 little endian, ET_EXEC, AMD64, one executable PT_LOAD and no interpreter.
 	b := make([]byte, 128)
@@ -164,7 +184,7 @@ func TestJITRollbackAndFailureSuspension(t *testing.T) {
 	}}}
 	create := func(marker byte) Version {
 		t.Helper()
-		v, err := manager.Stage(manifest, minimalStaticELF(marker))
+		v, err := manager.Stage(manifest, stagedArtifact(t, marker))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -221,7 +241,8 @@ func TestJITStageRecoversArtifactPublishedBeforeStateCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := Manifest{AdapterID: "fixture", Target: fixtureTarget(), Limits: fixtureJITPolicy().Limits}
-	first, err := manager.Stage(manifest, minimalStaticELF(3))
+	artifact := stagedArtifact(t, 3)
+	first, err := manager.Stage(manifest, artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +250,7 @@ func TestJITStageRecoversArtifactPublishedBeforeStateCommit(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "fixture", "state.json")); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := manager.Stage(manifest, minimalStaticELF(3))
+	recovered, err := manager.Stage(manifest, artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
