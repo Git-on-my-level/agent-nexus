@@ -13,6 +13,7 @@ module.exports = defineConfig({
   use: {
     baseURL,
     headless: true,
+    viewport: { width: 1280, height: 800 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
