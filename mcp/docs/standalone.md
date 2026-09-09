@@ -61,7 +61,12 @@ Supported overrides:
 With a workspace profile, `anx-mcp` exposes the same docs search/get/put/comment
 commands as the CLI (`docs.search`, `docs.get`, `docs.put`, `docs.comments.*`).
 Authorization is the profile access token. Tag agent-facing docs `knowledge`.
-Git-repo ingest is a follow-up; this slice is live core + CLI/MCP only.
+Git-repo ingest is a CLI composition over `docs.put`:
+
+```bash
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+```
 
 Diagnostics go to stderr. stdout is reserved for newline-delimited JSON-RPC MCP
 messages.

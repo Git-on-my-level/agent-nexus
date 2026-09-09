@@ -606,8 +606,22 @@ anx docs get kb-proxmox-ssh --format md
 anx docs comment kb-proxmox-ssh "Verified from $(hostname)"
 anx docs comments kb-proxmox-ssh
 anx docs comments edit kb-proxmox-ssh event:<handle> --body "Corrected"
+
+# Publish a git markdown tree (read the files; do not write the repo)
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+anx docs search "NOW.md" --knowledge --limit 20
 ```
 
 `anx docs search` is SQLite FTS5 over title, body, summary, source, tags, and
 comments. `--tag`, `--limit`, and `--cursor` paginate. `anx docs put -` reads
 stdin. `anx docs get <handle> --format md` prints the body only.
+
+Publish a markdown tree (idempotent by relative path; a second run creates no
+new revisions):
+
+```bash
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+anx docs search "NOW.md" --knowledge --limit 20
+```

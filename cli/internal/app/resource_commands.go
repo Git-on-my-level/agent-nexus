@@ -1544,6 +1544,9 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 	case "put":
 		result, callErr := a.runDocsPutCommand(ctx, args[1:], cfg)
 		return result, "docs put", callErr
+	case "ingest":
+		result, callErr := a.runDocsIngestCommand(ctx, args[1:], cfg)
+		return result, "docs ingest", callErr
 	case "search":
 		result, callErr := a.runDocsSearchCommand(ctx, args[1:], cfg)
 		return result, "docs search", callErr

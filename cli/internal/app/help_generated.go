@@ -294,6 +294,23 @@ var localHelperTopics = []localHelperTopic{
 		},
 	},
 	{
+		Path:        "docs ingest",
+		Summary:     "Upsert markdown files under a directory as knowledge docs with source pointers.",
+		JSONShape:   "Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.",
+		Composition: "Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.",
+		Examples: []string{
+			"anx docs ingest ./kb --source https://example.invalid/kb",
+		},
+		Flags: []localHelperFlag{
+			{Name: "<path>", Description: "Directory of markdown files, or a single markdown file."},
+			{Name: "--source <url-prefix>", Description: "Required. Joined with each relative path as the canonical source pointer."},
+			{Name: "--tags <tag>", Description: "Extra tags. `knowledge` is always applied."},
+			{Name: "--hosts <name>", Description: "Host names this knowledge tree applies to."},
+			{Name: "--verified-at <rfc3339>", Description: "When this knowledge tree was last verified."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+		},
+	},
+	{
 		Path:        "docs comment",
 		Summary:     "Post a document comment (or a reply with `--reply-to`).",
 		JSONShape:   "POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.",
@@ -1408,6 +1425,7 @@ Lower-level helpers:
   Mutation flow:
   docs create              Create durable context from flags plus ` + "`--body`" + ` / ` + "`--body-file`" + `, or from advanced JSON.
   docs put                 Idempotent create-or-replace by handle from a local file.
+  docs ingest              Upsert a markdown tree as knowledge docs with source pointers.
   docs revise              Revise from ` + "`--body-file`" + `; stages a diff proposal by default, or direct-writes with ` + "`--apply`" + `.
    Tip: agents should draft Markdown locally and pass ` + "`--body-file <path>`" + `. ` + "`docs revise doc:<handle> --body-file <path>`" + ` discovers the base revision and returns an apply command for the staged proposal.`)
 	case "meta":

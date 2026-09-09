@@ -104,6 +104,11 @@ anx docs search "proxmox" --knowledge --host "$(hostname)" --limit 20
 anx docs get kb-proxmox-ssh --format md
 anx docs comments kb-proxmox-ssh
 anx docs comment kb-proxmox-ssh "Verified from $(hostname)"
+
+# Publish a git markdown tree this host can read
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+anx docs search "NOW.md" --knowledge --limit 20
 ```
 
 The MCP server exposes the same commands. After `initialize` / `tools/list`,
