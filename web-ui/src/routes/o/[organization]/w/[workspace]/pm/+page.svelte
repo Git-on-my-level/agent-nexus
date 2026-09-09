@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -122,18 +122,25 @@
     const measured = Number(element.scrollHeight) || 0;
     if (measured > 0) element.style.height = `${Math.min(measured, 200)}px`;
   });
-  // Stick to the newest turn while the reader is already at the bottom.
+  // Stick to the newest turn while the reader is already at the bottom. Only a
+  // new turn (or an answer arriving on one) may move the view — the reader's own
+  // scroll position is read untracked so scrolling never re-pins them.
   $effect(() => {
-    const count = turns.length;
+    const signature = turns
+      .map((turn) => `${turn.id}:${turn.response ? 1 : 0}`)
+      .join("|");
     const element = threadElement;
-    if (!element || !count || loadingOlder) return;
-    if (!anchored) {
-      anchored = true;
-      void tick().then(() => scrollToLatest("auto"));
-      return;
-    }
-    if (!atBottom) return;
-    void tick().then(() => scrollToLatest(reducedMotion ? "auto" : "smooth"));
+    if (!element || !signature) return;
+    untrack(() => {
+      if (loadingOlder) return;
+      if (!anchored) {
+        anchored = true;
+        void tick().then(() => scrollToLatest("auto"));
+        return;
+      }
+      if (!atBottom) return;
+      void tick().then(() => scrollToLatest(reducedMotion ? "auto" : "smooth"));
+    });
   });
 
   function scrollToLatest(behavior = "auto") {
