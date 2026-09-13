@@ -63,13 +63,19 @@ describe("task board moves", () => {
       source: { authority: "github", native_id: "12" },
       version: 3,
     };
-    const result = await applyTaskPhaseMove(coreClient, work, "done");
+    // A done request needs evidence wherever the work lives.
+    expect((await applyTaskPhaseMove(coreClient, work, "done")).kind).toBe(
+      "needs_evidence",
+    );
+    const result = await applyTaskPhaseMove(coreClient, work, "done", {
+      resolutionRefs: ["artifact:proof"],
+    });
     expect(result.kind).toBe("requested");
     expect(coreClient.moveBoardCard).not.toHaveBeenCalled();
     expect(coreClient.createPmDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         instruction: "request status change at GitHub to Done",
-        payload: { phase: "done" },
+        payload: { phase: "done", resolution_refs: ["artifact:proof"] },
         work_ref: "card:gh",
         scope: "work.phase",
       }),

@@ -182,9 +182,10 @@
     }
     try {
       let resolutionRefs = [];
-      if (isNexusOwned(work) && phase === "done") {
-        // Done is a completion; core requires evidence that exists. Collect
-        // it inline (no prompt(): embedded browsers and phones lack it).
+      if (phase === "done") {
+        // Done is a completion; core requires evidence that exists, whether
+        // Nexus applies it or the PM requests it at the source. Collect it
+        // inline (no prompt(): embedded browsers and phones lack it).
         if (!evidenceFor || evidenceFor.key !== key) {
           evidenceFor = { key, work, phase, ref: "" };
           moveNotice = null;

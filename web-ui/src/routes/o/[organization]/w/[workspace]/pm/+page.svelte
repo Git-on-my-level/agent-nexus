@@ -317,7 +317,9 @@
       // Landing on an empty composer while a conversation already exists
       // reads as "nothing happened". Open the most recent one instead; the
       // composer still sends into it, and New starts a fresh thread.
-      if (!selectedId && !workRef && conversations.length > 0) {
+      // "New" (?new=1) means an empty composer on purpose.
+      const startNew = $page.url.searchParams.get("new") === "1";
+      if (!selectedId && !workRef && !startNew && conversations.length > 0) {
         const latest = [...conversations].sort((a, b) =>
           String(b.updated_at || b.created_at || "").localeCompare(
             String(a.updated_at || a.created_at || ""),
@@ -441,7 +443,8 @@
     "Which commitments are blocked, and who acts next?",
     "Where is the evidence still uncertain?",
   ];
-  const RUNBOOK_HREF = "/cli/docs/runbook.md#pm-runner-anx-pm-serve";
+  const RUNBOOK_HREF =
+    "https://github.com/Git-on-my-level/agent-nexus/blob/main/cli/docs/runbook.md#pm-runner-anx-pm-serve";
   onMount(() => {
     void initialize();
     const motion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -550,7 +553,7 @@
             {/if}
           </div>
         </details>
-        <a class="ui-btn-secondary" href={workspaceHref("/pm")}>New</a>
+        <a class="ui-btn-secondary" href={workspaceHref("/pm?new=1")}>New</a>
       {/snippet}
     </WorkspacePageHeader>
 

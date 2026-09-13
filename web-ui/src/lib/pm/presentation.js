@@ -357,6 +357,13 @@ export function errorMessage(error) {
       ? error.message
       : String(error || "Unable to load workspace data.");
   if (/capacity reached|busy/i.test(raw)) {
+    const details = error?.body?.error?.details ?? {};
+    if (String(details.reason ?? "") === "capacity") {
+      const limit = details.limit
+        ? ` (${details.in_flight ?? "?"} of ${details.limit})`
+        : "";
+      return `The PM is at its in-flight limit for this workspace${limit}. Your message is kept; send it once another turn finishes or expires, or release a stuck runner.`;
+    }
     return "Your previous message in this conversation is still queued or being answered. Your new message is kept; send it once that turn finishes or expires, or start a new conversation.";
   }
   if (isSessionExpired(error)) {

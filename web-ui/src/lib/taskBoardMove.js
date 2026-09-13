@@ -20,12 +20,19 @@ export function statusChangeInstruction(work, phase) {
   return `${STATUS_CHANGE_PREFIX} at ${source} to ${label(phase)}`;
 }
 
-export function createStatusChangeDecisionPayload(work, phase) {
+export function createStatusChangeDecisionPayload(
+  work,
+  phase,
+  { resolutionRefs = [] } = {},
+) {
   return {
     instruction: statusChangeInstruction(work, phase),
     // The target phase travels as structured data; the instruction is prose
     // for the reader and never the thing core executes.
-    payload: { phase },
+    payload:
+      phase === "done" && resolutionRefs.length
+        ? { phase, resolution_refs: resolutionRefs }
+        : { phase },
     request_key: phaseRequestKey(work, phase),
     scope: "work.phase",
     target_revision: workTargetRevision(work),
@@ -87,11 +94,12 @@ export async function applyTaskPhaseMove(
   if (!work || !phase || (work.phase || "unknown") === phase) {
     return { kind: "noop", work };
   }
+  // Done is a completion, and core refuses a completion without evidence,
+  // whether it applies the move itself or requests it at the source.
+  if (phase === "done" && !resolutionRefs.length) {
+    return { kind: "needs_evidence", work };
+  }
   if (isNexusOwned(work)) {
-    // Done is a completion, and core refuses a completion without evidence.
-    if (phase === "done" && !resolutionRefs.length) {
-      return { kind: "needs_evidence", work };
-    }
     const cardId = cardIdFromWork(work);
     const boardId = String(work.board_ref || work.board_id || "").trim();
     if (!boardId) {
@@ -117,7 +125,7 @@ export async function applyTaskPhaseMove(
     return { kind: "moved", work: { ...work, phase } };
   }
   const decision = await coreClient.createPmDecision(
-    createStatusChangeDecisionPayload(work, phase),
+    createStatusChangeDecisionPayload(work, phase, { resolutionRefs }),
   );
   return { kind: "requested", work, decision };
 }

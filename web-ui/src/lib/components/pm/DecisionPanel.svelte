@@ -27,6 +27,7 @@
     actorLabel = (id) => id,
     currentActorId = "",
     pmHref = "",
+    replacement = null,
     answer = $bindable(""),
     choice = $bindable(""),
     onAnswer,
@@ -229,7 +230,17 @@
     {#if selected.status === "superseded" && selected.superseded_by}
       <section class="border-t border-line-subtle pt-4">
         <p class="text-meta text-fg">
-          This proposal was replaced{#if selected.superseded_reason}: {selected.superseded_reason}{/if}.
+          {replacement
+            ? proposerLabel(replacement, {
+                actorLabel,
+                currentActorId,
+              }).replace(/^You proposed$/, "You") === "The PM proposes"
+              ? "The PM replaced this proposal"
+              : `${proposerLabel(replacement, { actorLabel, currentActorId })
+                  .replace(/ proposes$/, "")
+                  .replace(/^You proposed$/, "You")} replaced this proposal`
+            : "This proposal was replaced"}{#if selected.superseded_reason && !replacement}:
+            {selected.superseded_reason}{/if}.
           <a
             class="ui-prose-link"
             href={`?item=decision:${encodeURIComponent(selected.superseded_by)}`}

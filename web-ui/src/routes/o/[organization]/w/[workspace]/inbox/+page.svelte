@@ -698,11 +698,7 @@
               href={href({ item: visible[selectedIndex + 1].id })}>Next</a
             >
           {/if}
-          {#if selected?.ref && selected.kind === "inbox"}
-            <span class="min-w-0 truncate font-mono text-mono text-fg-subtle"
-              >{selected.ref}</span
-            >
-          {/if}
+
           <span class="ml-auto shrink-0 tabular-nums text-fg-subtle"
             >{selectedIndex >= 0
               ? `${selectedIndex + 1} of ${visible.length}`
@@ -722,6 +718,11 @@
                 : ""}
             currentActorId={$selectedActorId || ""}
             pmHref={workspaceHref("/pm")}
+            replacement={selectedDecision?.superseded_by
+              ? decisions.find(
+                  (item) => item.id === selectedDecision.superseded_by,
+                ) || null
+              : null}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),
             )}
