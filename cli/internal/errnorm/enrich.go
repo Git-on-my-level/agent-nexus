@@ -55,8 +55,13 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	var hint string
 
 	switch code {
+	case "lease_required", "lease_mismatch":
+		hint, recovery = enrichLease(code, msg)
 	case "conflict":
-		hint, recovery = enrichConflict(msg)
+		hint, recovery = enrichLease(code, msg)
+		if hint == "" && recovery == nil {
+			hint, recovery = enrichConflict(msg)
+		}
 	case "invalid_request":
 		hint, recovery = enrichInvalidRequest(msg)
 	case "key_mismatch":
@@ -200,7 +205,7 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 	details, _ := e.Details.(map[string]any)
 	if rec, _ := details["anx_cli_recovery"].(map[string]any); rec != nil {
 		switch rec["kind"] {
-		case "stale_concurrency_token", "resource_exists":
+		case "stale_concurrency_token", "resource_exists", "lease_required", "lease_mismatch":
 			return "", nil
 		}
 	}
@@ -298,6 +303,29 @@ func mergeRecovery(details map[string]any, rec map[string]any) {
 		return
 	}
 	details["anx_cli_recovery"] = rec
+}
+
+func enrichLease(code, msg string) (string, map[string]any) {
+	code = strings.TrimSpace(code)
+	lmsg := strings.ToLower(strings.TrimSpace(msg))
+	switch code {
+	case "lease_required":
+		return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`).",
+			map[string]any{"kind": "lease_required", "field": "lease_token"}
+	case "lease_mismatch":
+		return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	case "conflict":
+		if strings.Contains(lmsg, "this turn is not claimed") || strings.Contains(lmsg, "lease") {
+			if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "released") || strings.Contains(lmsg, "re-claim") || strings.Contains(lmsg, "reclaim") {
+				return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
+					map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+			}
+			return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`). If the lease was released or re-claimed, claim the turn again.",
+				map[string]any{"kind": "lease_required", "field": "lease_token"}
+		}
+	}
+	return "", nil
 }
 
 // enrichConflict maps core conflict messages (boards_handlers.go, cards_handlers.go, …) to hints.

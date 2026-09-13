@@ -459,6 +459,19 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(bindings, "bindings: 1") || !strings.Contains(bindings, "binding-1  telegram bot-1/-100 user=42 -> actor-david can_approve=true enabled=true revision=1") {
 		t.Fatalf("unexpected bindings list text: %s", bindings)
 	}
+	conversations := formatWorkCommandText("pm conversations list", map[string]any{"items": []any{
+		map[string]any{"id": "conv-bare", "work_ref": "card:x", "title": "Bare"},
+		map[string]any{"id": "conv-queued", "work_ref": "card:y", "latest_turn": map[string]any{"status": "sending", "claimed": false}},
+		map[string]any{"id": "conv-progress", "work_ref": "card:z", "latest_turn": map[string]any{"status": "sending", "claimed": true}},
+		map[string]any{"id": "conv-done", "turns": []any{map[string]any{"status": "failed"}, map[string]any{"status": "delivered"}}},
+		map[string]any{"id": "conv-failed", "last_turn": map[string]any{"status": "failed"}},
+	}})
+	if !strings.Contains(conversations, "conversations: 5") || !strings.Contains(conversations, "conv-bare  card:x  Bare") || strings.Contains(conversations, "status=unknown") {
+		t.Fatalf("bare conversation still printed unknown status: %s", conversations)
+	}
+	if !strings.Contains(conversations, "conv-queued  card:y  status=queued") || !strings.Contains(conversations, "conv-progress  card:z  status=in progress") || !strings.Contains(conversations, "conv-done    status=delivered") || !strings.Contains(conversations, "conv-failed    status=failed") {
+		t.Fatalf("conversation list missed latest-turn status: %s", conversations)
+	}
 	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
 	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
 		t.Errorf("lost receipt uncertainty: %s", pm)
@@ -622,6 +635,86 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			}
 			if strings.Contains(hint, "if_updated_at") {
 				t.Errorf("PM hint still used card/board language: %q", hint)
+			}
+		})
+	}
+}
+
+func TestPMTurnLeaseHints(t *testing.T) {
+	type tc struct {
+		name, path, code, message, want, notWant string
+		args                                     []string
+		body                                     string
+		env                                      map[string]string
+	}
+	cases := []tc{
+		{
+			name:    "propose without lease token",
+			path:    "/pm/turns/turn-1/decisions",
+			code:    "conflict",
+			message: "this turn is not claimed; claim it first",
+			args:    []string{"pm", "turns", "propose", "turn-1", "--from-file", "-"},
+			body:    `{"request_key":"k","work_ref":"card:x","instruction":"Review","scope":"review","target_revision":"abc"}`,
+			want:    "--lease-token",
+			notWant: "re-read it and retry",
+		},
+		{
+			name:    "complete with wrong token",
+			path:    "/pm/turns/turn-1/complete",
+			code:    "conflict",
+			message: "this turn is not claimed; claim it first",
+			args:    []string{"pm", "turns", "complete", "turn-1", "--from-file", "-"},
+			body:    `{"text":"done","lease_token":"stale"}`,
+			want:    "ANX_PM_LEASE_TOKEN",
+			notWant: "PM revision or state conflict",
+		},
+		{
+			name:    "lease_required code",
+			path:    "/pm/turns/turn-1/decisions",
+			code:    "lease_required",
+			message: "lease token is required",
+			args:    []string{"pm", "turns", "propose", "turn-1", "--from-file", "-"},
+			body:    `{"request_key":"k","work_ref":"card:x","instruction":"Review","scope":"review","target_revision":"abc"}`,
+			want:    "ANX_PM_LEASE_TOKEN",
+			notWant: "re-read it and retry",
+		},
+		{
+			name:    "lease_mismatch code",
+			path:    "/pm/turns/turn-1/complete",
+			code:    "lease_mismatch",
+			message: "lease token does not match",
+			args:    []string{"pm", "turns", "complete", "turn-1", "--from-file", "-"},
+			body:    `{"text":"done","lease_token":"stale"}`,
+			want:    "released or re-claimed",
+			notWant: "re-read it and retry",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.path {
+					t.Errorf("path=%s want %s", r.URL.Path, tc.path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				fmt.Fprintf(w, `{"error":{"code":%q,"message":%q}}`, tc.code, tc.message)
+			}))
+			defer server.Close()
+			env := map[string]string{"ANX_ACCESS_TOKEN": "fixture"}
+			for k, v := range tc.env {
+				env[k] = v
+			}
+			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), env, strings.NewReader(tc.body), append([]string{"--json", "--base-url", server.URL}, tc.args...)))
+			errObj := asMap(payload["error"])
+			hint := fmt.Sprint(errObj["hint"])
+			if !strings.Contains(hint, tc.want) {
+				t.Errorf("hint=%q want substring %q payload=%v", hint, tc.want, payload)
+			}
+			if strings.Contains(hint, tc.notWant) {
+				t.Errorf("hint still uses %q: %q", tc.notWant, hint)
+			}
+			if strings.Contains(hint, "if_updated_at") {
+				t.Errorf("lease hint still used card language: %q", hint)
 			}
 		})
 	}

@@ -89,6 +89,7 @@ var (
 	startupAckPoll         = 90 * time.Second
 	pmServeShutdownGrace   = 5 * time.Second
 	harnessKillGrace       = 2 * time.Second
+	harnessWaitDelay       = 3 * time.Second
 	claimForbiddenLimit    = 3
 	claimNonRetryableLimit = 10
 	claimBackoffStart      = time.Second
@@ -116,6 +117,7 @@ func runHarnessCmd(ctx context.Context, name string, args []string, dir string, 
 	}
 	cmd.Stdout = outW
 	cmd.Stderr = errW
+	cmd.WaitDelay = harnessWaitDelay
 	attachHarnessProcessGroup(cmd)
 	if err = cmd.Start(); err != nil {
 		return outBuf.Bytes(), errBuf.Bytes(), err
@@ -124,19 +126,28 @@ func runHarnessCmd(ctx context.Context, name string, args []string, dir string, 
 	go func() { done <- cmd.Wait() }()
 	select {
 	case err = <-done:
-		return outBuf.Bytes(), errBuf.Bytes(), err
+		return finishHarnessCmd(cmd, err, outBuf.Bytes(), errBuf.Bytes())
 	case <-ctx.Done():
 		signalHarnessProcessGroup(cmd, syscall.SIGTERM)
 		timer := time.NewTimer(harnessKillGrace)
 		defer timer.Stop()
 		select {
-		case <-done:
+		case err = <-done:
 		case <-timer.C:
 			signalHarnessProcessGroup(cmd, syscall.SIGKILL)
-			<-done
+			err = <-done
 		}
+		signalHarnessProcessGroup(cmd, syscall.SIGKILL)
 		return outBuf.Bytes(), errBuf.Bytes(), ctx.Err()
 	}
+}
+
+func finishHarnessCmd(cmd *exec.Cmd, waitErr error, stdout, stderr []byte) ([]byte, []byte, error) {
+	signalHarnessProcessGroup(cmd, syscall.SIGKILL)
+	if cmd != nil && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		return stdout, stderr, nil
+	}
+	return stdout, stderr, waitErr
 }
 
 func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -545,13 +556,16 @@ func (a *App) handleClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Res
 		}
 		stdout, stderr, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
 		a.logRunnerStderr(turnID, stderr)
+		text := assistantTextFromRunnerOutput(stdout)
 		if err != nil {
 			if shuttingDown(shutdownCtx) || errors.Is(err, context.Canceled) {
 				return false
 			}
+			if text != "" && errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, context.DeadlineExceeded) {
+				return complete(text, "", "")
+			}
 			return fail(harnessCmdFailure(err), joinCmdOutput(stdout, stderr))
 		}
-		text := assistantTextFromRunnerOutput(stdout)
 		if text == "" {
 			return fail(humanTurnFailure("no_assistant", ""), stderr)
 		}
@@ -781,8 +795,8 @@ func harnessCmdFailure(err error) string {
 	if err == nil {
 		return humanTurnFailure("launch_failed", "")
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return humanTurnFailure("deadline", "")
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return humanTurnFailure("await_failed", "")
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {

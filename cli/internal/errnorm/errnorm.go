@@ -183,6 +183,8 @@ var defaultMetadataByCode = map[string]Metadata{
 	"invalid_request":               {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
 	"invalid_token":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth token-status` then `anx --agent <agent> auth rotate` if needed."},
 	"key_mismatch":                  {Recoverable: true, Hint: "Rotate the agent key (`anx --agent <agent> auth rotate`) and retry token minting."},
+	"lease_mismatch":                {Recoverable: true, Hint: "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN)."},
+	"lease_required":                {Recoverable: true, Hint: "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`)."},
 	"last_active_principal":         {Recoverable: true, Hint: "Retry only with `--allow-human-lockout --human-lockout-reason <why>` for explicit break-glass recovery; it can leave the workspace without any active human principal."},
 	"method_not_allowed":            {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
