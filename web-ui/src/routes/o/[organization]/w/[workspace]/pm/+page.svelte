@@ -24,6 +24,7 @@
     startsTimeGroup,
     turnState,
     EXPECTED_WAIT_LABEL,
+    UNCLAIMED_LABEL,
   } from "$lib/pm/chatModel.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -618,17 +619,20 @@
               {:else if view.kind === "pending"}
                 <p class="pm-status" role="status">
                   {#if reducedMotion}
-                    <span>Thinking…</span>
+                    <span>{view.claimed ? "Thinking…" : "Queued…"}</span>
                   {:else}
                     <span class="pm-dots" aria-hidden="true"
                       ><i></i><i></i><i></i></span
                     >
-                    <span>Thinking</span>{#if view.elapsed}<span
-                        aria-hidden="true">&nbsp;· {view.elapsed}</span
+                    <span>{view.claimed ? "Thinking" : "Queued"}</span
+                    >{#if view.elapsed}<span aria-hidden="true"
+                        >&nbsp;· {view.elapsed}</span
                       >{/if}
                   {/if}
                 </p>
-                {#if view.longWait}
+                {#if !view.claimed}
+                  <p class="pm-status-note">{UNCLAIMED_LABEL}</p>
+                {:else if view.longWait}
                   <p class="pm-status-note">{EXPECTED_WAIT_LABEL}</p>
                 {/if}
                 {#if view.stalled}

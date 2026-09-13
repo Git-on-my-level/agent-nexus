@@ -222,7 +222,7 @@ export function buildInboxRows({
       id: `update:${group.group_ref || group.display_name}`,
       kind: "update",
       title: group.display_name || group.group_ref || "Update",
-      source: group.group_type || "workspace",
+      source: updateGroupSource(group.group_type),
       ref: group.group_ref || "",
       time: group.newest_event?.ts,
       status: "update",
@@ -241,6 +241,17 @@ export function buildInboxRows({
 function rowTime(row) {
   const t = Date.parse(row?.time ?? "");
   return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+}
+
+const UPDATE_GROUP_SOURCES = {
+  board: "Board updates",
+  topic: "Topic updates",
+  thread: "Thread updates",
+  workspace: "Workspace updates",
+};
+function updateGroupSource(type) {
+  const key = String(type ?? "").toLowerCase();
+  return UPDATE_GROUP_SOURCES[key] || (key ? `${key} updates` : "Updates");
 }
 
 export function filterMailbox(rows, mailbox) {

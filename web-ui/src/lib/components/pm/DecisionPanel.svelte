@@ -125,7 +125,7 @@
             </dd>
           </div>
           <div class="flex gap-1.5">
-            <dt>Source revision</dt>
+            <dt>{work?.source?.revision ? "Source revision" : "Revision"}</dt>
             <dd class="break-all font-mono text-fg">
               {selected.target_revision || "—"}
             </dd>

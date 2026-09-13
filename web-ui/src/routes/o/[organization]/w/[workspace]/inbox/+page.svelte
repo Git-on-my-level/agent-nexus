@@ -128,6 +128,23 @@
     return `${workspaceHref("/inbox")}?${params}`;
   }
 
+  /**
+   * The attention surface must not hide an obligation on page two. Follow
+   * cursors up to a bound; past it, say so instead of claiming completeness.
+   */
+  async function listAllPages(fetchPage, key, maxPages = 8) {
+    const collected = [];
+    let cursor;
+    let more = false;
+    for (let page = 0; page < maxPages; page += 1) {
+      const result = await fetchPage(cursor);
+      collected.push(...(Array.isArray(result?.[key]) ? result[key] : []));
+      cursor = result?.next_cursor || "";
+      more = Boolean(cursor) || result?.has_more === true;
+      if (!cursor) break;
+    }
+    return { [key]: collected, has_more: more && Boolean(cursor) };
+  }
   async function loadSelected(id) {
     const ticket = ++selectionRequest;
     try {
@@ -153,11 +170,14 @@
     }
   }
 
-  beforeNavigate(({ cancel }) => {
+  beforeNavigate(({ cancel, type }) => {
     if (busy) {
       cancel();
       return;
     }
+    // Full-page unloads are covered by onbeforeunload; a confirm() here would
+    // be blocked by the browser during beforeunload anyway.
+    if (type === "leave") return;
     if (
       answer.trim() &&
       !busy &&
@@ -178,9 +198,18 @@
         authDriver: "inbox",
       });
       const results = await Promise.allSettled([
-        coreClient.listPmDecisions({ limit: 50 }),
-        coreClient.listPmActions({ limit: 50 }),
-        coreClient.listWork({ limit: 50 }),
+        listAllPages(
+          (cursor) => coreClient.listPmDecisions({ limit: 50, cursor }),
+          "items",
+        ),
+        listAllPages(
+          (cursor) => coreClient.listPmActions({ limit: 50, cursor }),
+          "items",
+        ),
+        listAllPages(
+          (cursor) => coreClient.listWork({ limit: 50, cursor }),
+          "work",
+        ),
         coreClient.listInboxItems({ status: "open", limit: 50 }),
         coreClient.listInboxItems({ status: "completed", limit: 50 }),
         coreClient.getHomeUnread(),
@@ -499,7 +528,7 @@
     {/each}
     {#if truncated}
       <span class="ml-2 text-micro text-fg-subtle"
-        >Showing the newest 50 of each kind; older items are in <a
+        >Not everything is loaded; older items are in <a
           class="ui-prose-link"
           href={workspaceHref("/tasks")}>Tasks</a
         >.</span

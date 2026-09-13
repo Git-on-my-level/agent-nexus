@@ -73,6 +73,34 @@ describe("PM chat presentation model", () => {
     ).toMatchObject({ kind: "answered" });
   });
 
+  it("says a turn is queued, not thinking, while no runner holds its lease", () => {
+    const now = Date.parse("2026-09-09T10:01:00Z");
+    expect(
+      turnState(
+        {
+          status: "sending",
+          created_at: "2026-09-09T10:00:30Z",
+          lease_owner: "",
+        },
+        now,
+      ),
+    ).toMatchObject({ kind: "pending", claimed: false });
+    expect(
+      turnState(
+        {
+          status: "sending",
+          created_at: "2026-09-09T10:00:30Z",
+          lease_owner: "runner-1",
+        },
+        now,
+      ),
+    ).toMatchObject({ kind: "pending", claimed: true });
+    // An older core that omits the field gets the benefit of the doubt.
+    expect(
+      turnState({ status: "sending", created_at: "2026-09-09T10:00:30Z" }, now),
+    ).toMatchObject({ kind: "pending", claimed: true });
+  });
+
   it("names the usual wait after 20s and a stall only after 12 minutes", () => {
     const now = Date.parse("2026-09-09T10:01:00Z");
     const fresh = turnState(

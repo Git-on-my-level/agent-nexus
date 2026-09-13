@@ -200,7 +200,10 @@ export const TIME_GROUP_GAP_MS = 5 * 60 * 1000;
  * STALLED_AFTER_MS the runner may genuinely be off.
  */
 export const EXPECTED_WAIT_NOTE_AFTER_MS = 20_000;
-export const EXPECTED_WAIT_LABEL = "Answers usually take 4–7 minutes.";
+export const EXPECTED_WAIT_LABEL =
+  "The PM is a separate agent working through the CLI; answers take a few minutes.";
+export const UNCLAIMED_LABEL =
+  "Waiting for a PM runner to claim this. Nothing is thinking yet.";
 export const STALLED_AFTER_MS = 12 * 60 * 1000;
 
 /**
@@ -257,10 +260,16 @@ export function elapsedLabel(ms) {
  *
  * @param {{ status?: string, response?: string, failure?: string, created_at?: string } | null} turn
  * @param {number} now
- * @returns {{ kind: "answered"|"pending"|"failed"|"unknown", elapsed: string, stalled: boolean, longWait: boolean, detail: string }}
+ * @returns {{ kind: "answered"|"pending"|"failed"|"unknown", elapsed: string, stalled: boolean, longWait: boolean, claimed: boolean, detail: string }}
  */
 export function turnState(turn, now = Date.now()) {
-  const base = { elapsed: "", stalled: false, longWait: false, detail: "" };
+  const base = {
+    elapsed: "",
+    stalled: false,
+    longWait: false,
+    claimed: true,
+    detail: "",
+  };
   if (turn?.response) return { ...base, kind: "answered" };
   const status = String(turn?.status ?? "");
   if (status === "failed")
@@ -281,9 +290,14 @@ export function turnState(turn, now = Date.now()) {
     };
   const created = Date.parse(turn?.created_at ?? "");
   const waited = Number.isFinite(created) ? now - created : Number.NaN;
+  // A turn nobody has leased is queued, not being thought about. Older cores
+  // omit lease_owner; then the runner state is unknown and we say nothing.
+  const claimed =
+    turn?.lease_owner === undefined ? true : Boolean(String(turn.lease_owner));
   return {
     ...base,
     kind: "pending",
+    claimed,
     elapsed: elapsedLabel(waited),
     longWait:
       Number.isFinite(waited) &&

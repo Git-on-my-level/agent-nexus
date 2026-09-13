@@ -165,7 +165,7 @@
     </p>
     {#each groups as group (group.key)}
       <section
-        class="w-72 shrink-0 rounded-md bg-bg-soft p-2"
+        class="w-72 shrink-0 rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[11.5rem] xl:flex-1"
         aria-label={group.label}
         ondragover={(event) => event.preventDefault()}
         ondrop={(event) => handleDrop(event, group.key)}
