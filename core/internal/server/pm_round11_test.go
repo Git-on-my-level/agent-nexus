@@ -97,7 +97,7 @@ func TestRound11DecisionExecutorRegistry(t *testing.T) {
 				if a["closed_without_delivery"] != true {
 					t.Fatal(a)
 				}
-				if tc.authority == "github" && a["receipt"].(map[string]any)["detail"] != "Closed by "+human.ActorID+": no delivery path is configured for GitHub, nothing was sent" {
+				if tc.authority == "github" && a["receipt"].(map[string]any)["detail"] != "Closed without delivery: no delivery path is configured for GitHub; nothing was sent." {
 					t.Fatal(a)
 				}
 			}

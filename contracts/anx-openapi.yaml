@@ -755,7 +755,7 @@ paths:
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
       description: >-
-        Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to "Closed by <actor>: no delivery path is configured for <source>, nothing was sent". Other states return 409; other actors return 403.
+        Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to "Closed without delivery: no delivery path is configured for <source>; nothing was sent.". Other states return 409; other actors return 403.
       parameters:
       - name: action_id
         in: path
@@ -942,7 +942,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
+      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
       parameters:
       - name: turn_id
         in: path
@@ -966,7 +966,7 @@ paths:
     post:
       operationId: pmTurnsRelease
       summary: Release a claimed PM turn back to the queue
-      description: The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 403; no active lease returns 409. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.
+      description: The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.
       tags:
       - pm
       x-anx-surface: canonical
@@ -984,6 +984,8 @@ paths:
       - forbidden
       - not_found
       - conflict
+      - lease_mismatch
+      - turn_not_claimed
       - turn_closed
       - busy
       - unavailable
@@ -1122,7 +1124,7 @@ paths:
   /pm/turns/{turn_id}/complete:
     post:
       operationId: pmTurnsComplete
-      description: Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.
+      description: Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.
       summary: Record a selected PM agent response
       tags:
       - pm
@@ -6637,9 +6639,22 @@ components:
         target_revision:
           type: string
           description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version, which changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+        work_missing:
+          type: boolean
+          readOnly: true
+          description: Derived on every response; true when the referenced work no longer resolves. Such decisions remain visible in lists and pages and can be declined or their actions acknowledged or closed by the owner, but cannot be approved or dispatched.
+        target_current:
+          type: boolean
+          readOnly: true
+          description: Derived on every response; true when target_revision equals the referenced work's current decision_revision. False when the work is missing or its state cannot be read.
+        already_at_target:
+          type: boolean
+          readOnly: true
+          description: Derived on every response; true when a nonempty payload.phase equals the referenced work's current phase. False without a phase payload, when work is missing, or its state cannot be read.
         can_answer:
           type: boolean
-          description: Derived for the current reader; true only for the awaiting decision owner with human approval authority.
+          readOnly: true
+          description: Derived for the current reader; true only for the awaiting decision owner with human approval authority and readable existing work. False for missing work; the owner may still decline.
         answer:
           type: string
         superseded_by:
@@ -6960,7 +6975,7 @@ components:
       - approve
       - text
     PMCompleteRequest:
-      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content or token returns 409.
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
       type: object
       additionalProperties: true
       properties:
@@ -6995,7 +7010,7 @@ components:
           type: string
           minLength: 1
     PMFailRequest:
-      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content or token returns 409.
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
       type: object
       additionalProperties: true
       properties:

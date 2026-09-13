@@ -41,7 +41,7 @@ func (s *Service) AcknowledgeAction(ctx context.Context, p Principal, id string)
 		}
 		// Record the closure independently of error formatting or later routing.
 		a.ClosedWithoutDelivery = true
-		a.Receipt.Detail = fmt.Sprintf("Closed by %s: no delivery path is configured for %s, nothing was sent", p.ActorID, unavailable.source)
+		a.Receipt.Detail = fmt.Sprintf("Closed without delivery: no delivery path is configured for %s; nothing was sent.", unavailable.source)
 	case Failed:
 	case Unknown:
 		if s.deps.Reconcile != nil {
