@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Handler must be mounted behind the existing core authentication middleware.
@@ -167,6 +168,21 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(status)
+	// All turn-bearing endpoints share the same public projection, including
+	// idempotent message replays. Only the runner claim returns credentials.
+	switch value := out.(type) {
+	case Turn:
+		out = turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
+	case ConversationDetail:
+		turns := make([]any, 0, len(value.Turns))
+		for _, turn := range value.Turns {
+			turns = append(turns, turnResponse(turn, false))
+		}
+		out = struct {
+			ConversationDetail
+			Turns []any `json:"turns"`
+		}{value, turns}
+	}
 	_ = json.NewEncoder(w).Encode(out)
 }
 func queryLimit(r *http.Request) (int, error) {
@@ -216,4 +232,21 @@ func writeError(w http.ResponseWriter, err error) {
 		body["details"] = map[string]string{"existing_decision_id": conflict.ExistingDecisionID}
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": body})
+}
+
+// Shadow the durable lease fields, retaining them only for the claim protocol.
+func turnResponse(t Turn, includeLease bool) any {
+	out := struct {
+		Turn
+		Claimed        bool       `json:"claimed"`
+		LeaseToken     string     `json:"lease_token,omitempty"`
+		LeaseOwner     string     `json:"lease_owner,omitempty"`
+		LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
+	}{Turn: t, Claimed: leaseHeld(t, time.Now().UTC())}
+	if includeLease {
+		out.LeaseToken = t.LeaseToken
+		out.LeaseOwner = t.LeaseOwner
+		out.LeaseExpiresAt = &t.LeaseExpiresAt
+	}
+	return out
 }

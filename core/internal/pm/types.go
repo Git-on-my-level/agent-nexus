@@ -89,27 +89,30 @@ type MessageInput struct {
 	RequestKey string `json:"request_key"`
 	Text       string `json:"text"`
 }
+
+// Turn is the durable record; HTTP responses use turnResponse to hide lease credentials.
 type Turn struct {
-	DecisionIDs    []string  `json:"decision_ids,omitempty"`
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversation_id"`
-	WorkspaceID    string    `json:"workspace_id"`
-	ActorID        string    `json:"actor_id"`
-	Text           string    `json:"text"`
-	Response       string    `json:"response,omitempty"`
-	Status         Status    `json:"status"`
-	WakeupID       string    `json:"wakeup_id"`
-	AgentActorID   string    `json:"agent_actor_id"`
-	EvidenceRefs   []string  `json:"evidence_refs,omitempty"`
-	Failure        string    `json:"failure,omitempty"`
-	LeaseToken     string    `json:"lease_token,omitempty"`
-	LeaseOwner     string    `json:"lease_owner,omitempty"`
-	LeaseExpiresAt time.Time `json:"lease_expires_at,omitempty"`
-	MaxOutputBytes int       `json:"max_output_bytes,omitempty"`
-	Origin         *Origin   `json:"origin,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	Deadline       time.Time `json:"deadline"`
-	Revision       int       `json:"revision"`
+	DecisionIDs    []string   `json:"decision_ids,omitempty"`
+	ID             string     `json:"id"`
+	ConversationID string     `json:"conversation_id"`
+	WorkspaceID    string     `json:"workspace_id"`
+	ActorID        string     `json:"actor_id"`
+	Text           string     `json:"text"`
+	Response       string     `json:"response,omitempty"`
+	Status         Status     `json:"status"`
+	WakeupID       string     `json:"wakeup_id"`
+	AgentActorID   string     `json:"agent_actor_id"`
+	EvidenceRefs   []string   `json:"evidence_refs,omitempty"`
+	Failure        string     `json:"failure,omitempty"`
+	ClaimedAt      *time.Time `json:"claimed_at,omitempty"`
+	LeaseToken     string     `json:"lease_token,omitempty"`
+	LeaseOwner     string     `json:"lease_owner,omitempty"`
+	LeaseExpiresAt time.Time  `json:"lease_expires_at,omitempty"`
+	MaxOutputBytes int        `json:"max_output_bytes,omitempty"`
+	Origin         *Origin    `json:"origin,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	Deadline       time.Time  `json:"deadline"`
+	Revision       int        `json:"revision"`
 }
 type ClaimInput struct {
 	RunnerID string `json:"runner_id"`

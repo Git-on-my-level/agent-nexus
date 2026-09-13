@@ -758,7 +758,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-output-envelope: Returns `PMClaimedTurn`.
       x-anx-error-codes:
       - invalid_request
       - forbidden
@@ -787,7 +787,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PMTurn'
+                $ref: '#/components/schemas/PMClaimedTurn'
         '204':
           description: No claimable turn
   /pm/turns/{turn_id}/fail:
@@ -6304,7 +6304,7 @@ components:
         external_user_id:
           type: string
     PMTurn:
-      required: [deadline]
+      required: [deadline, claimed]
       type: object
       additionalProperties: true
       properties:
@@ -6347,16 +6347,32 @@ components:
             type: string
         failure:
           type: string
-        lease_token:
+        claimed:
+          type: boolean
+          readOnly: true
+          description: True while a runner holds an unexpired lease. No lease credentials are exposed on public turn responses.
+        claimed_at:
           type: string
-        lease_owner:
-          type: string
-        lease_expires_at:
-          type: string
+          format: date-time
+          readOnly: true
+          description: Time of the most recent runner claim, if recorded; retained after completion or expiry.
         max_output_bytes:
           type: integer
         origin:
           $ref: '#/components/schemas/PMOrigin'
+    PMClaimedTurn:
+      description: Authenticated runner claim response; lease credentials are returned only by the claim endpoint.
+      allOf:
+      - $ref: '#/components/schemas/PMTurn'
+      - type: object
+        properties:
+          lease_token:
+            type: string
+          lease_owner:
+            type: string
+          lease_expires_at:
+            type: string
+            format: date-time
     PMActionPayload:
       type: object
       additionalProperties: false

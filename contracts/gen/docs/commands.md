@@ -1534,7 +1534,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Claim one queued turn for the selected PM agent so two runners never answer it.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Output: Returns `PMTurn`.
+- Output: Returns `PMClaimedTurn`.
 - Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
 
 ## `pm.turns.complete`

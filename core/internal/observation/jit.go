@@ -631,6 +631,12 @@ func (m *JITManager) Read(ctx context.Context, id string, source Reader) (report
 		if e != nil {
 			return e
 		}
+		// An unavailable host runner may have prevented activation or suspended
+		// the last revision. Preserve that cause on every refresh, even when
+		// there is consequently no active version. Do not read the source.
+		if e = m.runner.Available(); e != nil {
+			return e
+		}
 		v, ok := s.Versions[s.Active]
 		if !ok || v.State != "active" {
 			return failure(ErrPolicy, "generated reader has no active version")

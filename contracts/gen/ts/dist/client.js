@@ -6728,7 +6728,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `PMTurn`.",
+        "output_envelope": "Returns `PMClaimedTurn`.",
         "error_codes": [
             "invalid_request",
             "forbidden",
