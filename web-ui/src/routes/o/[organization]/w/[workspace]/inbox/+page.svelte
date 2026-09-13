@@ -44,6 +44,7 @@
   let requestId = 0;
   let selectionRequest = 0;
   let ready = $state(false);
+  let truncated = $state(false);
   let now = $state(Date.now());
 
   let workspaceHref = $derived(
@@ -181,6 +182,14 @@
       if (results[0].status === "fulfilled") {
         decisions = results[0].value.items || [];
       } else error = errorMessage(results[0].reason);
+      // Each list is one page. Counts drawn from partial pages are lower
+      // bounds, and the reader must be told so rather than shown a total.
+      truncated = results.some(
+        (result) =>
+          result.status === "fulfilled" &&
+          (result.value?.has_more === true ||
+            Boolean(result.value?.next_cursor)),
+      );
       if (results[1].status === "fulfilled") {
         actions = results[1].value.items || [];
       }
@@ -448,10 +457,18 @@
         href={href({ mailbox: key, item: "" })}
         aria-current={mailbox === key ? "page" : undefined}
         >{title}{#if counts[key]}<span class="ml-1.5 text-micro text-fg-subtle"
-            >{counts[key]}</span
+            >{counts[key]}{truncated ? "+" : ""}</span
           >{/if}</a
       >
     {/each}
+    {#if truncated}
+      <span class="ml-2 text-micro text-fg-subtle"
+        >Showing the newest 50 of each kind; older items are in <a
+          class="ui-prose-link"
+          href={workspaceHref("/tasks")}>Tasks</a
+        >.</span
+      >
+    {/if}
   </nav>
   {#if error}
     <StateError message={error} onretry={load} retrying={loading} />
