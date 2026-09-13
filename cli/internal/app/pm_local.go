@@ -79,27 +79,23 @@ func init() {
 
 var (
 	lookPath = exec.LookPath
-	runCmd   = func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error) {
+	runCmd   = func(ctx context.Context, name string, args []string, dir string, env []string) (stdout []byte, stderr []byte, err error) {
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Dir = dir
 		if len(env) > 0 {
 			cmd.Env = env
 		}
-		var stdout, stderr bytes.Buffer
-		outW := io.Writer(&stdout)
-		errW := io.Writer(&stderr)
+		var outBuf, errBuf bytes.Buffer
+		outW := io.Writer(&outBuf)
+		errW := io.Writer(&errBuf)
 		if tee := harnessLogWriter; tee != nil {
-			outW = io.MultiWriter(&stdout, tee)
-			errW = io.MultiWriter(&stderr, tee)
+			outW = io.MultiWriter(&outBuf, tee)
+			errW = io.MultiWriter(&errBuf, tee)
 		}
 		cmd.Stdout = outW
 		cmd.Stderr = errW
-		err := cmd.Run()
-		out := stdout.Bytes()
-		if stderr.Len() > 0 {
-			out = append(out, stderr.Bytes()...)
-		}
-		return out, err
+		err = cmd.Run()
+		return outBuf.Bytes(), errBuf.Bytes(), err
 	}
 	nowFn            = time.Now
 	sleepFn          = sleepCtx
@@ -189,7 +185,7 @@ func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) 
 	lines := []string{
 		"conversation: " + convID,
 		"turn: " + anyString(turn["id"]),
-		"status: " + firstNonEmpty(anyString(turn["status"]), "unknown"),
+		"status: " + renderPMTurnStatus(turn),
 	}
 	if resp := anyString(turn["response"]); resp != "" {
 		lines = append(lines, "", resp)
@@ -372,13 +368,17 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		if len(expanded) == 0 || strings.TrimSpace(expanded[0]) == "" {
 			return fail("invalid --runner after {prompt} expansion", nil)
 		}
-		out, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
+		stdout, stderr, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
+		a.logRunnerStderr(turnID, stderr)
 		if err != nil {
-			return fail(humanTurnFailure("launch_failed", ""), out)
+			return fail(humanTurnFailure("launch_failed", ""), joinCmdOutput(stdout, stderr))
 		}
-		text := strings.TrimSpace(extractAssistantText(string(out), string(out)))
+		text, usedCombined := assistantTextFromRunnerOutput(stdout, stderr)
+		if usedCombined {
+			a.pmLog("pm serve: turn %s stdout empty; using combined output for assistant text\n", turnID)
+		}
 		if text == "" {
-			return fail(humanTurnFailure("no_assistant", ""), out)
+			return fail(humanTurnFailure("no_assistant", ""), joinCmdOutput(stdout, stderr))
 		}
 		return complete(text, "", "")
 	}
@@ -391,40 +391,50 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		"--",
 	}
 	runArgs = append(runArgs, argv...)
-	launchOut, launchErr := runCmd(runCtx, agentctl, runArgs, workDir, env)
+	launchOut, launchErrOut, launchErr := runCmd(runCtx, agentctl, runArgs, workDir, env)
+	a.logRunnerStderr(turnID, launchErrOut)
 	execID, launchTimeout := "", ""
 	if launchErr != nil {
 		var ok bool
 		execID, launchTimeout, ok = continuingAgentctlLaunch(launchOut)
 		if !ok {
-			return fail(humanTurnFailure("launch_failed", ""), launchOut)
+			return fail(humanTurnFailure("launch_failed", ""), joinCmdOutput(launchOut, launchErrOut))
 		}
 		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(launchOut)))
 	} else {
 		execID = extractExecutionID(launchOut)
 	}
 	if execID == "" {
-		return fail(humanTurnFailure("launch_failed", ""), launchOut)
+		return fail(humanTurnFailure("launch_failed", ""), joinCmdOutput(launchOut, launchErrOut))
 	}
 	awaitArgs := []string{"await", execID, "--through-execution-deadline", "--ignore-attention"}
-	awaitOut, awaitErr := runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+	awaitOut, awaitErrOut, awaitErr := runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+	a.logRunnerStderr(turnID, awaitErrOut)
 	if awaitErr != nil && agentctlNotFound(awaitOut, awaitErr) {
 		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(awaitOut)))
 		if visErr := waitForAgentctlExecution(runCtx, agentctl, execID, workDir, env); visErr != nil {
-			return fail(humanTurnFailure("startup_timeout", launchTimeout), awaitOut)
+			return fail(humanTurnFailure("startup_timeout", launchTimeout), joinCmdOutput(awaitOut, awaitErrOut))
 		}
-		awaitOut, awaitErr = runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+		awaitOut, awaitErrOut, awaitErr = runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+		a.logRunnerStderr(turnID, awaitErrOut)
 	}
 	if awaitErr != nil {
-		return fail(humanTurnFailure("await_failed", ""), awaitOut)
+		return fail(humanTurnFailure("await_failed", ""), joinCmdOutput(awaitOut, awaitErrOut))
 	}
-	contentOut, _ := runCmd(runCtx, agentctl, []string{"result", execID, "--content"}, workDir, env)
-	metaOut, _ := runCmd(runCtx, agentctl, []string{"result", execID}, workDir, env)
+	contentOut, contentErrOut, _ := runCmd(runCtx, agentctl, []string{"result", execID, "--content"}, workDir, env)
+	a.logRunnerStderr(turnID, contentErrOut)
+	metaOut, _, _ := runCmd(runCtx, agentctl, []string{"result", execID}, workDir, env)
 	blob := string(contentOut) + "\n" + string(metaOut) + "\n" + string(awaitOut) + "\n" + string(launchOut)
 	provider, model := extractProviderModel(blob)
-	text := strings.TrimSpace(extractAssistantText(string(contentOut), blob))
+	text, usedCombined := assistantTextFromRunnerOutput(contentOut, contentErrOut)
+	if usedCombined {
+		a.pmLog("pm serve: turn %s stdout empty; using combined output for assistant text\n", turnID)
+	}
 	if text == "" {
-		return fail(humanTurnFailure("no_assistant", ""), append(contentOut, awaitOut...))
+		text = strings.TrimSpace(extractAssistantText(string(contentOut), blob))
+	}
+	if text == "" {
+		return fail(humanTurnFailure("no_assistant", ""), joinCmdOutput(contentOut, awaitOut))
 	}
 	return complete(text, provider, model)
 }
@@ -610,7 +620,7 @@ func waitForAgentctlExecution(ctx context.Context, agentctl, execID, workDir str
 	deadline := nowFn().Add(startupAckPoll)
 	delay := time.Second
 	for {
-		out, err := runCmd(ctx, agentctl, []string{"status", execID}, workDir, env)
+		out, _, err := runCmd(ctx, agentctl, []string{"status", execID}, workDir, env)
 		if agentctlExecutionVisible(out, err) {
 			return nil
 		}
@@ -787,13 +797,55 @@ func extractEvidenceRefs(text string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, ref := range typedRefPattern.FindAllString(text, 50) {
-		if seen[ref] {
+		ref = sanitizeCapturedTypedRef(ref)
+		if ref == "" || seen[ref] {
 			continue
 		}
 		seen[ref] = true
 		out = append(out, ref)
 	}
 	return out
+}
+
+const typedRefTrailPunct = ".,;:)]\"'"
+
+func sanitizeCapturedTypedRef(ref string) string {
+	ref = strings.TrimRight(ref, typedRefTrailPunct)
+	_, rest, ok := strings.Cut(ref, ":")
+	if !ok || rest == "" {
+		return ""
+	}
+	return ref
+}
+
+func joinCmdOutput(stdout, stderr []byte) []byte {
+	if len(stderr) == 0 {
+		return stdout
+	}
+	if len(stdout) == 0 {
+		return stderr
+	}
+	out := make([]byte, 0, len(stdout)+len(stderr))
+	out = append(out, stdout...)
+	out = append(out, stderr...)
+	return out
+}
+
+func assistantTextFromRunnerOutput(stdout, stderr []byte) (text string, usedCombined bool) {
+	text = strings.TrimSpace(extractAssistantText(string(stdout), string(stdout)))
+	if text != "" {
+		return text, false
+	}
+	combined := joinCmdOutput(stdout, stderr)
+	text = strings.TrimSpace(extractAssistantText(string(combined), string(combined)))
+	return text, text != ""
+}
+
+func (a *App) logRunnerStderr(turnID string, stderr []byte) {
+	if len(stderr) == 0 || harnessLogWriter != nil {
+		return
+	}
+	a.pmLog("pm serve: turn %s runner stderr: %s\n", turnID, strings.TrimSpace(string(stderr)))
 }
 
 func loadOrCreateRunnerID(dir string) (string, error) {

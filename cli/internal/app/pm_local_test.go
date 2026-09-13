@@ -79,6 +79,27 @@ func TestExtractProviderModelAndAssistantText(t *testing.T) {
 	}
 }
 
+func TestExtractEvidenceRefsStripsTrailingPunctuation(t *testing.T) {
+	text := `Canonical ref decision:pm_turn_9f3acc1cccd. Then card:emergency-restock, topic:ops-1; work:item-2: next. artifact:blob-9) document:guide-1] and 'card:foo.bar'.`
+	refs := extractEvidenceRefs(text)
+	want := []string{
+		"decision:pm_turn_9f3acc1cccd",
+		"card:emergency-restock",
+		"topic:ops-1",
+		"work:item-2",
+		"artifact:blob-9",
+		"document:guide-1",
+		"card:foo.bar",
+	}
+	if strings.Join(refs, "|") != strings.Join(want, "|") {
+		t.Fatalf("refs %v want %v", refs, want)
+	}
+	dotted := extractEvidenceRefs("See card:foo.bar.")
+	if len(dotted) != 1 || dotted[0] != "card:foo.bar" {
+		t.Fatalf("internal dot stripped: %v", dotted)
+	}
+}
+
 func TestPMServeRequiresRunner(t *testing.T) {
 	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", "http://127.0.0.1:1", "pm", "serve"}))
 	if code := asMap(payload["error"])["code"]; code != "invalid_request" && code != "invalid_flags" {
@@ -90,6 +111,65 @@ func TestPMAskRequiresQuestion(t *testing.T) {
 	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", "http://127.0.0.1:1", "pm", "ask"}))
 	if code := asMap(payload["error"])["code"]; code != "invalid_request" {
 		t.Fatalf("code=%v payload=%v", code, payload)
+	}
+}
+
+func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
+	for _, tc := range []struct {
+		name, turnBody, want, hide string
+	}{
+		{
+			name:     "unclaimed sending",
+			turnBody: `{"id":"turn-1","status":"sending","claimed":false,"deadline":"2026-09-08T22:00:00Z"}`,
+			want:     "status: queued",
+			hide:     "status: sending",
+		},
+		{
+			name:     "claimed sending",
+			turnBody: `{"id":"turn-2","status":"sending","claimed":true,"claimed_at":"2026-09-08T21:00:00Z","deadline":"2026-09-08T22:00:00Z"}`,
+			want:     "status: in progress",
+			hide:     "status: sending",
+		},
+		{
+			name:     "delivered",
+			turnBody: `{"id":"turn-3","status":"delivered","claimed":true,"response":"Ready."}`,
+			want:     "status: delivered",
+			hide:     "status: sending",
+		},
+		{
+			name:     "failed",
+			turnBody: `{"id":"turn-4","status":"failed","claimed":true,"failure":"deadline passed"}`,
+			want:     "status: failed",
+			hide:     "status: sending",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+					io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
+				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
+					io.WriteString(w, tc.turnBody)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "ask", "What needs my decision?"})
+			if !strings.Contains(text, tc.want) {
+				t.Fatalf("missing %q in %s", tc.want, text)
+			}
+			if strings.Contains(text, tc.hide) {
+				t.Fatalf("unexpected %q in %s", tc.hide, text)
+			}
+			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
+			turn := asMap(asMap(payload["data"])["turn"])
+			if strings.Contains(tc.name, "sending") && anyString(turn["status"]) != "sending" {
+				t.Fatalf("JSON remapped status: %v", payload["data"])
+			}
+		})
 	}
 }
 
@@ -426,7 +506,112 @@ func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
 	}
 }
 
+func TestRunCmdSeparatesStdoutAndStderr(t *testing.T) {
+	stdout, stderr, err := runCmd(context.Background(), "/bin/sh", []string{"-c", "printf '%s\\n' stdout-line; printf '%s\\n' stderr-line >&2"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stdout), "stderr-line") {
+		t.Fatalf("stderr leaked into stdout: %q", stdout)
+	}
+	if !strings.Contains(string(stdout), "stdout-line") {
+		t.Fatalf("stdout=%q", stdout)
+	}
+	if !strings.Contains(string(stderr), "stderr-line") {
+		t.Fatalf("stderr=%q", stderr)
+	}
+	if strings.Contains(string(stderr), "stdout-line") {
+		t.Fatalf("stdout leaked into stderr: %q", stderr)
+	}
+}
+
+func TestHandleClaimedTurnDirectRunnerKeepsStderrOutOfAnswer(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'harness log line' >&2; printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts.fail) != 0 || len(posts.complete) != 1 {
+		t.Fatalf("posts fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	if !strings.Contains(posts.complete[0], "Approve the restock.") {
+		t.Fatalf("complete %v", posts.complete)
+	}
+	if strings.Contains(posts.complete[0], "harness log line") {
+		t.Fatalf("stderr leaked into answer: %s", posts.complete[0])
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "harness log line") {
+		t.Fatalf("stderr missing from runner log: %s", logs)
+	}
+	if strings.Contains(logs, "using combined output") {
+		t.Fatalf("unexpected combined fallback: %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnDirectRunnerFallsBackToCombined(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve from stderr.' >&2", "{prompt}"}, nil, claimedTurn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts.complete) != 1 || !strings.Contains(posts.complete[0], "Approve from stderr.") {
+		t.Fatalf("complete %v", posts.complete)
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "using combined output for assistant text") {
+		t.Fatalf("missing fallback log: %s", logs)
+	}
+	if !strings.Contains(logs, "Approve from stderr.") {
+		t.Fatalf("stderr missing from runner log: %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnAgentctlKeepsStderrOutOfAnswer(t *testing.T) {
+	restore := stubAgentctlStreams(t, func(_ context.Context, _ string, args []string, _ string, _ []string) ([]byte, []byte, error) {
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(`{"ok":true,"id":"exec-ok"}`), []byte("launch log\n"), nil
+		case len(args) > 0 && args[0] == "await":
+			return []byte(`{"ok":true}`), []byte("await log\n"), nil
+		case len(args) > 1 && args[0] == "result" && args[len(args)-1] == "--content":
+			return []byte("Approve the restock."), []byte("harness log line\n"), nil
+		case len(args) > 0 && args[0] == "result":
+			return []byte(`{"provider":"zai","model":"glm-5.3"}`), nil, nil
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn()); err != nil {
+		t.Fatal(err)
+	}
+	if len(posts.fail) != 0 || len(posts.complete) != 1 {
+		t.Fatalf("posts fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	if !strings.Contains(posts.complete[0], "Approve the restock.") {
+		t.Fatalf("complete %v", posts.complete)
+	}
+	if strings.Contains(posts.complete[0], "harness log line") {
+		t.Fatalf("stderr leaked into answer: %s", posts.complete[0])
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "harness log line") {
+		t.Fatalf("stderr missing from runner log: %s", logs)
+	}
+}
+
 func stubAgentctl(t *testing.T, fn func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error)) func() {
+	t.Helper()
+	return stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		out, err := fn(ctx, name, args, dir, env)
+		return out, nil, err
+	})
+}
+
+func stubAgentctlStreams(t *testing.T, fn func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error)) func() {
 	t.Helper()
 	prev := runCmd
 	runCmd = fn
