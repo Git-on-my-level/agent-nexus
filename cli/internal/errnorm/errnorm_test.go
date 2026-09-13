@@ -642,7 +642,7 @@ func TestEnrichStaleSourceRevisionHints(t *testing.T) {
 		t.Fatalf("work_missing should not add propose-again advice: %q", dispatchWorkMissing.Hint)
 	}
 
-	dispatchWorkMissingID := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing","decision":{"action_id":"action-9"}}}`))
+	dispatchWorkMissingID := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing","decision":{"action_id":"action-9"}}}}`))
 	EnrichForCommand(dispatchWorkMissingID, "pm.decisions.dispatch")
 	if dispatchWorkMissingID.Hint != "The task this approval refers to no longer exists; nothing was sent. Acknowledge the failed action with `anx pm actions acknowledge action-9`." {
 		t.Fatalf("dispatch work_missing with action_id hint=%q", dispatchWorkMissingID.Hint)
