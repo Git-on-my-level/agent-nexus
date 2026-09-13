@@ -7,6 +7,7 @@ export {
   DEV_FIXTURE_PERSONAS,
   getDevSeedData,
   listDevSeedThreadRefViolations,
+  listDevSeedInboxSubjectRefViolations,
   mockTopicRefFromThreadId,
   mockTopicRefSuffixFromThreadId,
   buildMockTopicWorkspaceFromThreadWorkspace,

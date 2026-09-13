@@ -308,7 +308,7 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 			}
 		default:
 			if !hasValue {
-				if i+1 >= len(args) || (strings.HasPrefix(args[i+1], "-") && !looksLikeNegativeNumericFlagValue(args[i+1])) {
+				if i+1 >= len(args) || (strings.HasPrefix(args[i+1], "-") && !looksLikeStringFlagValue(args[i+1])) {
 					return errnorm.Usage("invalid_flags", fmt.Sprintf("flag needs an argument: -%s", name))
 				}
 				i++
@@ -741,6 +741,11 @@ func preflightMinInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func looksLikeStringFlagValue(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return raw == "-" || looksLikeNegativeNumericFlagValue(raw)
 }
 
 func looksLikeNegativeNumericFlagValue(raw string) bool {

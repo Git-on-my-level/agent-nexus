@@ -12,6 +12,7 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 	"pm turns claim":           {Command: "pm turns claim", CommandID: "pm.turns.claim"},
 	"pm turns fail":            {Command: "pm turns fail", CommandID: "pm.turns.fail"},
 	"pm turns propose":         {Command: "pm turns propose", CommandID: "pm.turns.decisions.create"},
+	"pm turns release":         {Command: "pm turns release", CommandID: "pm.turns.release"},
 	"pm serve":                 {Command: "pm serve", CommandID: "pm.serve"},
 	"pm ask":                   {Command: "pm ask", CommandID: "pm.ask"},
 	"pm channels doctor":       {Command: "pm channels doctor", CommandID: "pm.channels.doctor"},

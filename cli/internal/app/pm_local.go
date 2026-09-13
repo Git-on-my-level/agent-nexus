@@ -6,17 +6,21 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -97,12 +101,16 @@ var (
 		err = cmd.Run()
 		return outBuf.Bytes(), errBuf.Bytes(), err
 	}
-	nowFn            = time.Now
-	sleepFn          = sleepCtx
-	startupAckPoll   = 90 * time.Second
-	harnessLogWriter io.Writer
-	typedRefPattern  = regexp.MustCompile(`\b(?:card|work|artifact|topic|document|decision):[A-Za-z0-9._:-]+`)
-	providerModelRe  = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
+	nowFn                  = time.Now
+	sleepFn                = sleepCtx
+	startupAckPoll         = 90 * time.Second
+	pmServeShutdownGrace   = 5 * time.Second
+	claimNonRetryableLimit = 10
+	claimBackoffStart      = time.Second
+	claimBackoffCap       = 60 * time.Second
+	harnessLogWriter       io.Writer
+	typedRefPattern        = regexp.MustCompile(`\b(?:card|work|artifact|topic|document|decision):[A-Za-z0-9._:-]+`)
+	providerModelRe       = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
 )
 
 func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -258,73 +266,162 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		defer func() { harnessLogWriter = prev }()
 	}
 	a.pmLog("pm serve: agent=%s runner_id=%s work_dir=%s max_concurrent=%d\n", cfg.Agent, runnerID, absDir, maxConcurrent)
+	serveCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	harnessRoot, stopHarness := context.WithCancel(context.Background())
+	defer stopHarness()
+	type heldTurn struct {
+		id, lease string
+	}
 	var (
-		mu      sync.Mutex
-		active  int
-		running = map[string]bool{}
+		mu                 sync.Mutex
+		active             int
+		held               = map[string]heldTurn{}
+		nonRetryableStreak int
+		backoff            = claimBackoffStart
+		loggedNonRetryable bool
 	)
+	shutdown := func() (*commandResult, error) {
+		deadline := nowFn().Add(pmServeShutdownGrace)
+		for {
+			mu.Lock()
+			busy := active
+			mu.Unlock()
+			if busy == 0 {
+				break
+			}
+			remain := deadline.Sub(nowFn())
+			if remain <= 0 {
+				break
+			}
+			if remain > 20*time.Millisecond {
+				remain = 20 * time.Millisecond
+			}
+			if sleepErr := sleepFn(context.Background(), remain); sleepErr != nil {
+				break
+			}
+		}
+		mu.Lock()
+		pending := make([]heldTurn, 0, len(held))
+		for _, turn := range held {
+			pending = append(pending, turn)
+		}
+		mu.Unlock()
+		releaseCtx, cancelRelease := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelRelease()
+		released := make([]string, 0, len(pending))
+		for _, turn := range pending {
+			if err := a.releaseTurn(releaseCtx, cfg, turn.id, turn.lease); err != nil {
+				a.pmLog("pm serve: release %s failed: %v\n", turn.id, err)
+				continue
+			}
+			a.pmLog("pm serve: released turn %s\n", turn.id)
+			released = append(released, turn.id)
+		}
+		stopHarness()
+		return &commandResult{Text: "pm serve stopped", Data: map[string]any{"stopped": true, "released": released}}, serveCtx.Err()
+	}
 	for {
 		select {
-		case <-ctx.Done():
-			return &commandResult{Text: "pm serve stopped", Data: map[string]any{"stopped": true}}, ctx.Err()
+		case <-serveCtx.Done():
+			return shutdown()
 		default:
 		}
 		mu.Lock()
 		busy := active
 		mu.Unlock()
 		if busy >= maxConcurrent {
-			if sleepErr := sleepCtx(ctx, interval); sleepErr != nil {
-				return nil, sleepErr
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
 			}
 			continue
 		}
-		claimed, claimErr := a.invokeRawJSON(ctx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
+		claimed, claimErr := a.invokeRawJSON(serveCtx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
 		if claimErr != nil {
+			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {
+				return shutdown()
+			}
+			if !claimErrorRetryable(claimErr) {
+				nonRetryableStreak++
+				if !loggedNonRetryable {
+					a.pmLog("pm serve: claim failed: %v\n", claimErr)
+					loggedNonRetryable = true
+				}
+				if nonRetryableStreak >= claimNonRetryableLimit {
+					return nil, errnorm.New(errnorm.KindRemote, "claim_failed", fmt.Sprintf("Claim failed with a non-retryable error %d times. Exiting.", claimNonRetryableLimit))
+				}
+				if sleepErr := sleepFn(serveCtx, backoff); sleepErr != nil {
+					return shutdown()
+				}
+				if backoff < claimBackoffCap {
+					backoff *= 2
+					if backoff > claimBackoffCap {
+						backoff = claimBackoffCap
+					}
+				}
+				continue
+			}
+			nonRetryableStreak = 0
+			backoff = claimBackoffStart
+			loggedNonRetryable = false
 			a.pmLog("pm serve: claim failed: %v\n", claimErr)
-			if sleepErr := sleepCtx(ctx, interval); sleepErr != nil {
-				return nil, sleepErr
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
 			}
 			continue
 		}
+		nonRetryableStreak = 0
+		backoff = claimBackoffStart
+		loggedNonRetryable = false
 		status, _ := asMap(claimed.Data)["status_code"].(int)
 		if status == 204 || commandResultBody(claimed) == nil {
-			if sleepErr := sleepCtx(ctx, interval); sleepErr != nil {
-				return nil, sleepErr
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
 			}
 			continue
 		}
 		turn := commandResultBody(claimed)
 		turnID := anyString(turn["id"])
+		leaseToken := anyString(turn["lease_token"])
 		mu.Lock()
-		if running[turnID] {
+		if _, exists := held[turnID]; exists {
 			mu.Unlock()
-			if sleepErr := sleepCtx(ctx, interval); sleepErr != nil {
-				return nil, sleepErr
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
 			}
 			continue
 		}
-		running[turnID] = true
+		held[turnID] = heldTurn{id: turnID, lease: leaseToken}
 		active++
 		mu.Unlock()
 		a.pmLog("pm serve: claimed turn %s\n", turnID)
 		runTurn := func() {
 			defer func() {
 				mu.Lock()
-				delete(running, turnID)
+				delete(held, turnID)
 				active--
 				mu.Unlock()
 			}()
-			_ = a.handleClaimedTurn(ctx, cfg, absDir, agentctl, argv, env, turn)
+			_ = a.handleClaimedTurn(ctx, cfg, absDir, agentctl, argv, env, turn, harnessRoot)
 		}
 		if maxConcurrent == 1 {
-			runTurn()
+			done := make(chan struct{})
+			go func() {
+				runTurn()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-serveCtx.Done():
+				return shutdown()
+			}
 			continue
 		}
 		go runTurn()
 	}
 }
 
-func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDir, agentctl string, argv, env []string, turn map[string]any) error {
+func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDir, agentctl string, argv, env []string, turn map[string]any, harnessBase context.Context) error {
 	started := nowFn()
 	turnID := anyString(turn["id"])
 	leaseToken := anyString(turn["lease_token"])
@@ -333,9 +430,14 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if n, ok := intFromAny(turn["max_output_bytes"]); ok && n >= 256 {
 		maxBytes = n
 	}
+	direct := runnerUsesPromptPlaceholder(argv)
 	fail := func(reason string, raw []byte) error {
 		if len(raw) > 0 {
-			a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(raw)))
+			source := "agentctl"
+			if direct {
+				source = "runner"
+			}
+			a.pmLog("pm serve: turn %s %s: %s\n", turnID, source, strings.TrimSpace(string(raw)))
 		}
 		a.pmLog("pm serve: turn %s failed in %ds: %s\n", turnID, elapsedSeconds(started), reason)
 		return a.failTurn(ctx, cfg, turnID, leaseToken, reason)
@@ -364,7 +466,11 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if reason := missingHarnessSecretReason(argv, env); reason != "" {
 		return fail(reason, nil)
 	}
-	runCtx, cancel := context.WithTimeout(ctx, remain)
+	base := harnessBase
+	if base == nil {
+		base = ctx
+	}
+	runCtx, cancel := context.WithTimeout(base, remain)
 	defer cancel()
 	if runnerUsesPromptPlaceholder(argv) {
 		expanded := expandPromptPlaceholder(argv, promptPath)
@@ -374,7 +480,10 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		stdout, stderr, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
 		a.logRunnerStderr(turnID, stderr)
 		if err != nil {
-			return fail(humanTurnFailure("launch_failed", ""), joinCmdOutput(stdout, stderr))
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			return fail(harnessCmdFailure(err), joinCmdOutput(stdout, stderr))
 		}
 		text := assistantTextFromRunnerOutput(stdout)
 		if text == "" {
@@ -395,6 +504,9 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	a.logRunnerStderr(turnID, launchErrOut)
 	execID, launchTimeout := "", ""
 	if launchErr != nil {
+		if errors.Is(launchErr, context.Canceled) {
+			return launchErr
+		}
 		var ok bool
 		execID, launchTimeout, ok = continuingAgentctlLaunch(launchOut)
 		if !ok {
@@ -413,12 +525,18 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if awaitErr != nil && agentctlNotFound(awaitOut, awaitErr) {
 		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(awaitOut)))
 		if visErr := waitForAgentctlExecution(runCtx, agentctl, execID, workDir, env); visErr != nil {
+			if errors.Is(visErr, context.Canceled) {
+				return visErr
+			}
 			return fail(humanTurnFailure("startup_timeout", launchTimeout), joinCmdOutput(awaitOut, awaitErrOut))
 		}
 		awaitOut, awaitErrOut, awaitErr = runCmd(runCtx, agentctl, awaitArgs, workDir, env)
 		a.logRunnerStderr(turnID, awaitErrOut)
 	}
 	if awaitErr != nil {
+		if errors.Is(awaitErr, context.Canceled) {
+			return awaitErr
+		}
 		return fail(humanTurnFailure("await_failed", ""), joinCmdOutput(awaitOut, awaitErrOut))
 	}
 	contentOut, contentErrOut, _ := runCmd(runCtx, agentctl, []string{"result", execID, "--content"}, workDir, env)
@@ -451,10 +569,21 @@ func truncateToMaxBytes(text string, maxBytes int) string {
 		return text
 	}
 	n := maxBytes
-	for n > 0 && !utf8.ValidString(text[:n]) {
+	for i := 0; i < utf8.UTFMax-1 && n > 0 && !utf8.RuneStart(text[n]); i++ {
 		n--
 	}
+	if n == 0 {
+		return ""
+	}
+	_, _ = utf8.DecodeLastRuneInString(text[:n])
 	return text[:n]
+}
+
+func (a *App) releaseTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken string) error {
+	_, err := a.invokeRawJSON(ctx, cfg, "pm turns release", "POST", "/pm/turns/"+url.PathEscape(turnID)+"/release", map[string]any{
+		"lease_token": leaseToken,
+	})
+	return err
 }
 
 func (a *App) failTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken, reason string) error {
@@ -575,6 +704,66 @@ func humanTurnFailure(kind, extra string) string {
 	default:
 		return "The PM harness failed to start. Retry, or check the runner log."
 	}
+}
+
+func harnessCmdFailure(err error) string {
+	if err == nil {
+		return humanTurnFailure("launch_failed", "")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return humanTurnFailure("deadline", "")
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return fmt.Sprintf("The PM harness exited with an error (exit %d). Retry, or check the runner log.", exitErr.ExitCode())
+	}
+	return "The PM harness failed to start. Retry, or check the runner log."
+}
+
+func claimErrorRetryable(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) {
+		return true
+	}
+	if typed.Kind == errnorm.KindNetwork {
+		return true
+	}
+	status := httpStatusFromErr(typed)
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return false
+	case http.StatusRequestTimeout, http.StatusConflict, http.StatusTooManyRequests,
+		http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	if status >= 400 && status < 500 {
+		return false
+	}
+	if typed.Recoverable != nil {
+		return *typed.Recoverable
+	}
+	return true
+}
+
+func httpStatusFromErr(err error) int {
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) {
+		return 0
+	}
+	details, _ := typed.Details.(map[string]any)
+	switch v := details["status"].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	}
+	return 0
 }
 
 func formatTimeoutPhrase(raw string) string {

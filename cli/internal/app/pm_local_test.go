@@ -10,11 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
 
 func TestSplitRunnerArgvRespectsQuotes(t *testing.T) {
@@ -332,7 +335,7 @@ func TestHandleClaimedTurnRecoversExit9StartupAck(t *testing.T) {
 	})
 	defer restore()
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +408,7 @@ func TestHandleClaimedTurnPollsStatusWhenAwaitNotFound(t *testing.T) {
 	})
 	defer restore()
 	harness, posts := pmTurnHarness(t)
-	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn()); err != nil {
+	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if statusCalls < 2 || awaitCalls != 2 {
@@ -443,7 +446,7 @@ func TestHandleClaimedTurnFailsPlainLanguageWhenStatusNeverAppears(t *testing.T)
 	})
 	defer restore()
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn(), nil)
 	if err == nil {
 		t.Fatal("expected failure")
 	}
@@ -503,7 +506,7 @@ func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
 			})
 			defer restore()
 			harness, posts := pmTurnHarness(t)
-			_ = harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn())
+			_ = harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn(), nil)
 			if len(posts.fail) != 1 || posts.fail[0] != tc.want {
 				t.Fatalf("fail %v want %q", posts.fail, tc.want)
 			}
@@ -538,7 +541,7 @@ func TestRunCmdSeparatesStdoutAndStderr(t *testing.T) {
 
 func TestHandleClaimedTurnDirectRunnerKeepsStderrOutOfAnswer(t *testing.T) {
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'harness log line' >&2; printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'harness log line' >&2; printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,7 +565,7 @@ func TestHandleClaimedTurnDirectRunnerKeepsStderrOutOfAnswer(t *testing.T) {
 
 func TestHandleClaimedTurnDirectRunnerFailsWhenStdoutHasNoAssistant(t *testing.T) {
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve from stderr.' >&2", "{prompt}"}, nil, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve from stderr.' >&2", "{prompt}"}, nil, claimedTurn(), nil)
 	if err == nil {
 		t.Fatal("expected no_assistant failure")
 	}
@@ -592,7 +595,7 @@ func TestAssistantTextFromRunnerOutputUsesStdoutOnly(t *testing.T) {
 
 func TestHandleClaimedTurnFailsWhenZAIAPIKeyMissing(t *testing.T) {
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'should not run'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin"}, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'should not run'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin"}, claimedTurn(), nil)
 	if err == nil {
 		t.Fatal("expected missing ZAI_API_KEY failure")
 	}
@@ -609,7 +612,7 @@ func TestHandleClaimedTurnFailsWhenZAIAPIKeyMissing(t *testing.T) {
 
 func TestHandleClaimedTurnRunsWhenZAIAPIKeyExported(t *testing.T) {
 	harness, posts := pmTurnHarness(t)
-	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin", "ZAI_API_KEY=from-operator"}, claimedTurn())
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin", "ZAI_API_KEY=from-operator"}, claimedTurn(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +642,7 @@ func TestHandleClaimedTurnAgentctlKeepsStderrOutOfAnswer(t *testing.T) {
 	})
 	defer restore()
 	harness, posts := pmTurnHarness(t)
-	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn()); err != nil {
+	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn(), nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(posts.fail) != 0 || len(posts.complete) != 1 {
@@ -738,5 +741,257 @@ func TestTruncateToMaxBytesKeepsUTF8RuneBoundaries(t *testing.T) {
 	}
 	if got := truncateToMaxBytes("abc", 2); got != "ab" {
 		t.Fatalf("ascii: got %q", got)
+	}
+	invalidMid := "abcdefghij\xffklmnopqrstuvwxyz"
+	got := truncateToMaxBytes(invalidMid, 20)
+	if !strings.Contains(got, "\xff") {
+		t.Fatalf("invalid byte in the middle should be kept, got %q bytes=%v", got, []byte(got))
+	}
+	if len(got) != 20 {
+		t.Fatalf("budget 20 with ASCII tail: got %d bytes %q", len(got), got)
+	}
+}
+
+func TestClaimErrorRetryable(t *testing.T) {
+	if claimErrorRetryable(errnorm.FromHTTPFailure(http.StatusUnauthorized, nil)) {
+		t.Fatal("401 should not retry")
+	}
+	if claimErrorRetryable(errnorm.FromHTTPFailure(http.StatusForbidden, nil)) {
+		t.Fatal("403 should not retry")
+	}
+	if !claimErrorRetryable(errnorm.FromHTTPFailure(http.StatusServiceUnavailable, nil)) {
+		t.Fatal("503 should retry")
+	}
+	if !claimErrorRetryable(errnorm.Network("request_failed", "connection refused")) {
+		t.Fatal("network should retry")
+	}
+}
+
+func TestHarnessCmdFailureDistinguishesStartExitAndDeadline(t *testing.T) {
+	if got := harnessCmdFailure(context.DeadlineExceeded); got != humanTurnFailure("deadline", "") {
+		t.Fatalf("deadline %q", got)
+	}
+	cmd := exec.Command("/bin/sh", "-c", "exit 7")
+	err := cmd.Run()
+	want := "The PM harness exited with an error (exit 7). Retry, or check the runner log."
+	if got := harnessCmdFailure(err); got != want {
+		t.Fatalf("exit 7: %q", got)
+	}
+	if got := harnessCmdFailure(exec.ErrNotFound); got != "The PM harness failed to start. Retry, or check the runner log." {
+		t.Fatalf("exec error %q", got)
+	}
+}
+
+func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
+	t.Run("exec error", func(t *testing.T) {
+		harness, posts := pmTurnHarness(t)
+		err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/no/such/pm-harness", "{prompt}"}, nil, claimedTurn(), nil)
+		if err == nil {
+			t.Fatal("expected start failure")
+		}
+		if len(posts.fail) != 1 || posts.fail[0] != "The PM harness failed to start. Retry, or check the runner log." {
+			t.Fatalf("fail %v", posts.fail)
+		}
+		if strings.Contains(harness.stderr.String(), "agentctl:") {
+			t.Fatalf("direct path logged agentctl prefix: %s", harness.stderr.String())
+		}
+	})
+	t.Run("exit 1 with stdout", func(t *testing.T) {
+		harness, posts := pmTurnHarness(t)
+		err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'harness wrote stdout'; exit 1", "{prompt}"}, nil, claimedTurn(), nil)
+		if err == nil {
+			t.Fatal("expected exit failure")
+		}
+		want := "The PM harness exited with an error (exit 1). Retry, or check the runner log."
+		if len(posts.fail) != 1 || posts.fail[0] != want {
+			t.Fatalf("fail %v", posts.fail)
+		}
+		logs := harness.stderr.String()
+		if strings.Contains(logs, "agentctl:") {
+			t.Fatalf("direct path logged agentctl prefix: %s", logs)
+		}
+		if !strings.Contains(logs, "runner:") || !strings.Contains(logs, "harness wrote stdout") {
+			t.Fatalf("expected runner log of stdout, got %s", logs)
+		}
+	})
+	t.Run("deadline", func(t *testing.T) {
+		restore := stubAgentctl(t, func(ctx context.Context, _ string, _ []string, _ string, _ []string) ([]byte, error) {
+			return nil, context.DeadlineExceeded
+		})
+		defer restore()
+		harness, posts := pmTurnHarness(t)
+		err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/true", "{prompt}"}, nil, claimedTurn(), nil)
+		if err == nil {
+			t.Fatal("expected deadline failure")
+		}
+		if len(posts.fail) != 1 || posts.fail[0] != humanTurnFailure("deadline", "") {
+			t.Fatalf("fail %v", posts.fail)
+		}
+	})
+}
+
+func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
+	var claims int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/turns/claim" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		claims++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `{"error":{"code":"permission_denied","message":"PM permission denied"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	sleepFn = func(context.Context, time.Duration) error { return nil }
+	t.Cleanup(func() { sleepFn = sleepCtx })
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	_, err := app.runPMServe(context.Background(), []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, cfg)
+	if err == nil || !strings.Contains(err.Error(), "Claim failed with a non-retryable error 10 times. Exiting.") {
+		t.Fatalf("err=%v", err)
+	}
+	if claims != 10 {
+		t.Fatalf("claims=%d", claims)
+	}
+	logs := stderr.String()
+	if strings.Count(logs, "claim failed:") != 1 {
+		t.Fatalf("expected one claim-failed log, got %s", logs)
+	}
+}
+
+func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
+	claimed := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-claimed:
+		default:
+			close(claimed)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, `{"error":{"code":"unavailable","message":"try again"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	sleepFn = func(context.Context, time.Duration) error { return nil }
+	t.Cleanup(func() { sleepFn = sleepCtx })
+	ctx, cancel := context.WithCancel(context.Background())
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	done := make(chan error, 1)
+	go func() {
+		_, err := app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"})
+		done <- err
+	}()
+	select {
+	case <-claimed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("transient claim did not run")
+	}
+	cancel()
+	err := <-done
+	if err == nil {
+		t.Fatal("expected cancel")
+	}
+	if !strings.Contains(stderr.String(), "claim failed:") {
+		t.Fatalf("expected transient claim logs, got %s", stderr.String())
+	}
+	if strings.Contains(err.Error(), "non-retryable") {
+		t.Fatalf("transient errors exited: %v", err)
+	}
+}
+
+func TestPMServeReleasesHeldTurnOnShutdown(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		released []string
+		claimed  bool
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			mu.Lock()
+			already := claimed
+			claimed = true
+			mu.Unlock()
+			if already {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			io.WriteString(w, `{"id":"turn-held","lease_token":"lease-held","deadline":"`+time.Now().Add(2*time.Minute).UTC().Format(time.RFC3339Nano)+`","text":"hi"}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			body, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			released = append(released, r.URL.Path+" "+string(body))
+			mu.Unlock()
+			io.WriteString(w, `{"id":"turn-held","status":"sending"}`)
+		case strings.HasSuffix(r.URL.Path, "/complete"), strings.HasSuffix(r.URL.Path, "/fail"):
+			t.Errorf("shutdown should release, not complete/fail: %s", r.URL.Path)
+			http.NotFound(w, r)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	started := make(chan struct{})
+	restore := stubAgentctl(t, func(ctx context.Context, _ string, _ []string, _ string, _ []string) ([]byte, error) {
+		select {
+		case <-started:
+		default:
+			close(started)
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	defer restore()
+	prevGrace := pmServeShutdownGrace
+	pmServeShutdownGrace = 30 * time.Millisecond
+	t.Cleanup(func() { pmServeShutdownGrace = prevGrace })
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"})
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("harness did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected shutdown error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("pm serve did not stop")
+	}
+	mu.Lock()
+	got := append([]string{}, released...)
+	mu.Unlock()
+	if len(got) != 1 || !strings.Contains(got[0], "/pm/turns/turn-held/release") || !strings.Contains(got[0], "lease-held") {
+		t.Fatalf("release %v", got)
+	}
+	if !strings.Contains(stderr.String(), "released turn turn-held") {
+		t.Fatalf("expected release log, got %s", stderr.String())
 	}
 }

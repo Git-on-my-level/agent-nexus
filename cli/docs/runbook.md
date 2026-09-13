@@ -478,9 +478,27 @@ exchange), and prints the exact command. Wake routing and
 Export `ZAI_API_KEY` in the shell that launches `pm serve`. The runner does not
 read `~/.hermes/auth.json` or inject the key. If the harness argv names `zai`
 and that variable is unset, the turn fails with a sentence that names
-`ZAI_API_KEY`. Run the PM harness as a different uid or on a different host
-from core's JIT generated-reader process: Seatbelt on this OS cannot hide
-another same-uid process's environment.
+`ZAI_API_KEY`.
+
+The harness child receives the **full parent environment**, then `HOME` is
+reset to the login account home from passwd (`user.Current().HomeDir`). That
+is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
+`HOME=.tmp/anx-dev-profile-homes/pm` applies to the `anx` process (CLI
+profiles), not to the child harness.
+
+Seatbelt on this OS cannot hide another same-uid process's environment, so
+run the harness as a different uid or on a different host from core's JIT
+generated-reader process. Example, separate uid:
+
+```sh
+sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
+  HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
+```
+
+Example, separate host: start core locally, then on the runner machine
+`ANX_BASE_URL=http://core-host:8000 ZAI_API_KEY=... ./cli/anx --agent pm pm serve ...`.
 
 ```sh
 make cli-build
