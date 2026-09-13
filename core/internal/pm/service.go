@@ -36,7 +36,10 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 	if cfg.MaxConcurrent == 0 {
 		cfg.MaxConcurrent = 2
 	}
-	if cfg.TurnTimeout < time.Second || cfg.TurnTimeout > 10*time.Minute || cfg.MaxOutputBytes < 256 || cfg.MaxOutputBytes > 64000 || cfg.MaxConcurrent < 1 || cfg.MaxConcurrent > 16 {
+	if cfg.MaxQueued == 0 {
+		cfg.MaxQueued = 20
+	}
+	if cfg.TurnTimeout < time.Second || cfg.TurnTimeout > 10*time.Minute || cfg.MaxOutputBytes < 256 || cfg.MaxOutputBytes > 64000 || cfg.MaxConcurrent < 1 || cfg.MaxConcurrent > 16 || cfg.MaxQueued < 1 {
 		return nil, ErrInvalid
 	}
 	return &Service{store: store, cfg: cfg, deps: deps}, nil
@@ -222,7 +225,7 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 	}
 	now := time.Now().UTC()
 	t := Turn{ID: id, ConversationID: c.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, Text: in.Text, Status: Pending, WakeupID: stableID("wake", id), AgentActorID: s.cfg.AgentActorID, MaxOutputBytes: s.cfg.MaxOutputBytes, Origin: c.Origin, CreatedAt: now, Deadline: now.Add(s.cfg.TurnTimeout), Revision: 1}
-	inserted, err := s.store.insertTurn(ctx, t, s.cfg.MaxConcurrent)
+	inserted, err := s.store.insertTurn(ctx, t, s.cfg.MaxQueued)
 	if err != nil {
 		return Turn{}, err
 	}

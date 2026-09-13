@@ -133,7 +133,7 @@ func TestRound9UnclaimedTurnOperations(t *testing.T) {
 func TestRound9BusyAdmissionDetails(t *testing.T) {
 	s, st, p, _ := fixture(t)
 	ctx := context.Background()
-	s.cfg.MaxConcurrent = 1
+	s.cfg.MaxQueued = 1
 	s.deps.Dispatch = nil
 	c, err := s.CreateConversation(ctx, p, CreateConversation{RequestKey: "one", Title: "One"})
 	if err != nil {
@@ -157,7 +157,7 @@ func TestRound9BusyAdmissionDetails(t *testing.T) {
 		details              map[string]any
 	}{
 		{c.ID, "conversation", map[string]any{"reason": "conversation", "turn_id": turn.ID}},
-		{other.ID, "capacity", map[string]any{"reason": "capacity", "in_flight": float64(1), "limit": float64(1)}},
+		{other.ID, "queue", map[string]any{"reason": "queue", "queued": float64(1), "limit": float64(1)}},
 	} {
 		t.Run(tc.reason, func(t *testing.T) {
 			rr := httptest.NewRecorder()
@@ -178,7 +178,7 @@ func TestRound9BusyAdmissionDetails(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(replay, turn) {
 		t.Fatalf("replay %+v %v", replay, err)
 	}
-	// Unknown serializes its conversation but frees workspace admission capacity.
+	// Unknown remains claimable and occupies the waiting queue.
 	turn.Status = Unknown
 	turn.Revision++
 	if err := st.cas(ctx, "turn", turn.ID, turn.Revision-1, turn); err != nil {
@@ -189,8 +189,8 @@ func TestRound9BusyAdmissionDetails(t *testing.T) {
 	if !errors.As(err, &busy) || busy.Reason != "conversation" || busy.TurnID != turn.ID {
 		t.Fatalf("unknown: %v", err)
 	}
-	if _, err := second.PostMessage(ctx, p, other.ID, MessageInput{RequestKey: "allowed", Text: "next"}); err != nil {
-		t.Fatal(err)
+	if _, err := second.PostMessage(ctx, p, other.ID, MessageInput{RequestKey: "waiting", Text: "next"}); !errors.As(err, &busy) || busy.Reason != "queue" {
+		t.Fatalf("unknown queue: %v", err)
 	}
 }
 
@@ -358,7 +358,7 @@ func TestRound9ConcurrentAdmissionReason(t *testing.T) {
 		t.Run(fmt.Sprint(sameConversation), func(t *testing.T) {
 			s, st, p, _ := fixture(t)
 			ctx := context.Background()
-			s.cfg.MaxConcurrent = 1
+			s.cfg.MaxQueued = 1
 			s.deps.Dispatch = nil
 			second, err := NewService(st, s.cfg, s.deps)
 			if err != nil {
@@ -406,7 +406,7 @@ func TestRound9ConcurrentAdmissionReason(t *testing.T) {
 					t.Fatal(busy)
 				}
 			} else {
-				if busy.Reason != "capacity" || busy.InFlight != 1 || busy.Limit != 1 {
+				if busy.Reason != "queue" || busy.Queued != 1 || busy.Limit != 1 {
 					t.Fatal(busy)
 				}
 			}

@@ -182,7 +182,7 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 
 // insertTurn observes admission and its failure reason under the same write lock,
 // including across multiple Service instances. Duplicate IDs are replayed by callers.
-func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool, error) {
+func (s *Store) insertTurn(ctx context.Context, t Turn, maxQueued int) (bool, error) {
 	b, err := json.Marshal(t)
 	if err != nil {
 		return false, err
@@ -212,15 +212,17 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool
 	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	var inFlight int
+	var queued int
 	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM pm_records WHERE kind='turn' AND workspace_id=?
- AND json_extract(body,'$.status') IN ('pending_delivery','sending')
- AND julianday(json_extract(body,'$.deadline'))>julianday('now')`, t.WorkspaceID).Scan(&inFlight)
+ AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown')
+ AND julianday(json_extract(body,'$.deadline'))>julianday('now')
+ AND NOT (COALESCE(json_extract(body,'$.lease_token'),'') != ''
+          AND COALESCE(julianday(json_extract(body,'$.lease_expires_at'))>julianday('now'),0))`, t.WorkspaceID).Scan(&queued)
 	if err != nil {
 		return false, err
 	}
-	if inFlight >= maxConcurrent {
-		return false, &BusyError{Reason: "capacity", InFlight: inFlight, Limit: maxConcurrent}
+	if queued >= maxQueued {
+		return false, &BusyError{Reason: "queue", Queued: queued, Limit: maxQueued}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, t.ID, t.WorkspaceID, t.ActorID, t.ConversationID, b); err != nil {
 		return false, err

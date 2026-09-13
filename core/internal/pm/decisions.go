@@ -505,16 +505,23 @@ func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision
 		d.Status = Declined
 	}
 	d.CanAnswer = p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
-	d.WorkMissing, d.TargetCurrent, d.AlreadyAtTarget = false, false, false
+	d.WorkMissing, d.TargetCurrent, d.AlreadyAtTarget = false, nil, nil
 	if s.deps.DecisionWork != nil {
 		work, err := s.deps.DecisionWork(ctx, p, d.WorkRef)
 		d.WorkMissing = errors.Is(err, ErrNotFound)
 		if err != nil {
 			d.CanAnswer = false
+			if d.WorkMissing {
+				current, atTarget := false, false
+				d.TargetCurrent, d.AlreadyAtTarget = &current, &atTarget
+			}
 		} else {
-			d.TargetCurrent = d.TargetRevision == work.Revision
-			d.AlreadyAtTarget = d.Payload != nil && d.Payload.Phase != "" && d.Payload.Phase == work.Phase
+			current := d.TargetRevision == work.Revision
+			atTarget := d.Payload != nil && d.Payload.Phase != "" && d.Payload.Phase == work.Phase
+			d.TargetCurrent, d.AlreadyAtTarget = &current, &atTarget
 		}
+	} else {
+		d.CanAnswer = false
 	}
 	return d
 }

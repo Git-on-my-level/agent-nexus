@@ -212,7 +212,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PMTurn'
         '429':
-          description: Busy; details.reason is conversation with details.turn_id, or capacity with details.in_flight and details.limit.
+          description: Busy; details.reason is conversation with details.turn_id, or queue with details.queued and details.limit. Unclaimed turns do not consume runner capacity.
           content:
             application/json:
               schema:
@@ -872,7 +872,7 @@ paths:
     post:
       operationId: pmTurnsClaim
       summary: Claim or recover a PM turn with an exclusive runner lease
-      description: Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.
+      description: New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. At capacity, returns 204 even if queued turns exist. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.
       tags:
       - pm
       x-anx-surface: canonical
@@ -915,7 +915,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PMClaimedTurn'
         '204':
-          description: No claimable turn
+          description: No claimable turn or workspace runner lease capacity reached
   /pm/turns/{turn_id}/fail:
     post:
       operationId: pmTurnsFail
@@ -6661,12 +6661,14 @@ components:
           description: Derived on every response; true when the referenced work no longer resolves or is trashed or archived. Such decisions remain visible in lists and pages and can be declined or their actions acknowledged or closed by the owner, but cannot be approved or dispatched.
         target_current:
           type: boolean
+          nullable: true
           readOnly: true
-          description: Derived on every response; true when target_revision equals the referenced work's current decision_revision. False when the work is missing or its state cannot be read.
+          description: Derived on every response; true when target_revision equals the referenced work's current decision_revision. False when the work is missing or the revision differs. Null when current work cannot be read or the work reader is unavailable.
         already_at_target:
           type: boolean
+          nullable: true
           readOnly: true
-          description: Derived on every response; true when a nonempty payload.phase equals the referenced work's current phase. False without a phase payload, when work is missing, or its state cannot be read.
+          description: Derived on every response; true when a nonempty payload.phase equals the referenced work's current phase. False without a phase payload, when work is missing, or the phase differs. Null when current work cannot be read or the work reader is unavailable.
         can_answer:
           type: boolean
           readOnly: true
@@ -6861,7 +6863,7 @@ components:
       - request_key
       - text
     PMErrorResponse:
-      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or capacity with in_flight and limit for the workspace. Conversation serialization takes precedence when both limits apply.
+      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or queue with queued and limit for the workspace (ANX_PM_MAX_QUEUED, default 20). Waiting turns are open, before their deadline, and have no unexpired runner lease, including unknown wakeup outcomes. Conversation serialization takes precedence when both limits apply. Capacity means claimed turns with unexpired leases (ANX_PM_MAX_CONCURRENT, default 2); it is enforced atomically at claim time with HTTP 204, not at message admission. The capacity reason remains reserved for compatibility.
       type: object
       required: [error]
       properties:
@@ -6887,14 +6889,17 @@ components:
                   description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
                 reason:
                   type: string
-                  enum: [conversation, capacity, revision_changed, work_missing, already_at_target, work_read_failed, conversation_owner_not_human]
+                  enum: [conversation, capacity, queue, revision_changed, work_missing, already_at_target, work_read_failed, conversation_owner_not_human]
                   description: Turn admission constraint, approval/source preflight refusal, or conversation_owner_not_human for a turn proposal whose owner is an agent principal. That 403 message is "Proposals need a human approver; this conversation belongs to an agent principal".
+                queued:
+                  type: integer
+                  description: Current workspace waiting turns for queue errors.
                 in_flight:
                   type: integer
-                  description: Current workspace in-flight turns for capacity errors.
+                  description: Current workspace claimed turns with unexpired runner leases for capacity errors.
                 limit:
                   type: integer
-                  description: Workspace turn capacity for capacity errors.
+                  description: Workspace queue limit for queue errors, or runner lease limit for capacity errors.
                 pending_decision_id:
                   type: string
                   description: Awaiting human decision blocking a different non-human proposal on this work.

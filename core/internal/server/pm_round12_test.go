@@ -128,7 +128,7 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			for _, row := range ds {
 				if row.ID == id {
 					found = true
-					if !row.WorkMissing || row.CanAnswer || row.TargetCurrent || row.AlreadyAtTarget {
+					if !row.WorkMissing || row.CanAnswer || row.TargetCurrent == nil || *row.TargetCurrent || row.AlreadyAtTarget == nil || *row.AlreadyAtTarget {
 						t.Fatal(row)
 					}
 				}

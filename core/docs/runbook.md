@@ -130,8 +130,12 @@ and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
 `lease_token`. Past-deadline sending turns expire to `failed` on claim.
-`ANX_PM_MAX_CONCURRENT` (default 2) bounds in-flight sending turns. Channel
-ingress turns carry `origin` and use this same claim pipeline. See
+`ANX_PM_MAX_CONCURRENT` (default 2) bounds claimed turns with unexpired runner
+leases; new claims return 204 at that cap. `ANX_PM_MAX_QUEUED` (default 20)
+separately bounds open turns waiting without an unexpired lease, including
+unknown wakeup outcomes. A full queue returns `429 busy` with `reason: queue`,
+`queued`, and `limit`; each conversation still allows at most one pending turn.
+Channel ingress turns carry `origin` and use this same claim pipeline. See
 `cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe and `{prompt}` Hermes
 or Codex argv.
 
