@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	"agent-nexus-cli/internal/config"
@@ -224,6 +225,10 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if len(query) > 0 {
 		path += "?" + query.Encode()
 	}
+	var started time.Time
+	if parsed.name == "pm decisions dispatch" {
+		started = time.Now().UTC()
+	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
 	if err != nil {
 		return result, parsed.name, err
@@ -258,7 +263,11 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		work := asMap(asMap(commandResultBody(result))["work"])
 		asMap(result.Data)["body"] = map[string]any{"ref": work["ref"], "freshness": work["freshness"], "latest_observation": work["latest_observation"], "refresh": work["refresh"]}
 	}
-	result.Text = formatWorkCommandText(parsed.name, commandResultBody(result))
+	if parsed.name == "pm decisions dispatch" {
+		result.Text = formatPMDispatchText(commandResultBody(result), started, "")
+	} else {
+		result.Text = formatWorkCommandText(parsed.name, commandResultBody(result))
+	}
 	if cfg.Verbose {
 		result.Text = formatPrettyBody(commandResultBody(result))
 	}
@@ -414,7 +423,7 @@ func formatWorkCommandText(name string, body any) string {
 		return formatPMTurnGetText(root)
 	}
 	if name == "pm decisions dispatch" {
-		return formatPMDispatchText(root)
+		return formatPMDispatchText(root, time.Time{}, "")
 	}
 	if name == "pm actions acknowledge" {
 		return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["acknowledged_at"]))
@@ -459,14 +468,14 @@ func renderPMTurnStatus(turn map[string]any) string {
 	return "queued"
 }
 
-func formatPMDispatchText(root map[string]any) string {
+func formatPMDispatchText(root map[string]any, started time.Time, previousStatus string) string {
 	receipt := asMap(root["receipt"])
 	status := firstNonEmpty(anyString(root["status"]), "unknown")
 	line := fmt.Sprintf("%s  status=%s  receipt=%s", anyString(root["id"]), status, firstNonEmpty(anyString(receipt["status"]), "unknown"))
 	if detail := anyString(receipt["detail"]); detail != "" {
 		line += "  " + detail
 	}
-	if note := pmDispatchSendNote(root); note != "" {
+	if note := pmDispatchSendNote(root, started, previousStatus); note != "" {
 		line += "  " + note
 	}
 	return line
@@ -481,8 +490,75 @@ func actionHasSentAttempt(root map[string]any) bool {
 	return false
 }
 
-func pmDispatchSendNote(root map[string]any) string {
+func parseRFC3339Timestamp(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return ts, true
+	}
+	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+		return ts, true
+	}
+	return time.Time{}, false
+}
+
+func newestAttemptSentAt(root map[string]any) (time.Time, bool) {
+	var latest time.Time
+	found := false
+	for _, row := range asSlice(root["attempts"]) {
+		parsed, ok := parseRFC3339Timestamp(anyString(asMap(row)["sent_at"]))
+		if !ok {
+			continue
+		}
+		if !found || parsed.After(latest) {
+			latest = parsed
+			found = true
+		}
+	}
+	return latest, found
+}
+
+func pmStatusPending(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pending_delivery", "pending":
+		return true
+	default:
+		return false
+	}
+}
+
+func pmDispatchCreatedAttempt(root map[string]any, started time.Time, previousStatus string) bool {
+	if !started.IsZero() {
+		if sentAt, ok := newestAttemptSentAt(root); ok && !sentAt.Before(started) {
+			return true
+		}
+	}
+	if !pmStatusPending(previousStatus) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(firstNonEmpty(anyString(root["status"]), ""))) {
+	case "delivered", "acknowledged", "source_reported", "verified":
+		return true
+	default:
+		return false
+	}
+}
+
+func pmDispatchSendNote(root map[string]any, started time.Time, previousStatus string) string {
 	status := strings.ToLower(strings.TrimSpace(firstNonEmpty(anyString(root["status"]), "")))
+	if pmDispatchCreatedAttempt(root, started, previousStatus) {
+		switch status {
+		case "source_reported":
+			id := firstNonEmpty(anyString(root["id"]), "<id>")
+			return "reported by source, not yet verified — run `anx pm actions reconcile " + id + "` to read it back"
+		case "delivered", "acknowledged":
+			return "delivered"
+		default:
+			return ""
+		}
+	}
 	if actionHasSentAttempt(root) {
 		switch status {
 		case "verified":
