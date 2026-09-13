@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"time"
 )
 
 // Store uses the core SQLite database, not a second local or channel database.
@@ -76,11 +78,38 @@ func (s *Store) cas(ctx context.Context, kind, id string, revision int, value an
 	return nil
 }
 func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent string) ([]T, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent)
-	if err != nil {
-		return nil, err
+	out := make([]T, 0)
+	var after int64
+	for {
+		rows, err := s.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND (?='' OR parent_id=?) AND rowid>? ORDER BY rowid LIMIT 200`, kind, ws, actor, actor, parent, parent, after)
+		if err != nil {
+			return nil, err
+		}
+		count := 0
+		for rows.Next() {
+			var raw []byte
+			var item T
+			if err = rows.Scan(&after, &raw); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if err = json.Unmarshal(raw, &item); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out = append(out, item)
+			count++
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+		if count < 200 {
+			return out, nil
+		}
 	}
-	return scanBodies[T](rows)
+
 }
 
 // listOpenTurns returns every sending or unknown turn, including those past the
@@ -167,4 +196,137 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool
 	}
 	n, err := r.RowsAffected()
 	return n == 1, err
+}
+
+// proposeDecision serializes proposal deduplication and turn linkage in SQLite,
+// including across Service instances. A reused proposal retains its exact target.
+func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) (Decision, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Decision{}, false, err
+	}
+	defer tx.Rollback()
+	// Acquire the write lock before reading the dedupe key.
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision WHERE kind='turn' AND id=?", turnID); err != nil {
+		return Decision{}, false, err
+	}
+	var raw []byte
+	inserted := false
+	err = tx.QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='decision' AND id=?", d.ID).Scan(&raw)
+	if err == nil {
+		var prior Decision
+		if err = json.Unmarshal(raw, &prior); err != nil {
+			return Decision{}, false, err
+		}
+		if prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) || !reflect.DeepEqual(prior.Payload, d.Payload) {
+			return Decision{}, false, ErrConflict
+		}
+		d = prior
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return Decision{}, false, err
+	} else {
+		if turnID != "" {
+			err = tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
+		}
+		if turnID != "" && err == nil {
+			if err = json.Unmarshal(raw, &d); err != nil {
+				return Decision{}, false, err
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return Decision{}, false, err
+		} else {
+			raw, err = json.Marshal(d)
+			if err != nil {
+				return Decision{}, false, err
+			}
+			if _, err = tx.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('decision',?,?,?,'',1,?)`, d.ID, d.WorkspaceID, d.ActorID, raw); err != nil {
+				return Decision{}, false, err
+			}
+			inserted = true
+		}
+	}
+	if turnID != "" {
+		var t Turn
+		if err = tx.QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='turn' AND id=?", turnID).Scan(&raw); err != nil {
+			return Decision{}, false, err
+		}
+		if err = json.Unmarshal(raw, &t); err != nil {
+			return Decision{}, false, err
+		}
+		if t.WorkspaceID != d.WorkspaceID || t.ActorID != d.ActorID {
+			return Decision{}, false, ErrForbidden
+		}
+		found := false
+		for _, id := range t.DecisionIDs {
+			if id == d.ID {
+				found = true
+			}
+		}
+		if !found {
+			t.DecisionIDs = append(t.DecisionIDs, d.ID)
+			t.Revision++
+			raw, err = json.Marshal(t)
+			if err != nil {
+				return Decision{}, false, err
+			}
+			if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision+1,body=? WHERE kind='turn' AND id=?", raw, t.ID); err != nil {
+				return Decision{}, false, err
+			}
+		}
+	}
+	return d, inserted, tx.Commit()
+}
+
+// claimTurn counts active leases and allocates one new lease under a single
+// SQLite write lock. Claim is allocation, not replay: handing the same lease
+// to another worker of the same runner would execute the turn concurrently.
+func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now time.Time, capacity int, ttl time.Duration, maxOutput int) (Turn, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Turn{}, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision WHERE kind='turn' AND workspace_id=?", p.WorkspaceID); err != nil {
+		return Turn{}, err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('sending','unknown') ORDER BY rowid`, p.WorkspaceID)
+	if err != nil {
+		return Turn{}, err
+	}
+	turns, err := scanBodies[Turn](rows)
+	if err != nil {
+		return Turn{}, err
+	}
+	held := 0
+	var candidate *Turn
+	for i := range turns {
+		t := &turns[i]
+		if !t.Deadline.After(now) {
+			continue
+		}
+		if leaseHeld(*t, now) {
+			held++
+			continue
+		}
+		if candidate == nil && t.AgentActorID == p.ActorID {
+			candidate = t
+		}
+	}
+	if held >= capacity || candidate == nil {
+		return Turn{}, ErrEmpty
+	}
+	t := *candidate
+	t.LeaseToken = newLeaseToken()
+	t.LeaseOwner = runner
+	t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, ttl)
+	t.MaxOutputBytes = maxOutput
+	t.Revision++
+	raw, err := json.Marshal(t)
+	if err != nil {
+		return Turn{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision+1,body=? WHERE kind='turn' AND id=?", raw, t.ID); err != nil {
+		return Turn{}, err
+	}
+	return t, tx.Commit()
 }

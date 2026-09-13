@@ -5,6 +5,7 @@ package pm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"agent-nexus-core/internal/router"
@@ -17,6 +18,7 @@ var (
 	ErrNotFound    = errors.New("PM record not found")
 	ErrStale       = errors.New("approved source revision has changed")
 	ErrUnavailable = errors.New("PM capability is not configured")
+	ErrPMIdentity  = fmt.Errorf("%w: ANX_PM_AGENT_ACTOR_ID is required", ErrUnavailable)
 	ErrBusy        = errors.New("PM execution capacity reached")
 	ErrEmpty       = errors.New("no claimable PM turn")
 )
@@ -78,6 +80,7 @@ type MessageInput struct {
 	Text       string `json:"text"`
 }
 type Turn struct {
+	DecisionIDs    []string  `json:"decision_ids,omitempty"`
 	ID             string    `json:"id"`
 	ConversationID string    `json:"conversation_id"`
 	WorkspaceID    string    `json:"workspace_id"`
@@ -116,29 +119,37 @@ type ContextPage struct {
 	NextCursor  string   `json:"next_cursor,omitempty"`
 	Limitations []string `json:"limitations,omitempty"`
 }
+type ActionPayload struct {
+	Phase          string   `json:"phase,omitempty"`
+	ResolutionRefs []string `json:"resolution_refs,omitempty"`
+}
+
 type DecisionInput struct {
-	RequestKey     string  `json:"request_key"`
-	WorkRef        string  `json:"work_ref"`
-	Instruction    string  `json:"instruction"`
-	Scope          string  `json:"scope"`
-	TargetRevision string  `json:"target_revision"`
-	Origin         *Origin `json:"origin,omitempty"`
+	Payload        *ActionPayload `json:"payload,omitempty"`
+	RequestKey     string         `json:"request_key"`
+	WorkRef        string         `json:"work_ref"`
+	Instruction    string         `json:"instruction"`
+	Scope          string         `json:"scope"`
+	TargetRevision string         `json:"target_revision"`
+	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	ID             string    `json:"id"`
-	WorkspaceID    string    `json:"workspace_id"`
-	ActorID        string    `json:"actor_id"`
-	WorkRef        string    `json:"work_ref"`
-	Instruction    string    `json:"instruction"`
-	Scope          string    `json:"scope"`
-	TargetRevision string    `json:"target_revision"`
-	Status         Status    `json:"status"`
-	Revision       int       `json:"revision"`
-	Answer         string    `json:"answer,omitempty"`
-	AnsweredBy     string    `json:"answered_by,omitempty"`
-	ActionID       string    `json:"action_id,omitempty"`
-	Origin         *Origin   `json:"origin,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	CanAnswer      bool           `json:"can_answer"`
+	Payload        *ActionPayload `json:"payload,omitempty"`
+	ID             string         `json:"id"`
+	WorkspaceID    string         `json:"workspace_id"`
+	ActorID        string         `json:"actor_id"`
+	WorkRef        string         `json:"work_ref"`
+	Instruction    string         `json:"instruction"`
+	Scope          string         `json:"scope"`
+	TargetRevision string         `json:"target_revision"`
+	Status         Status         `json:"status"`
+	Revision       int            `json:"revision"`
+	Answer         string         `json:"answer,omitempty"`
+	AnsweredBy     string         `json:"answered_by,omitempty"`
+	ActionID       string         `json:"action_id,omitempty"`
+	Origin         *Origin        `json:"origin,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
 }
 type AnswerInput struct {
 	Revision int    `json:"revision"`
@@ -146,19 +157,21 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
-	ID                 string    `json:"id"`
-	DecisionID         string    `json:"decision_id"`
-	WorkspaceID        string    `json:"workspace_id"`
-	ActorID            string    `json:"actor_id"`
-	WorkRef            string    `json:"work_ref"`
-	Instruction        string    `json:"instruction"`
-	Scope              string    `json:"scope"`
-	TargetRevision     string    `json:"target_revision"`
-	AuthorizationBasis string    `json:"authorization_basis"`
-	Status             Status    `json:"status"`
-	Receipt            Receipt   `json:"receipt"`
-	Attempts           []Attempt `json:"attempts"`
-	Revision           int       `json:"revision"`
+	ReconciliationConflict bool           `json:"reconciliation_conflict"`
+	Payload                *ActionPayload `json:"payload,omitempty"`
+	ID                     string         `json:"id"`
+	DecisionID             string         `json:"decision_id"`
+	WorkspaceID            string         `json:"workspace_id"`
+	ActorID                string         `json:"actor_id"`
+	WorkRef                string         `json:"work_ref"`
+	Instruction            string         `json:"instruction"`
+	Scope                  string         `json:"scope"`
+	TargetRevision         string         `json:"target_revision"`
+	AuthorizationBasis     string         `json:"authorization_basis"`
+	Status                 Status         `json:"status"`
+	Receipt                Receipt        `json:"receipt"`
+	Attempts               []Attempt      `json:"attempts"`
+	Revision               int            `json:"revision"`
 }
 type Attempt struct {
 	StartedAt  time.Time  `json:"started_at"`
@@ -210,7 +223,9 @@ type DispatchRequest struct {
 // Authorize must consult current principal permissions on EVERY operation.
 // Execute must atomically enforce TargetRevision at the source if supported;
 // otherwise it must fail closed when a race cannot be excluded. The action ID
-// is the stable remote idempotency key. Reconcile is read-only.
+// is the stable remote idempotency key. ErrUnavailable must only be returned
+// before effects: it means no executor exists and keeps the action pending.
+// Reconcile is read-only.
 type Dependencies struct {
 	Authorize       func(context.Context, Principal, string, string) error
 	EnsureThread    func(context.Context, Principal, string, string) (string, error)

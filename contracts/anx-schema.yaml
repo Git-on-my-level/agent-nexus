@@ -819,10 +819,15 @@ conversational_pm:
   storage: workspace_sqlite
   work_identity: card
   conversation_scope: [workspace_id, actor_id]
+  decision_read_scope: workspace
+  decision_answer_scope: actor_id
+  phase_action_target: payload.phase
   decision_status: [awaiting_answer, answered, superseded]
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
+    - PM turn response operations require the configured PM actor; an empty identity fails closed.
+    - Turn proposals reuse the awaiting decision for workspace, actor, work_ref and scope without changing its approved target.
     - Human approval and scope-specific authority are required for downstream actions.
     - Answer and durable delivery intent are atomic; an answer is not an applied outcome.
     - Revalidate source revision before dispatch; source tools must enforce the same precondition.

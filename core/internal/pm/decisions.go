@@ -2,10 +2,15 @@ package pm
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"time"
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
+	return s.proposeDecision(ctx, p, in, "")
+}
+func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID string) (Decision, error) {
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
@@ -19,40 +24,33 @@ func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionI
 			return Decision{}, ErrForbidden
 		}
 	}
-	d := Decision{ID: stableID("decision", p.WorkspaceID, p.ActorID, in.RequestKey), WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, WorkRef: in.WorkRef, Instruction: in.Instruction, Scope: in.Scope, TargetRevision: in.TargetRevision, Status: AwaitingAnswer, Revision: 1, Origin: in.Origin, CreatedAt: time.Now().UTC()}
-	inserted, err := s.store.insert(ctx, "decision", d.ID, p.WorkspaceID, p.ActorID, "", d)
+	d := Decision{ID: stableID("decision", p.WorkspaceID, p.ActorID, in.RequestKey), WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, WorkRef: in.WorkRef, Instruction: in.Instruction, Payload: in.Payload, Scope: in.Scope, TargetRevision: in.TargetRevision, Status: AwaitingAnswer, Revision: 1, Origin: in.Origin, CreatedAt: time.Now().UTC()}
+	d, inserted, err := s.store.proposeDecision(ctx, d, turnID)
 	if err != nil {
 		return Decision{}, err
 	}
 	if !inserted {
-		var prior Decision
-		if err = s.store.get(ctx, "decision", d.ID, &prior); err != nil {
-			return d, err
-		}
-		if prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) {
-			return Decision{}, ErrConflict
-		}
-		return prior, nil
+		return s.decisionForReader(ctx, p, d), nil
 	}
 	if d.Origin != nil {
 		if _, err = s.QueueDecisionCard(ctx, d, ""); err != nil {
 			return d, err
 		}
 	}
-	return d, nil
+	return s.decisionForReader(ctx, p, d), nil
 }
 func (s *Service) decision(ctx context.Context, p Principal, id, permission string) (Decision, error) {
 	var d Decision
 	if err := s.store.get(ctx, "decision", id, &d); err != nil {
 		return d, err
 	}
-	if d.WorkspaceID != p.WorkspaceID {
+	if d.WorkspaceID != p.WorkspaceID || (permission == "pm.approve" && d.ActorID != p.ActorID) {
 		return Decision{}, ErrForbidden
 	}
 	if err := s.authorize(ctx, p, permission, d.WorkRef); err != nil {
 		return Decision{}, err
 	}
-	return d, nil
+	return s.decisionForReader(ctx, p, d), nil
 }
 func (s *Service) ListDecisions(ctx context.Context, p Principal) ([]Decision, error) {
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
@@ -65,7 +63,7 @@ func (s *Service) ListDecisions(ctx context.Context, p Principal) ([]Decision, e
 	out := make([]Decision, 0, len(ds))
 	for _, d := range ds {
 		if s.authorize(ctx, p, "pm.read", d.WorkRef) == nil {
-			out = append(out, d)
+			out = append(out, s.decisionForReader(ctx, p, d))
 		}
 	}
 	return out, nil
@@ -78,13 +76,16 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if err != nil {
 		return d, err
 	}
+	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
+		return Decision{}, ErrInvalid
+	}
 	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Superseded)) {
 		if in.Approve {
 			if err = s.authorize(ctx, p, "pm.action."+d.Scope, d.WorkRef); err != nil {
 				return Decision{}, err
 			}
 		}
-		return d, nil
+		return s.decisionForReader(ctx, p, d), nil
 	}
 	if d.Revision != in.Revision || d.Status != AwaitingAnswer {
 		return Decision{}, ErrConflict
@@ -103,12 +104,13 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		}
 		d.Status = Answered
 		d.ActionID = stableID("action", d.ID)
-		a = &Action{ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
+		a = &Action{ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
 	}
+	d.CanAnswer = false
 	if err = s.store.answer(ctx, d, a, in.Revision); err != nil {
 		return Decision{}, err
 	}
-	return d, nil
+	return s.decisionForReader(ctx, p, d), nil
 }
 func (s *Service) action(ctx context.Context, p Principal, id, permission string) (Action, error) {
 	var a Action
@@ -151,14 +153,23 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if err != nil {
 		return Action{}, err
 	}
+	if d.ActorID != a.ActorID || d.AnsweredBy != d.ActorID || a.Instruction != d.Instruction || a.WorkRef != d.WorkRef || a.Scope != d.Scope || a.TargetRevision != d.TargetRevision || !reflect.DeepEqual(a.Payload, d.Payload) {
+		return Action{}, ErrForbidden
+	}
 	if a.Status != Pending {
 		return a, nil
 	} // Includes unknown/sending after crash: NEVER blindly resend.
+	if !validActionPayload(a.Scope, a.Payload) {
+		return Action{}, ErrInvalid
+	}
 	if s.deps.Execute == nil || s.deps.CurrentRevision == nil {
 		return Action{}, ErrUnavailable
 	}
 	// Revalidate the actual approving identity as well as the dispatch caller.
 	approver := Principal{WorkspaceID: a.WorkspaceID, ActorID: a.ActorID, Human: true}
+	if err = s.authorize(ctx, approver, "pm.approve", d.WorkRef); err != nil {
+		return Action{}, err
+	}
 	if err = s.authorize(ctx, approver, "pm.action."+a.Scope, a.WorkRef); err != nil {
 		return Action{}, err
 	}
@@ -179,10 +190,14 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	bounded, cancel := context.WithTimeout(ctx, s.cfg.TurnTimeout)
 	defer cancel()
 	receipt, execErr := s.deps.Execute(bounded, a)
-	if execErr != nil {
+	if errors.Is(execErr, ErrUnavailable) {
+		receipt = Receipt{Status: Pending, Detail: "Source executor required; no source mutation attempted"}
+	} else if errors.Is(execErr, ErrStale) {
+		receipt = Receipt{Status: Failed, Detail: ErrStale.Error()}
+	} else if execErr != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source handoff outcome is unknown; reconcile before any retry"}
 	}
-	if err = validateReceipt(receipt, false); err != nil {
+	if err = validateReceipt(receipt, false); err != nil && !(errors.Is(execErr, ErrUnavailable) && receipt.Status == Pending) {
 		receipt = Receipt{Status: Unknown, Detail: "Source returned an invalid receipt; reconciliation required"}
 	}
 	old = a.Revision
@@ -195,6 +210,9 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	a.Attempts[len(a.Attempts)-1].Receipt = receipt
 	if err = s.store.cas(context.WithoutCancel(ctx), "action", a.ID, old, a); err != nil {
 		return Action{}, err
+	}
+	if errors.Is(execErr, ErrStale) {
+		return a, ErrStale
 	}
 	return a, nil
 }
@@ -240,12 +258,12 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	}
 	// A read-back must not regress an acknowledged/applied result to delivery.
 	rank := map[Status]int{Unknown: 0, Sending: 0, Failed: 0, Delivered: 1, Acknowledged: 2, Reported: 3, Verified: 4}
-	if rank[r.Status] < rank[a.Status] {
-		return Action{}, ErrConflict
-	}
+	a.ReconciliationConflict = rank[r.Status] < rank[a.Status]
 	old := a.Revision
 	a.Receipt = r
-	a.Status = r.Status
+	if !a.ReconciliationConflict {
+		a.Status = r.Status
+	}
 	a.Revision++
 	err = s.store.cas(ctx, "action", a.ID, old, a)
 	return a, err
@@ -257,6 +275,9 @@ func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query
 	return s.GetTurnContextPage(ctx, p, turnID, query, "", limit)
 }
 func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, query, cursor string, limit int) (ContextPage, error) {
+	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
+		return ContextPage{}, err
+	}
 	var t Turn
 	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
 		return ContextPage{}, err
@@ -277,6 +298,9 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 // ProposeForTurn records a proposal under the requesting actor so that it is
 // visible in that actor's decision list. It confers no approval authority.
 func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string, in DecisionInput) (Decision, error) {
+	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
+		return Decision{}, err
+	}
 	var t Turn
 	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
 		return Decision{}, err
@@ -295,5 +319,28 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 		return Decision{}, ErrForbidden
 	}
 	in.Origin = c.Origin
-	return s.ProposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, in)
+	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, in, turnID)
+}
+
+// Prose never supplies mutation parameters, including for legacy decisions.
+func validActionPayload(scope string, p *ActionPayload) bool {
+	if scope != "work.phase" {
+		return true
+	}
+	if p == nil {
+		return false
+	}
+	switch p.Phase {
+	case "backlog", "ready", "in_progress", "blocked", "review":
+		return len(p.ResolutionRefs) == 0
+	case "done":
+		return len(p.ResolutionRefs) > 0
+	}
+	return false
+}
+
+// Reading decisions is workspace-visible; answering never inherits that scope.
+func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision) Decision {
+	d.CanAnswer = p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
+	return d
 }

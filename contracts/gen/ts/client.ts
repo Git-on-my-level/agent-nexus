@@ -6536,6 +6536,24 @@ export const commandRegistry: CommandSpec[] = [
           "name": "work_ref",
           "type": "string"
         }
+      ],
+      "optional": [
+        {
+          "name": "payload.phase",
+          "type": "string",
+          "enum_values": [
+            "backlog",
+            "blocked",
+            "done",
+            "in_progress",
+            "ready",
+            "review"
+          ]
+        },
+        {
+          "name": "payload.resolution_refs",
+          "type": "list\u003cstring\u003e"
+        }
       ]
     },
     "adjacent_commands": [
@@ -6975,6 +6993,24 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "work_ref",
           "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "payload.phase",
+          "type": "string",
+          "enum_values": [
+            "backlog",
+            "blocked",
+            "done",
+            "in_progress",
+            "ready",
+            "review"
+          ]
+        },
+        {
+          "name": "payload.resolution_refs",
+          "type": "list\u003cstring\u003e"
         }
       ]
     },

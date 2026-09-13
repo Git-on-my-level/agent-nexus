@@ -1,6 +1,7 @@
 package pm
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +10,12 @@ import (
 const bindFirstText = "This channel identity is not bound to a workspace principal. An operator must run `anx pm bindings create` before the PM will accept messages."
 
 func decisionCardText(d Decision) string {
-	return fmt.Sprintf("Decision %s\nRevision %d\n%s\nWork: %s", d.ID, d.Revision, d.Instruction, d.WorkRef)
+	text := fmt.Sprintf("Decision %s\nRevision %d\n%s\nWork: %s\nScope: %s\nTarget revision: %s", d.ID, d.Revision, d.Instruction, d.WorkRef, d.Scope, d.TargetRevision)
+	if d.Payload != nil {
+		payload, _ := json.Marshal(d.Payload)
+		text += "\nTarget: " + string(payload)
+	}
+	return text
 }
 
 func telegramDecisionMarkup(d Decision) map[string]any {

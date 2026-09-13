@@ -43,6 +43,14 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 	if p.ActorID == "" || p.WorkspaceID != s.cfg.WorkspaceID {
 		return ErrForbidden
 	}
+	if permission == "pm.respond" {
+		if strings.TrimSpace(s.cfg.AgentActorID) == "" {
+			return ErrPMIdentity
+		}
+		if p.ActorID != s.cfg.AgentActorID {
+			return ErrForbidden
+		}
+	}
 	if err := s.deps.Authorize(ctx, p, permission, ref); err != nil {
 		return ErrForbidden
 	}
@@ -163,6 +171,9 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	return page, nil
 }
 func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID string, in MessageInput) (Turn, error) {
+	if strings.TrimSpace(s.cfg.AgentActorID) == "" {
+		return Turn{}, ErrPMIdentity
+	}
 	c, err := s.conversation(ctx, p, conversationID)
 	if err != nil {
 		return Turn{}, err
@@ -321,9 +332,6 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return Turn{}, err
 	}
-	if s.cfg.AgentActorID != "" && p.ActorID != s.cfg.AgentActorID {
-		return Turn{}, ErrForbidden
-	}
 	runner := strings.TrimSpace(in.RunnerID)
 	if runner == "" {
 		runner = p.ActorID
@@ -335,57 +343,9 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	if err := s.expireStaleTurns(ctx, p, now); err != nil {
 		return Turn{}, err
 	}
-	turns, err := listOpenTurns(ctx, s.store, p.WorkspaceID)
-	if err != nil {
-		return Turn{}, err
-	}
-	held := 0
-	for _, t := range turns {
-		if t.LeaseOwner == runner && leaseHeld(t, now) && (t.Status == Sending || t.Status == Unknown) {
-			if s.cfg.AgentActorID != "" && t.AgentActorID != s.cfg.AgentActorID {
-				continue
-			}
-			return t, nil
-		}
-		if leaseHeld(t, now) && (t.Status == Sending || t.Status == Unknown) {
-			held++
-		}
-	}
-	if held >= s.cfg.MaxConcurrent {
-		return Turn{}, ErrEmpty
-	}
-	for _, t := range turns {
-		if t.Status != Sending && t.Status != Unknown {
-			continue
-		}
-		if now.After(t.Deadline) {
-			continue
-		}
-		if leaseHeld(t, now) {
-			continue
-		}
-		if t.AgentActorID != "" && t.AgentActorID != p.ActorID {
-			continue
-		}
-		old := t.Revision
-		if t.AgentActorID == "" {
-			t.AgentActorID = p.ActorID
-		}
-		t.LeaseToken = newLeaseToken()
-		t.LeaseOwner = runner
-		t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, s.cfg.TurnTimeout)
-		t.MaxOutputBytes = s.cfg.MaxOutputBytes
-		t.Revision++
-		if err = s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
-			if errors.Is(err, ErrConflict) {
-				continue
-			}
-			return Turn{}, err
-		}
-		return t, nil
-	}
-	return Turn{}, ErrEmpty
+	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.TurnTimeout, s.cfg.MaxOutputBytes)
 }
+
 func (s *Service) expireStaleTurns(ctx context.Context, p Principal, now time.Time) error {
 	turns, err := listOpenTurns(ctx, s.store, p.WorkspaceID)
 	if err != nil {

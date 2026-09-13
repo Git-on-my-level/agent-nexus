@@ -271,3 +271,37 @@ func TestCreateWorkHonorsStableCardID(t *testing.T) {
 		t.Fatalf("stable work id not preserved: id=%v ref=%v", w["id"], w["ref"])
 	}
 }
+
+func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
+	s, b := newWorkTestStore(t)
+	ctx := context.Background()
+	w, err := s.CreateWork(ctx, "actor-1", b, map[string]any{"title": "Native revision"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := w["id"].(string)
+	version := w["version"].(int64)
+	if _, err = s.MoveBoardCard(ctx, "actor-1", b, id, primitives.MoveBoardCardInput{ColumnKey: "ready"}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := s.GetWork(ctx, id)
+	if err != nil || updated["version"] != version+1 || updated["phase"] != "ready" {
+		t.Fatalf("move %v %v", updated, err)
+	}
+	// Simulates a PM approval obtained before the ordinary board move.
+	if _, err = s.MoveBoardCard(ctx, "actor-1", b, id, primitives.MoveBoardCardInput{ColumnKey: "review", IfWorkVersion: &version}); !errors.Is(err, primitives.ErrConflict) {
+		t.Fatalf("stale move %v", err)
+	}
+	card, err := s.GetBoardCard(ctx, b, id)
+	if err != nil || card["column_key"] != "ready" {
+		t.Fatalf("board diverged %v %v", card, err)
+	}
+	version++
+	if _, err = s.MoveBoardCard(ctx, "actor-1", b, id, primitives.MoveBoardCardInput{ColumnKey: "done", IfWorkVersion: &version}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("completion bypassed evidence gate %v", err)
+	}
+	after, err := s.GetWork(ctx, id)
+	if err != nil || after["version"] != version || after["phase"] != "ready" {
+		t.Fatalf("rejected move mutated work %v %v", after, err)
+	}
+}

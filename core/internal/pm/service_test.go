@@ -198,8 +198,16 @@ func TestApprovalReplayRetainsOneActionIntent(t *testing.T) {
 func TestAgentProposalHumanDiscoveryAndAgentReceiptDiscovery(t *testing.T) {
 	s, _, human, _ := fixture(t)
 	ctx := context.Background()
-	agent := Principal{WorkspaceID: "ws", ActorID: "worker"}
-	d, err := s.ProposeDecision(ctx, agent, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	agent := Principal{WorkspaceID: "ws", ActorID: "pm-agent"}
+	c, err := s.CreateConversation(ctx, human, CreateConversation{RequestKey: "agent-context", Title: "Proposal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := s.PostMessage(ctx, human, c.ID, MessageInput{RequestKey: "m", Text: "What needs approval?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,8 +283,8 @@ func TestQueuedTurnWithoutDispatchIsClaimedByLease(t *testing.T) {
 		t.Fatalf("second runner claimed leased turn: %v", err)
 	}
 	again, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
-	if err != nil || again.ID != first.ID || again.LeaseToken != first.LeaseToken {
-		t.Fatalf("idempotent claim %+v %v", again, err)
+	if !errors.Is(err, ErrEmpty) {
+		t.Fatalf("active lease must not be offered to a second worker %+v %v", again, err)
 	}
 	if _, err = s.CompleteTurn(ctx, agent, first.ID, "Needs a decision on restock.", nil); !errors.Is(err, ErrConflict) {
 		t.Fatalf("complete without lease token: %v", err)

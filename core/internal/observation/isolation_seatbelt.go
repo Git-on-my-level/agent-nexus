@@ -16,10 +16,7 @@ import (
 const seatbeltSandboxPath = "/usr/bin/sandbox-exec"
 const seatbeltShellPath = "/bin/sh"
 
-// seatbeltTempRoot is a host directory that is not covered by the profile's
-// /Users and /Volumes content-read denials. This host's TMPDIR is
-// /Volumes/scratch/tmp, so os.MkdirTemp("") would place the artifact and
-// scratch on a denied volume and flake under load when path aliasing differs.
+// seatbeltTempRoot stages artifacts under a stable, canonical local path.
 func seatbeltTempRoot() string {
 	for _, dir := range []string{"/private/tmp", "/tmp"} {
 		resolved, err := filepath.EvalSymlinks(dir)
@@ -116,39 +113,60 @@ func sbLiteral(path string) (string, error) {
 	return path, nil
 }
 
-// seatbeltProfile is the exact production profile. file-read* is required for
-// dyld shared-cache mapping on this macOS; content reads of operator homes,
-// /Volumes (except the artifact and scratch literals), credentials and
-// keychains are denied. Writes are scratch-only. Network and fork are denied.
+// seatbeltProfile allows only the compiled reader, its scratch, and the dyld
+// runtime. No Mach services are needed by the reader ABI, so mach-lookup stays
+// denied. Adding a runtime capability requires a specific allowlist entry and
+// conformance evidence; the availability probe never falls back to host execution.
 func seatbeltProfile(artifact, scratch string) string {
 	artifact, err := sbLiteral(artifact)
 	if err != nil {
 		return "(version 1)(deny default)"
 	}
-	var b strings.Builder
-	b.WriteString("(version 1)\n(deny default)\n")
-	b.WriteString("(allow process-exec* (literal \"" + artifact + "\"))\n")
-	b.WriteString("(allow signal)\n")
-	b.WriteString("(allow file-read*)\n")
-	b.WriteString("(allow file-map-executable)\n")
-	b.WriteString("(allow sysctl-read)\n")
-	b.WriteString("(allow mach-lookup)\n")
-	b.WriteString("(allow mach-priv-host-port)\n")
-	b.WriteString("(allow ipc-posix-shm)\n")
-	b.WriteString("(allow file-ioctl (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/dtracehelper\"))\n")
 	if scratch != "" {
 		if scratch, err = sbLiteral(scratch); err != nil {
 			return "(version 1)(deny default)"
 		}
-		b.WriteString("(allow file-write* (subpath \"" + scratch + "\"))\n")
 	}
-	b.WriteString("(deny file-read-data (subpath \"/Users\") (subpath \"/Volumes\") (subpath \"/Applications\") (subpath \"/opt\") (subpath \"/private/etc\") (subpath \"/private/var/root\") (subpath \"/Library/Keychains\"))\n")
-	b.WriteString("(allow file-read-data (literal \"" + artifact + "\"))\n")
+	var b strings.Builder
+	b.WriteString("(version 1)\n(deny default)\n")
+	b.WriteString("(allow process-exec* (literal \"" + artifact + "\"))\n")
+	b.WriteString("(allow signal)\n")
+	// System libraries and the shared cache, including current Cryptex layouts.
+	libraries := []string{"/usr/lib", "/System/Library/dyld",
+		"/System/Volumes/Preboot/Cryptexes/OS/usr/lib",
+		"/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld",
+		"/private/preboot/Cryptexes/OS/usr/lib",
+		"/private/preboot/Cryptexes/OS/System/Library/dyld"}
+	filters := "(literal \"" + artifact + "\")"
+	for _, path := range libraries {
+		filters += " (subpath \"" + path + "\")"
+	}
+	b.WriteString("(allow file-read* " + filters + ")\n")
+	b.WriteString("(allow file-map-executable " + filters + ")\n")
+	// Lookup metadata on ancestors does not grant directory/content reads.
+	seen := map[string]bool{}
+	paths := append(append([]string{}, libraries...), artifact)
 	if scratch != "" {
-		b.WriteString("(allow file-read-data (subpath \"" + scratch + "\"))\n")
+		paths = append(paths, scratch)
 	}
-	b.WriteString("(deny network*)\n")
-	b.WriteString("(deny process-fork)\n")
+	for _, path := range paths {
+		for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
+			if !seen[parent] {
+				b.WriteString("(allow file-read-metadata (literal \"" + parent + "\"))\n")
+				seen[parent] = true
+			}
+			if parent == "/" {
+				break
+			}
+		}
+	}
+	b.WriteString("(allow sysctl-read)\n")
+	b.WriteString("(allow file-read* (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\"))\n")
+	b.WriteString("(allow file-ioctl (literal \"/dev/null\"))\n")
+	if scratch != "" {
+		b.WriteString("(allow file-read* file-write* (subpath \"" + scratch + "\"))\n")
+	}
+	b.WriteString("(deny network*)\n(deny process-fork)\n")
 	return b.String()
 }
 
