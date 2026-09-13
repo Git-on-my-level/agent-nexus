@@ -356,10 +356,16 @@
         {@const verified =
           action.status === "verified" &&
           action.receipt?.independently_verified === true}
+        {@const closed =
+          action.status === "acknowledged" &&
+          (action.closed_without_delivery === true ||
+            (action.deliverable === false && !handedOff))}
         {@const state = receiptSignal(
-          action.status === "verified" && !verified
-            ? "source_reported"
-            : action.status,
+          closed
+            ? "closed"
+            : action.status === "verified" && !verified
+              ? "source_reported"
+              : action.status,
         )}
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <ReceiptSignal signal={state} />
@@ -399,7 +405,7 @@
                 : "Deliver approved instruction"}</button
             >
           {/if}
-          {#if delivered && handedOff}
+          {#if delivered && handedOff && !(verified && work && isNexusOwned(work))}
             <button
               class="ui-btn-secondary"
               onclick={onReconcile}

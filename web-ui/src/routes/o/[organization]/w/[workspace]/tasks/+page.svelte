@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -42,6 +42,13 @@
   // A pending "done" move waiting for its evidence ref.
   let evidenceFor = $state(null);
   let evidenceSuggestions = $state([]);
+  let evidenceInput = $state(null);
+  let moveNoticeElement = $state(null);
+  // Outcomes get the keyboard: the evidence field when it opens, the notice
+  // after a move.
+  $effect(() => {
+    if (moveNotice && moveNoticeElement) moveNoticeElement.focus();
+  });
   async function loadEvidenceSuggestions() {
     try {
       const result = await coreClient.listArtifacts({ limit: 25 });
@@ -224,6 +231,7 @@
           evidenceFor = { key, work, phase, ref: "" };
           moveNotice = null;
           void loadEvidenceSuggestions();
+          void tick().then(() => evidenceInput?.focus());
           return;
         }
         const trimmed = String(evidenceFor.ref ?? "").trim();
@@ -256,6 +264,21 @@
         decisions = decisions.filter(
           (decision) => decision.work_ref !== work.ref,
         );
+      } else if (
+        result.kind === "requested" &&
+        result.decision &&
+        result.decision.status !== "awaiting_answer"
+      ) {
+        // Core replayed an identical earlier request that is already
+        // answered or closed; nothing new was filed.
+        moveNotice = {
+          text: `That request was already ${
+            result.decision.status === "declined" ? "declined" : "answered"
+          }; nothing new was filed. Change the target or ask the PM to propose again.`,
+          href: workspaceHref(
+            `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
+          ),
+        };
       } else if (result.kind === "requested") {
         requested = { ...requested, [key]: phase };
         if (result.decision) decisions = [...decisions, result.decision];
@@ -611,6 +634,7 @@
         artifact or event that proves it<input
           class="ui-input mt-1"
           bind:value={evidenceFor.ref}
+          bind:this={evidenceInput}
           list="done-evidence-suggestions"
           placeholder="artifact:… or event:…"
         /></label
@@ -639,8 +663,10 @@
   {/if}
   {#if moveNotice}
     <p
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg outline-none"
       role="status"
+      tabindex="-1"
+      bind:this={moveNoticeElement}
     >
       <span class="min-w-0 flex-1">{moveNotice.text}</span>
       {#if moveNotice.undo}

@@ -133,6 +133,7 @@ const RECEIPT_FOLDED = {
   answered: "Answered",
   pending_delivery: "Pending delivery",
   acknowledged: "Acknowledged failure",
+  closed: "Closed, nothing delivered",
   source_reported: "Reported, not verified",
   sending: "Delivery in progress",
   unknown: "Delivery uncertain",
@@ -356,7 +357,14 @@ export function errorMessage(error) {
     error instanceof Error
       ? error.message
       : String(error || "Unable to load workspace data.");
-  if (/capacity reached|busy|already has an active turn/i.test(raw)) {
+  if (
+    /capacity reached|busy|already has an active turn|still queued or being answered/i.test(
+      raw,
+    ) ||
+    ["conversation", "capacity"].includes(
+      String(error?.body?.error?.details?.reason ?? ""),
+    )
+  ) {
     const details = error?.body?.error?.details ?? {};
     if (String(details.reason ?? "") === "capacity") {
       const limit = details.limit
@@ -494,6 +502,10 @@ export function decisionConsequence(item, work = null) {
   const phase = String(item?.payload?.phase ?? "").trim();
   if (scope === "work.phase") {
     const target = phase ? ` to ${label(phase)}` : "";
+    if (item?.deliverable === false) {
+      const where = source && source !== "Nexus" ? source : "this source";
+      return `No delivery path exists for ${where} yet. Approving records your decision${target} and keeps the request pending; nothing changes at ${where} until a delivery path exists.`;
+    }
     if (!work)
       return `Approving authorizes this change${target}. If the task lives in another tracker, it is requested there rather than applied here.`;
     if (owned || source === "Nexus")

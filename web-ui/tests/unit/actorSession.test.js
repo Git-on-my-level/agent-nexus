@@ -89,7 +89,7 @@ describe("actor session / gate logic", () => {
     });
   });
 
-  it("prefers principal usernames for actor and agent identifiers", () => {
+  it("prefers a real display name, then the principal username", () => {
     replacePrincipalRegistry([
       {
         agent_id: "agent-26",
@@ -98,11 +98,15 @@ describe("actor session / gate logic", () => {
       },
     ]);
 
+    // A name the actors API knows beats a login handle everywhere the UI
+    // shows a person or agent.
     expect(
       lookupActorDisplayName("actor-hermes", [
         { id: "actor-hermes", display_name: "Hermes Operator" },
       ]),
-    ).toBe("m4-hermes");
+    ).toBe("Hermes Operator");
+    // Without an actor record the username is the best label we have.
+    expect(lookupActorDisplayName("actor-hermes", [])).toBe("m4-hermes");
     expect(lookupActorDisplayName("agent-26", [])).toBe("m4-hermes");
     expect(
       lookupActorDisplayName("actor-human", [

@@ -58,6 +58,14 @@ export function decisionRowStatus(
   const status = String(action.status ?? "");
   if (status === "verified" && action.receipt?.independently_verified !== true)
     return "source_reported";
+  // A closed request that never left core is not a failure.
+  if (
+    status === "acknowledged" &&
+    (action.closed_without_delivery === true ||
+      (action.deliverable === false &&
+        !(action.attempts || []).some((attempt) => attempt?.sent_at)))
+  )
+    return "closed";
   return status || own;
 }
 

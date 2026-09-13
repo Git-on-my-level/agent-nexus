@@ -332,6 +332,14 @@ export function buildActorNameMap(actors, principals = get(principalRegistry)) {
 
     function mergePrincipalLabel(existingId) {
       const existing = map.get(existingId);
+      // A real display name from the actors API ("Leo Park") outranks a
+      // login handle from the principal ("dev.leo").
+      const existingIsName =
+        existing &&
+        existing !== existingId &&
+        !isSyntheticAnxHandle(existing) &&
+        existing !== username;
+      if (existingIsName) return;
       if (displayFromPrincipal && username && !isSyntheticAnxHandle(username)) {
         map.set(existingId, displayFromPrincipal);
         return;
