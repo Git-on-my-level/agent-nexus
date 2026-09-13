@@ -1568,7 +1568,9 @@
                 aria-label="Rename document"
                 title="Rename document"
               >
-                <h1 class="min-w-0 truncate text-display font-semibold text-fg">
+                <h1
+                  class="min-w-0 break-words text-display font-semibold text-fg"
+                >
                   {resourceDisplayLabel(document, documentId)}
                 </h1>
                 {#if titleSaving}

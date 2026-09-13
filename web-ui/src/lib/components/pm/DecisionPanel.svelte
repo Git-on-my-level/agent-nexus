@@ -74,6 +74,29 @@
   // in which case the server is the judge and the form stays available.
   let cannotAnswer = $derived(selected?.can_answer === false);
   let targetPhase = $derived(String(selected?.payload?.phase ?? "").trim());
+  // Evidence the proposal claims for a completion: shown before approval,
+  // with core's existence check when the response carries it.
+  let resolution = $derived.by(() => {
+    const summaries = Array.isArray(selected?.payload?.resolution)
+      ? selected.payload.resolution
+      : [];
+    const refs = Array.isArray(selected?.payload?.resolution_refs)
+      ? selected.payload.resolution_refs
+      : [];
+    if (summaries.length) return summaries;
+    return refs.map((ref) => ({ ref, exists: undefined }));
+  });
+  let missingEvidence = $derived(
+    resolution.some((entry) => entry?.exists === false),
+  );
+  // A proposal fenced on an older revision will fail at dispatch; say so
+  // before the click rather than after.
+  let stale = $derived.by(() => {
+    if (selected?.status !== "awaiting_answer") return false;
+    const target = String(selected?.target_revision ?? "").trim();
+    const current = String(work?.decision_revision ?? "").trim();
+    return Boolean(target && current && target !== current);
+  });
   let unappliable = $derived(
     selected?.scope === "work.phase" &&
       !targetPhase &&
@@ -105,6 +128,45 @@
         <p class="mt-3 text-meta text-fg">
           <span class="text-fg-muted">Requested change:</span> move to
           <strong>{label(targetPhase)}</strong>
+        </p>
+      {/if}
+      {#if resolution.length}
+        <p class="ui-label mt-3">Evidence for completion</p>
+        <ul class="space-y-1 text-meta">
+          {#each resolution as entry (entry.ref)}
+            <li class="flex flex-wrap items-center gap-2">
+              <span
+                class="min-w-0 break-all {entry.exists === false
+                  ? 'text-danger-text'
+                  : 'text-fg'}"
+                >{entry.title_or_summary || entry.title || entry.ref}</span
+              >
+              {#if entry.exists === false}
+                <span class="ui-badge ui-badge--danger">Not found</span>
+              {:else if entry.title_or_summary || entry.title}
+                <span class="font-mono text-micro text-fg-subtle"
+                  >{entry.ref}</span
+                >
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if stale}
+        <p
+          class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
+        >
+          This proposal is older than the task: it was made against an earlier
+          revision, so approving it would fail. Ask the PM to propose again.
+        </p>
+      {/if}
+      {#if missingEvidence}
+        <p
+          class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
+          Some of the evidence named here does not exist, so this cannot be
+          applied. Decline it and ask the PM to propose again with real
+          evidence.
         </p>
       {/if}
       {#if proposal}
@@ -162,7 +224,7 @@
     {#if selected.status === "superseded" && selected.superseded_by}
       <section class="border-t border-line-subtle pt-4">
         <p class="text-meta text-fg">
-          The PM replaced this proposal{#if selected.superseded_reason}: {selected.superseded_reason}{/if}.
+          This proposal was replaced{#if selected.superseded_reason}: {selected.superseded_reason}{/if}.
           <a
             class="ui-prose-link"
             href={`?item=decision:${encodeURIComponent(selected.superseded_by)}`}
@@ -198,7 +260,11 @@
             class="ui-btn-primary"
             type="submit"
             onclick={(event) => decide(event, "approve")}
-            disabled={busy || noteMissing || unappliable}
+            disabled={busy ||
+              noteMissing ||
+              unappliable ||
+              stale ||
+              missingEvidence}
             >{busy && choice === "approve" ? "Approving…" : "Approve"}</button
           >
           <button
@@ -239,7 +305,7 @@
       {/if}
       {#if action?.status === "failed" && !handedOff}
         <p class="mt-2 text-meta text-fg">
-          Nothing was sent. This approval cannot be retried; to try again,
+          Nothing was sent, and this approval will not be resent. To try again,
           <a
             class="ui-prose-link"
             href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}

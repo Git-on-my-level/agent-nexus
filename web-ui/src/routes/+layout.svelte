@@ -816,6 +816,7 @@
             href={workspaceHref("/pm")}
             data-tour="pm"
             aria-label="Ask PM"
+            aria-current={isActive("/pm") ? "page" : undefined}
           >
             <svg
               class="shell-ask-pm-icon"

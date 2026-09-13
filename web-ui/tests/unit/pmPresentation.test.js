@@ -47,7 +47,10 @@ describe("PM evidence presentation", () => {
         },
         now,
       ),
-    ).toMatchObject({ key: "error", label: "Can't reach source" });
+    ).toMatchObject({
+      key: "error",
+      label: "Can't reach source · last good read kept",
+    });
     // The label names the source when we know which one we could not reach.
     expect(
       freshness(
@@ -59,7 +62,10 @@ describe("PM evidence presentation", () => {
         },
         now,
       ),
-    ).toMatchObject({ key: "error", label: "Can't reach GitHub" });
+    ).toMatchObject({
+      key: "error",
+      label: "Can't reach GitHub · last good read kept",
+    });
   });
   it("shows malformed dates and future-clock observations as unknown", () => {
     expect(

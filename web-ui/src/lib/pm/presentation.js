@@ -65,12 +65,25 @@ export function freshness(
   const named = String(sourceName ?? "").trim();
   if (error || status === "error") {
     const code = String(error?.code ?? "").toLowerCase();
-    const label = READ_ERROR_LABELS[code]
+    const cause = READ_ERROR_LABELS[code]
       ? READ_ERROR_LABELS[code]
       : named
         ? `Can't reach ${named}`
         : "Can't reach source";
-    return { key: "error", label, tone: "warn" };
+    // A read that failed just now does not erase a good read minutes ago;
+    // say both while the last good read is still within its window.
+    const observed = Date.parse(observedAt);
+    const deadline = Date.parse(staleAfter);
+    const stillFresh =
+      Number.isFinite(observed) &&
+      Number.isFinite(deadline) &&
+      deadline > now &&
+      observed <= now;
+    return {
+      key: "error",
+      label: stillFresh ? `${cause} · last good read kept` : cause,
+      tone: "warn",
+    };
   }
   const observed = Date.parse(observedAt);
   if (!Number.isFinite(observed) || observed > now + 60_000)

@@ -45,15 +45,29 @@ export function requestedDecisionMap(decisions = [], records = []) {
       .filter((work) => work?.ref)
       .map((work) => [work.ref, workKey(work)]),
   );
+  const externalRefs = new Set(
+    records
+      .filter((work) => work?.ref && !isNexusOwned(work))
+      .map((w) => w.ref),
+  );
   const map = {};
   for (const decision of decisions) {
-    if (!decision || decision.status !== "awaiting_answer") continue;
+    if (!decision) continue;
+    // Awaiting anywhere; answered only for source-owned work, where the
+    // request stays live until a delivery path exists.
+    const live =
+      decision.status === "awaiting_answer" ||
+      (decision.status === "answered" && externalRefs.has(decision.work_ref));
+    if (!live) continue;
     const phaseRequest =
       decision.scope === "work.phase" ||
       String(decision.instruction || "").startsWith(STATUS_CHANGE_PREFIX);
     if (!phaseRequest) continue;
     const key = keyByRef.get(decision.work_ref);
-    if (key) map[key] = decision.id;
+    if (!key) continue;
+    // An awaiting request outranks an answered one for the same task.
+    if (decision.status === "answered" && map[key]) continue;
+    map[key] = decision.id;
   }
   return map;
 }

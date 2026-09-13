@@ -309,7 +309,9 @@
             notice =
               applied.status === "verified"
                 ? "Approved and applied."
-                : "Approved. Delivery is in progress.";
+                : applied.status === "failed"
+                  ? `Approved, but applying it failed: ${applied.receipt?.detail || "see the receipt below"}.`
+                  : "Approved. Delivery is in progress.";
           } catch (err) {
             actionError = errorMessage(err);
             // Core records why (stale revision, no path); show that record,

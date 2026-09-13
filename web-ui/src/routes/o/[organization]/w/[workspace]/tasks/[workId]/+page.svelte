@@ -168,10 +168,17 @@
     decisionsError = "";
     decisions = [];
     try {
-      const result = await coreClient.listPmDecisions({ limit: 200 });
+      const items = [];
+      let cursor;
+      for (let page = 0; page < 10; page += 1) {
+        const result = await coreClient.listPmDecisions({ limit: 200, cursor });
+        items.push(...(result.items || []));
+        cursor = result.next_cursor || "";
+        if (!cursor) break;
+      }
       if (ticket !== requestId) return;
       const ref = workKey(loadedWork);
-      decisions = (result.items || [])
+      decisions = items
         .filter((decision) => decision.work_ref === ref)
         .sort(
           (a, b) =>
