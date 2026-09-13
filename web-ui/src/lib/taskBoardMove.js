@@ -1,3 +1,4 @@
+import { proposalVoidReason } from "./inboxMailbox.js";
 import {
   cardIdFromWork,
   isNexusOwned,
@@ -67,6 +68,9 @@ export function requestedDecisionMap(
       .filter((work) => work?.ref)
       .map((work) => [work.ref, workKey(work)]),
   );
+  const workByRef = new Map(
+    records.filter((work) => work?.ref).map((work) => [work.ref, work]),
+  );
   const externalRefs = new Set(
     records
       .filter((work) => work?.ref && !isNexusOwned(work))
@@ -77,8 +81,10 @@ export function requestedDecisionMap(
     if (!decision) continue;
     // Awaiting anywhere; answered only for source-owned work, where the
     // request stays live until a delivery path exists.
+    const work = workByRef.get(decision.work_ref) || null;
     const live =
-      decision.status === "awaiting_answer" ||
+      (decision.status === "awaiting_answer" &&
+        !proposalVoidReason(decision, work)) ||
       (decision.status === "answered" &&
         externalRefs.has(decision.work_ref) &&
         !closedDecisions.has(decision.id));

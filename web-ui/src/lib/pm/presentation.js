@@ -372,7 +372,7 @@ export function errorMessage(error) {
         : "";
       return `The PM is at its in-flight limit for this workspace${limit}. Your message is kept; send it once another turn finishes or expires, or release a stuck runner.`;
     }
-    return "Your previous message in this conversation is still queued or being answered. Your new message is kept; send it once that turn finishes or expires, or start a new conversation.";
+    return "Your previous message in this conversation is still queued or being answered. Your draft stays in the composer; send it again once that turn finishes or expires, or copy it into a new conversation.";
   }
   if (isSessionExpired(error)) {
     return "Your session has expired. Sign in again to continue.";

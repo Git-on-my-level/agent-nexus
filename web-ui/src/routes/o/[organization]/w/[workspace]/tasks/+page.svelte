@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -49,6 +49,9 @@
   $effect(() => {
     if (moveNotice && moveNoticeElement) moveNoticeElement.focus();
   });
+  $effect(() => {
+    if (evidenceFor && evidenceInput) evidenceInput.focus();
+  });
   async function loadEvidenceSuggestions() {
     try {
       const result = await coreClient.listArtifacts({ limit: 25 });
@@ -60,7 +63,13 @@
       evidenceSuggestions = items
         .map((artifact) => ({
           ref: artifact.ref || (artifact.id ? `artifact:${artifact.id}` : ""),
-          title: artifact.title || artifact.name || artifact.filename || "",
+          title:
+            artifact.title ||
+            artifact.summary ||
+            artifact.name ||
+            artifact.filename ||
+            [artifact.kind, artifact.media_type].filter(Boolean).join(" · ") ||
+            "",
         }))
         .filter((entry) => entry.ref);
     } catch {
@@ -231,7 +240,7 @@
           evidenceFor = { key, work, phase, ref: "" };
           moveNotice = null;
           void loadEvidenceSuggestions();
-          void tick().then(() => evidenceInput?.focus());
+
           return;
         }
         const trimmed = String(evidenceFor.ref ?? "").trim();
@@ -624,6 +633,7 @@
   {#if evidenceFor}
     <form
       class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
+      role="status"
       onsubmit={(event) => {
         event.preventDefault();
         void moveTask(evidenceFor.work, evidenceFor.phase);

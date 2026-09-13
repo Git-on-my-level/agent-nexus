@@ -1,5 +1,6 @@
 <script>
   import StateError from "$lib/components/state/StateError.svelte";
+  import { proposalVoidReason } from "$lib/inboxMailbox.js";
   import ReceiptSignal from "./ReceiptSignal.svelte";
   import {
     decisionConsequence,
@@ -93,12 +94,18 @@
   );
   // A proposal fenced on an older revision will fail at dispatch; say so
   // before the click rather than after.
-  let stale = $derived.by(() => {
-    if (selected?.status !== "awaiting_answer") return false;
-    const target = String(selected?.target_revision ?? "").trim();
-    const current = String(work?.decision_revision ?? "").trim();
-    return Boolean(target && current && target !== current);
-  });
+  let voidReason = $derived(proposalVoidReason(selected, work));
+  let stale = $derived(voidReason === "stale");
+  let moot = $derived(voidReason === "moot");
+  function dismissVoid(event) {
+    event.preventDefault();
+    if (busy || !voidReason) return;
+    choice = "reject";
+    answer = moot
+      ? `Already at ${label(targetPhase || work?.phase || "")}; nothing to do.`
+      : "The task changed after this was proposed; the proposal no longer applies.";
+    onAnswer?.(event);
+  }
   let unappliable = $derived(
     selected?.scope === "work.phase" &&
       !targetPhase &&
@@ -154,6 +161,21 @@
           {/each}
         </ul>
       {/if}
+      {#if moot}
+        <p
+          id="decision-moot-note"
+          class="mt-3 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
+        >
+          The task is already at {label(targetPhase)}, so there is nothing left
+          to approve.
+          <button
+            class="ui-prose-link"
+            type="button"
+            onclick={dismissVoid}
+            disabled={busy}>Dismiss this proposal</button
+          >
+        </p>
+      {/if}
       {#if stale}
         <p
           id="decision-stale-note"
@@ -163,6 +185,12 @@
           revision, so approving it would fail. {proposer === "You proposed"
             ? "Propose it again from the board or the CLI."
             : "Ask the PM to propose again."}
+          <button
+            class="ui-prose-link"
+            type="button"
+            onclick={dismissVoid}
+            disabled={busy}>Dismiss this proposal</button
+          >
         </p>
       {/if}
       {#if missingEvidence}
@@ -280,6 +308,7 @@
               noteMissing ||
               unappliable ||
               stale ||
+              moot ||
               missingEvidence}
             aria-describedby={stale
               ? "decision-stale-note"
