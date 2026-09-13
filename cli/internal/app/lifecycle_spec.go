@@ -53,10 +53,10 @@ func derivedLifecyclePreflightSpecs() map[string]map[string]preflightFlagSpec {
 	for _, spec := range lifecycleResourceSpecs() {
 		for _, verb := range spec.verbs {
 			flags := map[string]preflightFlagSpec{
-				spec.idFlag:   valueFlag,
-				"reason":      valueFlag,
-				"from-file":   valueFlag,
-				"dry-run":     boolFlag,
+				spec.idFlag: valueFlag,
+				"reason":    valueFlag,
+				"from-file": valueFlag,
+				"dry-run":   boolFlag,
 			}
 			if verb != "purge" {
 				flags["actor-id"] = valueFlag

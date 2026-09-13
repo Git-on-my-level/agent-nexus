@@ -379,7 +379,7 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 	}
 }
 
-func TestEnrichForCommandPMConversationBusy(t *testing.T) {
+func TestEnrichForCommandPMBusyReasons(t *testing.T) {
 	t.Parallel()
 
 	generic := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
@@ -387,41 +387,59 @@ func TestEnrichForCommandPMConversationBusy(t *testing.T) {
 		t.Fatalf("busy without a command should keep the generic hint, got %q", generic.Hint)
 	}
 
-	err := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
-	EnrichForCommand(err, "pm.conversations.messages.create")
-	if !strings.Contains(err.Hint, "queued or being answered") || !strings.Contains(err.Hint, "pm conversations get") {
-		t.Fatalf("expected conversation busy hint, got %q", err.Hint)
-	}
-	if strings.Contains(strings.ToLower(err.Hint), "command help") {
-		t.Fatalf("busy hint still generic: %q", err.Hint)
-	}
-	details, _ := err.Details.(map[string]any)
-	if got, _ := details["hint"].(string); got != err.Hint {
-		t.Fatalf("details.hint should match: details=%q hint=%q", got, err.Hint)
-	}
-	rec, _ := details["anx_cli_recovery"].(map[string]any)
-	if rec["kind"] != "busy" {
-		t.Fatalf("unexpected recovery: %#v", rec)
+	conversationBody := []byte(`{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"conversation"}}}`)
+	capacityBody := []byte(`{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"capacity"}}}`)
+	conversationHint := "queued or being answered"
+	capacityHint := "in-flight limit for this workspace"
+
+	for _, commandID := range []string{"pm.conversations.messages.create", "pm.conversations.message", "pm.ask"} {
+		conv := FromHTTPFailure(429, conversationBody)
+		EnrichForCommand(conv, commandID)
+		if !strings.Contains(conv.Hint, conversationHint) || !strings.Contains(conv.Hint, "pm conversations get") {
+			t.Fatalf("%s conversation hint=%q", commandID, conv.Hint)
+		}
+		if strings.Contains(conv.Hint, capacityHint) {
+			t.Fatalf("%s used capacity wording for conversation: %q", commandID, conv.Hint)
+		}
+		details, _ := conv.Details.(map[string]any)
+		rec, _ := details["anx_cli_recovery"].(map[string]any)
+		if rec["reason"] != "conversation" {
+			t.Fatalf("%s recovery=%#v", commandID, rec)
+		}
+
+		capErr := FromHTTPFailure(429, capacityBody)
+		EnrichForCommand(capErr, commandID)
+		if !strings.Contains(capErr.Hint, capacityHint) || !strings.Contains(capErr.Hint, "release a stuck runner") {
+			t.Fatalf("%s capacity hint=%q", commandID, capErr.Hint)
+		}
+		if strings.Contains(capErr.Hint, conversationHint) {
+			t.Fatalf("%s used conversation wording for capacity: %q", commandID, capErr.Hint)
+		}
+		capDetails, _ := capErr.Details.(map[string]any)
+		capRec, _ := capDetails["anx_cli_recovery"].(map[string]any)
+		if capRec["reason"] != "capacity" {
+			t.Fatalf("%s capacity recovery=%#v", commandID, capRec)
+		}
 	}
 
-	alias := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
-	EnrichForCommand(alias, "pm.conversations.message")
-	if !strings.Contains(alias.Hint, "queued or being answered") {
-		t.Fatalf("CLI path command id should also enrich busy, got %q", alias.Hint)
+	missing := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	EnrichForCommand(missing, "pm.ask")
+	if !strings.Contains(missing.Hint, capacityHint) {
+		t.Fatalf("missing reason should use capacity hint, got %q", missing.Hint)
 	}
 
-	ask := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
-	EnrichForCommand(ask, "pm.ask")
-	if !strings.Contains(ask.Hint, "queued or being answered") || !strings.Contains(ask.Hint, "pm conversations get") {
-		t.Fatalf("pm.ask should use the conversation busy hint, got %q", ask.Hint)
-	}
-	if strings.Contains(strings.ToLower(ask.Hint), "command help") {
-		t.Fatalf("pm.ask busy hint still generic: %q", ask.Hint)
-	}
-
-	other := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	other := FromHTTPFailure(429, conversationBody)
 	EnrichForCommand(other, "pm.decisions.answer")
-	if strings.Contains(other.Hint, "queued or being answered") {
-		t.Fatalf("non-message PM commands must not get the conversation busy hint, got %q", other.Hint)
+	if strings.Contains(other.Hint, conversationHint) || strings.Contains(other.Hint, capacityHint) {
+		t.Fatalf("non-message PM commands must not get message busy hints, got %q", other.Hint)
+	}
+}
+
+func TestEnrichForCommandPMReconcileNothingDelivered(t *testing.T) {
+	t.Parallel()
+	err := FromHTTPFailure(400, []byte(`{"error":{"code":"invalid_request","message":"invalid PM request: Nothing has been delivered yet, so there is nothing to read back"}}`))
+	EnrichForCommand(err, "pm.actions.reconcile")
+	if err.Hint != "nothing has been delivered yet; deliver first or acknowledge the failure" {
+		t.Fatalf("hint=%q", err.Hint)
 	}
 }

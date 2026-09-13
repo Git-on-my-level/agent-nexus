@@ -229,10 +229,10 @@ func TestSecretCommandMachineIdentities(t *testing.T) {
 	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	tests := []struct {
-		name           string
-		args           []string
-		wantCommand    string
-		wantCommandID  string
+		name          string
+		args          []string
+		wantCommand   string
+		wantCommandID string
 	}{
 		{
 			name:          "secret update config error",

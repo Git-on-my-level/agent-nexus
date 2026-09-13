@@ -107,10 +107,10 @@ var (
 	pmServeShutdownGrace   = 5 * time.Second
 	claimNonRetryableLimit = 10
 	claimBackoffStart      = time.Second
-	claimBackoffCap       = 60 * time.Second
+	claimBackoffCap        = 60 * time.Second
 	harnessLogWriter       io.Writer
 	typedRefPattern        = regexp.MustCompile(`\b(?:card|work|artifact|topic|document|decision):[A-Za-z0-9._:-]+`)
-	providerModelRe       = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
+	providerModelRe        = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
 )
 
 func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -276,30 +276,23 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	var (
 		mu                 sync.Mutex
 		active             int
+		inFlight           sync.WaitGroup
 		held               = map[string]heldTurn{}
 		nonRetryableStreak int
 		backoff            = claimBackoffStart
-		loggedNonRetryable bool
 	)
 	shutdown := func() (*commandResult, error) {
-		deadline := nowFn().Add(pmServeShutdownGrace)
-		for {
-			mu.Lock()
-			busy := active
-			mu.Unlock()
-			if busy == 0 {
-				break
-			}
-			remain := deadline.Sub(nowFn())
-			if remain <= 0 {
-				break
-			}
-			if remain > 20*time.Millisecond {
-				remain = 20 * time.Millisecond
-			}
-			if sleepErr := sleepFn(context.Background(), remain); sleepErr != nil {
-				break
-			}
+		stopHarness()
+		drained := make(chan struct{})
+		go func() {
+			inFlight.Wait()
+			close(drained)
+		}()
+		timer := time.NewTimer(pmServeShutdownGrace)
+		defer timer.Stop()
+		select {
+		case <-drained:
+		case <-timer.C:
 		}
 		mu.Lock()
 		pending := make([]heldTurn, 0, len(held))
@@ -311,15 +304,17 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		defer cancelRelease()
 		released := make([]string, 0, len(pending))
 		for _, turn := range pending {
-			if err := a.releaseTurn(releaseCtx, cfg, turn.id, turn.lease); err != nil {
+			if err := a.releaseTurn(releaseCtx, cfg, runnerID, turn.id, turn.lease); err != nil {
 				a.pmLog("pm serve: release %s failed: %v\n", turn.id, err)
 				continue
 			}
-			a.pmLog("pm serve: released turn %s\n", turn.id)
+			a.pmLog("pm serve: released turn %s on shutdown\n", turn.id)
 			released = append(released, turn.id)
 		}
-		stopHarness()
-		return &commandResult{Text: "pm serve stopped", Data: map[string]any{"stopped": true, "released": released}}, serveCtx.Err()
+		return &commandResult{
+			Text: fmt.Sprintf("pm serve stopped; released %d turn(s)", len(released)),
+			Data: map[string]any{"stopped": true, "released": released},
+		}, nil
 	}
 	for {
 		select {
@@ -343,13 +338,12 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			}
 			if !claimErrorRetryable(claimErr) {
 				nonRetryableStreak++
-				if !loggedNonRetryable {
-					a.pmLog("pm serve: claim failed: %v\n", claimErr)
-					loggedNonRetryable = true
-				}
 				if nonRetryableStreak >= claimNonRetryableLimit {
-					return nil, errnorm.New(errnorm.KindRemote, "claim_failed", fmt.Sprintf("Claim failed with a non-retryable error %d times. Exiting.", claimNonRetryableLimit))
+					msg := fmt.Sprintf("Claim failed with a non-retryable error %d times. Exiting.", claimNonRetryableLimit)
+					a.pmLog("pm serve: %s\n", msg)
+					return nil, errnorm.New(errnorm.KindRemote, "claim_failed", msg)
 				}
+				a.pmLog("pm serve: claim failed (%s); retrying in %s, %d of %d\n", claimErrorLabel(claimErr), backoff, nonRetryableStreak, claimNonRetryableLimit)
 				if sleepErr := sleepFn(serveCtx, backoff); sleepErr != nil {
 					return shutdown()
 				}
@@ -363,7 +357,6 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			}
 			nonRetryableStreak = 0
 			backoff = claimBackoffStart
-			loggedNonRetryable = false
 			a.pmLog("pm serve: claim failed: %v\n", claimErr)
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
@@ -372,7 +365,6 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		}
 		nonRetryableStreak = 0
 		backoff = claimBackoffStart
-		loggedNonRetryable = false
 		status, _ := asMap(claimed.Data)["status_code"].(int)
 		if status == 204 || commandResultBody(claimed) == nil {
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
@@ -398,15 +390,21 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		runTurn := func() {
 			defer func() {
 				mu.Lock()
-				delete(held, turnID)
 				active--
 				mu.Unlock()
 			}()
-			_ = a.handleClaimedTurn(ctx, cfg, absDir, agentctl, argv, env, turn, harnessRoot)
+			settled := a.handleClaimedTurn(ctx, serveCtx, cfg, absDir, agentctl, argv, env, turn, harnessRoot)
+			if settled {
+				mu.Lock()
+				delete(held, turnID)
+				mu.Unlock()
+			}
 		}
+		inFlight.Add(1)
 		if maxConcurrent == 1 {
 			done := make(chan struct{})
 			go func() {
+				defer inFlight.Done()
 				runTurn()
 				close(done)
 			}()
@@ -417,11 +415,18 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			}
 			continue
 		}
-		go runTurn()
+		go func() {
+			defer inFlight.Done()
+			runTurn()
+		}()
 	}
 }
 
-func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDir, agentctl string, argv, env []string, turn map[string]any, harnessBase context.Context) error {
+func shuttingDown(ctx context.Context) bool {
+	return ctx != nil && ctx.Err() != nil
+}
+
+func (a *App) handleClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir, agentctl string, argv, env []string, turn map[string]any, harnessBase context.Context) bool {
 	started := nowFn()
 	turnID := anyString(turn["id"])
 	leaseToken := anyString(turn["lease_token"])
@@ -431,7 +436,10 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		maxBytes = n
 	}
 	direct := runnerUsesPromptPlaceholder(argv)
-	fail := func(reason string, raw []byte) error {
+	fail := func(reason string, raw []byte) bool {
+		if shuttingDown(shutdownCtx) {
+			return false
+		}
 		if len(raw) > 0 {
 			source := "agentctl"
 			if direct {
@@ -440,19 +448,23 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 			a.pmLog("pm serve: turn %s %s: %s\n", turnID, source, strings.TrimSpace(string(raw)))
 		}
 		a.pmLog("pm serve: turn %s failed in %ds: %s\n", turnID, elapsedSeconds(started), reason)
-		return a.failTurn(ctx, cfg, turnID, leaseToken, reason)
+		_ = a.failTurn(ctx, cfg, turnID, leaseToken, reason)
+		return true
 	}
-	complete := func(text, provider, model string) error {
+	complete := func(text, provider, model string) bool {
+		if shuttingDown(shutdownCtx) {
+			return false
+		}
 		if err := a.completeTurn(ctx, cfg, turnID, leaseToken, text, maxBytes); err != nil {
 			a.pmLog("pm serve: turn %s failed in %ds: %v\n", turnID, elapsedSeconds(started), err)
-			return err
+			return false
 		}
 		suffix := ""
 		if provider != "" {
 			suffix = fmt.Sprintf(" provider=%s model=%s", provider, model)
 		}
 		a.pmLog("pm serve: turn %s completed in %ds%s\n", turnID, elapsedSeconds(started), suffix)
-		return nil
+		return true
 	}
 	prompt := buildPMPrompt(cfg.Agent, turn, maxBytes)
 	promptPath := filepath.Join(workDir, "turn-"+sanitizeFilePart(turnID)+".md")
@@ -480,8 +492,8 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		stdout, stderr, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
 		a.logRunnerStderr(turnID, stderr)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return err
+			if shuttingDown(shutdownCtx) || errors.Is(err, context.Canceled) {
+				return false
 			}
 			return fail(harnessCmdFailure(err), joinCmdOutput(stdout, stderr))
 		}
@@ -504,8 +516,8 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	a.logRunnerStderr(turnID, launchErrOut)
 	execID, launchTimeout := "", ""
 	if launchErr != nil {
-		if errors.Is(launchErr, context.Canceled) {
-			return launchErr
+		if shuttingDown(shutdownCtx) || errors.Is(launchErr, context.Canceled) {
+			return false
 		}
 		var ok bool
 		execID, launchTimeout, ok = continuingAgentctlLaunch(launchOut)
@@ -525,8 +537,8 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if awaitErr != nil && agentctlNotFound(awaitOut, awaitErr) {
 		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(awaitOut)))
 		if visErr := waitForAgentctlExecution(runCtx, agentctl, execID, workDir, env); visErr != nil {
-			if errors.Is(visErr, context.Canceled) {
-				return visErr
+			if shuttingDown(shutdownCtx) || errors.Is(visErr, context.Canceled) {
+				return false
 			}
 			return fail(humanTurnFailure("startup_timeout", launchTimeout), joinCmdOutput(awaitOut, awaitErrOut))
 		}
@@ -534,8 +546,8 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		a.logRunnerStderr(turnID, awaitErrOut)
 	}
 	if awaitErr != nil {
-		if errors.Is(awaitErr, context.Canceled) {
-			return awaitErr
+		if shuttingDown(shutdownCtx) || errors.Is(awaitErr, context.Canceled) {
+			return false
 		}
 		return fail(humanTurnFailure("await_failed", ""), joinCmdOutput(awaitOut, awaitErrOut))
 	}
@@ -579,8 +591,9 @@ func truncateToMaxBytes(text string, maxBytes int) string {
 	return text[:n]
 }
 
-func (a *App) releaseTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken string) error {
+func (a *App) releaseTurn(ctx context.Context, cfg config.Resolved, runnerID, turnID, leaseToken string) error {
 	_, err := a.invokeRawJSON(ctx, cfg, "pm turns release", "POST", "/pm/turns/"+url.PathEscape(turnID)+"/release", map[string]any{
+		"runner_id":   runnerID,
 		"lease_token": leaseToken,
 	})
 	return err
@@ -718,6 +731,19 @@ func harnessCmdFailure(err error) string {
 		return fmt.Sprintf("The PM harness exited with an error (exit %d). Retry, or check the runner log.", exitErr.ExitCode())
 	}
 	return "The PM harness failed to start. Retry, or check the runner log."
+}
+
+func claimErrorLabel(err error) string {
+	var typed *errnorm.Error
+	if errors.As(err, &typed) {
+		if code := strings.TrimSpace(typed.Code); code != "" {
+			return strings.ReplaceAll(code, "_", " ")
+		}
+		if msg := strings.TrimSpace(typed.Message); msg != "" {
+			return strings.ToLower(msg)
+		}
+	}
+	return "error"
 }
 
 func claimErrorRetryable(err error) bool {

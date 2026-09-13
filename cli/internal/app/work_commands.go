@@ -429,6 +429,9 @@ func formatWorkCommandText(name string, body any) string {
 	if name == "pm actions acknowledge" {
 		return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["acknowledged_at"]))
 	}
+	if name == "pm actions reconcile" {
+		return formatPMActionReconcileText(root)
+	}
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])
 		lines := []string{renderWorkLine(work)}
@@ -467,6 +470,15 @@ func renderPMTurnStatus(turn map[string]any) string {
 		return "in progress"
 	}
 	return "queued"
+}
+
+func formatPMActionReconcileText(root map[string]any) string {
+	receipt := asMap(root["receipt"])
+	line := fmt.Sprintf("%s  status=%s  receipt=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), firstNonEmpty(anyString(receipt["status"]), "unknown"))
+	if detail := anyString(receipt["detail"]); detail != "" {
+		line += "  " + detail
+	}
+	return line + fmt.Sprintf("  reconciliation_conflict=%t", root["reconciliation_conflict"] == true)
 }
 
 func formatPMDispatchText(root map[string]any, started time.Time, previousStatus string) string {
