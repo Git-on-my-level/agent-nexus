@@ -1,4 +1,8 @@
-import { getInboxSubjectLabel, enrichInboxItem } from "./inboxUtils.js";
+import {
+  enrichInboxItem,
+  getInboxSubjectLabel,
+  getInboxSubjectRef,
+} from "./inboxUtils.js";
 import {
   decisionSummary,
   receiptSignal,
@@ -118,13 +122,10 @@ export function inboxRowBadge(row, now = Date.now()) {
       return { label: "Blocked", tone: "warn" };
     }
     const freshness = workFreshness(row.item || row, now);
-    if (freshness.key === "error") {
-      const name = sourceLabel(row.item?.source);
-      return {
-        label: name ? `Can't reach ${name}` : "Can't reach source",
-        tone: "warn",
-      };
-    }
+    // The label names the cause (reader not ready, rate limited, unreachable),
+    // the same way the task page does.
+    if (freshness.key === "error")
+      return { label: freshness.label, tone: "warn" };
     return null;
   }
   if (row.kind === "decision") {
@@ -194,7 +195,7 @@ export function buildInboxRows({
   }
   for (const raw of inboxItems) {
     const item = enrichInboxItem(raw);
-    const subjectRef = String(item.subject_ref ?? "").trim();
+    const subjectRef = String(getInboxSubjectRef(item) ?? "").trim();
     const subjectTitle = taskTitles.get(subjectRef);
     rows.push({
       id: `inbox:${item.id}`,

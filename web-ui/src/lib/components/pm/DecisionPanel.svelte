@@ -26,6 +26,7 @@
     actionError = "",
     actorLabel = (id) => id,
     currentActorId = "",
+    pmHref = "",
     answer = $bindable(""),
     choice = $bindable(""),
     onAnswer,
@@ -229,12 +230,22 @@
     {/if}
     <section class="border-t border-line-subtle pt-4">
       <h3 class="text-meta font-semibold text-fg">Delivery and outcome</h3>
-      {#if actionError}
+      {#if actionError && action?.status !== "failed"}
         <StateError
           message={actionError}
           onretry={onRefreshReceipt}
           class="mt-2"
         />
+      {/if}
+      {#if action?.status === "failed" && !handedOff}
+        <p class="mt-2 text-meta text-fg">
+          Nothing was sent. This approval cannot be retried; to try again,
+          <a
+            class="ui-prose-link"
+            href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}
+            >ask the PM to propose it again</a
+          > and approve the new proposal.
+        </p>
       {/if}
       {#if action}
         {@const verified =

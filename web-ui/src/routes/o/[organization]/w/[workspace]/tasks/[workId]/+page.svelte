@@ -103,6 +103,16 @@
       return "Open source evidence";
     }
   }
+  // A reader often reports the same URL for every claim; one link per URL.
+  function uniqueEvidence(list) {
+    const seen = new Set();
+    return (Array.isArray(list) ? list : []).filter((entry) => {
+      const key = String(entry?.url || entry?.ref || entry?.summary || "");
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
   function observationErrorText(observation) {
     const error = observation?.error;
     if (!error) return "";
@@ -263,7 +273,13 @@
                  lecture about what a finished run cannot do. -->
             <SignalBadge tone="warn">No acceptance criteria</SignalBadge>
           {/if}
-          <span class="font-mono text-micro text-fg-subtle">{work.ref}</span>
+          <button
+            class="ui-prose-link text-micro"
+            type="button"
+            title={work.ref}
+            onclick={() => navigator.clipboard?.writeText(work.ref)}
+            >Copy ref</button
+          >
         </span>
       {/snippet}
       {#snippet actions()}<button
@@ -449,7 +465,7 @@
                     </ul>{/if}
                   {#if observation.evidence?.length}
                     <ul class="mt-1.5 space-y-1">
-                      {#each observation.evidence as evidence}{@const url =
+                      {#each uniqueEvidence(observation.evidence) as evidence}{@const url =
                           safeSourceHref(evidence.url)}
                         <li class="break-words text-meta text-fg">
                           {#if url}<a

@@ -204,7 +204,7 @@ export const EXPECTED_WAIT_LABEL =
   "The PM is a separate agent working through the CLI; answers take a few minutes.";
 export const UNCLAIMED_LABEL =
   "Waiting for a PM runner to claim this. Nothing is thinking yet.";
-export const STALLED_AFTER_MS = 12 * 60 * 1000;
+export const STALLED_AFTER_MS = 8 * 60 * 1000;
 
 /**
  * Whether `turn` opens a new time group. Unparseable timestamps never open a

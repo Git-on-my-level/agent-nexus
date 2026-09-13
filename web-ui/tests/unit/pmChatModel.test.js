@@ -101,7 +101,7 @@ describe("PM chat presentation model", () => {
     ).toMatchObject({ kind: "pending", claimed: true });
   });
 
-  it("names the usual wait after 20s and a stall only after 12 minutes", () => {
+  it("names the usual wait after 20s and a stall only after 8 minutes", () => {
     const now = Date.parse("2026-09-09T10:01:00Z");
     const fresh = turnState(
       { status: "sending", created_at: "2026-09-09T10:00:50Z" },

@@ -330,8 +330,8 @@ export function errorMessage(error) {
     error instanceof Error
       ? error.message
       : String(error || "Unable to load workspace data.");
-  if (/capacity reached/i.test(raw)) {
-    return "The PM is busy with other questions. Your message is kept; try again in a minute.";
+  if (/capacity reached|busy/i.test(raw)) {
+    return "Your previous message in this conversation is still queued or being answered. Your new message is kept; send it once that turn finishes or expires, or start a new conversation.";
   }
   if (/PM permission denied/i.test(raw)) {
     return "You are not signed in as someone who can use the PM. Sign in again and retry.";

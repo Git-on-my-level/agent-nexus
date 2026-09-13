@@ -374,7 +374,7 @@
           ><a
             class="ui-prose-link text-warn-text"
             href={workspaceHref("/integrations")}
-            >{unreachableCount}{nextCursor ? "+" : ""} can't reach source</a
+            >{unreachableCount}{nextCursor ? "+" : ""} failing to read</a
           >{/if}
       {/if}
     {/snippet}
@@ -492,7 +492,7 @@
         <option value="">Any freshness</option>
         <option value="fresh">Checked recently</option>
         <option value="stale">Not checked lately</option>
-        <option value="error">Can't reach source</option>
+        <option value="error">Read failing</option>
         <option value="unknown">Never checked</option>
       </select>
       <form

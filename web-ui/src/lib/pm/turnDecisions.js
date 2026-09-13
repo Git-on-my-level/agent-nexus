@@ -9,7 +9,14 @@ const DECISION_REF_PATTERN = /\bdecision:[A-Za-z0-9._:-]+/g;
  * @returns {string[]} unique decision ids in first-seen order
  */
 export function decisionIdsFromTurn(turn) {
-  const refs = [...(turn?.evidence_refs || [])];
+  // Core records the proposed ids on the turn; evidence refs and prose
+  // mentions cover turns from runners that predate that field.
+  const refs = [
+    ...(Array.isArray(turn?.decision_ids)
+      ? turn.decision_ids.map((id) => `decision:${id}`)
+      : []),
+    ...(turn?.evidence_refs || []),
+  ];
   if (typeof turn?.response === "string") {
     refs.push(...(turn.response.match(DECISION_REF_PATTERN) || []));
   }

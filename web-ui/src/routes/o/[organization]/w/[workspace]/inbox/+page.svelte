@@ -669,6 +669,7 @@
                 ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
                 : ""}
             currentActorId={$selectedActorId || ""}
+            pmHref={workspaceHref("/pm")}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),
             )}

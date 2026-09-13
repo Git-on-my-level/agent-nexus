@@ -80,11 +80,13 @@
   let waiting = $derived(hasPendingTurn(turns, now));
   let showJump = $derived(Boolean(turns.length) && !atBottom);
 
-  beforeNavigate(({ cancel }) => {
+  beforeNavigate(({ cancel, type }) => {
     if (sending) {
       cancel();
       return;
     }
+    // Full-page unloads are covered by onbeforeunload.
+    if (type === "leave") return;
     if (
       draft.trim() &&
       !sending &&
@@ -444,16 +446,19 @@
     motion?.addEventListener?.("change", onMotionChange);
     // A pending turn resolves in the background whether or not this tab is in
     // front: keep polling while hidden, and refresh the moment it comes back.
-    const pollNow = () => {
+    const pollNow = (force = false) => {
       if (!selectedId || sending || loading || loadingOlder || pollInFlight)
         return;
+      // Nothing changes on its own once every turn is answered or failed;
+      // only a pending turn earns a poll.
+      if (!force && !waiting) return;
       pollInFlight = true;
       void loadConversation(selectedId, true).finally(() => {
         pollInFlight = false;
       });
     };
     const onVisibilityChange = () => {
-      if (!document.hidden) pollNow();
+      if (!document.hidden) pollNow(true);
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     const timer = setInterval(pollNow, 5000);
@@ -544,9 +549,9 @@
             >{conversation.title}</span
           >{/if}
         {#if activeWorkRef}<a
-            class="ui-prose-link shrink-0 font-mono"
+            class="ui-prose-link shrink-0"
             href={workspaceHref(`/tasks/${encodeURIComponent(activeWorkRef)}`)}
-            >{activeWorkRef}</a
+            title={activeWorkRef}>Open the task</a
           >{/if}
       </p>
     {/if}

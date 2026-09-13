@@ -176,7 +176,7 @@
             >{group.items.length}</span
           >
         </div>
-        <div class="flex flex-col gap-2" role="list">
+        <div class="flex flex-col gap-2">
           {#each group.items as work (workKey(work))}
             {@const key = workKey(work)}
             {@const decisionId = requestedDecisions[key]}
@@ -189,7 +189,8 @@
               data-work-ref={work.ref}
               draggable="true"
               tabindex="0"
-              role="listitem"
+              role="group"
+              aria-label={work.title || "Untitled task"}
               aria-keyshortcuts="ArrowLeft ArrowRight Enter"
               aria-describedby="task-board-card-help"
               ondragstart={(event) => handleDragStart(event, work)}
