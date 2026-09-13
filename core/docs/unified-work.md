@@ -298,3 +298,40 @@ alone. This does not authorize a blind retry.
 `make contract-gen` and `make contract-check` regenerate all consumer mirrors. UI phase drags
 and CLI PM proposals must send the structured payload; legacy prose-only pending
 decisions must be rejected/superseded and proposed again with that payload.
+
+### Proposal attribution, revision fences, and context pagination
+
+New decisions persist `proposed_by` (the proposing principal actor ID) separately
+from `actor_id` (the human who can answer and dispatch). `origin_kind` is
+`human` for direct proposals, `channel` for direct proposals with a validated
+channel origin, and `pm_turn` for the selected PM principal's turn proposals.
+Turn proposals record their originating `turn_id`. Superseded records retain
+their own attribution; reusing identical intent retains the original proposal's
+turn. A different proposer or origin kind is different intent. Legacy decisions
+without recorded provenance omit these fields rather than inventing attribution.
+
+Every work response exposes read-only `decision_revision`. Clients must copy it
+verbatim into proposal `target_revision`. It is the nonempty `source.revision`
+when authority is external, otherwise the decimal Nexus work `version`.
+Dispatch uses the same helper. `freshness.source_revision` is not a fallback.
+A metadata or refresh version change therefore invalidates a fallback fence;
+a known external revision remains the fence independently of local version changes.
+
+PM context uses canonical work cursors: send the returned `next_cursor` as
+`cursor` with the same query, and keep `limit` within 1..50. A work-specific
+context is one item and rejects cursors. Invalid cursors return 400.
+
+Pending actions and failed actions with no sent attempt return 400
+`invalid_request`: "Nothing has been delivered yet, so there is nothing to read back."
+New action attempts record `sent_at` at entry to the executor handoff boundary,
+before invoking it; crash uncertainty is conservatively treated as a possible
+send. Preflight failures omit `sent_at`. Legacy failed attempts without a handoff
+marker cannot establish delivery; other legacy delivery states still permit
+read-back. A sent failure can be reconciled but never changes from `failed` to
+`unknown`; inconclusive receipts remain visible with `reconciliation_conflict`.
+
+PM authorization caches only actor-to-principal IDs for at most 30 seconds,
+bounded to 256 entries. Every cache hit reloads current principal authority and
+wake routing from auth storage. A revoked/mismatched principal invalidates the
+cached identity immediately on the next check, including external database
+revocations. No authorization result is cached.

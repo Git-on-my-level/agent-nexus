@@ -119,25 +119,8 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	if err != nil {
 		return nil, err
 	}
-	findPrincipal := func(ctx context.Context, actorID string) (auth.AuthPrincipalSummary, error) {
-		limit := 200
-		cursor := ""
-		for {
-			items, next, err := authStore.ListPrincipals(ctx, auth.AuthPrincipalListFilter{Limit: &limit, Cursor: cursor})
-			if err != nil {
-				return auth.AuthPrincipalSummary{}, err
-			}
-			for _, item := range items {
-				if item.ActorID == actorID && !item.Revoked {
-					return item, nil
-				}
-			}
-			if next == "" {
-				return auth.AuthPrincipalSummary{}, pm.ErrForbidden
-			}
-			cursor = next
-		}
-	}
+	principalLookup := newPMPrincipalLookup(authStore)
+	findPrincipal := principalLookup.find
 	authorize := func(ctx context.Context, p pm.Principal, permission, ref string) error {
 		if p.WorkspaceID != cfg.PM.WorkspaceID {
 			return pm.ErrForbidden
@@ -210,15 +193,21 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	if cfg.BridgeEnabled {
 		deps.Dispatch = bridge.Dispatch
 	}
-	deps.ReadContext = func(ctx context.Context, p pm.Principal, ref, query string, limit int) (pm.ContextPage, error) {
+	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
 		if ref != "" {
+			if cursor != "" {
+				return pm.ContextPage{}, pm.ErrInvalid
+			}
 			w, err := store.GetWork(ctx, ref)
 			if err != nil {
 				return pm.ContextPage{}, err
 			}
 			return pm.ContextPage{Items: []any{publicWork(w)}}, nil
 		}
-		page, err := store.ListWork(ctx, primitives.WorkListFilter{Query: query, Limit: limit})
+		page, err := store.ListWork(ctx, primitives.WorkListFilter{Query: query, Cursor: cursor, Limit: limit})
+		if errors.Is(err, primitives.ErrInvalidCursor) {
+			return pm.ContextPage{}, pm.ErrInvalid
+		}
 		if err != nil {
 			return pm.ContextPage{}, err
 		}
@@ -229,21 +218,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		return pm.ContextPage{Items: items, NextCursor: page.NextCursor}, nil
 	}
 	deps.CurrentRevision = func(ctx context.Context, p pm.Principal, ref string) (string, error) {
-		w, err := store.GetWork(ctx, ref)
-		if err != nil {
-			return "", err
-		}
-		source := workSourceMap(w)
-		if anyString(source["authority"]) != "nexus" {
-			revision := anyString(source["revision"])
-			if revision == "" {
-				return "", pm.ErrUnavailable
-			}
-			return revision, nil
-		}
-		v, _ := w["version"].(int64)
-		return strconv.FormatInt(v, 10), nil
+		return currentWorkDecisionRevision(ctx, store, ref)
 	}
+
 	// The registry is the single source of configured native execution paths.
 	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
 		"work.phase": func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeWorkPhase(ctx, store, a) },
@@ -464,4 +441,12 @@ func readBackWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action
 		status = pm.Verified
 	}
 	return pm.Receipt{Status: status, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: reconcile, Detail: "Read back canonical Nexus phase: " + phase}, nil
+}
+
+func currentWorkDecisionRevision(ctx context.Context, store *primitives.Store, ref string) (string, error) {
+	w, err := store.GetWork(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	return primitives.WorkDecisionRevision(w), nil
 }

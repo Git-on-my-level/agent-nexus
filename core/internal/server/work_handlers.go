@@ -55,6 +55,7 @@ func workStoreError(w http.ResponseWriter, err error) {
 }
 func publicWork(w map[string]any) map[string]any {
 	out := publicCardView(w)
+	out["decision_revision"] = primitives.WorkDecisionRevision(w)
 	delete(out, "id")
 	delete(out, "thread_id")
 	for _, key := range []string{"source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "version", "freshness", "latest_observation"} {

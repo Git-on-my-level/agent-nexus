@@ -9,9 +9,9 @@ import (
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
-	return s.proposeDecision(ctx, p, in, "")
+	return s.proposeDecision(ctx, p, in, "", p.ActorID)
 }
-func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID string) (Decision, error) {
+func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID, proposedBy string) (Decision, error) {
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
@@ -26,6 +26,13 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 		}
 	}
 	d := Decision{ID: stableID("decision", p.WorkspaceID, p.ActorID, in.RequestKey), WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, WorkRef: in.WorkRef, Instruction: in.Instruction, Payload: in.Payload, Scope: in.Scope, TargetRevision: in.TargetRevision, Status: AwaitingAnswer, Revision: 1, Origin: in.Origin, CreatedAt: time.Now().UTC()}
+	d.ProposedBy = proposedBy
+	d.OriginKind = "human"
+	if turnID != "" {
+		d.OriginKind, d.TurnID = "pm_turn", turnID
+	} else if in.Origin != nil {
+		d.OriginKind = "channel"
+	}
 	d, inserted, err := s.store.proposeDecision(ctx, d, turnID)
 	if err != nil {
 		return Decision{}, err
@@ -144,7 +151,10 @@ func (s *Service) ListActions(ctx context.Context, p Principal) ([]Action, error
 	return out, nil
 }
 func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) (Action, error) {
-	d, err := s.decision(ctx, p, id, "pm.read")
+	if !p.Human {
+		return Action{}, ErrForbidden
+	}
+	d, err := s.decision(ctx, p, id, "pm.approve")
 	if err != nil {
 		return Action{}, err
 	}
@@ -197,7 +207,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	old := a.Revision
 	a.Status = Sending
 	a.Revision++
-	a.Attempts = append(a.Attempts, Attempt{StartedAt: time.Now().UTC(), Status: Sending})
+	sentAt := time.Now().UTC()
+	a.Attempts = append(a.Attempts, Attempt{StartedAt: sentAt, SentAt: &sentAt, Status: Sending})
 	if err = s.store.cas(ctx, "action", a.ID, old, a); err != nil {
 		return Action{}, err
 	}
@@ -250,7 +261,7 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	if err != nil {
 		return a, err
 	}
-	if a.Status == Pending {
+	if a.Status == Pending || (a.Status == Failed && !hasSentAttempt(a)) {
 		return Action{}, ErrNothingDelivered
 	}
 	if a.Status == Verified {
@@ -269,7 +280,7 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 		return Action{}, err
 	}
 	// A read-back must not regress an acknowledged/applied result to delivery.
-	rank := map[Status]int{Unknown: 0, Sending: 0, Failed: 0, Delivered: 1, Acknowledged: 2, Reported: 3, Verified: 4}
+	rank := map[Status]int{Unknown: 0, Sending: 0, Failed: 1, Delivered: 2, Acknowledged: 3, Reported: 4, Verified: 5}
 	a.ReconciliationConflict = rank[r.Status] < rank[a.Status]
 	old := a.Revision
 	a.Receipt = r
@@ -331,7 +342,7 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 		return Decision{}, ErrForbidden
 	}
 	in.Origin = c.Origin
-	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID)
+	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID)
 }
 
 // Prose never supplies mutation parameters, including for legacy decisions.
@@ -370,4 +381,19 @@ func (s *Service) actionForReader(ctx context.Context, a Action) Action {
 }
 func NoDeliveryPath(source string) error {
 	return fmt.Errorf("%w: No delivery path is configured for %s yet; the approval is kept and the action stays pending", ErrUnavailable, source)
+}
+
+// Missing sent_at on legacy failed attempts cannot establish a source handoff.
+// Other legacy delivery states already record an attempted handoff.
+func hasSentAttempt(a Action) bool {
+	for _, attempt := range a.Attempts {
+		if attempt.SentAt != nil {
+			return true
+		}
+		switch attempt.Status {
+		case Sending, Unknown, Delivered, Acknowledged, Reported, Verified:
+			return true
+		}
+	}
+	return false
 }

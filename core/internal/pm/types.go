@@ -147,6 +147,9 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
+	ProposedBy       string         `json:"proposed_by,omitempty"`
+	OriginKind       string         `json:"origin_kind,omitempty"`
+	TurnID           string         `json:"turn_id,omitempty"`
 	SupersededBy     string         `json:"superseded_by,omitempty"`
 	SupersededReason string         `json:"superseded_reason,omitempty"`
 	CanAnswer        bool           `json:"can_answer"`
@@ -191,6 +194,7 @@ type Action struct {
 	Revision               int            `json:"revision"`
 }
 type Attempt struct {
+	SentAt     *time.Time `json:"sent_at,omitempty"`
 	StartedAt  time.Time  `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Status     Status     `json:"status"`

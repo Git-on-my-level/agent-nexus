@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -321,6 +322,7 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	}
 	out["source"] = source
 	out["version"] = version
+	out["decision_revision"] = WorkDecisionRevision(out)
 	out["latest_observation"] = latest
 	out["refresh"] = refresh
 	fresh := map[string]any{"status": "unknown", "stale_after_seconds": 900}
@@ -930,4 +932,17 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 		m["relations"] = relations
 	}
 	return nil
+}
+
+// WorkDecisionRevision is the proposal and dispatch fence for a projected work
+// record. Observation freshness never substitutes for source identity.
+func WorkDecisionRevision(w map[string]any) string {
+	source := workMap(w["source"])
+	if authority := workString(source["authority"]); authority != "" && authority != "nexus" {
+		if revision, _ := source["revision"].(string); revision != "" {
+			return revision
+		}
+	}
+	version, _ := workInt(w["version"])
+	return strconv.FormatInt(version, 10)
 }

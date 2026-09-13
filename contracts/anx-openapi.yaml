@@ -6386,13 +6386,26 @@ components:
           items:
             type: string
     PMDecision:
-      description: Workspace-visible for reading; only actor_id may answer. Clients must show answer controls only to that human.
+      description: Workspace-visible for reading; only the human actor_id may answer or dispatch. Clients must show answer controls only to that human.
       type: object
       additionalProperties: true
       properties:
         id: *id001
         workspace_id: *id002
         actor_id: *id003
+        proposed_by:
+          type: string
+          readOnly: true
+          description: Actor ID of the proposing principal, distinct from actor_id (the human approver). Absent on legacy decisions whose proposer was not recorded.
+        origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Direct human proposal, PM turn proposal, or direct human proposal with a validated channel origin. Absent on legacy decisions.
+        turn_id:
+          type: string
+          readOnly: true
+          description: Originating PM turn ID, present for pm_turn proposals.
         work_ref: *id004
         created_at: *id005
         instruction:
@@ -6403,6 +6416,7 @@ components:
           type: string
         target_revision:
           type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
         can_answer:
           type: boolean
           description: Derived for the current reader; true only for the awaiting decision owner with human approval authority.
@@ -6465,6 +6479,7 @@ components:
           type: string
         target_revision:
           type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
         authorization_basis:
           type: string
         status:
@@ -6494,6 +6509,11 @@ components:
             properties:
               started_at:
                 type: string
+              sent_at:
+                type: string
+                format: date-time
+                readOnly: true
+                description: Core entered the executor handoff boundary; this is not proof of source delivery. Absent for preflight failures and legacy attempts.
               finished_at:
                 type: string
               status:
@@ -6578,6 +6598,7 @@ components:
           type: string
         target_revision:
           type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
       required:
       - request_key
       - work_ref
@@ -6851,6 +6872,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        decision_revision:
+          type: string
+          readOnly: true
+          description: Revision fence to copy into PM proposal target_revision. Uses nonempty source.revision for external authority; otherwise the decimal Nexus work version. Recomputed on every work response.
         project_ref: &id002
           type: string
         priority: &id003
@@ -6983,6 +7008,7 @@ components:
           additionalProperties: true
           properties: *id001
       required:
+      - decision_revision
       - ref
       - title
       - source

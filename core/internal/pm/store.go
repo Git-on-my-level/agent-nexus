@@ -219,7 +219,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 		if err = json.Unmarshal(raw, &prior); err != nil {
 			return Decision{}, false, err
 		}
-		if prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) || !reflect.DeepEqual(prior.Payload, d.Payload) {
+		if prior.ProposedBy != d.ProposedBy || prior.OriginKind != d.OriginKind || prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) || !reflect.DeepEqual(prior.Payload, d.Payload) {
 			return Decision{}, false, &DecisionConflict{ExistingDecisionID: prior.ID}
 		}
 		d = prior
@@ -233,7 +233,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 			if err = json.Unmarshal(raw, &prior); err != nil {
 				return Decision{}, false, err
 			}
-			if prior.Instruction == d.Instruction && prior.TargetRevision == d.TargetRevision && reflect.DeepEqual(prior.Payload, d.Payload) && sameOrigin(prior.Origin, d.Origin) {
+			if prior.ProposedBy == d.ProposedBy && prior.OriginKind == d.OriginKind && prior.Instruction == d.Instruction && prior.TargetRevision == d.TargetRevision && reflect.DeepEqual(prior.Payload, d.Payload) && sameOrigin(prior.Origin, d.Origin) {
 				d = prior
 				reuse = true
 			} else {
