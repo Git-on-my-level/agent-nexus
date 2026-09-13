@@ -157,6 +157,13 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 		}
 		return "", nil
 	case "source_revision_changed":
+		if commandID == "pm.decisions.answer" {
+			return "The task changed after this proposal, so approving it would have failed at delivery. Decline it with `anx pm decisions answer --decline`, or ask for a fresh proposal (`anx pm turns propose` from the PM, or a board move for a human).",
+				map[string]any{
+					"kind":        "stale_source_revision",
+					"refresh_cli": "anx pm decisions get <id>",
+				}
+		}
 		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
 			map[string]any{
 				"kind":        "stale_source_revision",

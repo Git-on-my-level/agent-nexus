@@ -465,6 +465,11 @@ func formatWorkCommandText(name string, body any) string {
 		for _, row := range rows {
 			item := asMap(row)
 			line := fmt.Sprintf("%s  %s  status=%s", anyString(item["id"]), anyString(item["work_ref"]), firstNonEmpty(anyString(item["status"]), "unknown"))
+			if name == "pm decisions list" {
+				if flag := decisionFreshnessFlag(item); flag != "" {
+					line += "  " + flag
+				}
+			}
 			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"])); title != "" {
 				line += "  " + strings.Join(strings.Fields(title), " ")
 			}
@@ -475,6 +480,9 @@ func formatWorkCommandText(name string, body any) string {
 			lines = append(lines, line)
 		}
 		return strings.Join(appendPaginationLines(lines, root), "\n")
+	}
+	if name == "pm decisions get" {
+		return formatPMDecisionGetText(root)
 	}
 	if name == "pm turns get" {
 		return formatPMTurnGetText(root)
@@ -509,6 +517,27 @@ func formatWorkCommandText(name string, body any) string {
 		return strings.Join(lines, "\n")
 	}
 	return formatPrettyBody(body)
+}
+
+func formatPMDecisionGetText(root map[string]any) string {
+	body := formatPrettyBody(root)
+	if flag := decisionFreshnessFlag(root); flag != "" {
+		return flag + "\n" + body
+	}
+	return body
+}
+
+func decisionFreshnessFlag(item map[string]any) string {
+	if asBool(item["work_missing"]) {
+		return "task missing"
+	}
+	if asBool(item["already_at_target"]) {
+		return "already there"
+	}
+	if current, ok := item["target_current"].(bool); ok && !current {
+		return "stale since proposal"
+	}
+	return ""
 }
 
 func formatPMTurnGetText(root map[string]any) string {

@@ -352,6 +352,20 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
 	}
 
+	answerStale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"target is not current"}}`))
+	EnrichForCommand(answerStale, "pm.decisions.answer")
+	if !strings.Contains(answerStale.Hint, "task changed after this proposal") || !strings.Contains(answerStale.Hint, "failed at delivery") {
+		t.Fatalf("expected stale-approve delivery hint, got %q", answerStale.Hint)
+	}
+	if !strings.Contains(answerStale.Hint, "pm decisions answer --decline") || !strings.Contains(answerStale.Hint, "pm turns propose") || !strings.Contains(answerStale.Hint, "board move") {
+		t.Fatalf("expected decline or fresh-proposal recovery, got %q", answerStale.Hint)
+	}
+	answerDetails, _ := answerStale.Details.(map[string]any)
+	answerRec, _ := answerDetails["anx_cli_recovery"].(map[string]any)
+	if answerRec["kind"] != "stale_source_revision" {
+		t.Fatalf("answer recovery=%#v", answerRec)
+	}
+
 	ack := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
 	EnrichForCommand(ack, "pm.actions.acknowledge")
 	if !strings.Contains(ack.Hint, "not in a state that can be acknowledged") || !strings.Contains(ack.Hint, "pm actions reconcile") {

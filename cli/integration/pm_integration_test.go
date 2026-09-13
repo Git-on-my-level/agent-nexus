@@ -66,7 +66,9 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "fake-harness.sh")
 	body := "#!/bin/sh\n" +
 		"cat \"$1\" >/dev/null\n" +
-		"printf '%s\\n' 'Synthetic PM reply. See card:fixture-card and decision:pm_testdecision.'\n"
+		"printf '%s\\n' 'Synthetic PM reply. See card:fixture-card and decision:pm_testdecision.'\n" +
+		"printf '%s\\n' '---evidence---'\n" +
+		"printf '%s\\n' 'decision:pm_testdecision'\n"
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -113,10 +115,20 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	if !strings.Contains(response, "card:fixture-card") {
 		t.Fatalf("response %q", response)
 	}
+	if strings.Contains(response, "---evidence---") {
+		t.Fatalf("evidence trailer leaked into stored reply: %q", response)
+	}
 	refs, _ := getPathValue(asked.Payload, "data.turn.evidence_refs")
 	joined := fmt.Sprint(refs)
-	if !strings.Contains(joined, "card:fixture-card") || !strings.Contains(joined, "decision:pm_testdecision") {
-		t.Fatalf("evidence refs %v", refs)
+	if strings.Contains(joined, "card:fixture-card") {
+		t.Fatalf("prose mention attached as evidence: %v", refs)
+	}
+	if strings.Contains(joined, "decision:pm_testdecision") {
+		t.Fatalf("unresolvable evidence ref was kept: %v serve=%s", refs, readFileOrEmpty(serveLog))
+	}
+	serveOut := readFileOrEmpty(serveLog)
+	if !strings.Contains(serveOut, "pm serve: dropping evidence ref decision:pm_testdecision:") {
+		t.Fatalf("expected drop log, serve=%s refs=%v", serveOut, refs)
 	}
 }
 

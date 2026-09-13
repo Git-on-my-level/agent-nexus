@@ -48,3 +48,19 @@ func TestRenderErrorPMConflictUsesRevisionHint(t *testing.T) {
 		t.Fatalf("PM 409 still offered a revision retry: %q", out)
 	}
 }
+
+func TestRenderErrorPMStaleApprovalHint(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	a := &App{Stderr: &stderr}
+	err := errnorm.FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"target is not current"}}`))
+	exit := a.renderError(machineCommandIdentity{Command: "pm decisions answer", CommandID: "pm.decisions.answer"}, false, err)
+	if exit != 1 {
+		t.Fatalf("expected exit 1, got %d", exit)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "Hint:") || !strings.Contains(out, "task changed after this proposal") || !strings.Contains(out, "pm decisions answer --decline") {
+		t.Fatalf("expected stale-approve hint, got %q", out)
+	}
+}
