@@ -13,16 +13,18 @@ import (
 )
 
 func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
-	h := newLiveCoreHarness(t)
+	h := newPasskeyLiveCoreHarness(t)
 	h.registerAgentBootstrap(t, "worker", "worker."+runToken())
+	h.selectPMAgent(t, "worker")
+	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createInviteTokenKind(t, "worker", "human"))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Synthetic PM approval test", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "data.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
 	ref := mustStringPath(t, work.Payload, "data.work.ref")
-	h.runCLIExpectOK(t, "worker", nil, "pm", "context", "--work-ref", ref, "--limit", "1")
+	h.runCLIExpectOK(t, "maya", nil, "pm", "context", "--work-ref", ref, "--limit", "1")
 	input := map[string]any{"request_key": "synthetic-instruction", "work_ref": ref, "instruction": `{"next_action":"Review synthetic evidence"}`, "scope": "work.annotate", "target_revision": fmt.Sprint(mustIntPath(t, work.Payload, "data.work.version"))}
-	proposal := h.runCLIExpectOK(t, "worker", input, "pm", "decisions", "create", "--from-file", "-")
+	proposal := h.runCLIExpectOK(t, "maya", input, "pm", "decisions", "create", "--from-file", "-")
 	decisionID := mustStringPath(t, proposal.Payload, "data.id")
-	replay := h.runCLIExpectOK(t, "worker", input, "pm", "decisions", "create", "--from-file", "-")
+	replay := h.runCLIExpectOK(t, "maya", input, "pm", "decisions", "create", "--from-file", "-")
 	if mustStringPath(t, replay.Payload, "data.id") != decisionID {
 		t.Fatal("instruction replay duplicated intent")
 	}
@@ -60,6 +62,7 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.selectPMAgent(t, "pm")
 	invite := h.createInviteToken(t, "pm")
 	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
@@ -135,6 +138,7 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.selectPMAgent(t, "pm")
 	invite := h.createInviteToken(t, "pm")
 	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
@@ -173,7 +177,7 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 		t.Fatalf("expected failed, got %s stdout=%s", status, asked.Stdout)
 	}
 	failure := mustStringPath(t, asked.Payload, "data.turn.failure")
-	if !strings.Contains(failure, "harness exploded") && !strings.Contains(failure, "exit status 1") {
+	if !strings.Contains(failure, "did not produce a reply") || !strings.Contains(failure, "status 1") {
 		t.Fatalf("failure %q", failure)
 	}
 }
@@ -216,7 +220,7 @@ func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	}
 }
 
-func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness) {
+func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness, extraEnv ...string) {
 	t.Helper()
 	old := h.server
 	if err := old.Process.Kill(); err != nil {
@@ -224,7 +228,7 @@ func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness) {
 	}
 	_, _ = old.Process.Wait()
 	cmd := exec.Command(old.Args[0], old.Args[1:]...)
-	cmd.Env = old.Env
+	cmd.Env = append(append([]string{}, old.Env...), extraEnv...)
 	cmd.Dir = old.Dir
 	cmd.Stdout = h.logFile
 	cmd.Stderr = h.logFile
