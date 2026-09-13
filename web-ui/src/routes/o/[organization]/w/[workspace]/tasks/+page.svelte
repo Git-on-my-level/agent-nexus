@@ -16,6 +16,7 @@
     workFreshness,
     workKey,
     errorMessage,
+    sourceLabel,
   } from "$lib/pm/presentation.js";
   import { navIconPath } from "$lib/icons.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
@@ -37,6 +38,7 @@
   let decisionsLoaded = $state(false);
   let shortcutsOpen = $state(false);
   let moveError = $state("");
+  let moveNotice = $state(null);
   let requestId = 0;
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
@@ -151,15 +153,34 @@
       // Fail soft: the Requested badge link degrades, the page stays usable.
     }
   }
-  async function moveTask(work, phase) {
+  async function moveTask(work, phase, { undo = false } = {}) {
     moveError = "";
+    moveNotice = null;
     const key = workKey(work);
+    const from = work.phase || "unknown";
+    if (!isNexusOwned(work)) {
+      // A move on source-owned work files a request for you to approve; that
+      // is an obligation, so it is never created by an accidental keypress.
+      const source = sourceLabel(work.source);
+      if (
+        !window.confirm(
+          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${source}? You approve the request in Inbox.`,
+        )
+      )
+        return;
+    }
     try {
       const result = await applyTaskPhaseMove(coreClient, work, phase);
       if (result.kind === "moved") {
         records = records.map((item) =>
           workKey(item) === key ? { ...item, phase } : item,
         );
+        moveNotice = undo
+          ? { text: `Moved “${work.title}” back to ${label(phase)}.` }
+          : {
+              text: `Moved “${work.title}” to ${label(phase)}.`,
+              undo: () => moveTask({ ...work, phase }, from, { undo: true }),
+            };
         const next = { ...requested };
         delete next[key];
         requested = next;
@@ -169,6 +190,14 @@
       } else if (result.kind === "requested") {
         requested = { ...requested, [key]: phase };
         if (result.decision) decisions = [...decisions, result.decision];
+        moveNotice = {
+          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. Approve it in Inbox.`,
+          href: result.decision?.id
+            ? workspaceHref(
+                `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
+              )
+            : "",
+        };
       }
     } catch (err) {
       moveError = errorMessage(err);
@@ -277,6 +306,7 @@
     ["Next task", ["J"]],
     ["Previous task", ["K"]],
     ["Open focused task", ["Enter"]],
+    ["Move focused card to the previous or next phase (board)", ["←", "→"]],
     ["Board view", ["B"]],
     ["Table view", ["T"]],
     ["Shortcut help", ["?"]],
@@ -309,15 +339,16 @@
           >{records.length}{nextCursor ? "+" : ""} tracked</span
         >{#if blockedCount}<span class="mx-1 text-fg-subtle">·</span><a
             class="ui-prose-link text-warn-text"
-            href={queryHref({ phase: "blocked" })}>{blockedCount} blocked</a
+            href={queryHref({ phase: "blocked" })}
+            >{blockedCount}{nextCursor ? "+" : ""} blocked</a
           >{/if}{#if neverCheckedCount}<span class="mx-1 text-fg-subtle">·</span
           ><a class="ui-prose-link" href={queryHref({ freshness: "unknown" })}
-            >{neverCheckedCount} never checked</a
+            >{neverCheckedCount}{nextCursor ? "+" : ""} never checked</a
           >{/if}{#if unreachableCount}<span class="mx-1 text-fg-subtle">·</span
           ><a
             class="ui-prose-link text-warn-text"
             href={workspaceHref("/integrations")}
-            >{unreachableCount} can't reach source</a
+            >{unreachableCount}{nextCursor ? "+" : ""} can't reach source</a
           >{/if}
       {/if}
     {/snippet}
@@ -367,7 +398,7 @@
     <!-- The board is a desktop surface: 18rem columns cannot be dragged on a
          390px screen, so the toggle that leads there is hidden below 640px. -->
     <nav
-      class="hidden rounded-md border border-line bg-bg-soft p-0.5 sm:flex"
+      class="flex rounded-md border border-line bg-bg-soft p-0.5"
       aria-label="Task view"
     >
       <a
@@ -475,6 +506,31 @@
     </div>
   </details>
 
+  {#if moveNotice}
+    <p
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
+      role="status"
+    >
+      <span class="min-w-0 flex-1">{moveNotice.text}</span>
+      {#if moveNotice.undo}
+        <button
+          class="ui-prose-link text-micro"
+          type="button"
+          onclick={moveNotice.undo}>Undo</button
+        >
+      {/if}
+      {#if moveNotice.href}
+        <a class="ui-prose-link text-micro" href={moveNotice.href}
+          >Open in Inbox</a
+        >
+      {/if}
+      <button
+        class="ui-prose-link text-micro"
+        type="button"
+        onclick={() => (moveNotice = null)}>Dismiss</button
+      >
+    </p>
+  {/if}
   {#if moveError}
     <StateError message={moveError} />
   {/if}

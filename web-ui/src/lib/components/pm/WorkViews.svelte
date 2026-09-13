@@ -1,4 +1,5 @@
 <script>
+  import { tick } from "svelte";
   import WorkCard from "./WorkCard.svelte";
   import SignalBadge from "./SignalBadge.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
@@ -135,7 +136,16 @@
         ? Math.min(keys.length - 1, Math.max(0, index) + 1)
         : Math.max(0, (index < 0 ? 0 : index) - 1);
     const nextPhase = keys[nextIndex];
-    if (nextPhase && nextPhase !== current && onMove) onMove(work, nextPhase);
+    if (!nextPhase || nextPhase === current || !onMove) return;
+    const ref = work.ref;
+    // The card re-renders in another column; keep the keyboard on it so a
+    // second arrow press moves it again instead of dropping focus on body.
+    Promise.resolve(onMove(work, nextPhase)).then(async () => {
+      await tick();
+      document
+        .querySelector(`[data-work-ref="${CSS.escape(ref)}"][tabindex="0"]`)
+        ?.focus();
+    });
   }
 </script>
 
@@ -148,6 +158,11 @@
     aria-label="Task board grouped by phase"
     tabindex="0"
   >
+    <p id="task-board-card-help" class="sr-only">
+      Drag a card between phases, or focus it and press the left or right arrow
+      to move it. Enter opens the task. Moving a task that lives in another
+      tracker asks for confirmation and files a request for you to approve.
+    </p>
     {#each groups as group (group.key)}
       <section
         class="w-72 shrink-0 rounded-md bg-bg-soft p-2"
@@ -175,6 +190,8 @@
               draggable="true"
               tabindex="0"
               role="listitem"
+              aria-keyshortcuts="ArrowLeft ArrowRight Enter"
+              aria-describedby="task-board-card-help"
               ondragstart={(event) => handleDragStart(event, work)}
               onfocus={() => (focusedKey = key)}
               onkeydown={(event) => handleCardKey(event, work)}

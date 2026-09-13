@@ -34,6 +34,7 @@
   let updates = $state([]);
   let loading = $state(true);
   let busy = $state(false);
+  let busyWith = $state("");
   let error = $state("");
   let actionError = $state("");
   let notice = $state("");
@@ -74,14 +75,12 @@
   let selectedDecision = $derived(
     selected?.kind === "decision" ? selected.item : null,
   );
-  let selectedTaskTitle = $derived(
+  let selectedWork = $derived(
     selectedDecision?.work_ref
-      ? String(
-          work.find((item) => workKey(item) === selectedDecision.work_ref)
-            ?.title || "",
-        )
-      : "",
+      ? work.find((item) => workKey(item) === selectedDecision.work_ref) || null
+      : null,
   );
+  let selectedTaskTitle = $derived(String(selectedWork?.title || ""));
   let action = $derived(
     actions.find(
       (item) =>
@@ -255,6 +254,7 @@
   async function deliver() {
     if (!selectedDecision || busy) return;
     busy = true;
+    busyWith = "deliver";
     error = "";
     notice = "";
     try {
@@ -266,6 +266,7 @@
       await refreshReceipt();
     } finally {
       busy = false;
+      busyWith = "";
     }
   }
 
@@ -282,6 +283,7 @@
   async function reconcile() {
     if (!action || busy) return;
     busy = true;
+    busyWith = "reconcile";
     actionError = "";
     try {
       const result = await coreClient.reconcilePmAction(action.id);
@@ -291,6 +293,7 @@
       actionError = errorMessage(err);
     } finally {
       busy = false;
+      busyWith = "";
     }
   }
 
@@ -524,8 +527,15 @@
                       {counts.watching === 1 ? "thing is" : "things are"} being watched.</a
                     >{/if}
                 </p>
+              {:else if mailbox === "watching"}
+                <p class="text-meta font-medium text-fg">
+                  Nothing is waiting on a source or a delivery.
+                </p>
               {:else}
-                <p class="text-meta font-medium text-fg">Nothing here</p>
+                <p class="text-meta font-medium text-fg">
+                  Nothing handled yet. Answered decisions and dismissed items
+                  land here.
+                </p>
               {/if}
             </li>
           {/each}
@@ -568,7 +578,9 @@
           <DecisionPanel
             selected={selectedDecision}
             taskTitle={selectedTaskTitle}
+            work={selectedWork}
             {action}
+            {busyWith}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),
             )}
@@ -713,7 +725,7 @@
               onclick={() => markUpdateRead(selected.item)}>Mark read</button
             >
           </div>
-        {:else}
+        {:else if selectedId || visible.length}
           <p class="p-6 text-meta text-fg-muted">
             {selectedId
               ? "This item is not in the loaded mailbox."

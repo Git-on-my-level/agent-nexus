@@ -58,8 +58,49 @@
   let refreshError = $derived.by(() => {
     const raw = work?.refresh?.last_error;
     if (!raw) return "";
-    return typeof raw === "string" ? raw : JSON.stringify(raw);
+    if (typeof raw === "string") return raw;
+    const message = String(raw.message || "").trim();
+    const code = String(raw.code || "").trim();
+    return message || code.replace(/_/g, " ") || "";
   });
+  let lastAttemptAt = $derived(work?.refresh?.last_attempt_at || "");
+  let failedAttempts = $derived(Number(work?.refresh?.failures) || 0);
+  /**
+   * Consecutive failed reads with the same error collapse into one row. A
+   * reader learns more from "failed 30 times since 2h ago, last just now"
+   * than from thirty identical lines.
+   */
+  let evidenceRows = $derived.by(() => {
+    const rows = [];
+    for (const observation of observations) {
+      const failed = observation?.status === "error";
+      const message = failed ? observationErrorText(observation) : "";
+      const last = rows[rows.length - 1];
+      if (failed && last?.group && last.message === message) {
+        last.count += 1;
+        last.oldest = observation.observed_at || last.oldest;
+        continue;
+      }
+      if (failed) {
+        rows.push({
+          group: true,
+          count: 1,
+          message,
+          newest: observation.observed_at,
+          oldest: observation.observed_at,
+          observation,
+        });
+      } else rows.push({ group: false, observation });
+    }
+    return rows;
+  });
+  function observationErrorText(observation) {
+    const error = observation?.error;
+    if (!error) return "";
+    return typeof error === "string"
+      ? error
+      : String(error.message || error.code || "");
+  }
   let hasNext = $derived(
     Boolean(
       work?.next_actor ||
@@ -94,7 +135,7 @@
     if (ticket !== requestId) return;
     if (results[0].status === "fulfilled") {
       work = results[0].value.work;
-      if (!work) error = "The workspace did not return this commitment.";
+      if (!work) error = "The workspace did not return this task.";
       else void loadDecisions(ticket, work);
     } else error = errorMessage(results[0].reason);
     if (results[1].status === "fulfilled") {
@@ -154,7 +195,7 @@
       notice = `Refresh ${result.refresh?.state || "requested"}. Evidence changes only after a reader reports back.`;
     } catch (err) {
       if (ticket === requestId)
-        notice = `Refresh request failed: ${errorMessage(err)}`;
+        evidenceError = `The check could not be requested: ${errorMessage(err)}`;
     } finally {
       if (ticket === requestId) refreshing = false;
     }
@@ -284,11 +325,19 @@
               </p>
             {:else}
               <p class="text-meta text-fg">
-                Last checked {#if lastCheckedAt}<time
+                {#if lastCheckedAt}Last read {sourceName}
+                  <time
                     datetime={lastCheckedAt}
                     title={formatAbsoluteDateTime(lastCheckedAt)}
                     >{formatTimestamp(lastCheckedAt)}</time
-                  >{:else}never{/if} · {sourceName}
+                  >{:else}Never read {sourceName} successfully{/if}{#if lastAttemptAt && failedAttempts}{" "}<span
+                    class="text-fg-muted"
+                    >· last attempt <time
+                      datetime={lastAttemptAt}
+                      title={formatAbsoluteDateTime(lastAttemptAt)}
+                      >{formatTimestamp(lastAttemptAt)}</time
+                    >, {failedAttempts} failed</span
+                  >{/if}
               </p>
               <button
                 class="ui-btn-secondary"
@@ -302,7 +351,7 @@
               >
             {/if}
           </div>
-          {#if refreshError}
+          {#if refreshError && refreshError !== evidenceRows[0]?.message}
             <p class="mt-2 break-words text-micro text-warn-text">
               {refreshError}
             </p>
@@ -322,66 +371,94 @@
               ? 'border-t border-line-subtle'
               : ''}"
           >
-            {#each observations as observation, index (observation.id || index)}
-              <li class="py-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <SignalBadge
-                    tone={observation.verification === "verified"
-                      ? "ok"
-                      : observation.status === "error"
-                        ? "danger"
-                        : observation.status === "uncertain"
-                          ? "warn"
-                          : "neutral"}
-                    >{observation.verification === "verified"
-                      ? "Verified evidence"
-                      : observation.status === "error"
-                        ? "Read failed"
-                        : observation.status === "uncertain"
-                          ? "Uncertain report"
-                          : "Reported claim"}</SignalBadge
-                  ><time
-                    class="text-micro text-fg-muted"
-                    datetime={observation.observed_at}
-                    title={formatAbsoluteDateTime(observation.observed_at)}
-                    >{formatTimestamp(observation.observed_at) ||
-                      "time unknown"}</time
-                  >
-                </div>
-                {#if observation.error}<p
-                    class="mt-1.5 text-meta text-danger-text"
-                  >
-                    {typeof observation.error === "string"
-                      ? observation.error
-                      : observation.error.message || observation.error.code}
-                  </p>{/if}
-                {#if observation.uncertainty?.length}<ul
-                    class="mt-1.5 list-disc pl-5 text-meta text-warn-text"
-                  >
-                    {#each observation.uncertainty as item}<li>
-                        {item}
-                      </li>{/each}
-                  </ul>{/if}
-                {#if observation.evidence?.length}
-                  <ul class="mt-1.5 space-y-1">
-                    {#each observation.evidence as evidence}{@const url =
-                        safeSourceHref(evidence.url)}
-                      <li class="break-words text-meta text-fg">
-                        {#if url}<a
-                            class="text-accent-text hover:underline"
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            >{evidence.summary ||
+            {#each evidenceRows as row, index (row.observation.id || index)}
+              {@const observation = row.observation}
+              {#if row.group}
+                <li class="py-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <SignalBadge tone="danger"
+                      >Read failed{#if row.count > 1}{" "}× {row.count}{/if}</SignalBadge
+                    >
+                    <span class="text-micro text-fg-muted">
+                      {#if row.count > 1}between <time
+                          datetime={row.oldest}
+                          title={formatAbsoluteDateTime(row.oldest)}
+                          >{formatTimestamp(row.oldest)}</time
+                        > and{/if}
+                      <time
+                        datetime={row.newest}
+                        title={formatAbsoluteDateTime(row.newest)}
+                        >{formatTimestamp(row.newest) || "time unknown"}</time
+                      >
+                    </span>
+                  </div>
+                  {#if row.message}
+                    <p class="mt-1.5 text-meta text-danger-text">
+                      {row.message}
+                    </p>
+                  {/if}
+                </li>
+              {:else}
+                <li class="py-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <SignalBadge
+                      tone={observation.verification === "verified"
+                        ? "ok"
+                        : observation.status === "error"
+                          ? "danger"
+                          : observation.status === "uncertain"
+                            ? "warn"
+                            : "neutral"}
+                      >{observation.verification === "verified"
+                        ? "Verified evidence"
+                        : observation.status === "error"
+                          ? "Read failed"
+                          : observation.status === "uncertain"
+                            ? "Uncertain report"
+                            : "Reported claim"}</SignalBadge
+                    ><time
+                      class="text-micro text-fg-muted"
+                      datetime={observation.observed_at}
+                      title={formatAbsoluteDateTime(observation.observed_at)}
+                      >{formatTimestamp(observation.observed_at) ||
+                        "time unknown"}</time
+                    >
+                  </div>
+                  {#if observation.error}<p
+                      class="mt-1.5 text-meta text-danger-text"
+                    >
+                      {typeof observation.error === "string"
+                        ? observation.error
+                        : observation.error.message || observation.error.code}
+                    </p>{/if}
+                  {#if observation.uncertainty?.length}<ul
+                      class="mt-1.5 list-disc pl-5 text-meta text-warn-text"
+                    >
+                      {#each observation.uncertainty as item}<li>
+                          {item}
+                        </li>{/each}
+                    </ul>{/if}
+                  {#if observation.evidence?.length}
+                    <ul class="mt-1.5 space-y-1">
+                      {#each observation.evidence as evidence}{@const url =
+                          safeSourceHref(evidence.url)}
+                        <li class="break-words text-meta text-fg">
+                          {#if url}<a
+                              class="text-accent-text hover:underline"
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              >{evidence.summary ||
+                                evidence.ref ||
+                                "Open source evidence"} ↗</a
+                            >{:else}{evidence.summary ||
                               evidence.ref ||
-                              "Open source evidence"} ↗</a
-                          >{:else}{evidence.summary ||
-                            evidence.ref ||
-                            "Unlinked evidence"}{/if}
-                      </li>{/each}
-                  </ul>
-                {/if}
-              </li>
+                              "Unlinked evidence"}{/if}
+                        </li>{/each}
+                    </ul>
+                  {/if}
+                </li>
+              {/if}
             {/each}
           </ol>
           {#if nextCursor}<button
@@ -550,7 +627,8 @@
               <dt class="text-micro text-fg-subtle">Authority</dt>
               <dd class="text-fg">
                 {sourceLabel(work.source)}{#if work.source?.native_id}
-                  <span class="font-mono text-fg-muted"
+                  <span class="text-fg-subtle"> · </span><span
+                    class="font-mono text-fg-muted"
                     >{work.source.native_id}</span
                   >{/if}
               </dd>

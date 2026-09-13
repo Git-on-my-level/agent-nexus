@@ -7,21 +7,49 @@ import {
 describe("task board moves", () => {
   it("moves a Nexus-owned task via cards.move", async () => {
     const coreClient = {
+      getBoard: vi
+        .fn()
+        .mockResolvedValue({ board: { updated_at: "2026-09-12T10:00:00Z" } }),
       moveBoardCard: vi.fn().mockResolvedValue({}),
       createPmDecision: vi.fn(),
     };
     const work = {
       ref: "card:local",
       id: "card-local",
+      board_ref: "board:studio",
       phase: "backlog",
       source: { authority: "nexus" },
     };
     const result = await applyTaskPhaseMove(coreClient, work, "in_progress");
     expect(result.kind).toBe("moved");
-    expect(coreClient.moveBoardCard).toHaveBeenCalledWith("", "card-local", {
-      column_key: "in_progress",
-    });
+    expect(coreClient.getBoard).toHaveBeenCalledWith("board:studio");
+    expect(coreClient.moveBoardCard).toHaveBeenCalledWith(
+      "board:studio",
+      "card-local",
+      {
+        column_key: "in_progress",
+        if_board_updated_at: "2026-09-12T10:00:00Z",
+      },
+    );
     expect(coreClient.createPmDecision).not.toHaveBeenCalled();
+  });
+
+  it("refuses to move a Nexus-owned task that is not on a board", async () => {
+    const coreClient = {
+      getBoard: vi.fn(),
+      moveBoardCard: vi.fn(),
+      createPmDecision: vi.fn(),
+    };
+    const work = {
+      ref: "card:loose",
+      id: "card-loose",
+      phase: "backlog",
+      source: { authority: "nexus" },
+    };
+    await expect(applyTaskPhaseMove(coreClient, work, "ready")).rejects.toThrow(
+      /not on a board/,
+    );
+    expect(coreClient.moveBoardCard).not.toHaveBeenCalled();
   });
 
   it("opens a PM decision for a source-owned task and does not move the card", async () => {

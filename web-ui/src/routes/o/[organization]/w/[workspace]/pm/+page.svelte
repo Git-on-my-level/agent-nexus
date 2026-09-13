@@ -23,6 +23,7 @@
     proposedDecisionIds,
     startsTimeGroup,
     turnState,
+    EXPECTED_WAIT_LABEL,
   } from "$lib/pm/chatModel.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -559,22 +560,6 @@
     tabindex="0"
   >
     <div class="pm-thread-inner">
-      {#if error}
-        <div
-          role="alert"
-          class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
-        >
-          <span class="min-w-0 flex-1 break-words">{error}</span>
-          <button
-            class="ui-prose-link text-micro"
-            type="button"
-            onclick={() =>
-              ready ? loadConversation(selectedId, true) : initialize()}
-            >Retry</button
-          >
-        </div>
-      {/if}
-
       {#if loading}
         <p class="text-meta text-fg-muted" role="status">Loading…</p>
       {:else if !turns.length}
@@ -612,7 +597,7 @@
                 class="pm-group-head"
                 title={formatAbsoluteDateTime(turn.created_at)}
               >
-                PM · {clock}
+                {clock}
               </p>
             {/if}
             <div class="pm-you">
@@ -638,11 +623,14 @@
                     <span class="pm-dots" aria-hidden="true"
                       ><i></i><i></i><i></i></span
                     >
-                    <span
-                      >Thinking{view.elapsed ? ` · ${view.elapsed}` : ""}</span
-                    >
+                    <span>Thinking</span>{#if view.elapsed}<span
+                        aria-hidden="true">&nbsp;· {view.elapsed}</span
+                      >{/if}
                   {/if}
                 </p>
+                {#if view.longWait}
+                  <p class="pm-status-note">{EXPECTED_WAIT_LABEL}</p>
+                {/if}
                 {#if view.stalled}
                   <p class="pm-status-note">
                     No reply yet — the PM runner may be off. <a
@@ -744,6 +732,21 @@
           </li>
         {/each}
       </ol>
+      {#if error}
+        <div
+          role="alert"
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
+          <span class="min-w-0 flex-1 break-words">{error}</span>
+          <button
+            class="ui-prose-link text-micro"
+            type="button"
+            onclick={() =>
+              ready ? loadConversation(selectedId, true) : initialize()}
+            >Retry</button
+          >
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -787,7 +790,11 @@
             Sending is disabled until PM is reachable.
           </p>
         {/if}
-        <kbd class="pm-kbd">⌘↵</kbd>
+        <kbd
+          class="pm-kbd"
+          title="Enter sends. Shift+Enter adds a line."
+          aria-label="Enter sends. Shift+Enter adds a line.">↵</kbd
+        >
         <button
           class="pm-send"
           type="submit"
@@ -1134,6 +1141,12 @@
     font-size: 11px;
     color: var(--fg-subtle);
   }
+  @media (hover: none) {
+    .pm-kbd {
+      display: none;
+    }
+  }
+
   .pm-kbd {
     font-family: inherit;
     font-size: 11px;

@@ -526,11 +526,10 @@ test("answer and failed delivery remain separately inspectable", async ({
     },
   });
   await page.goto(`${root}/inbox?item=decision:decision-sample`);
-  await page.getByLabel("Authorize this scope").check();
   await page
-    .getByLabel("Exact response")
+    .getByLabel("Your note (recorded with the decision)")
     .fill("Approved for the sample note only");
-  await page.getByRole("button", { name: "Record decision" }).click();
+  await page.getByRole("button", { name: "Approve" }).click();
   await expect(
     page.getByText("Pending delivery", { exact: true }),
   ).toBeVisible();

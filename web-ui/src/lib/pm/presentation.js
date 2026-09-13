@@ -159,7 +159,7 @@ function parseStructuredInstruction(text) {
  * a JSON payload (`{"next_action":"…"}`); a JSON blob is never a title —
  * prefer an instruction summary field, then the task title, then a generic.
  */
-function sentenceCase(text) {
+export function sentenceCase(text) {
   const s = String(text ?? "").trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
@@ -296,5 +296,72 @@ export function errorMessage(error) {
   if (/PM permission denied/i.test(raw)) {
     return "You are not signed in as someone who can use the PM. Sign in again and retry.";
   }
+  // "anx-core request failed at same-origin: POST /x (400) - reason" — the
+  // reason is the message; the transport prefix is log material.
+  const transport = raw.match(
+    /^anx-core request failed[^:]*:\s*[A-Z]+\s+\S+\s+\(\d{3}\)\s*-\s*(.+)$/s,
+  );
+  if (transport && transport[1].trim())
+    return sentenceCase(transport[1].trim());
   return raw;
+}
+
+const DECISION_KIND_PREFIX =
+  /^\s*(?:[A-Za-z][\w /-]{0,40}\s+)?decision\s*:\s*/i;
+
+/**
+ * The instruction without a "Producer decision:" style prefix. The PM writes
+ * every proposal in the same voice, so the prefix is noise in a list where
+ * every row would otherwise start with the same three words.
+ */
+export function stripDecisionPrefix(text) {
+  return String(text ?? "")
+    .trim()
+    .replace(DECISION_KIND_PREFIX, "");
+}
+
+function firstSentence(text) {
+  const s = String(text ?? "").trim();
+  if (!s) return "";
+  const match = s.match(/^.+?[.!?](?=\s|$)/);
+  return (match ? match[0] : s).trim();
+}
+
+/**
+ * Two lines for a decision: what it is about (the task) and what is being
+ * asked (the first sentence of the proposal). Structured JSON instructions
+ * fall back to the existing summary-field logic.
+ */
+export function decisionSummary(item, taskTitle = "") {
+  const structured = parseStructuredInstruction(item?.instruction);
+  if (structured) {
+    return {
+      title: sentenceCase(decisionTitleRaw(item, taskTitle)),
+      ask: "",
+    };
+  }
+  const body = stripDecisionPrefix(item?.instruction);
+  const ask = sentenceCase(firstSentence(body));
+  const title = String(taskTitle ?? "").trim() || ask || "Decision";
+  return { title, ask: title === ask ? "" : ask };
+}
+
+/**
+ * What approving will do, in the reader's words. Scope and ownership come
+ * from core; nothing here changes what core enforces.
+ */
+export function decisionConsequence(item, work = null) {
+  const scope = String(item?.scope ?? "");
+  const source = work?.source ? sourceLabel(work.source) : "";
+  const owned = work ? isNexusOwned(work) : false;
+  if (scope === "work.phase") {
+    if (owned || !source || source === "Nexus")
+      return "Approving moves this task in Nexus.";
+    return `Approving asks the PM to request this change at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
+  }
+  if (scope === "work.annotate")
+    return "Approving records the PM's note on this task in Nexus. The source is not changed.";
+  if (["github", "multica", "ssh_git", "git"].includes(scope))
+    return `Approving authorizes the PM to act at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
+  return "Approving authorizes exactly this proposal. Delivery and outcome are tracked below.";
 }

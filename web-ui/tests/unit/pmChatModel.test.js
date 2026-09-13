@@ -73,17 +73,31 @@ describe("PM chat presentation model", () => {
     ).toMatchObject({ kind: "answered" });
   });
 
-  it("names a pending turn stalled only after the 45s runner threshold", () => {
+  it("names the usual wait after 20s and a stall only after 12 minutes", () => {
     const now = Date.parse("2026-09-09T10:01:00Z");
     const fresh = turnState(
-      { status: "sending", created_at: "2026-09-09T10:00:40Z" },
+      { status: "sending", created_at: "2026-09-09T10:00:50Z" },
       now,
     );
-    expect(fresh).toMatchObject({ kind: "pending", stalled: false });
-    expect(fresh.elapsed).toBe("20s");
+    expect(fresh).toMatchObject({
+      kind: "pending",
+      stalled: false,
+      longWait: false,
+    });
+    expect(fresh.elapsed).toBe("10s");
+    // A minute in is a normal wait for a 4–7 minute answer: say so, do not
+    // accuse the runner of being off.
     expect(
       turnState({ status: "sending", created_at: "2026-09-09T10:00:00Z" }, now),
-    ).toMatchObject({ kind: "pending", stalled: true, elapsed: "1m 00s" });
+    ).toMatchObject({
+      kind: "pending",
+      stalled: false,
+      longWait: true,
+      elapsed: "1m 00s",
+    });
+    expect(
+      turnState({ status: "sending", created_at: "2026-09-09T09:48:00Z" }, now),
+    ).toMatchObject({ kind: "pending", stalled: true, longWait: false });
     // Without a created_at there is no elapsed wait to claim, and no stall.
     expect(turnState({ status: "sending" }, now)).toMatchObject({
       kind: "pending",

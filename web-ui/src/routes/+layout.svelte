@@ -601,6 +601,13 @@
     switchWorkspace(slug);
   }
 
+  function isTextEntryElement(target) {
+    return (
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+    );
+  }
   function handleWindowKeydown(event) {
     if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -609,8 +616,16 @@
       }
       return;
     }
-    // Ask PM is the product's primary verb; it gets a global shortcut.
-    if (event.key === "j" && (event.metaKey || event.ctrlKey)) {
+    // Ask PM is the product's primary verb; it gets a global shortcut, but
+    // never while the reader is typing or the palette is open.
+    if (
+      event.key === "j" &&
+      (event.metaKey || event.ctrlKey) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !commandPaletteOpen &&
+      !isTextEntryElement(event.target)
+    ) {
       event.preventDefault();
       if (activeWorkspaceSlug) {
         void goto(workspaceHref("/pm"));

@@ -66,7 +66,23 @@ export async function applyTaskPhaseMove(coreClient, work, phase) {
   if (isNexusOwned(work)) {
     const cardId = cardIdFromWork(work);
     const boardId = String(work.board_ref || work.board_id || "").trim();
-    await coreClient.moveBoardCard(boardId, cardId, { column_key: phase });
+    if (!boardId) {
+      throw new Error(
+        "This task is not on a board yet, so it has no phase column to move to.",
+      );
+    }
+    // cards.move requires the board's optimistic concurrency token, so the
+    // move is fenced on the board revision the reader was looking at.
+    const response = await coreClient.getBoard(boardId);
+    const board = response?.board || response;
+    const token = String(board?.updated_at || "").trim();
+    if (!token) {
+      throw new Error("The board did not report a revision; reload and retry.");
+    }
+    await coreClient.moveBoardCard(boardId, cardId, {
+      column_key: phase,
+      if_board_updated_at: token,
+    });
     return { kind: "moved", work: { ...work, phase } };
   }
   const decision = await coreClient.createPmDecision(

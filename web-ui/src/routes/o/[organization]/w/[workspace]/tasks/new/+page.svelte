@@ -37,8 +37,7 @@
       cancel();
       return;
     }
-    if (dirty && !window.confirm("Leave without saving this commitment?"))
-      cancel();
+    if (dirty && !window.confirm("Leave without saving this task?")) cancel();
   });
   async function load() {
     loading = true;
@@ -81,7 +80,7 @@
       const key = workKey(result.work || {});
       if (!key)
         throw new Error(
-          "The save response did not identify the commitment. Check Tasks before retrying to avoid a duplicate.",
+          "The save response did not identify the task. Check Tasks before retrying to avoid a duplicate.",
         );
       created = true;
       await goto(workspaceHref(`/tasks/${encodeURIComponent(key)}`));
@@ -120,15 +119,17 @@
       class="rounded-md border border-line bg-panel p-5"
     >
       <h2 class="text-meta font-semibold text-fg">
-        A board gives this commitment a home
+        This workspace has no board yet
       </h2>
       <p class="mt-2 text-meta text-fg-muted">
-        Create a workspace board via the API, then return to register the
-        outcome.
+        Every Nexus task lives on a board so it has a phase column. Ask the PM
+        to create one, or run <code class="font-mono">anx boards create</code>
+        from the CLI, then reload.
       </p>
-      ><button class="ui-btn-secondary mt-3 ml-2" onclick={load}
-        >Reload boards</button
-      >
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a class="ui-btn-primary" href={workspaceHref("/pm")}>Ask PM</a>
+        <button class="ui-btn-secondary" onclick={load}>Reload boards</button>
+      </div>
     </section>{:else}
     <form
       class="max-w-3xl space-y-4 rounded-md border border-line bg-panel p-4 sm:p-5"

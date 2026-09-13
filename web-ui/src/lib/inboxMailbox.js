@@ -1,6 +1,6 @@
 import { getInboxSubjectLabel, enrichInboxItem } from "./inboxUtils.js";
 import {
-  decisionTitle,
+  decisionSummary,
   receiptSignal,
   sourceLabel,
   workFreshness,
@@ -127,12 +127,14 @@ export function buildInboxRows({
       .map((item) => [workKey(item), String(item.title || "").trim()]),
   );
   for (const item of decisions) {
+    const summary = decisionSummary(item, taskTitles.get(item.work_ref) || "");
     rows.push({
       id: `decision:${item.id}`,
       kind: "decision",
-      title: decisionTitle(item, taskTitles.get(item.work_ref) || ""),
-      // The raw work ref is pane-header material, never a list line.
-      source: taskTitles.get(item.work_ref) || "Decision",
+      // The task is what the row is about; the ask is the second line. The
+      // raw work ref is pane-header material, never a list line.
+      title: summary.title,
+      source: summary.ask || "Decision",
       ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
       status: item.status,
@@ -194,7 +196,14 @@ export function buildInboxRows({
   }
   return rows
     .map((row) => ({ ...row, mailbox: classifyInboxRow(row, now) }))
-    .filter((row) => row.mailbox !== null);
+    .filter((row) => row.mailbox !== null)
+    .sort((a, b) => rowTime(b) - rowTime(a));
+}
+
+// Newest first across kinds; a row without a time sorts last, in input order.
+function rowTime(row) {
+  const t = Date.parse(row?.time ?? "");
+  return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
 }
 
 export function filterMailbox(rows, mailbox) {

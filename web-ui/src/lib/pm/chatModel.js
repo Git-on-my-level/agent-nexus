@@ -194,8 +194,14 @@ export function linkifyDecisionIds(text, hrefFor) {
 /** A new time-group header appears when a turn opens more than this after the last one. */
 export const TIME_GROUP_GAP_MS = 5 * 60 * 1000;
 
-/** Waiting longer than this without a reply is worth naming as a possible dead runner. */
-export const STALLED_AFTER_MS = 45_000;
+/**
+ * A normal answer takes minutes (the PM is an external harness running the
+ * anx CLI). Past this the reader is told how long it usually takes; past
+ * STALLED_AFTER_MS the runner may genuinely be off.
+ */
+export const EXPECTED_WAIT_NOTE_AFTER_MS = 20_000;
+export const EXPECTED_WAIT_LABEL = "Answers usually take 4–7 minutes.";
+export const STALLED_AFTER_MS = 12 * 60 * 1000;
 
 /**
  * Whether `turn` opens a new time group. Unparseable timestamps never open a
@@ -251,10 +257,10 @@ export function elapsedLabel(ms) {
  *
  * @param {{ status?: string, response?: string, failure?: string, created_at?: string } | null} turn
  * @param {number} now
- * @returns {{ kind: "answered"|"pending"|"failed"|"unknown", elapsed: string, stalled: boolean, detail: string }}
+ * @returns {{ kind: "answered"|"pending"|"failed"|"unknown", elapsed: string, stalled: boolean, longWait: boolean, detail: string }}
  */
 export function turnState(turn, now = Date.now()) {
-  const base = { elapsed: "", stalled: false, detail: "" };
+  const base = { elapsed: "", stalled: false, longWait: false, detail: "" };
   if (turn?.response) return { ...base, kind: "answered" };
   const status = String(turn?.status ?? "");
   if (status === "failed")
@@ -270,6 +276,10 @@ export function turnState(turn, now = Date.now()) {
     ...base,
     kind: "pending",
     elapsed: elapsedLabel(waited),
+    longWait:
+      Number.isFinite(waited) &&
+      waited >= EXPECTED_WAIT_NOTE_AFTER_MS &&
+      waited < STALLED_AFTER_MS,
     stalled: Number.isFinite(waited) && waited >= STALLED_AFTER_MS,
   };
 }

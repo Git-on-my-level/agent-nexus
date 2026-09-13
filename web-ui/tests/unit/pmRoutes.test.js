@@ -365,12 +365,13 @@ describe("PM operator interactions", () => {
     );
     render(InboxPage);
     await screen.findByRole("heading", { name: "Update sample note" });
-    await fireEvent.click(screen.getByLabelText("Authorize this scope"));
-    const input = screen.getByLabelText("Exact response");
+    const input = screen.getByLabelText(
+      "Your note (recorded with the decision)",
+    );
     await fireEvent.input(input, {
       target: { value: "Within the stated scope" },
     });
-    await fireEvent.submit(input.closest("form"));
+    await fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await screen.findByText("Pending delivery", { exact: true });
     expect(client.answerPmDecision).toHaveBeenCalledWith("decision-one", {
       revision: 2,

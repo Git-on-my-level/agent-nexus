@@ -2,18 +2,23 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import ReceiptSignal from "./ReceiptSignal.svelte";
   import {
+    decisionConsequence,
     decisionPayload,
-    decisionTitle,
+    decisionSummary,
     receiptSignal,
     safeSourceHref,
+    sentenceCase,
+    stripDecisionPrefix,
   } from "$lib/pm/presentation.js";
 
   let {
     selected = null,
     taskTitle = "",
+    work = null,
     action = null,
     workHref = "",
     busy = false,
+    busyWith = "",
     actionError = "",
     answer = $bindable(""),
     choice = $bindable(""),
@@ -23,8 +28,21 @@
     onRefreshReceipt,
   } = $props();
 
-  function recordAnswer(event) {
+  let summary = $derived(decisionSummary(selected, taskTitle));
+  let proposal = $derived(
+    decisionPayload(selected)
+      ? ""
+      : sentenceCase(stripDecisionPrefix(selected?.instruction)),
+  );
+  let consequence = $derived(decisionConsequence(selected, work));
+  let noteMissing = $derived(!answer.trim());
+
+  // Approve and Decline are the two verbs; each submits the form with its
+  // choice. The note is required by core (the answer text is the record).
+  function decide(event, value) {
     event.preventDefault();
+    choice = value;
+    if (busy || noteMissing) return;
     onAnswer?.(event);
   }
 </script>
@@ -32,22 +50,22 @@
 {#if selected}
   <div class="space-y-6 p-4 sm:p-5">
     <header>
-      {#if workHref}
-        <a class="ui-prose-link font-mono text-micro" href={workHref}
-          >{selected.work_ref}</a
-        >
-      {:else}
-        <span class="font-mono text-micro text-fg-muted"
-          >{selected.work_ref}</span
-        >
-      {/if}
-      <h2
-        class="mt-1.5 whitespace-pre-wrap break-words text-subtitle font-semibold text-fg"
-      >
-        {decisionTitle(selected, taskTitle)}
+      <h2 class="text-subtitle font-semibold text-fg">
+        {#if workHref}
+          <a class="hover:text-accent-text" href={workHref}>{summary.title}</a>
+        {:else}
+          {summary.title}
+        {/if}
       </h2>
-      {#if decisionPayload(selected)}
-        <details class="mt-2 text-micro text-fg-muted">
+      {#if proposal}
+        <p class="ui-label mt-4">The PM proposes</p>
+        <p
+          class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
+        >
+          {proposal}
+        </p>
+      {:else if decisionPayload(selected)}
+        <details class="mt-2 text-micro text-fg-muted" open>
           <summary class="cursor-pointer">Proposed payload</summary>
           <pre
             class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
@@ -55,78 +73,81 @@
             )}</pre>
         </details>
       {/if}
-      <dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-micro text-fg-muted">
-        <div class="flex gap-1.5">
-          <dt>Scope</dt>
-          <dd class="break-words text-fg">{selected.scope || "—"}</dd>
-        </div>
-        <div class="flex gap-1.5">
-          <dt>Source revision</dt>
-          <dd class="break-all font-mono text-fg">
-            {selected.target_revision || "—"}
-          </dd>
-        </div>
-      </dl>
+      <details class="mt-3 text-micro text-fg-muted">
+        <summary class="cursor-pointer">Technical details</summary>
+        <dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+          <div class="flex gap-1.5">
+            <dt>Task ref</dt>
+            <dd class="break-all font-mono text-fg">
+              {selected.work_ref || "—"}
+            </dd>
+          </div>
+          <div class="flex gap-1.5">
+            <dt>Scope</dt>
+            <dd class="break-words font-mono text-fg">
+              {selected.scope || "—"}
+            </dd>
+          </div>
+          <div class="flex gap-1.5">
+            <dt>Source revision</dt>
+            <dd class="break-all font-mono text-fg">
+              {selected.target_revision || "—"}
+            </dd>
+          </div>
+          <div class="flex gap-1.5">
+            <dt>Decision id</dt>
+            <dd class="break-all font-mono text-fg">{selected.id}</dd>
+          </div>
+        </dl>
+      </details>
     </header>
     {#if selected.status === "awaiting_answer"}
       <form
         class="space-y-3 border-t border-line-subtle pt-4"
-        onsubmit={recordAnswer}
+        onsubmit={(event) => decide(event, choice || "approve")}
       >
-        <fieldset>
-          <legend class="text-meta font-semibold text-fg">Your decision</legend>
-          <div class="mt-2 flex flex-wrap gap-4 text-meta text-fg">
-            <label class="flex items-center gap-2"
-              ><input
-                type="radio"
-                name="approval"
-                value="approve"
-                bind:group={choice}
-                required
-              />Authorize this scope</label
-            >
-            <label class="flex items-center gap-2"
-              ><input
-                type="radio"
-                name="approval"
-                value="reject"
-                bind:group={choice}
-                required
-              />Decline</label
-            >
-          </div>
-        </fieldset>
+        <p class="text-meta text-fg">{consequence}</p>
         <label class="block text-micro text-fg-muted"
-          >Exact response<textarea
+          >Your note (recorded with the decision)<textarea
             class="ui-input mt-1"
             bind:value={answer}
-            rows="4"
+            rows="3"
             required
             maxlength="16000"
-            placeholder="State your decision and any boundaries…"
+            placeholder="Why, and any boundaries the PM must respect…"
           ></textarea></label
         >
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             class="ui-btn-primary"
             type="submit"
-            disabled={busy || !choice || !answer.trim()}
-            >{busy ? "Recording answer…" : "Record decision"}</button
+            onclick={(event) => decide(event, "approve")}
+            disabled={busy || noteMissing}
+            >{busy && choice === "approve" ? "Approving…" : "Approve"}</button
           >
-          <span class="text-micro text-fg-subtle"
-            >Recording does not deliver. Delivery rechecks the source revision.</span
+          <button
+            class="ui-btn-secondary"
+            type="button"
+            onclick={(event) => decide(event, "reject")}
+            disabled={busy || noteMissing}
+            >{busy && choice === "reject" ? "Declining…" : "Decline"}</button
           >
+          {#if noteMissing}
+            <span class="text-micro text-fg-subtle">Add a note to decide.</span>
+          {/if}
         </div>
       </form>
     {:else}
       <section class="border-t border-line-subtle pt-4">
-        <h3 class="text-meta font-semibold text-fg">Recorded answer</h3>
+        <h3 class="text-meta font-semibold text-fg">
+          {selected.status === "superseded" ? "Declined" : "Approved"}
+        </h3>
         <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg-muted">
-          {selected.answer || "No answer text recorded"}
+          {selected.answer || "No note recorded"}
         </p>
         {#if selected.answered_by}
           <p class="mt-2 text-micro text-fg-subtle">
-            Answered by {selected.answered_by}
+            By {selected.answered_by}
           </p>
         {/if}
       </section>
@@ -180,13 +201,15 @@
         <div class="mt-4 flex flex-wrap items-center gap-2">
           {#if action.status === "pending_delivery"}
             <button class="ui-btn-primary" onclick={onDeliver} disabled={busy}
-              >{busy
+              >{busy && busyWith === "deliver"
                 ? "Requesting delivery…"
                 : "Deliver approved instruction"}</button
             >
           {/if}
           <button class="ui-btn-secondary" onclick={onReconcile} disabled={busy}
-            >{busy ? "Checking receipt…" : "Check source receipt"}</button
+            >{busy && busyWith === "reconcile"
+              ? "Checking receipt…"
+              : "Check source receipt"}</button
           >
         </div>
         <details class="mt-4 text-micro text-fg-muted">
@@ -209,7 +232,7 @@
       {:else}
         <p class="mt-2 text-meta text-fg-muted">
           {selected.status === "awaiting_answer"
-            ? "Nothing is authorized yet."
+            ? "Nothing happens until you decide."
             : "No delivery receipt yet."}
         </p>
       {/if}
