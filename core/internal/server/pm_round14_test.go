@@ -88,19 +88,22 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 						t.Fatal(got)
 					}
 				}
-				checkMissing := func(out map[string]any, proposal ...bool) {
+				checkMissing := func(out map[string]any, operation ...string) {
 					t.Helper()
 					e := out["error"].(map[string]any)
 					detail := e["details"].(map[string]any)
 					expected := fmt.Sprintf("Approved source revision has changed (approved at %s, source now unavailable). Approval refused (work_missing); inspect the work and create a fresh proposal if needed.", in.TargetRevision)
-					if len(proposal) > 0 && proposal[0] {
+					if len(operation) > 0 && operation[0] == "answer" {
 						expected = fmt.Sprintf("Proposal target has changed (proposed at %s, source now unavailable). Approval refused (work_missing); decline it or wait for a fresh proposal.", in.TargetRevision)
 					}
-					if e["code"] != "source_revision_changed" || e["message"] != expected || detail["reason"] != "work_missing" || detail["current_revision"] != nil || detail["approved_revision"] != in.TargetRevision {
+					if len(operation) > 0 && operation[0] == "reconcile" {
+						expected = "Nothing was delivered for this approval: the task it refers to no longer exists, so there is nothing to read back."
+					}
+					if e["code"] != "source_revision_changed" || e["message"] != expected || detail["reason"] != "work_missing" || detail["current_revision"] != nil || detail["approved_revision"] != in.TargetRevision || detail["origin_kind"] != "human" || detail["proposed_by"] != human.ActorID {
 						t.Fatal(out)
 					}
 				}
-				checkMissing(call("POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409), true)
+				checkMissing(call("POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409), "answer")
 				checkMissing(call("POST", "/pm/decisions/"+approvedID+"/dispatch", struct{}{}, 409))
 				action := call("GET", "/pm/actions/"+actionID, nil, 200)
 				if action["status"] != string(pm.Failed) || len(action["attempts"].([]any)) != 1 || action["deliverable"] != (authority == "nexus") || action["delivery_path"] != wantPath {
@@ -110,7 +113,7 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
+				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409), "reconcile")
 				checkMissing(call("POST", "/pm/decisions/"+approvedID+"/dispatch", struct{}{}, 409))
 				afterFailed, err := json.Marshal(call("GET", "/pm/actions/"+actionID, nil, 200))
 				if err != nil || !bytes.Equal(failedBody, afterFailed) {
@@ -128,7 +131,7 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 				if ack["status"] != string(pm.Acknowledged) || ack["acknowledged_at"] == nil || ack["receipt"].(map[string]any)["detail"] != receipt["detail"] || len(ack["attempts"].([]any)) != 1 {
 					t.Fatal(ack)
 				}
-				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
+				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409), "reconcile")
 				// Exercise reconcile's source-call branch, not only a pending action guard.
 				var stored pm.Action
 				var raw []byte
@@ -146,7 +149,7 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 				if _, err = db.Exec("UPDATE pm_records SET body=? WHERE kind='action' AND id=?", raw, actionID); err != nil {
 					t.Fatal(err)
 				}
-				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
+				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409), "reconcile")
 				var after []byte
 				if err := db.QueryRow("SELECT body FROM pm_records WHERE kind='action' AND id=?", actionID).Scan(&after); err != nil {
 					t.Fatal(err)
@@ -168,7 +171,7 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 						}
 					}
 					checkMissing(call("POST", "/pm/decisions/"+approvedID+"/dispatch", struct{}{}, 409))
-					checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
+					checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409), "reconcile")
 				}
 				in.RequestKey = "after-removal"
 				call("POST", "/pm/decisions", in, 404)

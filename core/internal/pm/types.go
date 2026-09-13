@@ -393,13 +393,19 @@ func (e *ConversationOwnerNotHumanError) Unwrap() error { return ErrForbidden }
 
 // ApprovalTargetError describes proposal or approved-action source preflight failure.
 type ApprovalTargetError struct {
-	Proposal         bool    `json:"-"`
+	Proposal         bool `json:"-"`
+	message          string
+	OriginKind       string  `json:"origin_kind"`
+	ProposedBy       string  `json:"proposed_by"`
 	ApprovedRevision string  `json:"approved_revision"`
 	CurrentRevision  *string `json:"current_revision"`
 	Reason           string  `json:"reason"`
 }
 
 func (e *ApprovalTargetError) Error() string {
+	if e.message != "" {
+		return e.message
+	}
 	current := "unavailable"
 	if e.CurrentRevision != nil {
 		current = *e.CurrentRevision

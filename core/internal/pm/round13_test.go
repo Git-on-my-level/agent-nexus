@@ -232,7 +232,7 @@ func TestRound13ApprovalTarget(t *testing.T) {
 					current = *details.CurrentRevision
 				}
 				expectedMessage := fmt.Sprintf("Proposal target has changed (proposed at r1, source now %s). Approval refused (%s); decline it or wait for a fresh proposal.", current, tc.reason)
-				if response.Error.Code != "source_revision_changed" || details.Reason != tc.reason || details.ApprovedRevision != "r1" || response.Error.Message != expectedMessage {
+				if response.Error.Code != "source_revision_changed" || details.Reason != tc.reason || details.ApprovedRevision != "r1" || details.OriginKind != d.OriginKind || details.ProposedBy != d.ProposedBy || response.Error.Message != expectedMessage {
 					t.Fatalf("%s", raw)
 				}
 				if tc.readErr != nil || tc.noReader {
