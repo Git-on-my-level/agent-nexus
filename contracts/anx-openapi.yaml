@@ -211,6 +211,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMTurn'
+        '429':
+          description: Busy; details.reason is conversation with details.turn_id, or capacity with details.in_flight and details.limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
   /pm/context:
     get:
       operationId: pmContext
@@ -370,6 +376,7 @@ paths:
     get:
       operationId: pmTurnsGet
       summary: Read a PM conversation turn
+      description: The requesting actor with conversation read permission or the configured PM actor with pm.respond permission may read the turn in its workspace. Active lease_owner is the runner ID; lease_token is returned only by claim.
       tags:
       - pm
       x-anx-surface: canonical
@@ -658,7 +665,7 @@ paths:
   /pm/actions/{action_id}/reconcile:
     post:
       operationId: pmActionsReconcile
-      description: Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Failed actions without a sent attempt remain unreconcilable, including after acknowledgement.
+      description: Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.
       summary: Read back an action outcome without resending
       tags:
       - pm
@@ -714,13 +721,13 @@ paths:
   /pm/actions/{action_id}/acknowledge:
     post:
       operationId: pmActionsAcknowledge
-      summary: Acknowledge a failed or unresolvable action
+      summary: Acknowledge a failed, unresolvable, or undeliverable action
       tags:
       - pm
       x-anx-surface: canonical
       x-anx-command-id: pm.actions.acknowledge
       x-anx-cli-path: pm actions acknowledge
-      x-anx-why: Acknowledge a failed or unresolvable action.
+      x-anx-why: Acknowledge a failed, unresolvable, or undeliverable action.
       x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
@@ -741,7 +748,7 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
-      description: Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.
+      description: Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions also retain their no-delivery-path reason in receipt.detail when it was empty. Other states return 409; other actors return 403.
       parameters:
       - name: action_id
         in: path
@@ -756,7 +763,7 @@ paths:
               $ref: '#/components/schemas/PMEmptyRequest'
       responses:
         '200':
-          description: Acknowledge a failed or unresolvable action
+          description: Acknowledge a failed, unresolvable, or undeliverable action
           content:
             application/json:
               schema:
@@ -926,7 +933,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. When a lease is held, lease_token must match.
+      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
       parameters:
       - name: turn_id
         in: path
@@ -1002,6 +1009,7 @@ paths:
   /pm/turns/{turn_id}/context:
     get:
       operationId: pmTurnsContext
+      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first".
       summary: Read requesting principal context as selected PM agent
       tags:
       - pm
@@ -1063,6 +1071,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
+      description: Requires an active lease. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first".
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -1112,6 +1121,7 @@ paths:
   /pm/turns/{turn_id}/complete:
     post:
       operationId: pmTurnsComplete
+      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first"; released or expired lease tokens never authorize completion. Identical terminal completion replays also refuse a cleared lease.
       summary: Record a selected PM agent response
       tags:
       - pm
@@ -6523,7 +6533,11 @@ components:
         claimed:
           type: boolean
           readOnly: true
-          description: True while a runner holds an unexpired lease. No lease credentials are exposed on public turn responses.
+          description: True while a runner holds an unexpired lease. Only the runner ID is exposed as lease_owner; no lease token is exposed on public turn responses.
+        lease_owner:
+          type: string
+          readOnly: true
+          description: Runner ID of the active lease, visible to the requesting actor and configured PM actor. Never a lease token; absent after release or expiry.
         claimed_at:
           type: string
           format: date-time
@@ -6611,6 +6625,15 @@ components:
         superseded_by:
           type: string
           description: Replacement decision ID when a changed proposal supersedes this awaiting decision.
+        superseded_by_proposed_by:
+          type: string
+          readOnly: true
+          description: Proposing actor ID of the replacement decision; absent for legacy records with unknown attribution.
+        superseded_by_origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Origin kind of the replacement decision; absent for legacy records with unknown attribution.
         superseded_reason:
           type: string
         supersedes:
@@ -6643,6 +6666,7 @@ components:
         origin:
           $ref: '#/components/schemas/PMOrigin'
     PMReceipt:
+      description: Successful native execution followed by canonical Nexus store read-back is verified with independently_verified true in the dispatch response. External executor reports remain source_reported until independently verified.
       type: object
       additionalProperties: true
       properties:
@@ -6697,14 +6721,14 @@ components:
         acknowledged_by:
           type: string
           readOnly: true
-          description: Decision actor who dismissed a failed or unresolvable unknown action; this is not source acknowledgement.
+          description: Decision actor who dismissed a failed, unresolvable unknown, or undeliverable pending action; this is not source acknowledgement.
         acknowledged_at:
           type: string
           format: date-time
           readOnly: true
         deliverable:
           type: boolean
-          description: Derived from configured executors for this scope and source on every read. False means dispatch returns unavailable (503) without changing the action or recording an attempt.
+          description: Derived from configured executors for this scope and source on every read, except acknowledged unsent actions always remain false. For pending actions, false means dispatch returns unavailable (503) without recording an attempt. Acknowledging an undeliverable pending action prevents later delivery; a fresh proposal and approval are required.
         reconciliation_conflict:
           type: boolean
           description: Latest read-back could not advance the action status. Receipt preserves that evidence even when its status is lower.
@@ -6773,6 +6797,7 @@ components:
       - request_key
       - text
     PMErrorResponse:
+      description: Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or capacity with in_flight and limit for the workspace. Conversation serialization takes precedence when both limits apply.
       type: object
       required: [error]
       properties:
@@ -6793,6 +6818,19 @@ components:
             details:
               type: object
               properties:
+                turn_id:
+                  type: string
+                  description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
+                reason:
+                  type: string
+                  enum: [conversation, capacity]
+                  description: Reason turn admission is busy.
+                in_flight:
+                  type: integer
+                  description: Current workspace in-flight turns for capacity errors.
+                limit:
+                  type: integer
+                  description: Workspace turn capacity for capacity errors.
                 existing_decision_id:
                   type: string
                   description: Existing proposal for a conflicting request key.

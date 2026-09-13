@@ -148,16 +148,25 @@ current principals; a request cannot claim to be human in a body/header.
 The built-in `work.annotate` scope supports Nexus-native local annotations only.
 Its exact instruction is a JSON patch object, for example
 `{"next_action":"Review acceptance evidence"}`. Propose a decision with the work
-metadata version in `target_revision`, answer it as a human, dispatch, then
-reconcile. Dispatch records `source_reported`; separate canonical read-back can
-record `verified`. A changed version rejects stale approval. No external source
+metadata version in `target_revision`, answer it as a human, then dispatch. Both
+`work.annotate` and `work.phase` perform post-commit canonical read-back in that
+dispatch and return `verified` with `independently_verified: true` when the
+requested outcome matches. External executor reports remain `source_reported`
+until independently verified. A changed version rejects stale approval. No external source
 write executor, deployment tool, or shell action is enabled by default.
 
 PM conversation creation, context inspection, and queued turns work without a
 model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages`
 queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
 runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
-`POST /pm/turns/{id}/fail` require that lease token when a lease is held.
+`POST /pm/turns/{id}/fail` require an active lease and its matching token.
+Turn context and proposal operations also require an active lease. An open turn
+without one returns `409 conflict`: "this turn is not claimed; claim it first",
+even when a stale token is supplied. Claim again after release or lease expiry.
+Identical terminal completion/failure replays also refuse a cleared lease without mutation.
+Legacy tokenless bridge reply events cannot complete a turn: bridge runners must
+claim and call the authenticated completion endpoint with that lease token.
+Do not place lease tokens in durable events or public context.
 `POST /pm/turns/{id}/release` requires the selected PM actor plus the current
 `runner_id` and `lease_token`. It clears an unexpired lease and returns the turn
 to the queue as `sending`, `claimed: false`, retaining `claimed_at`. A different
@@ -169,8 +178,14 @@ Every HTTP turn representation includes read-only `claimed`, derived from the
 current unexpired lease, plus `claimed_at` when the latest claim time is known.
 That timestamp survives completion and expiry; older records omit it. Public
 turns (including history, single-turn reads, and message replays) omit lease
-credentials. Only the authenticated claim response returns the lease token,
-owner, and expiry needed by the runner protocol.
+credentials. Active `lease_owner` (runner ID) is visible to the requesting actor
+and configured PM actor; only claim returns the token and expiry. The configured
+PM actor may read any turn in its workspace using `pm.respond` authorization;
+the requesting actor retains conversation read authorization.
+Turn admission returns `429 busy` with `error.details.reason: conversation` and
+`turn_id` for the blocking conversation turn, or `reason: capacity` plus workspace
+`in_flight` and `limit`. Conversation serialization wins if both constraints apply.
+The reason and counts are observed inside the admission transaction.
 `ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/release/complete/fail to that actor;
 `make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
 
@@ -320,7 +335,12 @@ clients should display the receipt detail rather than infer success from status
 alone. This does not authorize a blind retry.
 
 Human acknowledgement records `acknowledged_by` and `acknowledged_at` and sets
-visible status `acknowledged` without changing the receipt or attempts. It moves
+visible status `acknowledged` while preserving existing receipts and attempts.
+The decision actor may also acknowledge an undeliverable `pending_delivery`
+action. Core retains its approval and the no-delivery-path reason in
+`receipt.detail` (if empty). It cannot be delivered or reconciled after
+acknowledgement, even if routing becomes available; a fresh proposal and approval
+are required. Clients fold it under Handled. Acknowledgement moves
 the row out of Needs you but does not freeze source reconciliation. Later
 read-back can advance an unknown receipt to `verified` or `failed`, updating the
 action normally while retaining both acknowledgement fields and attempt history.
@@ -346,7 +366,9 @@ without recorded provenance omit these fields rather than inventing attribution.
 
 When a proposal replaces an awaiting decision, the create/propose response
 includes `supersedes` (the replaced decision ID), `supersedes_proposed_by`, and
-`supersedes_origin_kind`. These fields persist on the replacement for retries and
+`supersedes_origin_kind`. The old decision records `superseded_by_proposed_by`
+and `superseded_by_origin_kind` from its replacement; unknown legacy values are
+omitted. These fields persist on the replacement for retries and
 later reads; unknown legacy attribution is omitted. Clients should tell the
 reader whose earlier proposal was replaced, including when a human drag replaces
 a PM turn proposal.

@@ -171,7 +171,7 @@ func TestOneActiveTurnPerConversationAcrossServices(t *testing.T) {
 	if *count != 1 {
 		t.Fatalf("overlap dispatched %d", *count)
 	}
-	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "First reply", nil); err != nil {
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "First reply", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = second.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "2", Text: "Second"}); err != nil {
@@ -217,6 +217,7 @@ func TestAgentProposalHumanDiscoveryAndAgentReceiptDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	claimTestTurn(t, s, ctx, agent, turn.ID)
 	d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +328,7 @@ func TestFailTurnRecordsReasonAndFreesSession(t *testing.T) {
 		t.Fatalf("fail %+v %v", failed, err)
 	}
 	replay, err := s.FailTurn(ctx, agent, claimed.ID, FailInput{Reason: "harness timeout", LeaseToken: claimed.LeaseToken})
-	if err != nil || replay.ID != failed.ID {
+	if !errors.Is(err, ErrConflict) || replay.ID != "" {
 		t.Fatalf("fail replay %v", err)
 	}
 	if _, err = s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "next", Text: "Retry"}); err != nil {
@@ -403,7 +404,7 @@ func TestClaimAndExpirySeeTurnsPastHistoricalListLimit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = s.CompleteTurn(ctx, agent, turn.ID, "done", nil); err != nil {
+		if _, err = claimAndComplete(t, s, ctx, agent, turn.ID, "done", nil); err != nil {
 			t.Fatal(err)
 		}
 	}

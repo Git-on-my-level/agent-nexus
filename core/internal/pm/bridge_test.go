@@ -74,7 +74,14 @@ func TestRealNexusWakeArtifactSessionAndReplyRoundTrip(t *testing.T) {
 	if _, err = ps.AppendEvent(ctx, "pm-agent", event); err != nil {
 		t.Fatal(err)
 	}
-	completed, err := svc.SyncBridgeReply(ctx, ps, turn.ID, "reply-2")
+	if _, err := svc.SyncBridgeReply(ctx, ps, turn.ID, "reply-2"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("unclaimed event completed: %v", err)
+	}
+	claimed := claimTestTurn(t, svc, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID)
+	if _, err := svc.SyncBridgeReply(ctx, ps, turn.ID, "reply-2"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("tokenless event completed: %v", err)
+	}
+	completed, err := svc.CompleteTurnWithLease(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "A source reports progress; independent verification remains open.", []string{"event:reply-2"}, claimed.LeaseToken)
 	if err != nil {
 		t.Fatal(err)
 	}

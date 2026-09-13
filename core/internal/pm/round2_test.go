@@ -149,6 +149,7 @@ func TestChangedTurnProposalSupersedesIntentAtomically(t *testing.T) {
 			}
 			agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
 			in := DecisionInput{RequestKey: "first", WorkRef: "work:1", Instruction: "Move", Scope: "work.phase", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}}
+			claimTestTurn(t, s, ctx, agent, turn.ID)
 			first, err := s.ProposeForTurn(ctx, agent, turn.ID, in)
 			if err != nil {
 				t.Fatal(err)
@@ -162,6 +163,7 @@ func TestChangedTurnProposalSupersedesIntentAtomically(t *testing.T) {
 			case "revision":
 				in.TargetRevision = "r2"
 			}
+			claimTestTurn(t, s, ctx, agent, turn.ID)
 			next, err := s.ProposeForTurn(ctx, agent, turn.ID, in)
 			if err != nil || next.ID == first.ID || next.Instruction != in.Instruction || !reflect.DeepEqual(next.Payload, in.Payload) || next.TargetRevision != in.TargetRevision {
 				t.Fatalf("intent lost %+v %v", next, err)
@@ -180,6 +182,7 @@ func TestChangedTurnProposalSupersedesIntentAtomically(t *testing.T) {
 			if saved.DecisionIDs[len(saved.DecisionIDs)-1] != next.ID {
 				t.Fatalf("missing new link %+v", saved)
 			}
+			claimTestTurn(t, s, ctx, agent, turn.ID)
 			replay, err := s.ProposeForTurn(ctx, agent, turn.ID, in)
 			if err != nil || replay.ID != next.ID {
 				t.Fatalf("replay %+v %v", replay, err)
@@ -219,6 +222,7 @@ func TestDirectAgentProposalsForbiddenButTurnProposalsAddressHuman(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	claimTestTurn(t, s, ctx, agent, turn.ID)
 	d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: "through-turn", WorkRef: "work:1", Scope: "work.phase", Instruction: "Move", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}})
 	if err != nil || d.ActorID != human.ActorID {
 		t.Fatalf("proposal %+v %v", d, err)

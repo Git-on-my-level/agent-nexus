@@ -261,7 +261,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 				return pm.Receipt{}, err
 			}
 			if anyString(workSourceMap(w)["authority"]) == "nexus" {
-				return readBackWorkPhase(ctx, store, a, true)
+				return readBackWorkPhase(ctx, store, a)
 			}
 		}
 		if a.Scope == "work.annotate" {
@@ -331,10 +331,11 @@ type nativeMutationStore interface {
 }
 
 func executeNativeAnnotation(ctx context.Context, store nativeMutationStore, a pm.Action) (receipt pm.Receipt, execErr error) {
+	writeCompleted := false
 	defer func() {
 		if execErr != nil {
 			var uncertain *primitives.MutationOutcomeUnknown
-			execErr = &pm.NativeExecutionError{Cause: execErr, WriteStarted: errors.As(execErr, &uncertain)}
+			execErr = &pm.NativeExecutionError{Cause: execErr, WriteStarted: writeCompleted || errors.As(execErr, &uncertain)}
 		}
 	}()
 	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
@@ -356,7 +357,8 @@ func executeNativeAnnotation(ctx context.Context, store nativeMutationStore, a p
 	if err != nil {
 		return pm.Receipt{}, err
 	}
-	return pm.Receipt{Status: pm.Reported, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, Detail: "Nexus annotation mutation committed; reconcile for read-back verification"}, nil
+	writeCompleted = true
+	return reconcileNativeAnnotation(ctx, store, a)
 }
 
 func reconcileNativeAnnotation(ctx context.Context, store nativeMutationStore, a pm.Action) (pm.Receipt, error) {
@@ -375,7 +377,7 @@ func reconcileNativeAnnotation(ctx context.Context, store nativeMutationStore, a
 			return pm.Receipt{Status: pm.Failed, Detail: "Canonical annotation fields do not match the requested outcome"}, nil
 		}
 	}
-	return pm.Receipt{Status: pm.Verified, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: true, Detail: "Read back requested Nexus annotation fields from canonical work"}, nil
+	return pm.Receipt{NativeReadBack: true, Status: pm.Verified, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: true, Detail: "Read back requested Nexus annotation fields from canonical work"}, nil
 }
 
 func reconcileSourceRead(ctx context.Context, store *primitives.Store, runtime *ObservationRuntime, a pm.Action) (pm.Receipt, error) {
@@ -453,9 +455,9 @@ func executeWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Actio
 		return pm.Receipt{}, err
 	}
 	writeCompleted = true
-	return readBackWorkPhase(ctx, store, a, false)
+	return readBackWorkPhase(ctx, store, a)
 }
-func readBackWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Action, reconcile bool) (pm.Receipt, error) {
+func readBackWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Action) (pm.Receipt, error) {
 	w, err := store.GetWork(ctx, a.WorkRef)
 	if err != nil {
 		return pm.Receipt{}, err
@@ -467,11 +469,7 @@ func readBackWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Acti
 	if phase != a.Payload.Phase {
 		return pm.Receipt{Status: pm.Failed, Detail: "Canonical phase does not match requested phase: " + phase}, nil
 	}
-	status := pm.Reported
-	if reconcile {
-		status = pm.Verified
-	}
-	return pm.Receipt{Status: status, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: reconcile, Detail: "Read back canonical Nexus phase: " + phase}, nil
+	return pm.Receipt{NativeReadBack: true, Status: pm.Verified, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: true, Detail: "Read back canonical Nexus phase: " + phase}, nil
 }
 
 func currentWorkDecisionRevision(ctx context.Context, store *primitives.Store, ref string) (string, error) {
