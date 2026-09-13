@@ -316,7 +316,9 @@
         class="space-y-3 border-t border-line-subtle pt-4"
         onsubmit={(event) => decide(event, choice || "approve")}
       >
-        <p class="text-meta text-fg">{consequence}</p>
+        {#if !gone}
+          <p class="text-meta text-fg">{consequence}</p>
+        {/if}
         <label class="block text-micro text-fg-muted"
           >Your note (recorded with the decision)<textarea
             class="ui-input mt-1"
