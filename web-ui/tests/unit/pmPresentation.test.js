@@ -278,11 +278,11 @@ describe("a full PM queue reads as a queue, not a runner limit", () => {
 describe("instants in core's messages read as times, not ISO strings", () => {
   it("replaces RFC 3339 instants and leaves other text alone", async () => {
     const { humanizeInstants } = await import("$lib/pm/presentation.js");
-    const soon = new Date(Date.now() + 4 * 60_000).toISOString();
+    const soon = new Date(Date.now() + 4.5 * 60_000).toISOString();
     expect(humanizeInstants(`rate limited; next attempt at ${soon}`)).toBe(
       "rate limited; next attempt in 4m",
     );
-    const ago = new Date(Date.now() - 3 * 60_000).toISOString();
+    const ago = new Date(Date.now() - 3.5 * 60_000).toISOString();
     expect(humanizeInstants(`last read ${ago}`)).toBe("last read 3m ago");
     expect(humanizeInstants("no dates here")).toBe("no dates here");
     expect(humanizeInstants(undefined)).toBe("");
