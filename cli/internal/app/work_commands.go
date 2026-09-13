@@ -436,19 +436,23 @@ func formatWorkCommandText(name string, body any) string {
 }
 
 func formatPMTurnGetText(root map[string]any) string {
-	status := firstNonEmpty(anyString(root["status"]), "unknown")
-	if status == "sending" {
-		if asBool(root["claimed"]) {
-			status = "in progress"
-		} else {
-			status = "queued"
-		}
-	}
+	status := renderPMTurnStatus(root)
 	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), status)
 	if claimedAt := anyString(root["claimed_at"]); claimedAt != "" {
 		line += "  claimed_at=" + claimedAt
 	}
 	return line + fmt.Sprintf("  deadline=%s  failure=%s", anyString(root["deadline"]), anyString(root["failure"]))
+}
+
+func renderPMTurnStatus(turn map[string]any) string {
+	status := firstNonEmpty(anyString(turn["status"]), "unknown")
+	if status != "sending" {
+		return status
+	}
+	if asBool(turn["claimed"]) {
+		return "in progress"
+	}
+	return "queued"
 }
 
 func formatPMDispatchText(root map[string]any) string {
@@ -458,18 +462,38 @@ func formatPMDispatchText(root map[string]any) string {
 	if detail := anyString(receipt["detail"]); detail != "" {
 		line += "  " + detail
 	}
-	if pmDispatchNothingSent(status) {
-		line += "  nothing was sent"
+	if note := pmDispatchSendNote(root); note != "" {
+		line += "  " + note
 	}
 	return line
 }
 
-func pmDispatchNothingSent(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "failed", "delivered", "acknowledged", "source_reported", "verified":
-		return true
+func actionHasSentAttempt(root map[string]any) bool {
+	for _, row := range asSlice(root["attempts"]) {
+		if anyString(asMap(row)["sent_at"]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func pmDispatchSendNote(root map[string]any) string {
+	status := strings.ToLower(strings.TrimSpace(firstNonEmpty(anyString(root["status"]), "")))
+	if actionHasSentAttempt(root) {
+		switch status {
+		case "verified":
+			return "already verified"
+		case "delivered", "acknowledged", "source_reported":
+			return "already delivered"
+		default:
+			return ""
+		}
+	}
+	switch status {
+	case "failed", "delivered", "acknowledged", "source_reported", "verified", "pending_delivery":
+		return "nothing was sent"
 	default:
-		return false
+		return ""
 	}
 }
 

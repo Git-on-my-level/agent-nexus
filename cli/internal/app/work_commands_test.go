@@ -539,17 +539,37 @@ func TestPMConversationMessageBusyHint(t *testing.T) {
 func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		want       []string
+		want, hide []string
 	}{
 		{
-			name: "already failed",
+			name: "preflight failed",
 			body: `{"id":"action-1","status":"failed","receipt":{"status":"failed","detail":"unavailable"}}`,
 			want: []string{"action-1", "status=failed", "receipt=failed", "unavailable", "nothing was sent"},
+			hide: []string{"already delivered", "already verified"},
+		},
+		{
+			name: "failed attempt without sent_at",
+			body: `{"id":"action-1b","status":"failed","receipt":{"status":"failed","detail":"preflight"},"attempts":[{"started_at":"2026-09-08T21:00:00Z","status":"failed"}]}`,
+			want: []string{"nothing was sent"},
+			hide: []string{"already delivered", "already verified"},
 		},
 		{
 			name: "already delivered",
-			body: `{"id":"action-2","status":"delivered","receipt":{"status":"delivered","detail":"accepted"}}`,
-			want: []string{"action-2", "status=delivered", "receipt=delivered", "accepted", "nothing was sent"},
+			body: `{"id":"action-2","status":"delivered","receipt":{"status":"delivered","detail":"accepted"},"attempts":[{"sent_at":"2026-09-08T21:00:00Z","status":"delivered"}]}`,
+			want: []string{"action-2", "status=delivered", "receipt=delivered", "accepted", "already delivered"},
+			hide: []string{"nothing was sent"},
+		},
+		{
+			name: "already verified",
+			body: `{"id":"action-3","status":"verified","receipt":{"status":"verified","detail":"Read back canonical Nexus phase: ready"},"attempts":[{"sent_at":"2026-09-08T21:00:00Z","status":"verified"}]}`,
+			want: []string{"action-3", "status=verified", "receipt=verified", "already verified", "Read back canonical Nexus phase: ready"},
+			hide: []string{"nothing was sent"},
+		},
+		{
+			name: "pending without send",
+			body: `{"id":"action-4","status":"pending_delivery","receipt":{"status":"unknown"}}`,
+			want: []string{"nothing was sent"},
+			hide: []string{"already delivered", "already verified"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -568,6 +588,11 @@ func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
 			for _, needle := range tc.want {
 				if !strings.Contains(text, needle) {
 					t.Fatalf("missing %q in %s", needle, text)
+				}
+			}
+			for _, needle := range tc.hide {
+				if strings.Contains(text, needle) {
+					t.Fatalf("unexpected %q in %s", needle, text)
 				}
 			}
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "decisions", "dispatch", "decision-1"}))
