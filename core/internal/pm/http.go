@@ -121,6 +121,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err = decode(&in); err == nil {
 			out, err = s.BindChannel(ctx, p, in)
 		}
+	case len(path) == 2 && path[0] == "turns" && r.Method == http.MethodGet:
+		out, err = s.GetTurn(ctx, p, path[1])
 	case len(path) == 3 && path[0] == "turns" && path[2] == "context" && r.Method == http.MethodGet:
 		var limit int
 		limit, err = queryLimit(r)
@@ -203,10 +205,15 @@ func writeError(w http.ResponseWriter, err error) {
 		if errors.Is(err, e.err) {
 			status = e.status
 			code = e.code
-			message = e.err.Error()
+			message = err.Error()
 			break
 		}
 	}
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": message}})
+	body := map[string]any{"code": code, "message": message}
+	var conflict *DecisionConflict
+	if errors.As(err, &conflict) {
+		body["details"] = map[string]string{"existing_decision_id": conflict.ExistingDecisionID}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": body})
 }

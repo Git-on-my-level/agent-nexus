@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Page[T any] struct {
@@ -108,7 +109,11 @@ func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, curs
 	return page, err
 }
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
-	return recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
+	page, err := recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })
+	for i, a := range page.Items {
+		page.Items[i] = s.actionForReader(ctx, a)
+	}
+	return page, err
 }
 func (s *Service) BindingPage(ctx context.Context, p Principal) (Page[Binding], error) {
 	if err := s.authorize(ctx, p, "pm.bind", ""); err != nil {
@@ -127,6 +132,9 @@ func (s *Service) BindingPage(ctx context.Context, p Principal) (Page[Binding], 
 func (s *Service) ConversationHistory(ctx context.Context, p Principal, id string, limit int, cursor string) (ConversationDetail, error) {
 	c, err := s.conversation(ctx, p, id)
 	if err != nil {
+		return ConversationDetail{}, err
+	}
+	if err := s.ExpireTurns(ctx, time.Now().UTC()); err != nil {
 		return ConversationDetail{}, err
 	}
 	out := ConversationDetail{Conversation: c, Turns: make([]Turn, 0)}

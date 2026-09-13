@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -243,12 +242,9 @@ func TestPMRuntimeSourceReconcileDoesNotVerifyUnsentWrite(t *testing.T) {
 	if answer["status"] != "answered" {
 		t.Fatal(answer)
 	}
-	action := post("/pm/decisions/"+asString(d["id"])+"/dispatch", map[string]any{}, 200)
-	if action["status"] != "pending_delivery" {
-		t.Fatalf("unsent source write was not left pending: %v", action)
-	}
-	post("/pm/actions/"+asString(action["id"])+"/reconcile", map[string]any{}, 409)
-	receipt, err := reconcileSourceRead(ctx, store, runtime, pm.Action{ID: asString(action["id"]), WorkRef: ref, TargetRevision: "abc"})
+	post("/pm/decisions/"+asString(d["id"])+"/dispatch", map[string]any{}, 503)
+	post("/pm/actions/"+asString(answer["action_id"])+"/reconcile", map[string]any{}, 400)
+	receipt, err := reconcileSourceRead(ctx, store, runtime, pm.Action{ID: asString(answer["action_id"]), WorkRef: ref, TargetRevision: "abc"})
 	if err != nil || receipt.Status != pm.Unknown || receipt.IndependentlyVerified {
 		t.Fatalf("unsent write verified: %+v %v", receipt, err)
 	}
@@ -295,16 +291,12 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 			}
 			input := pm.DecisionInput{RequestKey: authority, WorkRef: asString(w["ref"]), Instruction: "Prose is not the target", Scope: "work.phase", TargetRevision: revision, Payload: &pm.ActionPayload{Phase: "ready"}}
 			agent := pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}
-			ad, err := rt.Service.ProposeDecision(ctx, agent, input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = rt.Service.AnswerDecision(ctx, agent, ad.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.Is(err, pm.ErrForbidden) {
-				t.Fatal(err)
+			if _, err = rt.Service.ProposeDecision(ctx, agent, input); !errors.Is(err, pm.ErrForbidden) {
+				t.Fatalf("direct agent proposal: %v", err)
 			}
 			agent.Human = true
-			if _, err = rt.Service.AnswerDecision(ctx, agent, ad.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.Is(err, pm.ErrForbidden) {
-				t.Fatalf("forged human: %v", err)
+			if _, err = rt.Service.ProposeDecision(ctx, agent, input); !errors.Is(err, pm.ErrForbidden) {
+				t.Fatalf("forged human proposal: %v", err)
 			}
 			d, err := rt.Service.ProposeDecision(ctx, p, input)
 			if err != nil {
@@ -319,7 +311,10 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 				t.Fatalf("agent dispatched phase action: %v", err)
 			}
 			a, err := rt.Service.DispatchDecision(ctx, p, d.ID)
-			if err != nil {
+			if authority != "nexus" && !errors.Is(err, pm.ErrUnavailable) {
+				t.Fatalf("missing path: %v", err)
+			}
+			if authority == "nexus" && err != nil {
 				t.Fatal(err)
 			}
 			updated, err := store.GetWork(ctx, input.WorkRef)
@@ -327,7 +322,16 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 				t.Fatal(err)
 			}
 			if authority != "nexus" {
-				if a.Status != pm.Pending || !strings.Contains(a.Receipt.Detail, "executor required") || updated["phase"] != w["phase"] || updated["version"] != w["version"] {
+				actions, err := rt.Service.ListActions(ctx, p)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, saved := range actions {
+					if saved.ID == d.ActionID {
+						a = saved
+					}
+				}
+				if a.Status != pm.Pending || a.Deliverable || len(a.Attempts) != 0 || a.Revision != 1 || updated["phase"] != w["phase"] || updated["version"] != w["version"] {
 					t.Fatalf("source changed: %+v %v", a, updated)
 				}
 				return
@@ -382,5 +386,81 @@ func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
 	}
 	if _, err = rt.Service.ClaimTurn(ctx, p, pm.ClaimInput{}); !errors.Is(err, pm.ErrForbidden) {
 		t.Fatalf("revoked PM claimed: %v", err)
+	}
+}
+
+func TestPMMaintenanceTickExpiresWithoutRunnerReadOrSender(t *testing.T) {
+	env := newPMStoreTestEnv(t)
+	ctx := context.Background()
+	rt, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.Sender = nil
+	turn := pm.Turn{ID: "expired", WorkspaceID: "ws_main", ActorID: "human", AgentActorID: "old-pm", Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(-time.Minute)}
+	body, err := json.Marshal(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.workspace.DB().ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,'',1,?)`, turn.ID, turn.WorkspaceID, turn.ActorID, body); err != nil {
+		t.Fatal(err)
+	}
+	if err = rt.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = env.workspace.DB().QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND id=?`, turn.ID).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(body, &turn); err != nil {
+		t.Fatal(err)
+	}
+	if turn.Status != pm.Failed || turn.Failure != "The PM did not answer before the deadline. Retry, or check that a runner is attached." {
+		t.Fatalf("not expired %+v", turn)
+	}
+}
+
+func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
+	env := newPMStoreTestEnv(t)
+	ctx := context.Background()
+	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "turn-human", "turn-human-actor", "turn-human", "turn-human-token")
+	machine := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "turn-agent", "turn-agent-actor", "turn-agent", "turn-agent-token")
+	store := env.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, human.ActorID, map[string]any{"title": "Proposals"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateWork(ctx, human.ActorID, asString(board["id"]), map[string]any{"title": "Task"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	humanP := pm.Principal{WorkspaceID: "ws_main", ActorID: human.ActorID, Human: true}
+	agent := pm.Principal{WorkspaceID: "ws_main", ActorID: machine.ActorID}
+	input := pm.DecisionInput{RequestKey: "proposal", WorkRef: asString(work["ref"]), Scope: "work.phase", Instruction: "Move", Payload: &pm.ActionPayload{Phase: "ready"}, TargetRevision: "1"}
+	for _, owner := range []pm.Principal{humanP, agent} {
+		c, err := rt.Service.CreateConversation(ctx, owner, pm.CreateConversation{RequestKey: owner.ActorID, Title: "Question"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		turn, err := rt.Service.PostMessage(ctx, owner, c.ID, pm.MessageInput{RequestKey: "m", Text: "Next step?"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := rt.Service.ProposeForTurn(ctx, agent, turn.ID, input)
+		if !owner.Human {
+			if !errors.Is(err, pm.ErrForbidden) {
+				t.Fatalf("agent addressed itself: %+v %v", d, err)
+			}
+		} else {
+			if err != nil || d.ActorID != human.ActorID {
+				t.Fatalf("human proposal %+v %v", d, err)
+			}
+			if _, err = rt.Service.AnswerDecision(ctx, humanP, d.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

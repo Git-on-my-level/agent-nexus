@@ -338,6 +338,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMDecision'
+        '409':
+          description: Request key intent conflicts; error.details.existing_decision_id identifies the existing decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/turns/{turn_id}:
+    get:
+      operationId: pmTurnsGet
+      summary: Read a PM conversation turn
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.get
+      x-anx-cli-path: pm turns get
+      x-anx-why: Read a PM conversation turn.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a PM conversation turn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
   /pm/decisions/{decision_id}:
     get:
       operationId: pmDecisionsGet
@@ -473,6 +519,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMAction'
+        '503':
+          description: No executor is configured for this scope and source. The approved pending action is unchanged and no attempt is recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
   /pm/actions:
     get:
       operationId: pmActionsList
@@ -603,6 +655,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMAction'
+        '400':
+          description: A pending action has never been delivered, so there is nothing to read back.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
   /pm/bindings:
     get:
       operationId: pmBindingsList
@@ -711,8 +769,8 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn.
-        Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are
-        expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn
+        Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are
+        expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn
         timeout. Channel-origin turns use this same claim/complete/fail pipeline.
       requestBody:
         required: false
@@ -6242,6 +6300,7 @@ components:
         external_user_id:
           type: string
     PMTurn:
+      required: [deadline]
       type: object
       additionalProperties: true
       properties:
@@ -6262,9 +6321,12 @@ components:
           type: string
         deadline:
           type: string
+          format: date-time
+          description: Turn completion deadline; open turns expire to failed on reads and periodic maintenance.
         status:
           type: string
           enum:
+          - pending_delivery
           - sending
           - delivered
           - unknown
@@ -6326,6 +6388,11 @@ components:
           description: Derived for the current reader; true only for the awaiting decision owner with human approval authority.
         answer:
           type: string
+        superseded_by:
+          type: string
+          description: Replacement decision ID when a changed proposal supersedes this awaiting decision.
+        superseded_reason:
+          type: string
         answered_by:
           type: string
         action_id:
@@ -6359,6 +6426,7 @@ components:
         detail:
           type: string
     PMAction:
+      required: [deliverable]
       type: object
       additionalProperties: true
       properties:
@@ -6390,6 +6458,9 @@ components:
           - verified
           - failed
           - unknown
+        deliverable:
+          type: boolean
+          description: Derived from configured executors for this scope and source on every read. False means dispatch returns unavailable (503) without changing the action or recording an attempt.
         reconciliation_conflict:
           type: boolean
           description: Latest read-back could not advance the action status. Receipt preserves that evidence even when its status is lower.
@@ -6452,7 +6523,26 @@ components:
       required:
       - request_key
       - text
+    PMErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              properties:
+                existing_decision_id:
+                  type: string
+                  description: Existing proposal for a conflicting request key.
     PMDecisionCreateRequest:
+      description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
       type: object
       additionalProperties: true
       properties:

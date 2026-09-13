@@ -92,7 +92,12 @@ func TestSeatbeltProfileIsDenyDefault(t *testing.T) {
 		}
 	}
 
-	for _, broad := range []string{"(allow file-read*)", "(allow file-map-executable)", "(allow mach-lookup)", "(allow mach-priv-host-port)", "(allow ipc-posix-shm)"} {
+	for _, name := range []string{"hw.ncpu", "hw.pagesize", "kern.osrelease", "kern.version", "hw.memsize", "sysctl.proc_translated", "hw.optional.armv8_1_atomics", "hw.optional.armv8_crc32", "hw.optional.armv8_2_sha512", "hw.optional.armv8_2_sha3", "hw.optional.arm.FEAT_DIT"} {
+		if !strings.Contains(profile, `(allow sysctl-read (sysctl-name "`+name+`"))`) {
+			t.Fatalf("missing named sysctl %s", name)
+		}
+	}
+	for _, broad := range []string{"(allow sysctl-read)", "(sysctl-name-prefix", "kern.procargs2", "kern.proc.", "(allow file-read*)", "(allow file-map-executable)", "(allow mach-lookup)", "(allow mach-priv-host-port)", "(allow ipc-posix-shm)"} {
 		if strings.Contains(profile, broad) {
 			t.Fatalf("ambient permission %s", broad)
 		}
@@ -524,6 +529,75 @@ int main(void) {
  close(fd);puts("{}");return 0;
 }
 `, secret))
+	if _, err := runner.Run(context.Background(), binary, []byte("{}"), isolationTestPolicy().Limits); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Use only a controlled same-uid fixture process, with a synthetic environment.
+func TestSeatbeltSysctlAllowlistAndProcessArgumentsDenied(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Seatbelt is macOS-only")
+	}
+	runner := isolationRunnerOrSkip(t)
+	child := exec.Command("/bin/sleep", "30")
+	child.Env = []string{"ANX_SYNTHETIC_FIXTURE=not-a-secret"}
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
+	binary := compileIsolatedFixture(t, isolationWorkDir(t), "sysctl-reader", `
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+int main(int argc, char **argv) {
+ int pid;
+ if(scanf("%d", &pid)!=1) return 9;
+ char buf[65536]; size_t n=sizeof(buf);
+ int mib[3]={CTL_KERN,KERN_PROCARGS2,pid};
+ int result=sysctl(mib,3,buf,&n,NULL,0);
+ // Prove the controlled process is readable without the profile.
+ if(argc>1) return result==0 ? 0 : 10;
+ if(result==0 || (errno!=EPERM && errno!=EACCES)) return 11;
+ const char *names[]={"hw.ncpu","hw.pagesize","kern.osrelease","kern.version","hw.memsize"};
+ for(int i=0;i<5;i++) {n=sizeof(buf);if(sysctlbyname(names[i],buf,&n,NULL,0)!=0) return 20+i;}
+ puts("{}");return 0;
+}`)
+	input := []byte(fmt.Sprint(child.Process.Pid))
+	baseline := exec.Command(binary, "baseline")
+	baseline.Stdin = strings.NewReader(string(input))
+	if err := baseline.Run(); err != nil {
+		t.Fatalf("controlled process baseline: %v", err)
+	}
+	if _, err := runner.Run(context.Background(), binary, input, isolationTestPolicy().Limits); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSeatbeltGoRuntimeWithNamedSysctls(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Seatbelt is macOS-only")
+	}
+	runner := isolationRunnerOrSkip(t)
+	dir := isolationWorkDir(t)
+	source := filepath.Join(dir, "runtime-probe.go")
+	if err := os.WriteFile(source, []byte(`package main
+import ("fmt"; "runtime"; "syscall")
+func main(){
+ if runtime.NumCPU()<1 || syscall.Getpagesize()<1 {panic("runtime sizing")}
+ ch:=make(chan int);go func(){ch<-1}();<-ch
+ fmt.Println("{}")
+}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "runtime-probe")
+	build := exec.Command("go", "build", "-o", binary, source)
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build Go probe: %v %s", err, out)
+	}
 	if _, err := runner.Run(context.Background(), binary, []byte("{}"), isolationTestPolicy().Limits); err != nil {
 		t.Fatal(err)
 	}

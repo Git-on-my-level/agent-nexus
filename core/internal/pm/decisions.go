@@ -3,6 +3,7 @@ package pm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 )
@@ -123,7 +124,7 @@ func (s *Service) action(ctx context.Context, p Principal, id, permission string
 	if err := s.authorize(ctx, p, permission, a.WorkRef); err != nil {
 		return Action{}, err
 	}
-	return a, nil
+	return s.actionForReader(ctx, a), nil
 }
 func (s *Service) ListActions(ctx context.Context, p Principal) ([]Action, error) {
 	if err := s.authorize(ctx, p, "pm.read", ""); err != nil {
@@ -136,7 +137,7 @@ func (s *Service) ListActions(ctx context.Context, p Principal) ([]Action, error
 	out := make([]Action, 0, len(as))
 	for _, a := range as {
 		if s.authorize(ctx, p, "pm.read", a.WorkRef) == nil {
-			out = append(out, a)
+			out = append(out, s.actionForReader(ctx, a))
 		}
 	}
 	return out, nil
@@ -162,8 +163,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if !validActionPayload(a.Scope, a.Payload) {
 		return Action{}, ErrInvalid
 	}
-	if s.deps.Execute == nil || s.deps.CurrentRevision == nil {
-		return Action{}, ErrUnavailable
+	if err = s.checkDelivery(ctx, a); err != nil {
+		return Action{}, err
 	}
 	// Revalidate the actual approving identity as well as the dispatch caller.
 	approver := Principal{WorkspaceID: a.WorkspaceID, ActorID: a.ActorID, Human: true}
@@ -190,14 +191,12 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	bounded, cancel := context.WithTimeout(ctx, s.cfg.TurnTimeout)
 	defer cancel()
 	receipt, execErr := s.deps.Execute(bounded, a)
-	if errors.Is(execErr, ErrUnavailable) {
-		receipt = Receipt{Status: Pending, Detail: "Source executor required; no source mutation attempted"}
-	} else if errors.Is(execErr, ErrStale) {
+	if errors.Is(execErr, ErrStale) {
 		receipt = Receipt{Status: Failed, Detail: ErrStale.Error()}
 	} else if execErr != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source handoff outcome is unknown; reconcile before any retry"}
 	}
-	if err = validateReceipt(receipt, false); err != nil && !(errors.Is(execErr, ErrUnavailable) && receipt.Status == Pending) {
+	if err = validateReceipt(receipt, false); err != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source returned an invalid receipt; reconciliation required"}
 	}
 	old = a.Revision
@@ -211,8 +210,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if err = s.store.cas(context.WithoutCancel(ctx), "action", a.ID, old, a); err != nil {
 		return Action{}, err
 	}
-	if errors.Is(execErr, ErrStale) {
-		return a, ErrStale
+	if errors.Is(execErr, ErrStale) || errors.Is(execErr, ErrUnavailable) {
+		return a, execErr
 	}
 	return a, nil
 }
@@ -239,7 +238,7 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 		return a, err
 	}
 	if a.Status == Pending {
-		return Action{}, ErrConflict
+		return Action{}, ErrNothingDelivered
 	}
 	if a.Status == Verified {
 		return a, nil
@@ -319,7 +318,7 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 		return Decision{}, ErrForbidden
 	}
 	in.Origin = c.Origin
-	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID}, in, turnID)
+	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID)
 }
 
 // Prose never supplies mutation parameters, including for legacy decisions.
@@ -343,4 +342,19 @@ func validActionPayload(scope string, p *ActionPayload) bool {
 func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision) Decision {
 	d.CanAnswer = p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
 	return d
+}
+
+// Availability is a projection of trusted routing, never stored capability truth.
+func (s *Service) checkDelivery(ctx context.Context, a Action) error {
+	if s.deps.Execute == nil || s.deps.CurrentRevision == nil || s.deps.CheckDelivery == nil {
+		return NoDeliveryPath("this action")
+	}
+	return s.deps.CheckDelivery(ctx, a)
+}
+func (s *Service) actionForReader(ctx context.Context, a Action) Action {
+	a.Deliverable = s.checkDelivery(ctx, a) == nil
+	return a
+}
+func NoDeliveryPath(source string) error {
+	return fmt.Errorf("%w: No delivery path is configured for %s yet; the approval is kept and the action stays pending", ErrUnavailable, source)
 }

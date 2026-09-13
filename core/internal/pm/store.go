@@ -112,11 +112,11 @@ func listRecords[T any](ctx context.Context, s *Store, kind, ws, actor, parent s
 
 }
 
-// listOpenTurns returns every sending or unknown turn, including those past the
+// listOpenTurns returns every pending, sending or unknown turn, including those past the
 // bounded listRecords window. Claim and deadline expiry must see current work,
 // not the oldest 200 historical rows.
 func listOpenTurns(ctx context.Context, s *Store, ws string) ([]Turn, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('sending','unknown') ORDER BY rowid`, ws)
+	rows, err := s.db.QueryContext(ctx, `SELECT body FROM pm_records WHERE kind='turn' AND workspace_id=? AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown') ORDER BY rowid`, ws)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,8 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool
 }
 
 // proposeDecision serializes proposal deduplication and turn linkage in SQLite,
-// including across Service instances. A reused proposal retains its exact target.
+// including across Service instances. Only identical intent is reused; changed
+// intent supersedes the awaiting decision in the same transaction as its replacement.
 func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) (Decision, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -219,22 +220,40 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 			return Decision{}, false, err
 		}
 		if prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) || !reflect.DeepEqual(prior.Payload, d.Payload) {
-			return Decision{}, false, ErrConflict
+			return Decision{}, false, &DecisionConflict{ExistingDecisionID: prior.ID}
 		}
 		d = prior
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return Decision{}, false, err
 	} else {
-		if turnID != "" {
-			err = tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
-		}
-		if turnID != "" && err == nil {
-			if err = json.Unmarshal(raw, &d); err != nil {
+		err = tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&raw)
+		reuse := false
+		if err == nil {
+			var prior Decision
+			if err = json.Unmarshal(raw, &prior); err != nil {
 				return Decision{}, false, err
+			}
+			if prior.Instruction == d.Instruction && prior.TargetRevision == d.TargetRevision && reflect.DeepEqual(prior.Payload, d.Payload) && sameOrigin(prior.Origin, d.Origin) {
+				d = prior
+				reuse = true
+			} else {
+				prior.Status = Superseded
+				prior.SupersededBy = d.ID
+				prior.SupersededReason = "Replaced by a proposal with changed payload, instruction, target revision, or origin"
+				prior.CanAnswer = false
+				prior.Revision++
+				raw, err = json.Marshal(prior)
+				if err != nil {
+					return Decision{}, false, err
+				}
+				if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision+1,body=? WHERE kind='decision' AND id=?", raw, prior.ID); err != nil {
+					return Decision{}, false, err
+				}
 			}
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return Decision{}, false, err
-		} else {
+		}
+		if !reuse {
 			raw, err = json.Marshal(d)
 			if err != nil {
 				return Decision{}, false, err

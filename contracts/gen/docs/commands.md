@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `159`
+- Commands: `160`
 
 ## `actors.create`
 
@@ -1535,7 +1535,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Reclaiming with the same runner_id returns the held lease. Past-deadline sending turns are expired to `failed` on claim. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
 
 ## `pm.turns.complete`
 
@@ -1588,6 +1588,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
+
+## `pm.turns.get`
+
+- CLI path: `pm turns get`
+- HTTP: `GET /pm/turns/{turn_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read a PM conversation turn.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
 
 ## `ref_edges.list`
 

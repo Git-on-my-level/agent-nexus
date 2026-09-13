@@ -160,7 +160,19 @@ func seatbeltProfile(artifact, scratch string) string {
 			}
 		}
 	}
-	b.WriteString("(allow sysctl-read)\n")
+	// Exact sysctl names only: Go runtime sizing needs hw.ncpu/hw.pagesize;
+	// dyld/system metadata uses kern.osrelease, kern.version, hw.memsize.
+	// Go internal/cpu on arm64 probes the five named ARM feature flags below;
+	// x86 checks sysctl.proc_translated for Rosetta (current-process metadata).
+	// Never grant kern.procargs2, kern.proc.*, or a sysctl-name-prefix: those
+	// can disclose other same-uid processes' arguments and environment.
+	for _, name := range []string{
+		"hw.ncpu", "hw.pagesize", "kern.osrelease", "kern.version", "hw.memsize", "sysctl.proc_translated",
+		"hw.optional.armv8_1_atomics", "hw.optional.armv8_crc32",
+		"hw.optional.armv8_2_sha512", "hw.optional.armv8_2_sha3", "hw.optional.arm.FEAT_DIT",
+	} {
+		b.WriteString("(allow sysctl-read (sysctl-name \"" + name + "\"))\n")
+	}
 	b.WriteString("(allow file-read* (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\"))\n")
 	b.WriteString("(allow file-ioctl (literal \"/dev/null\"))\n")
 	if scratch != "" {

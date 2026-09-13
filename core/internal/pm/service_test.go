@@ -37,6 +37,7 @@ func fixture(t *testing.T) (*Service, *Store, Principal, *int) {
 			return ContextPage{Items: []any{"current evidence"}}, nil
 		},
 		Dispatch:        func(context.Context, DispatchRequest) error { count++; return nil },
+		CheckDelivery:   func(context.Context, Action) error { return nil },
 		CurrentRevision: func(context.Context, Principal, string) (string, error) { return "r1", nil },
 		Execute: func(context.Context, Action) (Receipt, error) {
 			return Receipt{Status: Delivered, ExternalID: "remote-1"}, nil
