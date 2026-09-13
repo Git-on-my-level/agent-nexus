@@ -4540,7 +4540,6 @@ Inputs:
   - body `work_ref` (string)
   Optional:
   - body `payload.phase` (string)
-  - body `payload.resolution` (list<object>)
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
@@ -4713,10 +4712,10 @@ Generated Help: pm turns complete
 Inputs:
   Required:
   - path `turn_id`
+  - body `lease_token` (string)
   - body `text` (string)
   Optional:
   - body `evidence_refs` (list<string>)
-  - body `lease_token` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4740,9 +4739,9 @@ Generated Help: pm turns context
 
 - Command ID: `pm.turns.context`
 - CLI path: `pm turns context`
-- HTTP: `GET /pm/turns/{turn_id}/context`
+- HTTP: `POST /pm/turns/{turn_id}/context`
 - Stability: `beta`
-- Input mode: `none`
+- Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
 - Output: Returns `PMContextResponse`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
@@ -4753,6 +4752,11 @@ Generated Help: pm turns context
 Inputs:
   Required:
   - path `turn_id`
+  - body `lease_token` (string)
+  Optional:
+  - body `cursor` (string)
+  - body `limit` (integer)
+  - body `query` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4784,15 +4788,14 @@ Generated Help: pm turns fail
 - Output: Returns `PMTurn`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
+- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns get`, `pm turns release`
 
 Inputs:
   Required:
   - path `turn_id`
-  - body `reason` (string)
-  Optional:
   - body `lease_token` (string)
+  - body `reason` (string)
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4864,13 +4867,13 @@ Inputs:
   Required:
   - path `turn_id`
   - body `instruction` (string)
+  - body `lease_token` (string)
   - body `request_key` (string)
   - body `scope` (string)
   - body `target_revision` (string)
   - body `work_ref` (string)
   Optional:
   - body `payload.phase` (string)
-  - body `payload.resolution` (list<object>)
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
