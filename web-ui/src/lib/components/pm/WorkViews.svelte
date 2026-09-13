@@ -15,6 +15,7 @@
     isNexusOwned,
     workKey,
     taskDetailPath,
+    workFreshness,
   } from "$lib/pm/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   let {
@@ -276,6 +277,7 @@
       <tbody class="divide-y divide-line-subtle bg-panel">
         {#each records as work (workKey(work))}
           {@const checked = lastChecked(work, now)}
+          {@const read = workFreshness(work, now)}
           {@const tone = badgeTone(work.phase)}
           <tr
             class="h-10 align-middle hover:bg-panel-hover"
@@ -297,6 +299,9 @@
                 <span class="min-w-0 flex-1 truncate"
                   >{boardLabel(work)} · {statusText(work)}</span
                 >
+                {#if read.key === "error"}
+                  <SignalBadge tone="warn">{read.label}</SignalBadge>
+                {/if}
                 <span class="shrink-0 tabular-nums">{checked.text}</span>
               </span>
             </th>

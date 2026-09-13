@@ -237,7 +237,7 @@ function decisionTitleRaw(item, taskTitle = "") {
     }
     return taskTitle || "Proposed decision";
   }
-  return instruction || taskTitle || "Decision";
+  return stripDecisionPrefix(instruction) || taskTitle || "Decision";
 }
 
 /**

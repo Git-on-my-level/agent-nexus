@@ -6,7 +6,7 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
     errorMessage,
-    sourceLabel,
+    readErrorExplanation,
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -171,7 +171,9 @@
                 )}>{item.title || item.ref}</a
               >{#if item.refresh?.last_error}
                 <p class="mt-0.5 text-micro text-warn-text">
-                  Can't reach {sourceLabel(item.source)}{retryLine(item)}
+                  {readErrorExplanation(item.refresh.last_error)}{retryLine(
+                    item,
+                  )}
                 </p>
                 <details class="mt-0.5 text-micro text-fg-muted">
                   <summary class="w-fit cursor-pointer">Details</summary>

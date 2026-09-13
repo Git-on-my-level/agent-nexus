@@ -311,6 +311,9 @@
             "another person"}. Only they can answer it.
         </p>
       </section>
+    {:else if selected.status === "awaiting_answer" && voidReason}
+      <!-- Dismiss in the note above is the only action left; a disabled
+           Approve and a note field would only ask for work that goes nowhere. -->
     {:else if selected.status === "awaiting_answer"}
       <form
         class="space-y-3 border-t border-line-subtle pt-4"
@@ -406,12 +409,21 @@
       {/if}
       {#if action?.status === "failed" && !handedOff}
         <p class="mt-2 text-meta text-fg">
-          Nothing was sent, and this approval will not be resent. To try again,
-          <a
-            class="ui-prose-link"
-            href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}
-            >ask the PM to propose it again</a
-          > and approve the new proposal.
+          Nothing was sent, and this approval will not be resent.
+          {#if selected?.work_missing}
+            The task it refers to no longer exists.
+          {:else if selected?.origin_kind === "human" && workHref}
+            To try again, <a class="ui-prose-link" href={workHref}
+              >propose it again from the task</a
+            > and approve the new proposal.
+          {:else}
+            To try again,
+            <a
+              class="ui-prose-link"
+              href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}
+              >ask the PM to propose it again</a
+            > and approve the new proposal.
+          {/if}
         </p>
       {/if}
       {#if action}
@@ -507,7 +519,9 @@
       {:else}
         <p class="mt-2 text-meta text-fg-muted">
           {selected.status === "awaiting_answer"
-            ? "Nothing happens until you decide."
+            ? voidReason
+              ? "Nothing will be delivered; dismiss this proposal to tidy up."
+              : "Nothing happens until you decide."
             : selected.status === "declined" ||
                 (selected.status === "superseded" && !selected.superseded_by)
               ? "Declined; nothing will be delivered."

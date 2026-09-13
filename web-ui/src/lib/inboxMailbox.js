@@ -237,7 +237,12 @@ export function buildInboxRows({
       // The task is what the row is about; the ask is the second line. The
       // raw work ref is pane-header material, never a list line.
       title: summary.title,
-      source: summary.ask || "Decision",
+      // A trashed task has no title to lead with; the ask leads and the
+      // second line says why the subject is gone.
+      source:
+        item.work_missing === true && !taskTitles.get(item.work_ref)
+          ? "Task no longer exists"
+          : summary.ask || "Decision",
       ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
       status: decisionRowStatus(item, actions, {
