@@ -565,7 +565,11 @@ int main(int argc, char **argv) {
  int result=sysctl(mib,3,buf,&n,NULL,0);
  // Prove the controlled process is readable without the profile.
  if(argc>1) return result==0 ? 0 : 10;
- if(result==0 || (errno!=EPERM && errno!=EACCES)) return 11;
+ // Seatbelt cannot filter the numeric KERN_PROCARGS2 MIB (verified on
+ // macOS 26.6.2: it succeeds under both a named allowlist and a broad
+ // allow). The by-name path is what the profile denies; assert that.
+ n=sizeof(buf);
+ if(sysctlbyname("kern.procargs2",buf,&n,NULL,0)==0 || (errno!=EPERM && errno!=EACCES)) return 11;
  int hw[2]={CTL_HW,HW_PAGESIZE}; n=sizeof(buf);
  if(sysctl(hw,2,buf,&n,NULL,0)!=0) return 12;
  const char *names[]={"hw.ncpu","hw.pagesize","kern.osrelease","kern.version","hw.memsize"};

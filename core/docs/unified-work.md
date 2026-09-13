@@ -105,7 +105,13 @@ metadata access. Artifact, scratch, and dyld subtree grants remain bounded.
 Signals are limited to `(target self)`. Sysctl reads require a broad allow:
 Go reads `CTL_HW/HW_PAGESIZE` by numeric MIB, which an exact `sysctl-name`
 allowlist does not satisfy on this OS. Explicit denies for `kern.procargs2`
-and the `kern.proc` name prefix protect process arguments and environment.
+and the `kern.proc` name prefix block the by-name reads. Known limit,
+verified on macOS 26.6.2: Seatbelt's sysctl filters do not see numeric MIBs,
+so a same-uid numeric `KERN_PROCARGS2` read still succeeds under every
+variant of this rule. The profile therefore does not protect the argv or
+environment of other same-uid processes; do not keep secrets in the
+environment of long-lived same-uid processes on a host that runs generated
+readers.
 The profile and controlled process-argument denial/Go runtime probes live in
 `internal/observation/isolation_integration_test.go`. Require
 `ANX_OBSERVATION_ISOLATION_TEST=1` for host qualification; unavailable enforcement

@@ -165,6 +165,13 @@ func seatbeltProfile(artifact, scratch string) string {
 	// Go's Darwin runtime reads CTL_HW/HW_PAGESIZE via numeric MIB, which
 	// a sysctl-name allowlist does not satisfy on macOS 26. Permit runtime
 	// sysctl reads, but explicitly deny process metadata/argv/environment.
+	// Known limit, verified on macOS 26.6.2: Seatbelt's sysctl filters see
+	// names, not numeric MIBs, and a same-uid numeric KERN_PROCARGS2 read
+	// succeeds under every variant of this rule (named allowlist included).
+	// The by-name denials below hold; argv/environment of other same-uid
+	// processes is not protected by this profile. Do not keep secrets in the
+	// environment of long-lived same-uid processes on a host that runs
+	// generated readers.
 	b.WriteString("(allow sysctl-read)\n")
 	b.WriteString("(deny sysctl-read (sysctl-name \"kern.procargs2\"))\n")
 	b.WriteString("(deny sysctl-read (sysctl-name-prefix \"kern.proc\"))\n")
