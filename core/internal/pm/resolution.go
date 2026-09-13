@@ -50,8 +50,8 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 	type response struct {
 		Decision
 		WorkMissing            bool   `json:"work_missing"`
-		TargetCurrent          bool   `json:"target_current"`
-		AlreadyAtTarget        bool   `json:"already_at_target"`
+		TargetCurrent          *bool  `json:"target_current"`
+		AlreadyAtTarget        *bool  `json:"already_at_target"`
 		Replayed               bool   `json:"replayed,omitempty"`
 		ReplayedTerminalStatus Status `json:"replayed_terminal_status,omitempty"`
 		Deliverable            *bool  `json:"deliverable"`

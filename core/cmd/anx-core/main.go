@@ -487,6 +487,7 @@ func main() {
 			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
 			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
 			MaxConcurrent:  envInt("ANX_PM_MAX_CONCURRENT", 2),
+			MaxQueued:      envInt("ANX_PM_MAX_QUEUED", 20),
 		},
 		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
 		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),

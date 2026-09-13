@@ -41,12 +41,16 @@ type BusyError struct {
 	Reason   string `json:"reason"`
 	TurnID   string `json:"turn_id,omitempty"`
 	InFlight int    `json:"in_flight,omitempty"`
+	Queued   int    `json:"queued,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 }
 
 func (e *BusyError) Error() string {
 	if e.Reason == "conversation" {
 		return fmt.Sprintf("The previous message in this conversation is still queued or being answered (turn %s).", e.TurnID)
+	}
+	if e.Reason == "queue" {
+		return fmt.Sprintf("Workspace PM queue is full (%d waiting; limit %d)", e.Queued, e.Limit)
 	}
 	return fmt.Sprintf("Workspace PM capacity reached (%d in flight; limit %d)", e.InFlight, e.Limit)
 }
@@ -231,8 +235,8 @@ type DecisionInput struct {
 type Decision struct {
 	SourceAuthority        string         `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
 	WorkMissing            bool           `json:"-"`                          // Current work projection; never persisted.
-	TargetCurrent          bool           `json:"-"`
-	AlreadyAtTarget        bool           `json:"-"`
+	TargetCurrent          *bool          `json:"-"`
+	AlreadyAtTarget        *bool          `json:"-"`
 	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
 	ProposedBy             string         `json:"proposed_by,omitempty"`
 	OriginKind             string         `json:"origin_kind,omitempty"`
@@ -330,6 +334,7 @@ type Config struct {
 	TurnTimeout    time.Duration
 	MaxOutputBytes int
 	MaxConcurrent  int
+	MaxQueued      int
 }
 type DispatchRequest struct {
 	Turn           Turn

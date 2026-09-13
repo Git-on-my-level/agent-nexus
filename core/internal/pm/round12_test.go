@@ -116,8 +116,12 @@ func TestRound12DecisionProjectionReadFailures(t *testing.T) {
 	s, _, p, _ := fixture(t)
 	for _, readErr := range []error{ErrNotFound, context.DeadlineExceeded} {
 		s.deps.DecisionWork = func(context.Context, Principal, string) (DecisionWork, error) { return DecisionWork{}, readErr }
-		d := s.decisionForReader(context.Background(), p, Decision{ActorID: p.ActorID, Status: AwaitingAnswer, WorkMissing: true, TargetCurrent: true, AlreadyAtTarget: true})
-		if d.CanAnswer || d.TargetCurrent || d.AlreadyAtTarget || d.WorkMissing != errors.Is(readErr, ErrNotFound) {
+		d := s.decisionForReader(context.Background(), p, Decision{ActorID: p.ActorID, Status: AwaitingAnswer, WorkMissing: true, TargetCurrent: boolPtr(true), AlreadyAtTarget: boolPtr(true)})
+		var want *bool
+		if errors.Is(readErr, ErrNotFound) {
+			want = boolPtr(false)
+		}
+		if d.CanAnswer || !reflect.DeepEqual(d.TargetCurrent, want) || !reflect.DeepEqual(d.AlreadyAtTarget, want) || d.WorkMissing != errors.Is(readErr, ErrNotFound) {
 			t.Fatal(d)
 		}
 	}
@@ -140,7 +144,7 @@ func TestRound12DecisionTargetFlags(t *testing.T) {
 				d.Payload = &ActionPayload{Phase: tc.phase}
 			}
 			d = s.decisionForReader(context.Background(), p, d)
-			if d.WorkMissing || !d.CanAnswer || d.TargetCurrent != tc.current || d.AlreadyAtTarget != tc.moot {
+			if d.WorkMissing || !d.CanAnswer || d.TargetCurrent == nil || *d.TargetCurrent != tc.current || d.AlreadyAtTarget == nil || *d.AlreadyAtTarget != tc.moot {
 				t.Fatal(d)
 			}
 		})
