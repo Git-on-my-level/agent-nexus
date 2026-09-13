@@ -422,8 +422,15 @@
       const raw = errorMessage(err);
       if (errorCode(err) === "source_revision_changed") {
         // Terminal, and the receipt below says so; a Retry would contradict it.
+        const reason = String(
+          err?.body?.error?.details?.reason ?? err?.details?.reason ?? "",
+        );
         notice =
-          "Not delivered: the task changed after this was approved. A fresh proposal and approval are needed.";
+          reason === "work_missing"
+            ? "Not delivered: the task this approval refers to no longer exists. Nothing was sent; acknowledge it to file it under Handled."
+            : reason === "work_read_failed"
+              ? "Not delivered: the task could not be read just now. Nothing was sent; try again shortly."
+              : "Not delivered: the task changed after this was approved. A fresh proposal and approval are needed.";
         await refreshReceipt();
         return;
       }
