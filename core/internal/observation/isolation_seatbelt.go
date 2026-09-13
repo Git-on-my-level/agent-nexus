@@ -51,6 +51,8 @@ func copyExecutable(src, dst string) error {
 // Seatbelt cannot enforce memory, CPU, nproc, file size, wall timeout, or
 // output bytes. Darwin rejects RLIMIT_AS/DATA/RSS (Invalid argument) and
 // RLIMIT_NPROC is user-global, so this runner must not set ulimit -u.
+// memory_bytes is validated but not enforced on Darwin. Scratch is writable
+// within its private directory; file size is per-file, not an aggregate quota.
 // Enforced here: Seatbelt path/network/fork policy; ulimit CPU, file size,
 // open files, core; Go wall timeout and output-byte cap.
 type SeatbeltRunner struct {
@@ -171,14 +173,15 @@ func seatbeltProfile(artifact, scratch string) string {
 	}
 	// Go's Darwin runtime reads CTL_HW/HW_PAGESIZE via numeric MIB, which
 	// a sysctl-name allowlist does not satisfy on macOS 26. Permit runtime
-	// sysctl reads, but explicitly deny process metadata/argv/environment.
+	// sysctl reads, but deny named process metadata/argv/environment reads.
 	// Known limit, verified on macOS 26.6.2: Seatbelt's sysctl filters see
 	// names, not numeric MIBs, and a same-uid numeric KERN_PROCARGS2 read
 	// succeeds under every variant of this rule (named allowlist included).
 	// The by-name denials below hold; argv/environment of other same-uid
 	// processes is not protected by this profile. Do not keep secrets in the
 	// environment of long-lived same-uid processes on a host that runs
-	// generated readers.
+	// generated readers. Use a separate uid/host for the reader host and never
+	// carry secrets in anx-core's environment on a shared-uid host.
 	b.WriteString("(allow sysctl-read)\n")
 	b.WriteString("(deny sysctl-read (sysctl-name \"kern.procargs2\"))\n")
 	b.WriteString("(deny sysctl-read (sysctl-name-prefix \"kern.proc\"))\n")

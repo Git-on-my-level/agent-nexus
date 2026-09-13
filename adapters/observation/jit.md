@@ -19,23 +19,38 @@ fallback. The manager fails validation, canary and activation when that executor
 is unavailable. Bubblewrap or Seatbelt setup failure also fails closed; merely
 finding binaries is not evidence that isolation is enforced.
 
-The runner uses a new user, PID and network namespace; disables further user
-namespaces; drops capabilities; clears environment; binds only the immutable
-executable and harmless `/dev/null` and `/dev/urandom` devices; and makes its root
-filesystem read-only. It mounts no host home, credential store, Unix socket,
-network filesystem, runtime libraries or `/proc`. Standard input/output are pipes.
-CPU time, address space, processes, open files, file size, core dumps and wall time
-are bounded. Address-space and CPU limits are per process; use a dedicated account
-and select process/memory budgets together. This is not a cgroup aggregate-memory
-quota or a claim of kernel-exploit resistance.
+On Linux, the runner uses new user, PID and network namespaces; disables further
+user namespaces; drops capabilities; clears environment; and binds only the
+immutable executable and harmless devices. Its root (including `/tmp`) is
+read-only, with no host home, credentials, Unix sockets, runtime libraries or
+`/proc`. `prlimit --as=memory_bytes` enforces per-process virtual address space;
+`--cpu`, `--nproc`, `--nofile`, `--fsize`, and `--core` apply the other rlimits.
+These are not cgroup aggregate-memory or aggregate-process quotas.
 
-V1 permits **no filesystem scratch writes**, credential handles, host read paths,
-network destinations or dependency installation inside generated code. These are
-explicitly rejected capability requests. Brokered reads happen through trusted
-selected-target built-ins with their own configuration and bounds. Network access
-is not restricted by a prompt or by a GET convention inside arbitrary code: the
-generated process has no source network at all. Scratch writes remain unsupported
-until an approved runner enforces aggregate disk and inode quotas.
+On macOS, Seatbelt permits the artifact and required system runtime reads,
+blocks network access and process forks, and clears the child environment.
+**Same-uid process argv/environment remain readable**: numeric `KERN_PROCARGS2`
+MIB reads bypass the profile's name-based sysctl filters. Go's runtime also needs
+numeric hardware sysctl reads, which a named allowlist cannot satisfy. Named
+process sysctl denials remain in place but cannot filter those numeric MIB reads.
+Use a separate uid/host for the reader host, separated from secret-bearing
+processes, and never carry secrets in anx-core's environment on a shared-uid host.
+The runner rejects root but does not enforce deployment separation.
+
+macOS scratch is writable only within the runner-created private scratch
+directory and is deleted after execution. `ulimit -f` bounds each file, not total
+disk bytes or inode count; there is no aggregate scratch quota. `memory_bytes` is
+validated (16 MiB through 1 GiB) but **not enforced on Darwin**: the existing
+wrapper cannot set `RLIMIT_AS`, `DATA`, or `RSS` (Invalid argument). CPU, file size,
+open files and core dumps are bounded by the trusted `ulimit` wrapper; process
+forking is denied instead of using user-global `RLIMIT_NPROC`. Both platforms
+bound wall time and output bytes in Go, with piped standard input/output.
+
+Manifest requests for scratch paths, credential handles, host read paths,
+network destinations and dependency installation are rejected. The macOS
+runner-owned scratch grant is distinct from arbitrary manifest scratch paths.
+Brokered source reads happen through trusted selected-target built-ins; generated
+code has no source network access. No claim of kernel-exploit resistance is made.
 
 The [Bubblewrap implementation](https://github.com/containers/bubblewrap) defines
 the required namespace, read-only mount, environment, size and nested-user-namespace
@@ -102,6 +117,16 @@ schema-invalid JSON with exit zero; process/sandbox startup failure never certif
 a negative security test. No credentials belong in fixtures or generated output.
 
 The unit lifecycle tests use an explicitly labeled package-private fake executor
-to test persistence and transitions. `TestLinuxIsolationEnforcement` compiles and
-runs a harmless static C fixture to test real kernel/runtime denials when opted
-in. Those two evidence classes must remain separate.
+to test persistence and transitions. `TestSeatbelt…`,
+`TestIsolationNegativeDenials`, `TestIsolationConformance`, and
+`TestIsolatedTransformLifecycle` compile and run harmless fixtures against the
+real host runner. Those two evidence classes must remain separate. From the
+worktree root, run the qualification gate (unavailable isolation is a failure):
+
+```sh
+export GOCACHE=$PWD/.tmp/gocache PATH=/opt/homebrew/bin:$PATH; unset GOROOT
+(cd core && ANX_OBSERVATION_ISOLATION_TEST=1 go test ./internal/observation -run 'Test(Seatbelt|IsolationNegative|IsolationConformance|IsolatedTransform)' -count=1 -v)
+```
+
+Run that gate separately on macOS and Linux; a pass on one is not proof for the
+other. The by-name sysctl test does not establish numeric MIB confidentiality.

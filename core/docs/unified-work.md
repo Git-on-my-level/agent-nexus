@@ -126,7 +126,12 @@ Seatbelt cannot set Darwin `RLIMIT_AS`/`DATA`/`RSS` (the kernel returns
 Invalid argument) and must not set `RLIMIT_NPROC` (it is user-global). CPU,
 file size, open files and core dumps are applied with `ulimit` in a trusted
 `/bin/sh` wrapper around `sandbox-exec`, analogous to Linux `prlimit`. Wall
-timeout and output bytes are enforced in Go.
+timeout and output bytes are enforced in Go. `memory_bytes` is validated
+(16 MiB through 1 GiB) but not enforced on Darwin; Linux enforces per-process
+virtual address space with `prlimit --as=memory_bytes`, not aggregate RSS.
+Darwin scratch is writable within the private runner directory; the file-size
+limit is per file, with no aggregate byte/inode quota. Linux `/tmp` is read-only.
+Never carry secrets in anx-core's environment on a shared-uid reader host.
 
 Example JIT target fields: `jit_state_root` (absolute 0700 directory),
 `jit_adapter_id`, and `jit_policy` with bounded isolation limits.
@@ -144,6 +149,22 @@ not verify this deployment separation.
 The PM service uses the same SQLite and the current workspace principal.
 Conversation histories remain actor scoped. Decision authorization rechecks
 current principals; a request cannot claim to be human in a body/header.
+
+PM decision targets must be live: trashed, archived and purged work all project
+`work_missing: true`, `target_current: false`, `already_at_target: false`, and
+`can_answer: false`. The owner may still decline. Proposing against non-live work
+returns `404 not_found`; fresh approval, dispatch and reconcile return
+`409 source_revision_changed`, reason `work_missing`, with the approved revision
+and `current_revision: null`, before any source call. Recorded answer replays
+remain idempotent. Principal and decision ownership checks precede these diagnoses.
+
+Executor routing is independent of work liveness. Decisions capture trusted
+`source_authority` and copy it to their actions; reads derive `deliverable` and
+`delivery_path` from the configured executor registry. Legacy records use work
+as a fallback. If that work was already purged and no source was captured,
+`deliverable: null` and `delivery_path: unknown` explicitly mean unknown routing,
+not a missing executor. Dispatch and reconcile still fail with `work_missing`.
+Empty decision `payload.resolution` summaries are omitted.
 
 The built-in `work.annotate` scope supports Nexus-native local annotations only.
 Its exact instruction is a JSON patch object, for example

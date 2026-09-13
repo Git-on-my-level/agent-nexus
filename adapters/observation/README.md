@@ -111,16 +111,24 @@ unconfigured in this package.
 ## Verification
 
 ```sh
+export GOCACHE=$PWD/.tmp/gocache PATH=/opt/homebrew/bin:$PATH; unset GOROOT
 cd core
 go test -race ./internal/observation
 go test ./...
 go vet ./...
-ANX_OBSERVATION_ISOLATION_TEST=1 go test ./internal/observation -run TestLinuxIsolationEnforcement -v
+ANX_OBSERVATION_ISOLATION_TEST=1 go test ./internal/observation -run 'Test(Seatbelt|IsolationNegative|IsolationConformance|IsolatedTransform)' -count=1 -v
 ```
 
-The last command requires a dedicated unprivileged Linux account, usable user
-namespaces, Bubblewrap, `prlimit` and a static C fixture compiler. It exercises
-harmless local fixtures for denied host reads, environment credentials, source
-writes, host-loopback networking and nested user namespaces. A skipped test is
-**not** runtime isolation qualification. See [qualification evidence](qualification.md)
-for what was actually run and remaining integration/platform gaps.
+The last command requires a usable enforced runner and C fixture compiler:
+Linux needs a dedicated unprivileged account, user namespaces, Bubblewrap and
+`prlimit`; macOS needs Seatbelt `sandbox-exec`. Run on each platform separately.
+A skipped test is **not** runtime isolation qualification.
+
+On macOS, numeric sysctl MIB reads expose same-uid process argv/environment;
+Seatbelt's named filters cannot block them. Separate the reader host by uid/host
+from secret-bearing processes and never carry secrets in anx-core's environment
+on a shared-uid host. Scratch is writable within the private runner directory,
+with a per-file size limit but no aggregate byte/inode quota. `memory_bytes` is
+validated but not enforced on Darwin; Linux enforces per-process virtual address
+space with `prlimit --as`, with read-only scratch. See [JIT envelope](jit.md) and
+[qualification evidence](qualification.md) for exact limits and test commands.

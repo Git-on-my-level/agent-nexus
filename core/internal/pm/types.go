@@ -229,7 +229,8 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	WorkMissing            bool           `json:"-"` // Current work projection; never persisted.
+	SourceAuthority        string         `json:"source_authority,omitempty"` // Trusted routing snapshot, not caller input.
+	WorkMissing            bool           `json:"-"`                          // Current work projection; never persisted.
 	TargetCurrent          bool           `json:"-"`
 	AlreadyAtTarget        bool           `json:"-"`
 	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
@@ -266,6 +267,8 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
+	DeliveryPath           string         `json:"delivery_path"`
+	SourceAuthority        string         `json:"source_authority,omitempty"`
 	ClosedWithoutDelivery  bool           `json:"closed_without_delivery,omitempty"`
 	AcknowledgedBy         string         `json:"acknowledged_by,omitempty"`
 	AcknowledgedAt         *time.Time     `json:"acknowledged_at,omitempty"`
@@ -346,7 +349,7 @@ type DispatchRequest struct {
 // Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
-	// DecisionWork reads one current snapshot; ErrNotFound means missing work.
+	// DecisionWork reads one live snapshot; ErrNotFound includes trashed/archived work.
 	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
 	Authorize         func(context.Context, Principal, string, string) error
@@ -364,8 +367,9 @@ type Dependencies struct {
 }
 
 type DecisionWork struct {
-	Revision string
-	Phase    string
+	SourceAuthority string
+	Revision        string
+	Phase           string
 }
 
 // HumanProposalPendingError protects an awaiting human proposal under the store lock.
