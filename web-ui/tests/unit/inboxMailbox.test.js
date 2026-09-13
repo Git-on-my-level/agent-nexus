@@ -313,3 +313,49 @@ describe("approvals the reader still has to deliver", () => {
     expect(theirs.mailbox).toBe("watching");
   });
 });
+
+describe("acknowledging a delivery that failed before it was sent", () => {
+  it("reads as an acknowledged failure, not a closed request", () => {
+    const decision = {
+      id: "d2",
+      status: "answered",
+      actor_id: "maya",
+      action_id: "a2",
+      work_ref: "card:gone",
+      instruction: "move",
+      work_missing: true,
+    };
+    const failedThenAcknowledged = {
+      id: "a2",
+      decision_id: "d2",
+      status: "acknowledged",
+      deliverable: false,
+      attempts: [
+        {
+          status: "failed",
+          started_at: "2026-09-13T10:00:00Z",
+          finished_at: "2026-09-13T10:00:01Z",
+          receipt: { status: "failed", detail: "The task no longer exists" },
+        },
+      ],
+    };
+    const row = buildInboxRows({
+      decisions: [decision],
+      actions: [failedThenAcknowledged],
+      currentActorId: "maya",
+    }).find((row) => row.id === "decision:d2");
+    expect(row.status).toBe("acknowledged");
+    const closedUnsent = {
+      ...failedThenAcknowledged,
+      id: "a3",
+      attempts: [],
+      closed_without_delivery: true,
+    };
+    const closedRow = buildInboxRows({
+      decisions: [{ ...decision, id: "d3", action_id: "a3" }],
+      actions: [closedUnsent],
+      currentActorId: "maya",
+    }).find((row) => row.id === "decision:d3");
+    expect(closedRow.status).toBe("closed");
+  });
+});

@@ -793,6 +793,17 @@
     position: relative;
   }
 
+  /* A fixture-persona switch that failed; dev only, but it must be said. */
+  .shell-persona-error {
+    margin: 0 0 0.5rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 6px;
+    background: var(--danger-soft);
+    color: var(--danger-text);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
   .shell-account-row {
     min-height: 36px;
   }

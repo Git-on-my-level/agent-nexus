@@ -432,6 +432,9 @@
           action.receipt?.independently_verified === true}
         {@const closed =
           action.status === "acknowledged" &&
+          !(action.attempts || []).some(
+            (attempt) => attempt?.status === "failed",
+          ) &&
           (action.closed_without_delivery === true ||
             (action.deliverable === false && !handedOff))}
         {@const state = receiptSignal(

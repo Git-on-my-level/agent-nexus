@@ -86,6 +86,7 @@
   let personaSubmenuOpen = $state(false);
   let devFixturePersonas = $state([]);
   let devPersonaBusy = $state(false);
+  let devPersonaError = $state("");
 
   let activeWorkspace = $derived($page.data.workspace ?? null);
   let shellCapabilities = $derived(
@@ -398,7 +399,17 @@
     if (!activeWorkspaceSlug || devPersonaBusy || !trimmed) {
       return;
     }
-    await activateDevPersonaSession(trimmed);
+    devPersonaError = "";
+    const result = await activateDevPersonaSession(trimmed);
+    if (result?.ok) return;
+    const label =
+      devFixturePersonas.find(
+        (persona) => String(persona?.persona_id ?? "") === trimmed,
+      )?.display_label || trimmed;
+    devPersonaError =
+      result?.status === 502
+        ? `Could not switch to ${label}: its seeded sign-in is used up. Re-run make serve to re-seed; you are still signed in as before.`
+        : `Could not switch to ${label} (HTTP ${result?.status || "error"}); you are still signed in as before.`;
   }
 
   async function establishDevHumanSessionForActor(actorId) {
@@ -985,6 +996,16 @@
         </div>
 
         <div class="shell-sidebar-footer">
+          {#if devPersonaError}
+            <p class="shell-persona-error" role="alert">
+              {devPersonaError}
+              <button
+                class="ui-prose-link"
+                type="button"
+                onclick={() => (devPersonaError = "")}>Dismiss</button
+              >
+            </p>
+          {/if}
           <div class="shell-account" id="shell-account-container">
             {#if accountMenuOpen}
               <div class="shell-account-menu" role="menu">

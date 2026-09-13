@@ -147,8 +147,13 @@
         !isNexusOwned(work) && workFreshness(work, now).key === "unknown",
     ).length,
   );
+  // A failed read whose last good read is still within its window has not
+  // cost the reader anything yet; it is not "failing" from the table's view.
   let unreachableCount = $derived(
-    records.filter((work) => workFreshness(work, now).key === "error").length,
+    records.filter((work) => {
+      const read = workFreshness(work, now);
+      return read.key === "error" && !read.kept;
+    }).length,
   );
   let boardTitles = $derived(
     Object.fromEntries(

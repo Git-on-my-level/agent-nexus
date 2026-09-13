@@ -42,6 +42,8 @@
     sending = $state(false),
     ready = $state(false),
     error = $state(""),
+    // The last error came from a send, so "try again" means send again.
+    errorFromSend = $state(false),
     draft = $state(""),
     partial = $state(false),
     historyOpen = $state(false);
@@ -164,22 +166,26 @@
   $effect(() => {
     const key = selectedKey;
     if (!ready) return;
-    const firstRun = conversationScope === undefined;
-    const switched = !firstRun && conversationScope !== key;
-    conversationScope = key;
-    historyOpen = false;
-    // A reload or deep link lands here once with an empty composer; the
-    // draft promised to the reader is in this tab's storage.
-    if (firstRun && !draft.trim()) draft = readDraft(key);
-    if (switched) {
-      createdConversationId = "";
-      creationKey = "";
-      requestKey = "";
-      requestText = "";
-      draft = readDraft(key);
-      anchored = false;
-    }
-    void loadConversation(key.split("\n")[0]);
+    // Only the conversation key may re-run this: reading the draft here made
+    // every restored draft fetch the conversation a second time.
+    untrack(() => {
+      const firstRun = conversationScope === undefined;
+      const switched = !firstRun && conversationScope !== key;
+      conversationScope = key;
+      historyOpen = false;
+      // A reload or deep link lands here once with an empty composer; the
+      // draft promised to the reader is in this tab's storage.
+      if (firstRun && !draft.trim()) draft = readDraft(key);
+      if (switched) {
+        createdConversationId = "";
+        creationKey = "";
+        requestKey = "";
+        requestText = "";
+        draft = readDraft(key);
+        anchored = false;
+      }
+      void loadConversation(key.split("\n")[0]);
+    });
   });
   $effect(() => {
     void loadDecisionRecords(turnDecisionIds);
@@ -340,7 +346,10 @@
     }
     // A quiet poll refreshes turns; it must not erase an error the reader
     // has not yet seen (a "busy" refusal, for one).
-    if (!quiet) error = "";
+    if (!quiet) {
+      error = "";
+      errorFromSend = false;
+    }
     try {
       if (id) {
         const result = await coreClient.getPmConversation(id, { limit: 100 });
@@ -412,6 +421,7 @@
     if (!text || sending || !ready) return;
     sending = true;
     error = "";
+    errorFromSend = false;
     if (!requestKey || text !== requestText) {
       requestKey = crypto.randomUUID();
       requestText = text;
@@ -456,6 +466,7 @@
       } else await loadConversation(id, true);
     } catch (err) {
       error = errorMessage(err);
+      errorFromSend = true;
     } finally {
       sending = false;
       // The composer was disabled while sending; give the keyboard back.
@@ -850,6 +861,13 @@
               class="ui-prose-link text-micro"
               type="button"
               onclick={signInAgain}>Sign in again</button
+            >
+          {:else if errorFromSend}
+            <button
+              class="ui-prose-link text-micro"
+              type="button"
+              disabled={sending || !draft.trim()}
+              onclick={() => void send()}>Send again</button
             >
           {:else}
             <button

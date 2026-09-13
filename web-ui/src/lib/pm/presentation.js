@@ -62,7 +62,7 @@ const READ_ERROR_LABELS = {
 // what it means and what changes it.
 const READ_ERROR_EXPLANATIONS = {
   policy_denied:
-    "The reader for this source has no approved version yet, so nothing is read until one is activated.",
+    "The reader for this source has no approved version yet, so nothing is read until an operator activates one (anx-observe jit-activate; see the runbook).",
   isolation_unavailable:
     "The sandbox that runs readers is not available on this host, so nothing is read.",
   configuration: "The reader for this source is not configured.",
@@ -107,6 +107,8 @@ export function freshness(
       key: "error",
       label: stillFresh ? `${cause} · last good read kept` : cause,
       tone: "warn",
+      // The failed read did not cost the reader anything yet.
+      kept: stillFresh,
     };
   }
   const observed = Date.parse(observedAt);
@@ -227,6 +229,15 @@ function decisionTitleRaw(item, taskTitle = "") {
   const structured = parseStructuredInstruction(instruction);
   if (structured) {
     if (!Array.isArray(structured)) {
+      // A note names the field it sets: "Priority: high", not "High".
+      if (String(item?.scope ?? "") === "work.annotate") {
+        for (const [key, value] of Object.entries(structured)) {
+          if (["string", "number", "boolean"].includes(typeof value)) {
+            const text = String(value).trim();
+            if (text) return `${key.replace(/_/g, " ")}: ${text}`;
+          }
+        }
+      }
       for (const key of DECISION_SUMMARY_KEYS) {
         const value = structured[key];
         if (typeof value === "string" && value.trim()) return value.trim();
@@ -391,9 +402,9 @@ export function errorMessage(error) {
   ) {
     const details = error?.body?.error?.details ?? {};
     if (String(details.reason ?? "") === "queue") {
-      const limit = details.limit
-        ? ` (${details.queued ?? "?"} of ${details.limit})`
-        : "";
+      // Released leases re-enter the queue, so "queued" can exceed the limit;
+      // "21 of 20" reads as a bug rather than a full queue.
+      const limit = details.limit ? ` (limit ${details.limit})` : "";
       return `The PM queue for this workspace is full${limit}. Your message is kept; send it again in a moment, once a waiting question is answered or expires.`;
     }
     if (String(details.reason ?? "") === "capacity") {
@@ -561,4 +572,21 @@ export function decisionConsequence(item, work = null) {
   if (["github", "multica", "ssh_git", "git"].includes(scope))
     return `Approving authorizes the PM to act at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
   return "Approving authorizes exactly this proposal. Delivery and outcome are tracked below.";
+}
+
+/**
+ * Core's messages carry RFC 3339 instants ("next attempt at 2026-09-13T19:34:49Z").
+ * A reader wants "next attempt in 4m".
+ */
+export function humanizeInstants(text) {
+  return String(text ?? "").replace(
+    /(\bat )?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))/g,
+    (match, at, instant) => {
+      const when = formatTimestamp(instant);
+      if (!when || when === instant) return match;
+      // "at in 4m" is not English; a relative time carries its own preposition.
+      const relative = /^in \S|\bago$|^just now$|^in a moment$/.test(when);
+      return relative || !at ? when : `${at}${when}`;
+    },
+  );
 }

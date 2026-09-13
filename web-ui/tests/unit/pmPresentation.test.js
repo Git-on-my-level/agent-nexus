@@ -65,7 +65,19 @@ describe("PM evidence presentation", () => {
     ).toMatchObject({
       key: "error",
       label: "Can't reach GitHub · last good read kept",
+      kept: true,
     });
+    // Once the window has passed the failure is the reader's problem.
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T11:00:00Z",
+          error: "Access denied",
+        },
+        now,
+      ),
+    ).toMatchObject({ key: "error", kept: false });
   });
   it("shows malformed dates and future-clock observations as unknown", () => {
     expect(
@@ -163,6 +175,27 @@ describe("PM evidence presentation", () => {
     expect(decisionTitle({}, "Release")).toBe("Release");
     expect(decisionTitle({})).toBe("Decision");
   });
+  it("titles a note with the field it sets", () => {
+    expect(
+      decisionTitle({
+        scope: "work.annotate",
+        instruction: '{"priority":"high"}',
+      }),
+    ).toBe("Priority: high");
+    expect(
+      decisionTitle({
+        scope: "work.annotate",
+        instruction: '{"next_action":"Ship the release"}',
+      }),
+    ).toBe("Next action: Ship the release");
+    // Phase proposals keep the summary-key title.
+    expect(
+      decisionTitle({
+        scope: "work.phase",
+        instruction: '{"summary":"Move to review","phase":"review"}',
+      }),
+    ).toBe("Move to review");
+  });
   it("exposes structured instructions as payloads, plain text stays a title", () => {
     expect(decisionPayload({ instruction: '{"a":1}' })).toBe('{\n  "a": 1\n}');
     expect(decisionPayload({ instruction: "plain text" })).toBe("");
@@ -224,8 +257,35 @@ describe("a full PM queue reads as a queue, not a runner limit", () => {
       },
     };
     expect(errorMessage(err)).toBe(
-      "The PM queue for this workspace is full (20 of 20). Your message is kept; send it again in a moment, once a waiting question is answered or expires.",
+      "The PM queue for this workspace is full (limit 20). Your message is kept; send it again in a moment, once a waiting question is answered or expires.",
     );
+  });
+  it("does not print a queue past its limit as a count", async () => {
+    const { errorMessage } = await import("$lib/pm/presentation.js");
+    const err = new Error("Workspace PM queue is full (21 waiting; limit 20)");
+    err.status = 429;
+    err.body = {
+      error: {
+        code: "busy",
+        details: { reason: "queue", queued: 21, limit: 20 },
+      },
+    };
+    expect(errorMessage(err)).not.toContain("21 of 20");
+    expect(errorMessage(err)).toContain("(limit 20)");
+  });
+});
+
+describe("instants in core's messages read as times, not ISO strings", () => {
+  it("replaces RFC 3339 instants and leaves other text alone", async () => {
+    const { humanizeInstants } = await import("$lib/pm/presentation.js");
+    const soon = new Date(Date.now() + 4 * 60_000).toISOString();
+    expect(humanizeInstants(`rate limited; next attempt at ${soon}`)).toBe(
+      "rate limited; next attempt in 4m",
+    );
+    const ago = new Date(Date.now() - 3 * 60_000).toISOString();
+    expect(humanizeInstants(`last read ${ago}`)).toBe("last read 3m ago");
+    expect(humanizeInstants("no dates here")).toBe("no dates here");
+    expect(humanizeInstants(undefined)).toBe("");
   });
 });
 

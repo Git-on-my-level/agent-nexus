@@ -15,6 +15,7 @@
   import { formatTimestamp } from "$lib/formatDate";
   import {
     errorMessage,
+    humanizeInstants,
     isNexusOwned,
     isSessionExpired,
     taskDetailPath,
@@ -418,7 +419,16 @@
     try {
       const result = await coreClient.dispatchPmDecision(selectedDecision.id);
       actions = [...actions.filter((item) => item.id !== result.id), result];
-      notice = "Delivery request recorded.";
+      // The dispatch call succeeds even when the delivery it records did not.
+      const status = String(result?.status ?? "");
+      notice =
+        status === "failed"
+          ? "Delivery failed; the receipt below says why."
+          : status === "verified"
+            ? "Delivered and read back."
+            : status === "delivered"
+              ? "Delivered; waiting for the source to read it back."
+              : "Delivery request recorded.";
     } catch (err) {
       const raw = errorMessage(err);
       if (errorCode(err) === "source_revision_changed") {
@@ -859,7 +869,9 @@
                 taskItem,
               )}{#if taskItem?.refresh?.last_error?.message}
                 <span class="text-warn-text">
-                  · {taskItem.refresh.last_error.message}</span
+                  · {humanizeInstants(
+                    taskItem.refresh.last_error.message,
+                  )}</span
                 >{/if}
             </p>
             <div class="flex flex-wrap gap-2">

@@ -91,12 +91,15 @@ export function decisionRowStatus(
     String(decision?.actor_id ?? "") === currentActorId
   )
     return "awaiting_delivery";
-  // A closed request that never left core is not a failure.
+  // A closed request that never left core is not a failure; one that failed
+  // before it could be sent is, and its acknowledgement says so.
+  const attempts = action.attempts || [];
   if (
     status === "acknowledged" &&
+    !attempts.some((attempt) => attempt?.status === "failed") &&
     (action.closed_without_delivery === true ||
       (action.deliverable === false &&
-        !(action.attempts || []).some((attempt) => attempt?.sent_at)))
+        !attempts.some((attempt) => attempt?.sent_at)))
   )
     return "closed";
   return status || own;
