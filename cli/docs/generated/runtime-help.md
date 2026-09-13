@@ -117,6 +117,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
 - `pm context` (command): Read bounded authorized PM context; partial coverage stays explicit.
+- `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
 - `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
 - `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
 - `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
@@ -1481,6 +1482,7 @@ Local Help: pm
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
+  anx pm actions acknowledge Acknowledge a failed or unresolvable action.
   anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
   anx pm actions list          Report durable action and receipt statuses with principal-bound pagination.
   anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
@@ -4106,6 +4108,40 @@ Usage: anx pm context
   --query <value>
   --limit <value>
   --cursor <value>
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm actions acknowledge`
+
+Acknowledge a failed or unresolvable action.
+
+```text
+Generated Help: pm actions acknowledge
+
+- Command ID: `pm.actions.acknowledge`
+- CLI path: `pm actions acknowledge`
+- HTTP: `POST /pm/actions/{action_id}/acknowledge`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Acknowledge a failed or unresolvable action.
+- Output: Returns `PMAction`.
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`
+
+Inputs:
+  Required:
+  - path `action_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Acknowledge a failed or unresolvable action.
+
+Usage: anx pm actions acknowledge <ref> (or --action-id <ref>)
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
