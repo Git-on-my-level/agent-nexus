@@ -253,17 +253,25 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		started = time.Now().UTC()
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
-	if err != nil {
-		return result, parsed.name, err
-	}
 	if parsed.name == "pm turns claim" {
-		status, _ := asMap(result.Data)["status_code"].(int)
-		if status == 204 {
-			data := asMap(result.Data)
-			data["body"] = map[string]any{"claimed": false, "reason": "nothing to claim"}
-			result.Text = "No claimable turn"
-			return result, parsed.name, nil
+		if cap, ok := parsePMClaimCapacity(result, err); ok {
+			return applyPMClaimCapacityResult(result, cap), parsed.name, nil
 		}
+		if err == nil {
+			status, _ := asMap(result.Data)["status_code"].(int)
+			if status == 204 {
+				data := asMap(result.Data)
+				data["body"] = map[string]any{"claimed": false, "reason": "nothing to claim"}
+				result.Text = "No claimable turn"
+				return result, parsed.name, nil
+			}
+		}
+	}
+	if err != nil {
+		if parsed.id != "" && (parsed.name == "pm actions reconcile" || parsed.name == "pm actions acknowledge") {
+			errnorm.AnnotateDetail(err, "action_id", parsed.id)
+		}
+		return result, parsed.name, err
 	}
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
@@ -572,6 +580,9 @@ func formatPMTurnGetText(root map[string]any) string {
 }
 
 func formatPMTurnClaimText(root map[string]any) string {
+	if cap, ok := pmClaimCapacityFromMap(root); ok {
+		return formatPMClaimCapacityText(cap)
+	}
 	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), renderPMTurnStatus(root))
 	if runner := firstNonEmpty(anyString(root["lease_owner"]), anyString(root["runner_id"])); runner != "" {
 		line += "  runner_id=" + runner
@@ -580,6 +591,46 @@ func formatPMTurnClaimText(root map[string]any) string {
 		line += "  lease_token=" + token
 	}
 	return line
+}
+
+func applyPMClaimCapacityResult(result *commandResult, cap pmClaimCapacity) *commandResult {
+	data := map[string]any{
+		"status_code": 200,
+		"headers":     map[string][]string{},
+		"body":        cap.asMap(),
+	}
+	if result != nil {
+		existing := asMap(result.Data)
+		if _, ok := existing["status_code"]; ok {
+			data["status_code"] = existing["status_code"]
+		}
+		if existing["headers"] != nil {
+			data["headers"] = existing["headers"]
+		}
+		if body := asMap(existing["body"]); len(body) > 0 {
+			data["body"] = mergePMClaimCapacityBody(body, cap)
+		}
+	}
+	return &commandResult{Data: data, Text: formatPMClaimCapacityText(cap)}
+}
+
+func mergePMClaimCapacityBody(body map[string]any, cap pmClaimCapacity) map[string]any {
+	out := cap.asMap()
+	for k, v := range body {
+		out[k] = v
+	}
+	out["claimed"] = false
+	out["reason"] = "capacity"
+	if _, ok := body["in_flight"]; !ok {
+		out["in_flight"] = cap.InFlight
+	}
+	if _, ok := body["limit"]; !ok {
+		out["limit"] = cap.Limit
+	}
+	if _, ok := body["waiting"]; !ok && body["queued"] == nil {
+		out["waiting"] = cap.Waiting
+	}
+	return out
 }
 
 func formatPMActionAcknowledgeText(root map[string]any) string {

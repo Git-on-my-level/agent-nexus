@@ -580,7 +580,12 @@ polls sleep without claiming. A claim that still returns a turn in that window
 (`released turn … : skip window after repeated lease loss`) and later polls in
 the same window keep sleeping without claiming. The runner always sleeps the
 poll interval after a release. A turn is given up after 3 harness runs in this
-process; it stays claimable for another runner until its deadline.
+process. If no saved reply exists, the runner fails the turn with the
+reader-facing reason `The PM could not produce a deliverable reply after several
+attempts.` (technical detail stays on stderr) so later waiting turns can be
+claimed. If a saved reply exists, the lease is released and this runner holds
+further claims until that turn's deadline rather than a short skip window; the
+turn stays claimable for another runner until the deadline.
 
 If `complete` cannot be delivered after retries, the runner does **not** fail
 the turn. It writes the reply to `turn-<id>.reply.md` (0600) in `--work-dir`,

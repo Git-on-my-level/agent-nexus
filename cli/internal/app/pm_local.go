@@ -100,14 +100,17 @@ var (
 )
 
 const (
-	evidenceBlockMarker       = "---evidence---"
-	defaultPMMaxOutputBytes   = 64000
-	terminalRetryBudget       = time.Minute
-	replyTruncationMarkerTmpl = "\n\n[reply truncated by anx pm serve at %d bytes; %d bytes were dropped]"
-	maxHarnessRunsPerTurn     = 3
-	leaseLossSkipAfter        = 2
-	leaseLossSkipStart        = 30 * time.Second
-	leaseLossSkipCap          = 5 * time.Minute
+	evidenceBlockMarker             = "---evidence---"
+	defaultPMMaxOutputBytes         = 64000
+	terminalRetryBudget             = time.Minute
+	replyTruncationMarkerTmpl       = "\n\n[reply truncated by anx pm serve at %d bytes; %d bytes were dropped]"
+	maxHarnessRunsPerTurn           = 3
+	leaseLossSkipAfter              = 2
+	leaseLossSkipStart              = 30 * time.Second
+	leaseLossSkipCap                = 5 * time.Minute
+	claimCapacityLogInterval        = time.Minute
+	emptyAskConversationReuseWindow = 5 * time.Minute
+	harnessGiveUpReason             = "The PM could not produce a deliverable reply after several attempts."
 )
 
 type pmTurnMemory struct {
@@ -411,20 +414,26 @@ func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 	}
 	convID := strings.TrimSpace(conversationID.value)
+	createdConversation := false
 	var conversation map[string]any
 	if convID == "" {
-		body := map[string]any{"request_key": key + "-conversation", "title": convTitle}
-		if strings.TrimSpace(workRef.value) != "" {
-			body["work_ref"] = strings.TrimSpace(workRef.value)
-		}
-		created, err := a.invokeRawJSON(ctx, cfg, "pm conversations create", "POST", "/pm/conversations", body)
-		if err != nil {
-			return created, err
-		}
-		conversation = commandResultBody(created)
-		convID = anyString(conversation["id"])
-		if convID == "" {
-			return nil, errnorm.New(errnorm.KindRemote, "invalid_response", "conversation create did not return an id")
+		if reused := a.recentEmptyAskConversation(ctx, cfg); reused != "" {
+			convID = reused
+		} else {
+			body := map[string]any{"request_key": key + "-conversation", "title": convTitle}
+			if strings.TrimSpace(workRef.value) != "" {
+				body["work_ref"] = strings.TrimSpace(workRef.value)
+			}
+			created, err := a.invokeRawJSON(ctx, cfg, "pm conversations create", "POST", "/pm/conversations", body)
+			if err != nil {
+				return created, err
+			}
+			conversation = commandResultBody(created)
+			convID = anyString(conversation["id"])
+			if convID == "" {
+				return nil, errnorm.New(errnorm.KindRemote, "invalid_response", "conversation create did not return an id")
+			}
+			createdConversation = true
 		}
 	}
 	posted, err := a.invokeRawJSON(ctx, cfg, "pm conversations message", "POST", "/pm/conversations/"+url.PathEscape(convID)+"/messages", map[string]any{
@@ -432,6 +441,9 @@ func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) 
 		"text":        text,
 	})
 	if err != nil {
+		if createdConversation || conversationID.value == "" {
+			annotatePMAskSendFailure(err, convID)
+		}
 		return posted, err
 	}
 	turn := commandResultBody(posted)
@@ -471,6 +483,42 @@ func (a *App) runPMAsk(ctx context.Context, args []string, cfg config.Resolved) 
 		lines = append(lines, "failure: "+failure)
 	}
 	return &commandResult{Data: data, Text: strings.Join(lines, "\n")}, nil
+}
+
+func annotatePMAskSendFailure(err error, convID string) {
+	errnorm.AnnotateDetail(err, "conversation_id", convID)
+}
+
+func (a *App) recentEmptyAskConversation(ctx context.Context, cfg config.Resolved) string {
+	listed, err := a.invokeRawJSON(ctx, cfg, "pm conversations list", "GET", "/pm/conversations?limit=5", nil)
+	if err != nil {
+		return ""
+	}
+	items := asSlice(commandResultBody(listed)["items"])
+	if len(items) == 0 {
+		return ""
+	}
+	item := asMap(items[0])
+	id := anyString(item["id"])
+	if id == "" {
+		return ""
+	}
+	created, ok := parseRFC3339Timestamp(anyString(item["created_at"]))
+	if !ok || nowFn().Sub(created) > emptyAskConversationReuseWindow || nowFn().Sub(created) < 0 {
+		return ""
+	}
+	if len(conversationLatestTurn(item)) > 0 {
+		return ""
+	}
+	got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
+	if err != nil {
+		return ""
+	}
+	detail := commandResultBody(got)
+	if len(asSlice(detail["turns"])) > 0 || len(conversationLatestTurn(detail)) > 0 {
+		return ""
+	}
+	return id
 }
 
 func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -552,6 +600,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		forbiddenStreak    int
 		nonRetryableStreak int
 		backoff            = claimBackoffStart
+		lastCapacityLog    time.Time
 	)
 	shutdown := func() (*commandResult, error) {
 		stopHarness()
@@ -614,6 +663,19 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			continue
 		}
 		claimed, claimErr := a.invokeRawJSON(serveCtx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
+		if cap, ok := parsePMClaimCapacity(claimed, claimErr); ok {
+			forbiddenStreak = 0
+			nonRetryableStreak = 0
+			backoff = claimBackoffStart
+			if lastCapacityLog.IsZero() || nowFn().Sub(lastCapacityLog) >= claimCapacityLogInterval {
+				a.pmLog("pm serve: %s\n", formatPMClaimCapacityText(cap))
+				lastCapacityLog = nowFn()
+			}
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
+			}
+			continue
+		}
 		if claimErr != nil {
 			if errors.Is(claimErr, context.Canceled) || errors.Is(claimErr, context.DeadlineExceeded) {
 				return shutdown()
@@ -683,16 +745,18 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		turn := commandResultBody(claimed)
 		turnID := anyString(turn["id"])
 		if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip {
-			reason := "skip window after repeated lease loss"
 			if givenUp {
-				a.logGiveUpTurn(turnID)
-				reason = "given up after harness cap"
-			} else if a.turnMem().consumeSkipLog(turnID) {
+				a.giveUpOnTurn(serveCtx, serveCtx, cfg, absDir, turn, nowFn())
+				if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+					return shutdown()
+				}
+				continue
+			}
+			reason := "skip window after repeated lease loss"
+			if a.turnMem().consumeSkipLog(turnID) {
 				a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
 			}
-			if !givenUp {
-				a.turnMem().holdClaimsUntil(until)
-			}
+			a.turnMem().holdClaimsUntil(until)
 			a.releaseTurnBestEffort(serveCtx, cfg, turn, absDir, reason)
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
@@ -766,15 +830,11 @@ func (a *App) handleClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Res
 			return settled
 		}
 		if rerun == 1 || !a.turnMem().canRunHarness(turnID) {
-			reason := "lease lost after re-run"
 			if !a.turnMem().canRunHarness(turnID) {
-				a.turnMem().markGivenUp(turnID)
-				a.logGiveUpTurn(turnID)
-				reason = "given up after harness cap"
-			} else {
-				a.pmLog("pm serve: turn %s lease lost again after re-run; releasing lease\n", turnID)
+				return a.giveUpOnTurn(ctx, shutdownCtx, cfg, workDir, turn, nowFn())
 			}
-			a.releaseTurnBestEffort(ctx, cfg, turn, workDir, reason)
+			a.pmLog("pm serve: turn %s lease lost again after re-run; releasing lease\n", turnID)
+			a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease lost after re-run")
 			return true
 		}
 	}
@@ -848,10 +908,7 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 		return true, false
 	}
 	if !a.turnMem().canRunHarness(turnID) {
-		a.turnMem().markGivenUp(turnID)
-		a.logGiveUpTurn(turnID)
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "given up after harness cap")
-		return true, false
+		return a.giveUpOnTurn(ctx, shutdownCtx, cfg, workDir, turn, started), false
 	}
 	prompt := buildPMPrompt(cfg.Agent, turn, maxBytes)
 	promptPath := filepath.Join(workDir, "turn-"+sanitizeFilePart(turnID)+".md")
@@ -1254,22 +1311,24 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	}
 	a.turnMem().noteLoss(turnID)
 	if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip || givenUp || !a.turnMem().canRunHarness(turnID) {
-		reason := "skip window after repeated lease loss"
 		if givenUp || !a.turnMem().canRunHarness(turnID) {
-			a.turnMem().markGivenUp(turnID)
-			a.logGiveUpTurn(turnID)
-			reason = "given up after harness cap"
-		} else if a.turnMem().consumeSkipLog(turnID) {
+			return a.giveUpOnTurn(ctx, shutdownCtx, cfg, workDir, turn, nowFn()), false
+		}
+		if a.turnMem().consumeSkipLog(turnID) {
 			a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
 		}
-		if skip && !givenUp {
+		if skip {
 			a.turnMem().holdClaimsUntil(until)
 		}
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, reason)
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "skip window after repeated lease loss")
 		return true, false
 	}
 	runnerID := runnerIDFromTurn(turn, workDir)
 	claimed, claimErr := a.invokeRawJSON(ctx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
+	if _, ok := parsePMClaimCapacity(claimed, claimErr); ok {
+		a.pmLog("pm serve: turn %s still pending but not claimable; nothing to do\n", turnID)
+		return true, false
+	}
 	if claimErr != nil {
 		a.pmLog("pm serve: turn %s re-claim failed: %v; moving on\n", turnID, claimErr)
 		return true, false
@@ -1344,10 +1403,10 @@ func (a *App) finishUndeliveredComplete(ctx context.Context, cfg config.Resolved
 	a.pmLog("pm serve: turn %s complete could not be delivered: %v\n", turnID, err)
 	a.turnMem().noteLoss(turnID)
 	if a.turnMem().harnessRuns(turnID) >= maxHarnessRunsPerTurn {
-		a.turnMem().markGivenUp(turnID)
-		a.logGiveUpTurn(turnID)
+		a.giveUpOnTurn(ctx, nil, cfg, workDir, turn, nowFn())
+	} else {
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	}
-	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	path := turnReplyPath(workDir, turnID)
 	if abs, absErr := filepath.Abs(path); absErr == nil {
 		path = abs
@@ -1356,6 +1415,32 @@ func (a *App) finishUndeliveredComplete(ctx context.Context, cfg config.Resolved
 		deadline := firstNonEmpty(anyString(turn["deadline"]), parseTurnDeadline(turn).UTC().Format(time.RFC3339))
 		a.pmLog("pm serve: reply for turn %s saved to %s; lease released; the turn stays claimable until %s\n", turnID, path, deadline)
 	}
+}
+
+func (a *App) giveUpOnTurn(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir string, turn map[string]any, started time.Time) bool {
+	if turn == nil {
+		return true
+	}
+	turnID := anyString(turn["id"])
+	a.turnMem().markGivenUp(turnID)
+	reply, replyErr := readTurnReply(workDir, turnID)
+	if replyErr == nil && reply != "" {
+		a.logGiveUpTurn(turnID)
+		a.turnMem().holdClaimsUntil(parseTurnDeadline(turn))
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "given up after harness cap")
+		return true
+	}
+	n := a.turnMem().harnessRuns(turnID)
+	if n < 1 {
+		n = maxHarnessRunsPerTurn
+	}
+	if a.turnMem().consumeGiveUpLog(turnID) {
+		a.pmLog("pm serve: giving up on turn %s after %d harness runs with no saved reply; failing the turn\n", turnID, n)
+	}
+	if started.IsZero() {
+		started = nowFn()
+	}
+	return a.settleFailedTurn(ctx, shutdownCtx, cfg, workDir, turn, started, harnessGiveUpReason, nil, false)
 }
 
 func (a *App) logGiveUpTurn(turnID string) {
@@ -1543,6 +1628,85 @@ func claimErrorRetryable(err error) bool {
 		return *typed.Recoverable
 	}
 	return true
+}
+
+type pmClaimCapacity struct {
+	InFlight int
+	Limit    int
+	Waiting  int
+}
+
+func (c pmClaimCapacity) asMap() map[string]any {
+	return map[string]any{
+		"claimed":   false,
+		"reason":    "capacity",
+		"in_flight": c.InFlight,
+		"limit":     c.Limit,
+		"waiting":   c.Waiting,
+	}
+}
+
+func formatPMClaimCapacityText(c pmClaimCapacity) string {
+	return fmt.Sprintf("No lease available: %d of %d runner leases are held; %d turn(s) are waiting.", c.InFlight, c.Limit, c.Waiting)
+}
+
+func parsePMClaimCapacity(result *commandResult, err error) (pmClaimCapacity, bool) {
+	if cap, ok := pmClaimCapacityFromMap(commandResultBody(result)); ok {
+		return cap, true
+	}
+	if err == nil {
+		return pmClaimCapacity{}, false
+	}
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) || typed == nil {
+		return pmClaimCapacity{}, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(typed.Code), "busy") {
+		return pmClaimCapacity{}, false
+	}
+	details := pmErrorDetails(typed)
+	if !strings.EqualFold(anyString(details["reason"]), "capacity") {
+		return pmClaimCapacity{}, false
+	}
+	return pmClaimCapacityFromMap(details)
+}
+
+func pmClaimCapacityFromMap(m map[string]any) (pmClaimCapacity, bool) {
+	if len(m) == 0 {
+		return pmClaimCapacity{}, false
+	}
+	if asBool(m["claimed"]) {
+		return pmClaimCapacity{}, false
+	}
+	if !strings.EqualFold(anyString(m["reason"]), "capacity") {
+		return pmClaimCapacity{}, false
+	}
+	waiting := intValue(m["waiting"])
+	if waiting == 0 {
+		waiting = intValue(m["queued"])
+	}
+	return pmClaimCapacity{
+		InFlight: intValue(m["in_flight"]),
+		Limit:    intValue(m["limit"]),
+		Waiting:  waiting,
+	}, true
+}
+
+func pmErrorDetails(err error) map[string]any {
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) || typed == nil {
+		return nil
+	}
+	details, _ := typed.Details.(map[string]any)
+	parsed := asMap(details["parsed"])
+	errObj := asMap(parsed["error"])
+	if nested := asMap(errObj["details"]); len(nested) > 0 {
+		return nested
+	}
+	if nested := asMap(parsed["details"]); len(nested) > 0 {
+		return nested
+	}
+	return nil
 }
 
 func httpStatusFromErr(err error) int {

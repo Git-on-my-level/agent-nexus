@@ -79,6 +79,29 @@ func WithDetails(err *Error, details any) *Error {
 	return err
 }
 
+// AnnotateDetail records a CLI-known field on a remote error when the API body
+// omitted it. Existing values from the parsed API payload win.
+func AnnotateDetail(err error, key, value string) {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return
+	}
+	var typed *Error
+	if !errors.As(err, &typed) || typed == nil {
+		return
+	}
+	if lookupErrorDetail(typed, key) != "" {
+		return
+	}
+	details, _ := typed.Details.(map[string]any)
+	if details == nil {
+		details = map[string]any{}
+		typed.Details = details
+	}
+	details[key] = value
+}
+
 func ExitCode(err error) int {
 	if err == nil {
 		return 0
