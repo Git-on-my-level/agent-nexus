@@ -270,6 +270,15 @@ export function turnState(turn, now = Date.now()) {
       detail: String(turn?.failure ?? "").trim(),
     };
   if (status === "unknown") return { ...base, kind: "unknown" };
+  // Core's deadline is authoritative: past it, silence is not progress.
+  const deadline = Date.parse(turn?.deadline ?? "");
+  if (Number.isFinite(deadline) && now > deadline)
+    return {
+      ...base,
+      kind: "failed",
+      detail:
+        "No reply before the deadline. Retry, or check that a PM runner is attached.",
+    };
   const created = Date.parse(turn?.created_at ?? "");
   const waited = Number.isFinite(created) ? now - created : Number.NaN;
   return {

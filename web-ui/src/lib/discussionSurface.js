@@ -88,7 +88,20 @@ export function cardDiscussionSurface({ threadId, cardKey }) {
 export function documentDiscussionSurface(doc) {
   const docId = String(doc?.id ?? "").trim();
   const threadId = String(doc?.thread_id ?? "").trim();
-  const documentRef = docId ? `document:${docId}` : "";
+  const handle = String(doc?.handle ?? "").trim();
+  const publicRef = String(doc?.ref ?? "").trim();
+  // Comments posted through the CLI carry the public ref (document:<handle>);
+  // older UI posts carry document:<id>. Both name this document.
+  const documentRefs = [
+    ...new Set(
+      [
+        publicRef,
+        handle ? `document:${handle}` : "",
+        docId ? `document:${docId}` : "",
+      ].filter(Boolean),
+    ),
+  ];
+  const documentRef = documentRefs[0] || "";
   return {
     kind: "document",
     threadId,
@@ -98,7 +111,7 @@ export function documentDiscussionSurface(doc) {
     emptyMessage: DOC_EMPTY,
     timelineSource: "thread",
     liveUpdates: true,
-    subjectRefFilter: documentRef,
+    subjectRefFilter: documentRefs,
     extraPostRefs: documentRef ? [documentRef] : [],
     archiveLabelKind: "resolve",
     expandFillsParent: true,

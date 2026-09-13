@@ -2,12 +2,16 @@ import { toTimelineViewEvent } from "./timelineUtils.js";
 
 /** @param {unknown} event @param {string} requiredRef */
 export function eventRefsInclude(event, requiredRef) {
-  const want = String(requiredRef ?? "").trim();
-  if (!want) {
+  // A subject can be named by several equivalent refs (id, handle, public
+  // ref); a message tagged with any of them belongs to the subject.
+  const wanted = (Array.isArray(requiredRef) ? requiredRef : [requiredRef])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  if (!wanted.length) {
     return true;
   }
   const refs = Array.isArray(event?.refs) ? event.refs : [];
-  return refs.some((r) => String(r).trim() === want);
+  return refs.some((r) => wanted.includes(String(r).trim()));
 }
 
 function parseEventTimeMs(event) {

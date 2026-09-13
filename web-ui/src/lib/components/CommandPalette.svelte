@@ -9,7 +9,11 @@
     resourceDisplayLabel,
     resourceRouteSegment,
   } from "$lib/resourceIdentity.js";
-  import { workKey } from "$lib/pm/presentation.js";
+  import {
+    label as phaseLabel,
+    sourceLabel,
+    workKey,
+  } from "$lib/pm/presentation.js";
   import { workspacePath } from "$lib/workspacePaths";
 
   let {
@@ -166,7 +170,10 @@
 
   function resultSubtitle(entry) {
     if (entry.type === "task") {
-      return [entry.item.phase, entry.item.ref || workKey(entry.item)]
+      return [
+        phaseLabel(entry.item.phase),
+        entry.item.source ? sourceLabel(entry.item.source) : "",
+      ]
         .filter(Boolean)
         .join(" · ");
     }

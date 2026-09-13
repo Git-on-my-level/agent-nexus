@@ -8,7 +8,9 @@ import {
 } from "./pm/presentation.js";
 
 export function phaseRequestKey(work, phase) {
-  return `task-phase:${workKey(work)}:${phase}`;
+  // The revision is part of the key: a request made after the work moved is
+  // a new request, not a replay of the stale one.
+  return `task-phase:${workKey(work)}:${phase}:${workTargetRevision(work)}`;
 }
 
 const STATUS_CHANGE_PREFIX = "request status change";

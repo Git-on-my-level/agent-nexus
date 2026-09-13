@@ -115,7 +115,14 @@
 
   let pinActive = $derived(pinComposer || pinComposerNarrow);
 
-  let subjectRefFilterNorm = $derived(String(subjectRefFilter ?? "").trim());
+  // One subject may be named by several equivalent refs; the first is the
+  // display ref, all of them select messages.
+  let subjectRefFilters = $derived(
+    (Array.isArray(subjectRefFilter) ? subjectRefFilter : [subjectRefFilter])
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean),
+  );
+  let subjectRefFilterNorm = $derived(subjectRefFilters[0] || "");
 
   /** In document-scoped discussion, hide `document:` / `document_revision:` chips (we're already on that doc). */
   let suppressDisplayDocumentId = $derived(
@@ -155,7 +162,7 @@
   let refScopedTimeline = $derived(
     subjectRefFilterNorm
       ? (Array.isArray(timeline) ? timeline : []).filter((event) =>
-          eventRefsInclude(event, subjectRefFilterNorm),
+          eventRefsInclude(event, subjectRefFilters),
         )
       : Array.isArray(timeline)
         ? timeline

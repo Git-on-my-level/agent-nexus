@@ -147,8 +147,17 @@
   async function loadDecisions() {
     decisionsLoaded = true;
     try {
-      const result = await coreClient.listPmDecisions({ limit: 200 });
-      decisions = Array.isArray(result?.items) ? result.items : [];
+      // Follow the cursor so the Requested badge never silently misses a
+      // request that landed past the first page.
+      const items = [];
+      let cursor;
+      for (let page = 0; page < 10; page += 1) {
+        const result = await coreClient.listPmDecisions({ limit: 200, cursor });
+        items.push(...(Array.isArray(result?.items) ? result.items : []));
+        cursor = result?.next_cursor || "";
+        if (!cursor) break;
+      }
+      decisions = items;
     } catch {
       // Fail soft: the Requested badge link degrades, the page stays usable.
     }

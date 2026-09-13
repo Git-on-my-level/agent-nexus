@@ -13,16 +13,41 @@ export const INBOX_MAILBOXES = [
   ["handled", "Handled"],
 ];
 
+// Decision status once the action receipt is joined in: an answered decision
+// reads as its action's state until that state is final.
 const WATCHING_DECISION_STATUSES = new Set([
   "answered",
+  "pending",
   "pending_delivery",
   "delivered",
   "sending",
   "acknowledged",
   "applied",
   "source_reported",
-  "failed",
+  "reported",
+  "unknown",
 ]);
+
+/**
+ * The state a decision row should wear: the decision's own status until it is
+ * answered, then its action's receipt status. A verified read-back is done; a
+ * failed delivery needs the reader again.
+ */
+export function decisionRowStatus(decision, actions = []) {
+  const own = String(decision?.status ?? "");
+  if (own !== "answered") return own;
+  const action = actions.find(
+    (item) =>
+      item &&
+      ((decision.action_id && item.id === decision.action_id) ||
+        item.decision_id === decision.id),
+  );
+  if (!action) return own;
+  const status = String(action.status ?? "");
+  if (status === "verified" && action.receipt?.independently_verified !== true)
+    return "source_reported";
+  return status || own;
+}
 
 const LOUD_SEVERITIES = new Map([
   ["critical", { label: "Critical", tone: "danger" }],
@@ -57,6 +82,8 @@ export function classifyInboxRow(row, now = Date.now()) {
     // Needs you.
     if (row.status === "awaiting_answer")
       return row.item?.can_answer === false ? "watching" : "needs-you";
+    // A failed delivery is the reader's problem again, not a thing to watch.
+    if (row.status === "failed") return "needs-you";
     if (WATCHING_DECISION_STATUSES.has(row.status)) return "watching";
     return "handled";
   }
@@ -122,6 +149,7 @@ export function inboxRowBadge(row, now = Date.now()) {
 
 export function buildInboxRows({
   decisions = [],
+  actions = [],
   work = [],
   inboxItems = [],
   updates = [],
@@ -144,7 +172,7 @@ export function buildInboxRows({
       source: summary.ask || "Decision",
       ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
-      status: item.status,
+      status: decisionRowStatus(item, actions),
       phase: item.status,
       item,
     });

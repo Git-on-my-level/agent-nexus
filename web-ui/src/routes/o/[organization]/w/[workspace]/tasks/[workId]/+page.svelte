@@ -94,6 +94,15 @@
     }
     return rows;
   });
+  // A bare URL still deserves a distinct link name: its host and path.
+  function evidenceLinkText(url) {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+    } catch {
+      return "Open source evidence";
+    }
+  }
   function observationErrorText(observation) {
     const error = observation?.error;
     if (!error) return "";
@@ -450,7 +459,7 @@
                               rel="noreferrer"
                               >{evidence.summary ||
                                 evidence.ref ||
-                                "Open source evidence"} ↗</a
+                                evidenceLinkText(url)} ↗</a
                             >{:else}{evidence.summary ||
                               evidence.ref ||
                               "Unlinked evidence"}{/if}

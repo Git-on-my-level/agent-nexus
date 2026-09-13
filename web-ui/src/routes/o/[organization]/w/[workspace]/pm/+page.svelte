@@ -1080,9 +1080,8 @@
   }
   .pm-suggestions {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
     padding: 8px 12px 0;
   }
   .pm-suggestions::-webkit-scrollbar {

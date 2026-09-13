@@ -62,6 +62,7 @@
   let rows = $derived(
     buildInboxRows({
       decisions,
+      actions,
       work,
       inboxItems,
       updates,
@@ -615,7 +616,7 @@
               href={href({ item: visible[selectedIndex + 1].id })}>Next</a
             >
           {/if}
-          {#if selected?.ref}
+          {#if selected?.ref && selected.kind === "inbox"}
             <span class="min-w-0 truncate font-mono text-mono text-fg-subtle"
               >{selected.ref}</span
             >
@@ -672,7 +673,12 @@
               </p>
             {/if}
             <p class="text-micro text-fg-muted">
-              Last checked {taskLastChecked(taskItem)}
+              Last checked {taskLastChecked(
+                taskItem,
+              )}{#if taskItem?.refresh?.last_error?.message}
+                <span class="text-warn-text">
+                  · {taskItem.refresh.last_error.message}</span
+                >{/if}
             </p>
             <div class="flex flex-wrap gap-2">
               <a
@@ -774,12 +780,20 @@
           <div class="space-y-4 p-4 sm:p-5">
             <h2 class="text-subtitle text-fg">{selected.title}</h2>
             <p class="text-meta text-fg-muted">
-              {selected.count || 0} grouped updates
+              {selected.count || 0} updates since you last looked{#if selected.item?.newest_event?.summary}.
+                Newest: {selected.item.newest_event.summary}{/if}
             </p>
-            <button
-              class="ui-btn-secondary"
-              onclick={() => markUpdateRead(selected.item)}>Mark read</button
-            >
+            <div class="flex flex-wrap gap-2">
+              <a
+                class="ui-btn-secondary"
+                href={`${workspaceHref("/events")}?q=${encodeURIComponent(selected.ref || "")}`}
+                >Open in audit log</a
+              >
+              <button
+                class="ui-btn-secondary"
+                onclick={() => markUpdateRead(selected.item)}>Mark read</button
+              >
+            </div>
           </div>
         {:else if selectedId || visible.length}
           <p class="p-6 text-meta text-fg-muted">

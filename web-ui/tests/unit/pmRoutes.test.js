@@ -382,7 +382,10 @@ describe("PM operator interactions", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Deliver approved instruction" }),
     );
-    await screen.findByText("Failed", { exact: true });
+    // The receipt shows in the panel and, once joined, on the row badge too.
+    expect(
+      (await screen.findAllByText("Failed", { exact: true })).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Within the stated scope")).toBeTruthy();
     expect(screen.queryByText("Outcome verified")).toBeNull();
   });
