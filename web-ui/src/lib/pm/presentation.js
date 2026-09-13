@@ -136,7 +136,8 @@ const RECEIPT_FOLDED = {
   source_reported: "Source reported; not independently verified",
   sending: "Delivery in progress",
   unknown: "Delivery uncertain",
-  superseded: "Superseded",
+  superseded: "Replaced",
+  declined: "Declined",
 };
 
 export function receiptSignal(state) {
@@ -338,6 +339,18 @@ export function sourceLabel(source) {
     "Authority unknown"
   );
 }
+/** True when core answered 401 for a missing, invalid or expired token. */
+export function isSessionExpired(error) {
+  const status = Number(error?.status);
+  const code = String(error?.body?.error?.code ?? "").toLowerCase();
+  return (
+    status === 401 ||
+    code === "invalid_token" ||
+    code === "auth_required" ||
+    /token is invalid, expired, or revoked/i.test(String(error?.message ?? ""))
+  );
+}
+
 export function errorMessage(error) {
   const raw =
     error instanceof Error
@@ -345,6 +358,9 @@ export function errorMessage(error) {
       : String(error || "Unable to load workspace data.");
   if (/capacity reached|busy/i.test(raw)) {
     return "Your previous message in this conversation is still queued or being answered. Your new message is kept; send it once that turn finishes or expires, or start a new conversation.";
+  }
+  if (isSessionExpired(error)) {
+    return "Your session has expired. Sign in again to continue.";
   }
   if (/PM permission denied/i.test(raw)) {
     return "You are not signed in as someone who can use the PM. Sign in again and retry.";

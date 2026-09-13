@@ -10,6 +10,7 @@
   import {
     decisionTitle,
     errorMessage,
+    isSessionExpired,
     receiptSignal,
   } from "$lib/pm/presentation.js";
   import { decisionIdsFromTurn } from "$lib/pm/turnDecisions.js";
@@ -78,6 +79,7 @@
     turns.flatMap((turn) => candidateDecisionIdsFromTurn(turn)),
   );
   let waiting = $derived(hasPendingTurn(turns, now));
+  let sessionExpired = $state(false);
   let showJump = $derived(Boolean(turns.length) && !atBottom);
 
   beforeNavigate(({ cancel, type }) => {
@@ -291,7 +293,12 @@
         if (!quiet || !olderLoaded) turnsCursor = result.next_cursor || "";
       }
     } catch (err) {
-      if (ticket === requestId) error = errorMessage(err);
+      if (ticket === requestId) {
+        error = errorMessage(err);
+        // An expired session will not fix itself; stop polling and offer
+        // sign-in instead of re-raising the same alert every few seconds.
+        if (isSessionExpired(err)) sessionExpired = true;
+      }
     } finally {
       if (ticket === requestId) loading = false;
     }
@@ -452,6 +459,7 @@
       // Nothing changes on its own once every turn is answered or failed;
       // only a pending turn earns a poll.
       if (!force && !waiting) return;
+      if (sessionExpired) return;
       pollInFlight = true;
       void loadConversation(selectedId, true).finally(() => {
         pollInFlight = false;
@@ -749,13 +757,19 @@
           class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         >
           <span class="min-w-0 flex-1 break-words">{error}</span>
-          <button
-            class="ui-prose-link text-micro"
-            type="button"
-            onclick={() =>
-              ready ? loadConversation(selectedId, true) : initialize()}
-            >Retry</button
-          >
+          {#if sessionExpired}
+            <a class="ui-prose-link text-micro" href={workspaceHref("/login")}
+              >Sign in again</a
+            >
+          {:else}
+            <button
+              class="ui-prose-link text-micro"
+              type="button"
+              onclick={() =>
+                ready ? loadConversation(selectedId, true) : initialize()}
+              >Retry</button
+            >
+          {/if}
         </div>
       {/if}
     </div>

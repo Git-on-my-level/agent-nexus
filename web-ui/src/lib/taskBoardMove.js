@@ -78,11 +78,20 @@ export function requestedDecisionMap(decisions = [], records = []) {
  *
  * @returns {Promise<{ kind: "moved" | "requested", work: object, decision?: object }>}
  */
-export async function applyTaskPhaseMove(coreClient, work, phase) {
+export async function applyTaskPhaseMove(
+  coreClient,
+  work,
+  phase,
+  { resolutionRefs = [] } = {},
+) {
   if (!work || !phase || (work.phase || "unknown") === phase) {
     return { kind: "noop", work };
   }
   if (isNexusOwned(work)) {
+    // Done is a completion, and core refuses a completion without evidence.
+    if (phase === "done" && !resolutionRefs.length) {
+      return { kind: "needs_evidence", work };
+    }
     const cardId = cardIdFromWork(work);
     const boardId = String(work.board_ref || work.board_id || "").trim();
     if (!boardId) {
@@ -101,6 +110,9 @@ export async function applyTaskPhaseMove(coreClient, work, phase) {
     await coreClient.moveBoardCard(boardId, cardId, {
       column_key: phase,
       if_board_updated_at: token,
+      ...(phase === "done"
+        ? { resolution: "done", resolution_refs: resolutionRefs }
+        : {}),
     });
     return { kind: "moved", work: { ...work, phase } };
   }

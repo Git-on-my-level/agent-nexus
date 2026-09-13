@@ -38,6 +38,8 @@ const WATCHING_DECISION_STATUSES = new Set([
  */
 export function decisionRowStatus(decision, actions = []) {
   const own = String(decision?.status ?? "");
+  // A decline used to be stored as superseded with no replacement.
+  if (own === "superseded" && !decision?.superseded_by) return "declined";
   if (own !== "answered") return own;
   const action = actions.find(
     (item) =>
@@ -136,6 +138,8 @@ export function inboxRowBadge(row, now = Date.now()) {
         : null;
     if (row.status === "superseded" && row.item?.superseded_by)
       return { label: "Replaced", tone: "neutral" };
+    if (row.status === "declined")
+      return { label: "Declined", tone: "neutral" };
     return receiptSignal(row.status);
   }
   if (row.kind === "update") {

@@ -179,7 +179,33 @@
         return;
     }
     try {
-      const result = await applyTaskPhaseMove(coreClient, work, phase);
+      let resolutionRefs = [];
+      if (isNexusOwned(work) && phase === "done") {
+        // Done is a completion; core requires evidence that exists. Ask for
+        // it here rather than failing with the API's vocabulary afterwards.
+        const ref = window.prompt(
+          `Marking “${work.title}” done needs evidence. Enter the ref of the artifact or event that proves it (for example artifact:… or event:…).`,
+          "",
+        );
+        if (ref === null) return;
+        const trimmed = String(ref).trim();
+        if (!trimmed) {
+          moveNotice = {
+            text: "Done needs evidence. Add the artifact or event that proves completion, or ask the PM to propose it with evidence.",
+          };
+          return;
+        }
+        resolutionRefs = [trimmed];
+      }
+      const result = await applyTaskPhaseMove(coreClient, work, phase, {
+        resolutionRefs,
+      });
+      if (result.kind === "needs_evidence") {
+        moveNotice = {
+          text: "Done needs evidence. Add the artifact or event that proves completion.",
+        };
+        return;
+      }
       if (result.kind === "moved") {
         records = records.map((item) =>
           workKey(item) === key ? { ...item, phase } : item,
@@ -200,7 +226,13 @@
         requested = { ...requested, [key]: phase };
         if (result.decision) decisions = [...decisions, result.decision];
         moveNotice = {
-          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. Approve it in Inbox.`,
+          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. Approve it in Inbox.${
+            result.decision?.supersedes
+              ? result.decision.supersedes_origin_kind === "pm_turn"
+                ? " This replaced the PM's earlier proposal for this task."
+                : " This replaced an earlier proposal for this task."
+              : ""
+          }`,
           href: result.decision?.id
             ? workspaceHref(
                 `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
