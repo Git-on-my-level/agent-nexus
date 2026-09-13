@@ -76,9 +76,19 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (wasOpen) {
         wasOpen = false;
-        const target = opener;
+        // Opened by shortcut with nothing focused: land on the page's search
+        // trigger (or its main landmark) rather than <body>.
+        const target =
+          opener?.isConnected && opener !== document.body
+            ? opener
+            : document.querySelector('[aria-keyshortcuts="Meta+K"]') ||
+              document.querySelector("main");
         opener = null;
-        if (target?.isConnected) target.focus();
+        if (target instanceof HTMLElement) {
+          if (!target.hasAttribute("tabindex") && target.tagName === "MAIN")
+            target.setAttribute("tabindex", "-1");
+          target.focus();
+        }
       }
     }
   });
