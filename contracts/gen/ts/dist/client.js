@@ -6797,7 +6797,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
-            "source_revision_changed",
+            "turn_closed",
             "busy",
             "unavailable"
         ],
@@ -6873,7 +6873,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
-            "source_revision_changed",
+            "turn_closed",
             "busy",
             "unavailable"
         ],
@@ -6931,7 +6931,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
-            "source_revision_changed",
+            "turn_closed",
             "busy",
             "unavailable"
         ],
@@ -7031,7 +7031,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
-            "source_revision_changed",
+            "turn_closed",
             "busy",
             "unavailable"
         ],

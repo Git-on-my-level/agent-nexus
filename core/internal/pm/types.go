@@ -16,6 +16,7 @@ var (
 	ErrInvalid          = errors.New("invalid PM request")
 	ErrConflict         = errors.New("PM revision or state conflict")
 	ErrNotFound         = errors.New("PM record not found")
+	ErrTurnClosed       = errors.New("PM turn is closed")
 	ErrStale            = errors.New("approved source revision has changed")
 	ErrUnavailable      = errors.New("PM capability is not configured")
 	ErrPMIdentity       = fmt.Errorf("%w: ANX_PM_AGENT_ACTOR_ID is required", ErrUnavailable)
@@ -23,6 +24,22 @@ var (
 	ErrBusy             = errors.New("PM execution capacity reached")
 	ErrEmpty            = errors.New("no claimable PM turn")
 )
+
+// TurnClosedError carries the durable turn state, independently of source revisions.
+type TurnClosedError struct {
+	TurnID   string    `json:"turn_id"`
+	Deadline time.Time `json:"deadline"`
+	Status   Status    `json:"status"`
+	expired  bool
+}
+
+func (e *TurnClosedError) Error() string {
+	if e.expired {
+		return "This turn passed its deadline and was failed; nothing can be proposed or read for it. Ask again to start a new turn."
+	}
+	return "This turn is already terminal; nothing can be proposed or read for it. Ask again to start a new turn."
+}
+func (e *TurnClosedError) Unwrap() error { return ErrTurnClosed }
 
 // DecisionConflict preserves immutable request-key intent while identifying the
 // existing record the client can inspect. Source revisions are opaque, unordered.

@@ -349,8 +349,8 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 	if p.WorkspaceID != t.WorkspaceID || p.ActorID != t.AgentActorID {
 		return ContextPage{}, ErrForbidden
 	}
-	if time.Now().After(t.Deadline) {
-		return ContextPage{}, ErrStale
+	if err := s.requireOpenTurn(ctx, t); err != nil {
+		return ContextPage{}, err
 	}
 	var c Conversation
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
@@ -372,8 +372,8 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 	if p.WorkspaceID != t.WorkspaceID || p.ActorID != t.AgentActorID {
 		return Decision{}, ErrForbidden
 	}
-	if time.Now().After(t.Deadline) {
-		return Decision{}, ErrStale
+	if err := s.requireOpenTurn(ctx, t); err != nil {
+		return Decision{}, err
 	}
 	var c Conversation
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
