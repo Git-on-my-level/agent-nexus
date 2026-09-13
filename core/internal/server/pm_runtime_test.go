@@ -93,7 +93,18 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 	}
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
-	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations", map[string]any{"request_key": "forged", "title": "forged", "actor_id": seed.ActorID}, "", 403)
+	for _, tc := range []struct {
+		name, token, code string
+	}{
+		{"missing", "", "auth_required"},
+		{"invalid", "invalid-token", "invalid_token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations", map[string]any{"request_key": "forged", "title": "forged", "actor_id": seed.ActorID}, tc.token, http.StatusUnauthorized)
+			defer resp.Body.Close()
+			assertErrorCode(t, resp, tc.code)
+		})
+	}
 	resp := postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations", map[string]any{"request_key": "conversation", "title": "Context"}, seed.AccessToken, 201)
 	defer resp.Body.Close()
 	var c map[string]any

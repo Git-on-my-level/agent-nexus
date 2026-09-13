@@ -882,6 +882,32 @@ func TestArchiveBoardCardGlobalRoute(t *testing.T) {
 	assertErrorCode(t, moveArchivedResp, "invalid_request")
 }
 
+func createResolutionEvidenceViaHTTP(t *testing.T, baseURL, threadID string) string {
+	t.Helper()
+	resp := postJSONExpectStatus(t, baseURL+"/events", `{
+		"actor_id":"actor-1",
+		"event":{
+			"type":"message_posted",
+			"thread_id":"`+threadID+`",
+			"refs":["thread:`+threadID+`"],
+			"summary":"Completion evidence",
+			"provenance":{"sources":["inferred"]}
+		}
+	}`, http.StatusCreated)
+	defer resp.Body.Close()
+	var payload struct {
+		Event map[string]any `json:"event"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode resolution evidence response: %v", err)
+	}
+	id := asString(payload.Event["id"])
+	if id == "" {
+		t.Fatal("expected resolution evidence event id")
+	}
+	return "event:" + id
+}
+
 func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	t.Parallel()
 
@@ -890,6 +916,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 
 	primaryThreadID := createBoardThreadViaHTTP(t, h, "Create resolution primary thread")
 	memberThreadID := createBoardThreadViaHTTP(t, h, "Create resolution member thread")
+	evidenceRef := createResolutionEvidenceViaHTTP(t, h.baseURL, memberThreadID)
 
 	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
@@ -909,6 +936,16 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 	boardID := asString(createBoardPayload.Board["id"])
 	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
 
+	missingRefResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Missing resolution evidence",
+		"column_key":"done",
+		"resolution_refs":["event:missing-resolution-evidence"]
+	}`, http.StatusBadRequest)
+	defer missingRefResp.Body.Close()
+	assertErrorCode(t, missingRefResp, "invalid_request")
+
 	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
 		resp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
 			"actor_id":"actor-1",
@@ -917,7 +954,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 			"related_refs":["thread:`+memberThreadID+`"],
 			"column_key":"done",
 			"resolution":"`+resolution+`",
-			"resolution_refs":["event:done-1"]
+			"resolution_refs":["`+evidenceRef+`"]
 		}`, http.StatusBadRequest)
 		defer resp.Body.Close()
 		assertErrorCode(t, resp, "invalid_request")
@@ -930,7 +967,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"review",
 		"resolution":"done",
-		"resolution_refs":["event:done-1"]
+		"resolution_refs":["`+evidenceRef+`"]
 	}`, http.StatusBadRequest)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "invalid_request")
@@ -952,7 +989,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 		"title":"Member card done refs only",
 		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"done",
-		"resolution_refs":["event:done-1"]
+		"resolution_refs":["`+evidenceRef+`"]
 	}`, http.StatusCreated)
 	defer resp.Body.Close()
 	var goodDonePayload struct {
@@ -970,7 +1007,7 @@ func TestBoardCardCreateRejectsInvalidResolutionCombinations(t *testing.T) {
 		"related_refs":["thread:`+memberThreadID+`"],
 		"column_key":"done",
 		"resolution":"canceled",
-		"resolution_refs":["event:canceled-1"]
+		"resolution_refs":["`+evidenceRef+`"]
 	}`, http.StatusBadRequest)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "invalid_request")
@@ -1560,6 +1597,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 
 	primaryThreadID := createBoardThreadViaHTTP(t, h, "Move primary thread")
 	memberThreadID := createBoardThreadViaHTTP(t, h, "Move member thread")
+	evidenceRef := createResolutionEvidenceViaHTTP(t, h.baseURL, memberThreadID)
 
 	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
 		"actor_id":"actor-1",
@@ -1597,13 +1635,22 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	cardThreadID := asString(addPayload.Card["thread_id"])
 	moveBase := h.baseURL + "/cards/" + cardID + "/move"
 
+	missingRefResp := postJSONExpectStatus(t, moveBase, `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
+		"column_key":"done",
+		"resolution_refs":["event:missing-resolution-evidence"]
+	}`, http.StatusBadRequest)
+	defer missingRefResp.Body.Close()
+	assertErrorCode(t, missingRefResp, "invalid_request")
+
 	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
 		legacyResolutionResp := postJSONExpectStatus(t, moveBase, `{
 			"actor_id":"actor-1",
 			"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
 			"column_key":"done",
 			"resolution":"`+resolution+`",
-			"resolution_refs":["event:card-completion-1"]
+			"resolution_refs":["`+evidenceRef+`"]
 		}`, http.StatusBadRequest)
 		defer legacyResolutionResp.Body.Close()
 		assertErrorCode(t, legacyResolutionResp, "invalid_request")
@@ -1613,7 +1660,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 		"actor_id":"actor-1",
 		"if_board_updated_at":"`+asString(addPayload.Board["updated_at"])+`",
 		"column_key":"done",
-		"resolution_refs":["event:card-completion-1"]
+		"resolution_refs":["`+evidenceRef+`"]
 	}`, http.StatusOK)
 	defer doneMoveResp.Body.Close()
 	var doneMovePayload struct {
@@ -1629,7 +1676,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	if asString(doneMovePayload.Card["resolution"]) != "done" {
 		t.Fatalf("expected card resolution done, got %#v", doneMovePayload.Card["resolution"])
 	}
-	if !containsAny(doneMovePayload.Card["resolution_refs"].([]any), "event:card-completion-1") {
+	if !containsAny(doneMovePayload.Card["resolution_refs"].([]any), evidenceRef) {
 		t.Fatalf("expected terminal evidence ref on moved card, got %#v", doneMovePayload.Card["resolution_refs"])
 	}
 
@@ -1663,7 +1710,7 @@ func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 		"if_board_updated_at":"`+asString(cancelAddPayload.Board["updated_at"])+`",
 		"column_key":"done",
 		"resolution":"canceled",
-		"resolution_refs":["event:card-canceled-1"]
+		"resolution_refs":["`+evidenceRef+`"]
 	}`, http.StatusBadRequest)
 	defer cancelMoveResp.Body.Close()
 	assertErrorCode(t, cancelMoveResp, "invalid_request")
