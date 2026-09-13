@@ -2,6 +2,7 @@ package pm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -45,7 +46,7 @@ func (s *Service) validateResolution(ctx context.Context, p Principal, scope str
 // Project only at the HTTP boundary: derived fields never enter persistence,
 // approval equality, idempotency checks, or the source executor's parameters.
 func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision) any {
-	path, err := s.deliveryPath(ctx, Action{DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: d.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Scope: d.Scope, TargetRevision: d.TargetRevision, Payload: d.Payload})
+	path, err := s.deliveryPath(ctx, Action{SourceAuthority: d.SourceAuthority, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: d.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Scope: d.Scope, TargetRevision: d.TargetRevision, Payload: d.Payload})
 	type response struct {
 		Decision
 		WorkMissing            bool   `json:"work_missing"`
@@ -53,10 +54,14 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 		AlreadyAtTarget        bool   `json:"already_at_target"`
 		Replayed               bool   `json:"replayed,omitempty"`
 		ReplayedTerminalStatus Status `json:"replayed_terminal_status,omitempty"`
-		Deliverable            bool   `json:"deliverable"`
+		Deliverable            *bool  `json:"deliverable"`
 		DeliveryPath           string `json:"delivery_path"`
 	}
-	out := response{Decision: d, WorkMissing: d.WorkMissing, TargetCurrent: d.TargetCurrent, AlreadyAtTarget: d.AlreadyAtTarget, Replayed: d.Replayed, Deliverable: err == nil, DeliveryPath: path}
+	out := response{Decision: d, WorkMissing: d.WorkMissing, TargetCurrent: d.TargetCurrent, AlreadyAtTarget: d.AlreadyAtTarget, Replayed: d.Replayed, DeliveryPath: path}
+	if path != "unknown" {
+		available := err == nil
+		out.Deliverable = &available
+	}
 	if d.Replayed && d.Status != AwaitingAnswer {
 		out.ReplayedTerminalStatus = d.Status
 	}
@@ -65,7 +70,7 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 	}
 	type payloadResponse struct {
 		*ActionPayload
-		Resolution []ResolutionRef `json:"resolution"`
+		Resolution []ResolutionRef `json:"resolution,omitempty"`
 	}
 	payload := payloadResponse{ActionPayload: d.Payload, Resolution: make([]ResolutionRef, 0, len(d.Payload.ResolutionRefs))}
 	for _, ref := range d.Payload.ResolutionRefs {
@@ -82,4 +87,18 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 		response
 		Payload payloadResponse `json:"payload"`
 	}{out, payload}
+}
+
+// Legacy purged work may have no recoverable source authority. Null availability
+// is intentionally different from false (a known unconfigured executor). Keep
+// the internal bool fail-closed, while wire consumers can distinguish the two.
+func (a Action) MarshalJSON() ([]byte, error) {
+	type action Action
+	if a.DeliveryPath != "unknown" {
+		return json.Marshal(action(a))
+	}
+	return json.Marshal(struct {
+		action
+		Deliverable *bool `json:"deliverable"`
+	}{action: action(a)})
 }

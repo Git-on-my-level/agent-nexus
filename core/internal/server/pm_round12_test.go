@@ -164,7 +164,7 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			for _, a := range actions {
 				if a.ID == actionID {
 					found = true
-					if a.Deliverable {
+					if a.Deliverable != (authority == "nexus") {
 						t.Fatal(a)
 					}
 				}
@@ -177,9 +177,9 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 				t.Fatal(page)
 			}
 			call(t, "POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409)
-			call(t, "POST", "/pm/decisions/"+id+"/dispatch", struct{}{}, 403)
+			call(t, "POST", "/pm/decisions/"+id+"/dispatch", struct{}{}, 409)
 			in.RequestKey += "-missing"
-			call(t, "POST", "/pm/decisions", in, 403)
+			call(t, "POST", "/pm/decisions", in, 404)
 			token = other.AccessToken
 			check(call(t, "GET", "/pm/decisions/"+id, nil, 200), true, false, false, false)
 			call(t, "POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Text: "no"}, 403)
@@ -189,15 +189,20 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			if declined["status"] != "declined" {
 				t.Fatal(declined)
 			}
-			closed := call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
-			if closed["closed_without_delivery"] != true || closed["acknowledged_by"] != human.ActorID || closed["deliverable"] != false || len(closed["attempts"].([]any)) != 0 {
-				t.Fatal(closed)
+			if authority == "nexus" {
+				// Missing work does not remove an otherwise configured executor.
+				call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 409)
+			} else {
+				closed := call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
+				if closed["closed_without_delivery"] != true || closed["acknowledged_by"] != human.ActorID || closed["deliverable"] != false || len(closed["attempts"].([]any)) != 0 {
+					t.Fatal(closed)
+				}
+				detail := closed["receipt"].(map[string]any)["detail"].(string)
+				if strings.Contains(detail, human.ActorID) || detail != "Closed without delivery: no delivery path is configured for external; nothing was sent." {
+					t.Fatal(detail)
+				}
+				call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
 			}
-			detail := closed["receipt"].(map[string]any)["detail"].(string)
-			if strings.Contains(detail, human.ActorID) || detail != "Closed without delivery: no delivery path is configured for the missing work item; nothing was sent." {
-				t.Fatal(detail)
-			}
-			call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
 			var raw string
 			if err := env.workspace.DB().QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='decision' AND id=?", id).Scan(&raw); err != nil {
 				t.Fatal(err)

@@ -52,10 +52,12 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 	if kind == "decision" || kind == "action" || kind == "binding" {
 		owner = ""
 	}
-	// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
-	// ordering (including whole seconds) without SQLite's millisecond rounding.
-	// Legacy actions had no creation timestamp; use their decision's timestamp.
-	rows, err := s.store.db.QueryContext(ctx, `WITH records AS (
+	lastVisible := before
+	for {
+		// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
+		// ordering (including whole seconds) without SQLite's millisecond rounding.
+		// Legacy actions had no creation timestamp; use their decision's timestamp.
+		rows, err := s.store.db.QueryContext(ctx, `WITH records AS (
  SELECT r.rowid AS record_rowid, r.body,
  rtrim(COALESCE(json_extract(r.body,'$.created_at'),
    (SELECT json_extract(d.body,'$.created_at') FROM pm_records d
@@ -64,53 +66,60 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
  SELECT record_rowid,created,body FROM records
  WHERE (?=0 OR created<? OR (created=? AND record_rowid<?))
  ORDER BY created DESC,record_rowid DESC LIMIT ?`, kind, p.WorkspaceID, owner, owner, before.Row, before.Created, before.Created, before.Row, limit+1)
-	if err != nil {
-		return out, err
-	}
-	// Close SQL rows before permission callbacks, which may query the same DB.
-	type record struct {
-		row     int64
-		created string
-		value   T
-	}
-	records := make([]record, 0, limit+1)
-	for rows.Next() {
-		var v record
-		var b []byte
-		if err = rows.Scan(&v.row, &v.created, &b); err != nil {
-			rows.Close()
-			return out, err
-		}
-		if err = json.Unmarshal(b, &v.value); err != nil {
-			rows.Close()
-			return out, err
-		}
-		records = append(records, v)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return out, err
-	}
-	out.HasMore = len(records) > limit
-	if out.HasMore {
-		records = records[:limit]
-	}
-	for _, v := range records {
-		if allowed(v.value) {
-			out.Items = append(out.Items, v.value)
-		}
-		before.Scope, before.Created, before.Row = scope, v.created, v.row
-	}
-	if out.HasMore {
-		raw, err := json.Marshal(before)
 		if err != nil {
 			return out, err
 		}
-		out.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+		// Close SQL rows before permission callbacks, which may query the same DB.
+		type record struct {
+			row     int64
+			created string
+			value   T
+		}
+		records := make([]record, 0, limit+1)
+		for rows.Next() {
+			var v record
+			var b []byte
+			if err = rows.Scan(&v.row, &v.created, &b); err != nil {
+				rows.Close()
+				return out, err
+			}
+			if err = json.Unmarshal(b, &v.value); err != nil {
+				rows.Close()
+				return out, err
+			}
+			records = append(records, v)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return out, err
+		}
+		for _, v := range records {
+			before.Scope, before.Created, before.Row = scope, v.created, v.row
+			if !allowed(v.value) {
+				continue
+			}
+			if len(out.Items) == limit {
+				// Only a further visible record proves there is another page.
+				out.HasMore = true
+				raw, err := json.Marshal(lastVisible)
+				if err != nil {
+					return out, err
+				}
+				out.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+				return out, nil
+			}
+			out.Items = append(out.Items, v.value)
+			lastVisible = before
+		}
+		if len(records) < limit+1 {
+			return out, nil
+		}
+		// Continue in bounded batches past hidden rows. SQL rows are closed
+		// before callbacks, including callbacks that read from this same store.
 	}
-	return out, nil
 }
+
 func (s *Service) ConversationPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Conversation], error) {
 	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) bool { return s.authorize(ctx, p, "pm.read", c.WorkRef) == nil })
 }

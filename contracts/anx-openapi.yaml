@@ -31,7 +31,7 @@ paths:
     get:
       operationId: pmConversationsList
       summary: List PM conversations
-      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.
       tags:
       - pm
       x-anx-surface: canonical
@@ -283,7 +283,7 @@ paths:
     get:
       operationId: pmDecisionsList
       summary: List durable PM decisions
-      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.
       tags:
       - pm
       x-anx-surface: canonical
@@ -326,6 +326,7 @@ paths:
                 $ref: '#/components/schemas/PMDecisionListResponse'
     post:
       operationId: pmDecisionsCreate
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization.
       summary: Propose a scoped PM decision
       tags:
       - pm
@@ -469,7 +470,7 @@ paths:
     post:
       operationId: pmDecisionsAnswer
       summary: Answer and authorize a scoped decision
-      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing, already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
       tags:
       - pm
       x-anx-surface: canonical
@@ -524,6 +525,7 @@ paths:
   /pm/decisions/{decision_id}/dispatch:
     post:
       operationId: pmDecisionsDispatch
+      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call or attempt. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.
       summary: Hand off an authorized source action
       tags:
       - pm
@@ -586,7 +588,7 @@ paths:
     get:
       operationId: pmActionsList
       summary: List action receipts and attempts
-      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Legacy actions without created_at use their decision creation time.
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor. Legacy actions without created_at use their decision creation time.
       tags:
       - pm
       x-anx-surface: canonical
@@ -673,7 +675,7 @@ paths:
   /pm/actions/{action_id}/reconcile:
     post:
       operationId: pmActionsReconcile
-      description: Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.
+      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.
       summary: Read back an action outcome without resending
       tags:
       - pm
@@ -6589,7 +6591,7 @@ components:
         resolution:
           type: array
           readOnly: true
-          description: Derived on decision responses only, never accepted as input or stored approval parameters. Missing, trashed, or unavailable refs have exists false and an empty title_or_summary; summaries are bounded to 240 characters plus an ellipsis.
+          description: Omitted when empty. Derived on decision responses only, never accepted as input or stored approval parameters. Missing, trashed, or unavailable refs have exists false and an empty title_or_summary; summaries are bounded to 240 characters plus an ellipsis.
           items:
             type: object
             additionalProperties: false
@@ -6605,6 +6607,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        source_authority:
+          type: string
+          readOnly: true
+          description: Trusted source authority captured at proposal and copied to the action for executor routing even after work is purged. Absent on legacy records; live work supplies the legacy fallback.
         replayed:
           type: boolean
           readOnly: true
@@ -6615,12 +6621,13 @@ components:
           description: Response-only status of a replayed decision that is no longer awaiting_answer. Absent on awaiting replays and ordinary reads.
         deliverable:
           type: boolean
+          nullable: true
           readOnly: true
-          description: Derived on every response from the same configured scope/source executor registry as action deliverable. Availability does not imply approval, delivery, or a valid source revision.
+          description: Derived on every response from the same configured scope/source executor registry as action deliverable. Availability is independent of work lifecycle and does not imply approval, delivery, or a valid source revision. Null means a legacy record has lost both its work and source authority; delivery_path is unknown, never an unconfigured-executor diagnosis.
         delivery_path:
           type: string
           readOnly: true
-          description: Configured executor route (for example nexus or github); none when no route is available. Open string for future integrations; configured denotes a legacy unnamed executor.
+          description: Configured executor route (for example nexus or github); none when no route is available. Open string for future integrations; configured denotes a legacy unnamed executor. Unknown denotes a legacy record whose source cannot be recovered after work purge; deliverable is null.
         id: *id001
         workspace_id: *id002
         actor_id: *id003
@@ -6651,7 +6658,7 @@ components:
         work_missing:
           type: boolean
           readOnly: true
-          description: Derived on every response; true when the referenced work no longer resolves. Such decisions remain visible in lists and pages and can be declined or their actions acknowledged or closed by the owner, but cannot be approved or dispatched.
+          description: Derived on every response; true when the referenced work no longer resolves or is trashed or archived. Such decisions remain visible in lists and pages and can be declined or their actions acknowledged or closed by the owner, but cannot be approved or dispatched.
         target_current:
           type: boolean
           readOnly: true
@@ -6733,6 +6740,14 @@ components:
       type: object
       additionalProperties: true
       properties:
+        delivery_path:
+          type: string
+          readOnly: true
+          description: Configured scope/source executor route independent of work lifecycle; none when unconfigured. Uses the trusted source_authority snapshot, with live-work fallback for legacy records. If a legacy source cannot be recovered after purge, delivery_path is unknown and deliverable is null.
+        source_authority:
+          type: string
+          readOnly: true
+          description: Trusted source authority captured at proposal and copied to the action for executor routing even after work is purged. Absent on legacy records; live work supplies the legacy fallback.
         id: *id001
         workspace_id: *id002
         actor_id: *id003
@@ -6776,6 +6791,7 @@ components:
           description: True when the decision actor closed an undeliverable pending request without sending it. Receipt detail names the actor and delivery limitation. This is not an acknowledged source failure.
         deliverable:
           type: boolean
+          nullable: true
           description: Derived from configured executors for this scope and source on every read, except acknowledged unsent actions always remain false. For pending actions, false means dispatch returns unavailable (503) without recording an attempt. Acknowledging an undeliverable pending action prevents later delivery; a fresh proposal and approval are required.
         reconciliation_conflict:
           type: boolean

@@ -32,6 +32,13 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 		}
 	}
 	d := Decision{ID: stableID("decision", p.WorkspaceID, p.ActorID, in.RequestKey), WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, WorkRef: in.WorkRef, Instruction: in.Instruction, Payload: in.Payload, Scope: in.Scope, TargetRevision: in.TargetRevision, Status: AwaitingAnswer, Revision: 1, Origin: in.Origin, CreatedAt: time.Now().UTC()}
+	if s.deps.DecisionWork != nil {
+		work, err := s.deps.DecisionWork(ctx, p, in.WorkRef)
+		if err != nil {
+			return Decision{}, err
+		}
+		d.SourceAuthority = work.SourceAuthority
+	}
 	d.ProposedBy = proposedBy
 	d.OriginKind = "human"
 	if turnID != "" {
@@ -131,7 +138,7 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		d.Status = Answered
 		d.ActionID = stableID("action", d.ID)
 		now := time.Now().UTC()
-		a = &Action{CreatedAt: &now, ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
+		a = &Action{SourceAuthority: d.SourceAuthority, CreatedAt: &now, ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
 	}
 	d.CanAnswer = false
 	if err = s.store.answer(ctx, d, a, in.Revision); err != nil {
@@ -148,6 +155,9 @@ func (s *Service) action(ctx context.Context, p Principal, id, permission string
 		return Action{}, ErrForbidden
 	}
 	if err := s.authorize(ctx, p, permission, a.WorkRef); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return Action{}, actionWorkReadError(a, err)
+		}
 		return Action{}, err
 	}
 	return s.actionForReader(ctx, a), nil
@@ -186,8 +196,11 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if err != nil {
 		return Action{}, err
 	}
-	if d.ActorID != a.ActorID || d.AnsweredBy != d.ActorID || a.Instruction != d.Instruction || a.WorkRef != d.WorkRef || a.Scope != d.Scope || a.TargetRevision != d.TargetRevision || !reflect.DeepEqual(a.Payload, d.Payload) {
+	if d.ActorID != a.ActorID || d.AnsweredBy != d.ActorID || a.Instruction != d.Instruction || a.WorkRef != d.WorkRef || a.Scope != d.Scope || a.TargetRevision != d.TargetRevision || a.SourceAuthority != d.SourceAuthority || !reflect.DeepEqual(a.Payload, d.Payload) {
 		return Action{}, ErrForbidden
+	}
+	if err := s.validateActionWork(ctx, p, a); err != nil {
+		return Action{}, err
 	}
 	if a.Status != Pending {
 		return a, nil
@@ -211,7 +224,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	}
 	revision, err := s.deps.CurrentRevision(ctx, approver, a.WorkRef)
 	if err != nil {
-		return Action{}, err
+		return Action{}, actionWorkReadError(a, err)
 	}
 	if revision != a.TargetRevision {
 		// The approval remains answered, but its delivery is now terminal. Keep
@@ -318,6 +331,9 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	a, err := s.action(ctx, p, id, "pm.read")
 	if err != nil {
 		return a, err
+	}
+	if err := s.validateActionWork(ctx, p, a); err != nil {
+		return Action{}, err
 	}
 	// Human handling is a display state, not evidence of source acknowledgement.
 	sourceStatus := a.Status
@@ -471,6 +487,9 @@ func (s *Service) deliveryPath(ctx context.Context, a Action) (string, error) {
 	if s.deps.DeliveryPath != nil {
 		path, err := s.deps.DeliveryPath(ctx, a)
 		if err != nil {
+			if path == "unknown" && errors.Is(err, ErrNotFound) {
+				return path, err
+			}
 			return "none", err
 		}
 		if path == "" || path == "none" {
@@ -487,7 +506,9 @@ func (s *Service) deliveryPath(ctx context.Context, a Action) (string, error) {
 	return "none", NoDeliveryPath("this action")
 }
 func (s *Service) actionForReader(ctx context.Context, a Action) Action {
-	a.Deliverable = !(a.AcknowledgedAt != nil && !hasSentAttempt(a)) && s.checkDelivery(ctx, a) == nil
+	path, err := s.deliveryPath(ctx, a)
+	a.DeliveryPath = path
+	a.Deliverable = !(a.AcknowledgedAt != nil && !hasSentAttempt(a)) && err == nil
 	return a
 }
 
@@ -539,4 +560,28 @@ func (s *Service) validateApprovalTarget(ctx context.Context, p Principal, d Dec
 		return failure
 	}
 	return nil
+}
+
+// Reconciliation checks liveness, not the approved revision or target phase:
+// a successful source write is expected to have changed those values.
+func (s *Service) validateActionWork(ctx context.Context, p Principal, a Action) error {
+	var err error
+	if s.deps.DecisionWork != nil {
+		_, err = s.deps.DecisionWork(ctx, p, a.WorkRef)
+	} else if s.deps.CurrentRevision != nil {
+		_, err = s.deps.CurrentRevision(ctx, p, a.WorkRef)
+	} else {
+		err = ErrUnavailable
+	}
+	if err != nil {
+		return actionWorkReadError(a, err)
+	}
+	return nil
+}
+func actionWorkReadError(a Action, err error) error {
+	reason := "work_read_failed"
+	if errors.Is(err, ErrNotFound) {
+		reason = "work_missing"
+	}
+	return &ApprovalTargetError{ApprovedRevision: a.TargetRevision, Reason: reason}
 }

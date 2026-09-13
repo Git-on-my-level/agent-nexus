@@ -130,16 +130,15 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if err != nil {
 			return pm.ErrForbidden
 		}
-		if ref != "" && permission != "pm.respond" {
+		// Decision reads/answers and source actions authorize the principal first;
+		// their domain preflight handles missing or non-live work. Preserve the
+		// existing reference check for other PM operations such as bindings.
+		if ref != "" && permission != "pm.respond" && permission != "pm.read" && permission != "pm.approve" && permission != "pm.propose" && !strings.HasPrefix(permission, "pm.action.") {
 			if _, err := store.GetWork(ctx, ref); err != nil {
-				if !errors.Is(err, primitives.ErrNotFound) {
-					return err
-				}
-				// Durable PM records outlive work. Reading and human handling
-				// remain authorized; proposals and source mutations need work.
-				if permission != "pm.read" && permission != "pm.approve" {
+				if errors.Is(err, primitives.ErrNotFound) {
 					return pm.ErrNotFound
 				}
+				return err
 			}
 		}
 		switch permission {
@@ -157,14 +156,22 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 				return pm.ErrForbidden
 			}
 			return nil
-		case "pm.propose", "pm.approve", "pm.bind":
+		case "pm.propose":
+			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
+				if ref == "" {
+					return nil
+				}
+				_, err := liveDecisionWork(ctx, store, ref)
+				return err
+			}
+		case "pm.approve", "pm.bind":
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				return nil
 			}
 		case "pm.action.work.annotate":
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				w, err := store.GetWork(ctx, ref)
-				if err == nil && anyString(workSourceMap(w)["authority"]) == "nexus" {
+				if errors.Is(err, primitives.ErrNotFound) || (err == nil && anyString(workSourceMap(w)["authority"]) == "nexus") {
 					return nil
 				}
 			}
@@ -229,14 +236,11 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		return currentWorkDecisionRevision(ctx, store, ref)
 	}
 	deps.DecisionWork = func(ctx context.Context, p pm.Principal, ref string) (pm.DecisionWork, error) {
-		w, err := store.GetWork(ctx, ref)
-		if errors.Is(err, primitives.ErrNotFound) {
-			return pm.DecisionWork{}, pm.ErrNotFound
-		}
+		w, err := liveDecisionWork(ctx, store, ref)
 		if err != nil {
 			return pm.DecisionWork{}, err
 		}
-		return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"])}, nil
+		return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"]), SourceAuthority: anyString(workSourceMap(w)["authority"])}, nil
 	}
 
 	// The registry is the single source of configured native execution paths.
@@ -247,14 +251,19 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		},
 	}
 	deps.DeliveryPath = func(ctx context.Context, a pm.Action) (string, error) {
-		w, err := store.GetWork(ctx, a.WorkRef)
-		if errors.Is(err, primitives.ErrNotFound) {
-			return "none", pm.NoDeliveryPath("the missing work item")
+		authority := a.SourceAuthority
+		if authority == "" {
+			// Legacy records lack the trusted routing snapshot. Resolve it from
+			// live or trashed work where possible; never infer it from a scope.
+			w, err := store.GetWork(ctx, a.WorkRef)
+			if errors.Is(err, primitives.ErrNotFound) {
+				return "unknown", pm.ErrNotFound
+			}
+			if err != nil {
+				return "none", err
+			}
+			authority = anyString(workSourceMap(w)["authority"])
 		}
-		if err != nil {
-			return "none", err
-		}
-		authority := anyString(workSourceMap(w)["authority"])
 		if authority == "nexus" && nativeExecutors[a.Scope] != nil {
 			return "nexus", nil
 		}
@@ -493,9 +502,25 @@ func readBackWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Acti
 }
 
 func currentWorkDecisionRevision(ctx context.Context, store *primitives.Store, ref string) (string, error) {
-	w, err := store.GetWork(ctx, ref)
+	w, err := liveDecisionWork(ctx, store, ref)
 	if err != nil {
 		return "", err
 	}
 	return primitives.WorkDecisionRevision(w), nil
+}
+
+// PM targets must be live even though Work GET intentionally exposes lifecycle
+// records. Durable decisions remain readable and declineable after removal.
+func liveDecisionWork(ctx context.Context, store *primitives.Store, ref string) (map[string]any, error) {
+	w, err := store.GetWork(ctx, ref)
+	if errors.Is(err, primitives.ErrNotFound) {
+		return nil, pm.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if anyString(w["trashed_at"]) != "" || anyString(w["archived_at"]) != "" {
+		return nil, pm.ErrNotFound
+	}
+	return w, nil
 }

@@ -5906,7 +5906,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/actions",
     "operation_id": "pmActionsList",
     "summary": "List action receipts and attempts",
-    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Legacy actions without created_at use their decision creation time.",
+    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor. Legacy actions without created_at use their decision creation time.",
     "why": "List action receipts and attempts.",
     "input_mode": "none",
     "streaming": {
@@ -5966,7 +5966,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/actions/{action_id}/reconcile",
     "operation_id": "pmActionsReconcile",
     "summary": "Read back an action outcome without resending",
-    "description": "Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.",
+    "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.",
     "why": "Read back an action outcome without resending.",
     "input_mode": "json-body",
     "streaming": {
@@ -6401,7 +6401,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/conversations",
     "operation_id": "pmConversationsList",
     "summary": "List PM conversations",
-    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.",
+    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.",
     "why": "List PM conversations.",
     "input_mode": "none",
     "streaming": {
@@ -6535,7 +6535,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions/{decision_id}/answer",
     "operation_id": "pmDecisionsAnswer",
     "summary": "Answer and authorize a scoped decision",
-    "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing, already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
+    "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
     "why": "Answer and authorize a scoped decision.",
     "input_mode": "json-body",
     "streaming": {
@@ -6614,6 +6614,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions",
     "operation_id": "pmDecisionsCreate",
     "summary": "Propose a scoped PM decision",
+    "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization.",
     "why": "Propose a scoped PM decision.",
     "input_mode": "json-body",
     "streaming": {
@@ -6716,6 +6717,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions/{decision_id}/dispatch",
     "operation_id": "pmDecisionsDispatch",
     "summary": "Hand off an authorized source action",
+    "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call or attempt. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.",
     "why": "Hand off an authorized source action.",
     "input_mode": "json-body",
     "streaming": {
@@ -6840,7 +6842,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions",
     "operation_id": "pmDecisionsList",
     "summary": "List durable PM decisions",
-    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.",
+    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.",
     "why": "List durable PM decisions.",
     "input_mode": "none",
     "streaming": {

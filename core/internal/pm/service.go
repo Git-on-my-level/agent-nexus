@@ -57,6 +57,12 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 		}
 	}
 	if err := s.deps.Authorize(ctx, p, permission, ref); err != nil {
+		// Authorizers may report missing work only after checking the principal's
+		// permission. Preserve that diagnosis for proposals/source actions. Other
+		// lookups retain the forbidden fold to prevent cross-principal existence leaks.
+		if errors.Is(err, ErrNotFound) && (permission == "pm.propose" || strings.HasPrefix(permission, "pm.action.")) && s.deps.Authorize(ctx, p, permission, "") == nil {
+			return ErrNotFound
+		}
 		return ErrForbidden
 	}
 	return nil
