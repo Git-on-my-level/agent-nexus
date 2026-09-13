@@ -143,6 +143,12 @@
       }
       return true;
     } catch (e) {
+      // A principal that may not list principals (an agent persona, a
+      // read-limited grant) is not a lone new human; no welcome for them.
+      const status = Number(e?.status ?? e?.coreHttpStatus ?? 0);
+      if (status === 401 || status === 403) {
+        return false;
+      }
       console.warn(
         "[WorkspaceTour] listPrincipals failed; showing tour (solo-workspace assumption)",
         e,

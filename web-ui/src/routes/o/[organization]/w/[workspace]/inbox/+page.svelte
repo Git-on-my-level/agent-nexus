@@ -1,7 +1,7 @@
 <script>
   import { onMount, untrack } from "svelte";
   import { page } from "$app/stores";
-  import { beforeNavigate } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
@@ -18,6 +18,7 @@
     humanizeInstants,
     isNexusOwned,
     isSessionExpired,
+    readErrorExplanation,
     taskDetailPath,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -67,7 +68,12 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let mailbox = $derived($page.url.searchParams.get("mailbox") || "needs-you");
-  let selectedId = $derived($page.url.searchParams.get("item") || "");
+  let urlItem = $derived($page.url.searchParams.get("item") || "");
+  // Holds the answered row until goto can pin it in the URL. Without this,
+  // updating `decisions` moves the row out of the current mailbox and the
+  // panel jumps to visible[0], which clears the notice.
+  let heldItem = $state("");
+  let selectedId = $derived(urlItem || heldItem);
 
   let rows = $derived(
     buildInboxRows({
@@ -184,7 +190,9 @@
   }
 
   beforeNavigate(({ cancel, type }) => {
-    if (busy) {
+    // recordAnswer pins the answered row with goto() while busy is still
+    // true; cancelling that navigation drops the Approved/Declined notice.
+    if (busy && type !== "goto") {
       cancel();
       return;
     }
@@ -302,13 +310,29 @@
         approve: choice === "approve",
         text: answer.trim(),
       });
+      const approved = choice === "approve";
+      const pinId = `decision:${result.id}`;
+      const wasUnpinned = !urlItem;
+      if (wasUnpinned) heldItem = pinId;
       decisions = decisions.map((item) =>
         item.id === result.id ? result : item,
       );
-      const approved = choice === "approve";
       answer = "";
       choice = "";
       notice = approved ? "Approved." : "Declined.";
+      // The answered row leaves this mailbox. Hold it, then pin it in the
+      // URL so a reload keeps the same row (and the notice) in view.
+      if (wasUnpinned) {
+        const moved = rows.find((row) => row.id === pinId);
+        await goto(
+          href({
+            item: pinId,
+            mailbox: moved?.mailbox || mailbox,
+          }),
+          { replaceState: true, noScroll: true, keepFocus: true },
+        );
+        heldItem = "";
+      }
       if (result.action_id) {
         try {
           const receipt = await coreClient.getPmAction(result.action_id);
@@ -870,7 +894,7 @@
               )}{#if taskItem?.refresh?.last_error?.message}
                 <span class="text-warn-text">
                   · {humanizeInstants(
-                    taskItem.refresh.last_error.message,
+                    readErrorExplanation(taskItem.refresh.last_error),
                   )}</span
                 >{/if}
             </p>
