@@ -169,6 +169,7 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
+	CreatedAt              *time.Time     `json:"created_at,omitempty"`
 	Deliverable            bool           `json:"deliverable"`
 	ReconciliationConflict bool           `json:"reconciliation_conflict"`
 	Payload                *ActionPayload `json:"payload,omitempty"`

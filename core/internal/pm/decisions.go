@@ -105,7 +105,8 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		}
 		d.Status = Answered
 		d.ActionID = stableID("action", d.ID)
-		a = &Action{ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
+		now := time.Now().UTC()
+		a = &Action{CreatedAt: &now, ID: d.ActionID, DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: p.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Payload: d.Payload, Scope: d.Scope, TargetRevision: d.TargetRevision, AuthorizationBasis: "decision:" + d.ID + ";human:" + p.ActorID, Status: Pending, Revision: 1, Attempts: []Attempt{}}
 	}
 	d.CanAnswer = false
 	if err = s.store.answer(ctx, d, a, in.Revision); err != nil {
@@ -179,7 +180,19 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return Action{}, err
 	}
 	if revision != a.TargetRevision {
-		return Action{}, ErrStale
+		// The approval remains answered, but its delivery is now terminal. Keep
+		// the failed preflight as durable evidence so clients do not offer retry
+		// against the same stale authorization. No source handoff was made.
+		old := a.Revision
+		now := time.Now().UTC()
+		a.Status = Failed
+		a.Receipt = Receipt{Status: Failed, Detail: fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s); re-approve to deliver", a.TargetRevision, revision)}
+		a.Revision++
+		a.Attempts = append(a.Attempts, Attempt{StartedAt: now, FinishedAt: &now, Status: Failed, Receipt: a.Receipt})
+		if err = s.store.cas(context.WithoutCancel(ctx), "action", a.ID, old, a); err != nil {
+			return Action{}, err
+		}
+		return a, ErrStale
 	}
 	old := a.Revision
 	a.Status = Sending
