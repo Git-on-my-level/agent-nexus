@@ -225,15 +225,15 @@
         coreClient.listInboxItems({ status: "completed", limit: 50 }),
         coreClient.getHomeUnread(),
       ]);
-      if (ticket !== requestId) return;
-      if (results[0].status === "fulfilled") {
-        decisions = results[0].value.items || [];
-      } else error = errorMessage(results[0].reason);
       // A refused session will refuse the retry too; offer sign-in instead.
       sessionExpired = results.some(
         (result) =>
           result.status === "rejected" && isSessionExpired(result.reason),
       );
+      if (ticket !== requestId) return;
+      if (results[0].status === "fulfilled") {
+        decisions = results[0].value.items || [];
+      } else error = errorMessage(results[0].reason);
       // Each list is one page. Counts drawn from partial pages are lower
       // bounds, and the reader must be told so rather than shown a total.
       truncated = results.some(
@@ -245,6 +245,10 @@
       if (results[1].status === "fulfilled") {
         actions = results[1].value.items || [];
         receiptsUnavailable = false;
+      } else if (sessionExpired) {
+        // The receipts are not in doubt, the session is; keep the last
+        // classification and let the banner say what to do.
+        error = error || errorMessage(results[1].reason);
       } else {
         // Without receipts, an answered decision cannot be classified; say
         // so rather than quietly filing everything under Watching.

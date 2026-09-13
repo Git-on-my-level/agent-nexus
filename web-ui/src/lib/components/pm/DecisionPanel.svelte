@@ -135,7 +135,7 @@
   <div class="space-y-6 p-4 sm:p-5">
     <header>
       <h2 class="text-subtitle font-semibold text-fg">
-        {#if workHref}
+        {#if workHref && !selected?.work_missing}
           <a class="hover:text-accent-text" href={workHref}>{summary.title}</a>
         {:else}
           {summary.title}
@@ -446,14 +446,14 @@
             rel="noreferrer">Open authoritative receipt ↗</a
           >
         {/if}
-        {#if undeliverable && !delivered}
+        {#if undeliverable && !delivered && !selected?.work_missing}
           <p class="mt-2 text-meta text-fg-muted">
             No delivery path is configured for this source yet. The approval is
             kept, and the request stays pending until one is.
           </p>
         {/if}
         <div class="mt-4 flex flex-wrap items-center gap-2">
-          {#if action.status === "pending_delivery" && !undeliverable && targetMoved}
+          {#if action.status === "pending_delivery" && (targetMoved || (undeliverable && selected?.work_missing))}
             <p class="text-meta text-warn-text">
               {selected?.work_missing
                 ? "The task this approval refers to no longer exists, so it cannot be delivered."

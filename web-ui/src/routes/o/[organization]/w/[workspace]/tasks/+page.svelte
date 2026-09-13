@@ -41,6 +41,7 @@
   let shortcutsOpen = $state(false);
   let moveError = $state("");
   let sessionExpired = $state(false);
+  let moveSessionExpired = $state(false);
   function signInAgain() {
     restartSession({
       organizationSlug: $page.params.organization,
@@ -200,23 +201,30 @@
       // Fail soft: the Board column falls back to the board_ref slug.
     }
   }
+  const DECISION_PREFETCH_PAGES = 25;
   async function loadDecisions() {
     decisionsLoaded = true;
     try {
-      // Follow the cursor so the Requested badge never silently misses a
-      // request that landed past the first page.
+      // Follow the cursor so the Requested badge does not miss a request
+      // that landed past the first page. Pages are newest first, so if the
+      // ceiling is reached only the oldest requests go unbadged; the Inbox
+      // still lists them.
       const items = [];
       let cursor;
-      for (let page = 0; page < 10; page += 1) {
+      for (let page = 0; page < DECISION_PREFETCH_PAGES; page += 1) {
         const result = await coreClient.listPmDecisions({ limit: 200, cursor });
         items.push(...(Array.isArray(result?.items) ? result.items : []));
         cursor = result?.next_cursor || "";
         if (!cursor) break;
       }
       decisions = items;
+      if (cursor)
+        console.warn(
+          `Requested badges cover the newest ${items.length} decisions; older ones are not badged.`,
+        );
       const receipts = [];
       let actionCursor;
-      for (let page = 0; page < 10; page += 1) {
+      for (let page = 0; page < DECISION_PREFETCH_PAGES; page += 1) {
         const result = await coreClient.listPmActions({
           limit: 200,
           cursor: actionCursor,
@@ -232,6 +240,7 @@
   }
   async function moveTask(work, phase, { undo = false } = {}) {
     moveError = "";
+    moveSessionExpired = false;
     moveNotice = null;
     const key = workKey(work);
     const from = work.phase || "unknown";
@@ -262,11 +271,13 @@
         const trimmed = String(evidenceFor.ref ?? "").trim();
         if (!trimmed) return;
         resolutionRefs = [trimmed];
-        evidenceFor = null;
       }
       const result = await applyTaskPhaseMove(coreClient, work, phase, {
         resolutionRefs,
       });
+      // The evidence form closes only once core accepted the ref; a rejected
+      // ref keeps the typed value in front of the reader with the error.
+      if (result.kind !== "needs_evidence") evidenceFor = null;
       if (result.kind === "needs_evidence") {
         moveNotice = {
           text: "Done needs evidence. Add the artifact or event that proves completion.",
@@ -334,6 +345,7 @@
         return;
       }
       moveError = errorMessage(err);
+      moveSessionExpired = isSessionExpired(err);
     }
   }
   // Core answers a replayed request key with the decision it already holds.
@@ -716,7 +728,11 @@
     </p>
   {/if}
   {#if moveError}
-    <StateError message={moveError} />
+    <StateError
+      message={moveError}
+      onretry={moveSessionExpired ? signInAgain : undefined}
+      retryLabel="Sign in again"
+    />
   {/if}
 
   {#if error}
@@ -766,6 +782,7 @@
       {requested}
       {requestedDecisions}
       {boardTitles}
+      truncated={Boolean(nextCursor)}
       onMove={moveTask}
     />
   {/if}

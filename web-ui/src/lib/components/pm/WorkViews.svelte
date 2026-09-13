@@ -25,6 +25,9 @@
     requested = {},
     requestedDecisions = {},
     boardTitles = {},
+    // The records are one page of the list; a column count is then a lower
+    // bound, and says so the way the table header does.
+    truncated = false,
     onMove,
   } = $props();
   let groups = $derived(
@@ -181,8 +184,10 @@
       >
         <div class="mb-2 flex items-baseline justify-between gap-2 px-1 py-1">
           <h2 class="ui-label mb-0 truncate">{group.label}</h2>
-          <span class="shrink-0 text-micro tabular-nums text-fg-subtle"
-            >{group.items.length}</span
+          <span
+            class="shrink-0 text-micro tabular-nums text-fg-subtle"
+            title={truncated ? "At least; not every task is loaded" : undefined}
+            >{group.items.length}{truncated ? "+" : ""}</span
           >
         </div>
         <div class="flex flex-col gap-2">

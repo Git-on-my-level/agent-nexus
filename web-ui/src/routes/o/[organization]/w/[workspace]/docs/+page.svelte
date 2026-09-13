@@ -83,6 +83,9 @@
   };
 
   let documents = $state([]);
+  // Search pages followed beyond the first before the list says "more".
+  const SEARCH_PAGE_CEILING = 5;
+  let searchTruncated = $state(false);
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
@@ -220,7 +223,20 @@
         // /docs/search takes q/knowledge/tag/cursor/limit only (no state or
         // thread_id per contracts/anx-openapi.yaml), so the lifecycle filter
         // and thread scope are dropped while searching.
+        // Search pages at 50; follow the cursor so a common word does not
+        // quietly show only its first page.
         data = await coreClient.searchDocuments({ q });
+        let cursor = data?.next_cursor || "";
+        for (let pages = 0; cursor && pages < SEARCH_PAGE_CEILING; pages += 1) {
+          const more = await coreClient.searchDocuments({ q, cursor });
+          data = {
+            ...data,
+            documents: [...(data.documents || []), ...(more?.documents || [])],
+            next_cursor: more?.next_cursor || "",
+          };
+          cursor = data.next_cursor;
+        }
+        searchTruncated = Boolean(cursor);
       } else {
         const filters = {
           state: docFiltersApplied.states ?? ["active"],
@@ -228,6 +244,7 @@
         const threadFromUrl = String(scopedThreadId ?? "").trim();
         if (threadFromUrl) filters.thread_id = threadFromUrl;
         data = await coreClient.listDocuments(filters);
+        searchTruncated = false;
       }
       if (
         loadToken !== activeDocumentListLoadToken ||
@@ -875,6 +892,12 @@
         {@render docRow(doc, i, i > 0)}
       {/each}
     </div>
+    {#if searchTruncated}
+      <p class="mt-2 text-micro text-fg-muted" role="status">
+        Showing the first {documents.length} matches. Narrow the search to see the
+        rest.
+      </p>
+    {/if}
   {/if}
 
   <ConfirmModal
