@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
@@ -56,6 +56,17 @@
   let moveNotice = $state(null);
   // A pending "done" move waiting for its evidence ref.
   let evidenceFor = $state(null);
+  // Cancelling the form must not drop the keyboard on the page body.
+  function cancelEvidence() {
+    const ref = evidenceFor?.work?.ref;
+    evidenceFor = null;
+    void tick().then(() => {
+      if (!ref) return;
+      document
+        .querySelector(`[data-work-ref="${CSS.escape(ref)}"][tabindex="0"]`)
+        ?.focus();
+    });
+  }
   let evidenceSuggestions = $state([]);
   let evidenceInput = $state(null);
   let moveNoticeElement = $state(null);
@@ -724,7 +735,7 @@
       <button
         class="ui-prose-link text-micro"
         type="button"
-        onclick={() => (evidenceFor = null)}>Cancel</button
+        onclick={cancelEvidence}>Cancel</button
       >
     </form>
   {/if}

@@ -280,3 +280,36 @@ describe("proposals core marks as void", () => {
     });
   });
 });
+
+describe("approvals the reader still has to deliver", () => {
+  it("sit in Needs you with a Deliver badge, only for the approver", () => {
+    const decision = {
+      id: "d1",
+      status: "answered",
+      actor_id: "maya",
+      action_id: "a1",
+      work_ref: "card:a",
+      instruction: "move",
+    };
+    const action = {
+      id: "a1",
+      decision_id: "d1",
+      status: "pending_delivery",
+      deliverable: true,
+      attempts: [],
+    };
+    const mine = buildInboxRows({
+      decisions: [decision],
+      actions: [action],
+      currentActorId: "maya",
+    }).find((row) => row.id === "decision:d1");
+    expect(mine.mailbox).toBe("needs-you");
+    expect(inboxRowBadge(mine)).toMatchObject({ label: "Deliver" });
+    const theirs = buildInboxRows({
+      decisions: [decision],
+      actions: [action],
+      currentActorId: "leo",
+    }).find((row) => row.id === "decision:d1");
+    expect(theirs.mailbox).toBe("watching");
+  });
+});

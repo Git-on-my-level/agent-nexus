@@ -58,6 +58,10 @@
   let composerElement = $state(null);
   let olderLoaded = false;
   let creationKey, requestKey, requestText, createdConversationId;
+  // Conversations this tab created whose first message was refused: they
+  // exist at core, but nothing was said in them, so History skips them until
+  // a message lands (the retry still uses the same conversation).
+  let unsentConversations = $state(new Set());
   let requestId = 0;
   let decisionFetch = 0;
   let pollInFlight = false;
@@ -427,6 +431,7 @@
           );
         id = result.id;
         createdConversationId = id;
+        unsentConversations = new Set([...unsentConversations, id]);
       }
       const turn = await coreClient.sendPmMessage(id, {
         request_key: requestKey,
@@ -439,6 +444,11 @@
       draft = "";
       requestKey = "";
       requestText = "";
+      if (unsentConversations.has(id)) {
+        const next = new Set(unsentConversations);
+        next.delete(id);
+        unsentConversations = next;
+      }
       await loadList();
       if (selectedId !== id) {
         sending = false;
@@ -579,7 +589,7 @@
           >
           <div class="pm-history-panel" role="presentation">
             <nav aria-label="Conversation history">
-              {#each conversations as item (item.id)}
+              {#each conversations.filter((item) => item.id === selectedId || !unsentConversations.has(item.id)) as item (item.id)}
                 <a
                   class="pm-history-item {item.id === selectedId
                     ? 'pm-history-item--active'

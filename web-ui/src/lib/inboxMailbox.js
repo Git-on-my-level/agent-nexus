@@ -60,7 +60,7 @@ export function proposalVoidReason(decision, work = null) {
 export function decisionRowStatus(
   decision,
   actions = [],
-  { receiptsUnavailable = false, work = null } = {},
+  { receiptsUnavailable = false, work = null, currentActorId = "" } = {},
 ) {
   const own = String(decision?.status ?? "");
   const voidReason = proposalVoidReason(decision, work);
@@ -81,6 +81,16 @@ export function decisionRowStatus(
   const status = String(action.status ?? "");
   if (status === "verified" && action.receipt?.independently_verified !== true)
     return "source_reported";
+  // An approval that has a delivery path and was never sent still needs the
+  // approver's click; only the approver, and only while it is deliverable.
+  if (
+    (status === "pending_delivery" || status === "pending") &&
+    action.deliverable !== false &&
+    !(action.attempts || []).some((attempt) => attempt?.sent_at) &&
+    currentActorId &&
+    String(decision?.actor_id ?? "") === currentActorId
+  )
+    return "awaiting_delivery";
   // A closed request that never left core is not a failure.
   if (
     status === "acknowledged" &&
@@ -125,8 +135,13 @@ export function classifyInboxRow(row, now = Date.now()) {
     // Needs you.
     if (row.status === "awaiting_answer")
       return row.item?.can_answer === false ? "watching" : "needs-you";
-    // A failed delivery is the reader's problem again, not a thing to watch.
-    if (row.status === "failed" || row.status === "receipt_unavailable")
+    // A failed delivery is the reader's problem again, not a thing to watch;
+    // so is an approval the reader has yet to deliver.
+    if (
+      row.status === "failed" ||
+      row.status === "receipt_unavailable" ||
+      row.status === "awaiting_delivery"
+    )
       return "needs-you";
     // A moot, stale or orphaned proposal is nobody's obligation; it waits to
     // be tidied.
@@ -189,6 +204,8 @@ export function inboxRowBadge(row, now = Date.now()) {
       return { label: "Declined", tone: "neutral" };
     if (row.status === "receipt_unavailable")
       return { label: "Delivery state unknown", tone: "warn" };
+    if (row.status === "awaiting_delivery")
+      return { label: "Deliver", tone: "warn" };
     if (row.status === "void_moot")
       return { label: "Already there", tone: "neutral" };
     if (row.status === "void_stale")
@@ -216,6 +233,7 @@ export function buildInboxRows({
   inboxItems = [],
   updates = [],
   now = Date.now(),
+  currentActorId = "",
 } = {}) {
   const rows = [];
   const taskTitles = new Map();
@@ -248,6 +266,7 @@ export function buildInboxRows({
       status: decisionRowStatus(item, actions, {
         receiptsUnavailable,
         work: workByRef.get(item.work_ref) || null,
+        currentActorId,
       }),
       phase: item.status,
       item,

@@ -77,6 +77,7 @@
       inboxItems,
       updates,
       now,
+      currentActorId: $selectedActorId || "",
     }),
   );
   let visible = $derived(filterMailbox(rows, mailbox));

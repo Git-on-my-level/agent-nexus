@@ -102,6 +102,7 @@
     return { text: "never", title: "", datetime: "", muted: true };
   }
 
+  const ARROW_SKIPPED_PHASES = new Set(["blocked", "cancelled"]);
   function orderedPhases() {
     return groups.map((group) => group.key);
   }
@@ -132,8 +133,13 @@
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    const keys = orderedPhases();
     const current = work.phase || "unknown";
+    // Blocked and cancelled are states, not steps: an arrow walks the
+    // workflow and never files someone an obligation by accident. A card
+    // already in such a state can still step out of it.
+    const keys = orderedPhases().filter(
+      (key) => !ARROW_SKIPPED_PHASES.has(key) || key === current,
+    );
     const index = keys.indexOf(current);
     const nextIndex =
       event.key === "ArrowRight"
@@ -343,7 +349,10 @@
               {/if}
             </td>
             <td class="whitespace-nowrap px-3 py-1.5">
-              {#if checked.datetime}
+              {#if read.key === "error"}
+                <SignalBadge tone="warn">{read.label}</SignalBadge>
+                <span class="ml-1.5 text-fg-subtle">{checked.text}</span>
+              {:else if checked.datetime}
                 <time
                   class="tabular-nums text-fg-muted"
                   datetime={checked.datetime}
