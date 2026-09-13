@@ -152,6 +152,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if err = decode(&in); err == nil {
 			out, err = s.ClaimTurn(ctx, p, in)
 		}
+	case len(path) == 3 && path[0] == "turns" && path[2] == "release" && r.Method == http.MethodPost:
+		var in ReleaseInput
+		if err = decode(&in); err == nil {
+			out, err = s.ReleaseTurn(ctx, p, path[1], in)
+		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "fail" && r.Method == http.MethodPost:
 		var in FailInput
 		if err = decode(&in); err == nil {
@@ -262,6 +267,7 @@ func writeError(w http.ResponseWriter, err error) {
 
 // Shadow the durable lease fields, retaining them only for the claim protocol.
 func turnResponse(t Turn, includeLease bool) any {
+	t.FailureKind = turnFailureKind(t)
 	out := struct {
 		Turn
 		Claimed        bool       `json:"claimed"`

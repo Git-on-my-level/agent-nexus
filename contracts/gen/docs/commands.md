@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `161`
+- Commands: `162`
 
 ## `actors.create`
 
@@ -1548,7 +1548,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMClaimedTurn`.
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
 
 ## `pm.turns.complete`
 
@@ -1614,6 +1614,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+
+## `pm.turns.release`
+
+- CLI path: `pm turns release`
+- HTTP: `POST /pm/turns/{turn_id}/release`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Return interrupted work to the queue for another claim.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
+- Output: Returns `PMTurn`.
+- Agent notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
 
 ## `ref_edges.list`
 

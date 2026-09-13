@@ -201,7 +201,11 @@ func TestClaimAllocatesNewWorkAndEnforcesCapacityAcrossServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := second.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "same"})
+	recovered, err := second.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "same"})
+	if err != nil || recovered.ID != first.ID || recovered.LeaseToken != first.LeaseToken || recovered.Revision != first.Revision {
+		t.Fatalf("cross-service recovery: %+v %v", recovered, err)
+	}
+	next, err := second.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "second"})
 	if err != nil || first.ID == next.ID {
 		t.Fatalf("did not allocate new work: %+v %v", next, err)
 	}
@@ -213,8 +217,11 @@ func TestClaimAllocatesNewWorkAndEnforcesCapacityAcrossServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	results := make(chan error, 2)
-	for _, svc := range []*Service{s, second} {
-		go func(svc *Service) { _, err := svc.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "race"}); results <- err }(svc)
+	for i, svc := range []*Service{s, second} {
+		go func(svc *Service, runner string) {
+			_, err := svc.ClaimTurn(ctx, agent, ClaimInput{RunnerID: runner})
+			results <- err
+		}(svc, fmt.Sprintf("race-%d", i))
 	}
 	successes := 0
 	for i := 0; i < 2; i++ {

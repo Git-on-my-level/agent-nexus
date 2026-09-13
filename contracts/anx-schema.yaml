@@ -827,6 +827,7 @@ conversational_pm:
   decision_dispatch_scope: actor_id
   action_acknowledgement_scope: actor_id
   action_acknowledgement_fields: [acknowledged_by, acknowledged_at]
+  turn_failure_kind: [expired]
   decision_provenance: [proposed_by, origin_kind, turn_id]
   decision_origin_kind: [human, pm_turn, channel]
   phase_action_target: payload.phase
@@ -835,6 +836,9 @@ conversational_pm:
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
     - Done proposals validate every resolution ref; decision payload.resolution is read-only and derived at response time.
+    - Same-runner claims recover the existing unexpired lease before allocating; owner release requires runner_id and lease_token and returns sending with claimed false.
+    - Expired turns carry failure_kind expired; turn_closed errors expose the reason and name the deadline.
+    - Human acknowledgement preserves later read-only reconciliation and its acknowledgement metadata; it never enables reconciliation for unsent failures.
     - Human acknowledgement handles failed or unresolvable unknown actions without modifying receipt history; it is not proof of delivery.
     - PM authentication failures use the core 401 auth error contract; authorization failures remain 403.
     - PM turn response operations require the configured PM actor; an empty identity fails closed.

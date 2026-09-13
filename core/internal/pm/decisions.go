@@ -308,10 +308,15 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	if err != nil {
 		return a, err
 	}
-	if a.Status == Pending || (a.Status == Failed && !hasSentAttempt(a)) {
+	// Human handling is a display state, not evidence of source acknowledgement.
+	sourceStatus := a.Status
+	if a.Status == Acknowledged && a.AcknowledgedAt != nil {
+		sourceStatus = a.Receipt.Status
+	}
+	if sourceStatus == Pending || (sourceStatus == Failed && !hasSentAttempt(a)) {
 		return Action{}, ErrNothingDelivered
 	}
-	if a.Status == Verified || a.AcknowledgedAt != nil {
+	if a.Status == Verified {
 		return a, nil
 	}
 	if s.deps.Reconcile == nil {
@@ -328,10 +333,10 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	}
 	// A read-back must not regress an acknowledged/applied result to delivery.
 	rank := map[Status]int{Unknown: 0, Sending: 0, Failed: 1, Delivered: 2, Acknowledged: 3, Reported: 4, Verified: 5}
-	a.ReconciliationConflict = rank[r.Status] < rank[a.Status]
+	a.ReconciliationConflict = rank[r.Status] < rank[sourceStatus]
 	old := a.Revision
 	a.Receipt = r
-	if !a.ReconciliationConflict {
+	if !a.ReconciliationConflict && !(a.Status == Acknowledged && a.AcknowledgedAt != nil && r.Status == Unknown) {
 		a.Status = r.Status
 	}
 	a.Revision++

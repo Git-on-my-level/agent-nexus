@@ -293,8 +293,8 @@ func TestQueuedTurnWithoutDispatchIsClaimedByLease(t *testing.T) {
 		t.Fatalf("second runner claimed leased turn: %v", err)
 	}
 	again, err := s.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "runner-a"})
-	if !errors.Is(err, ErrEmpty) {
-		t.Fatalf("active lease must not be offered to a second worker %+v %v", again, err)
+	if err != nil || again.ID != first.ID || again.LeaseToken != first.LeaseToken || again.Revision != first.Revision {
+		t.Fatalf("same runner must recover its active lease %+v %v", again, err)
 	}
 	if _, err = s.CompleteTurn(ctx, agent, first.ID, "Needs a decision on restock.", nil); !errors.Is(err, ErrConflict) {
 		t.Fatalf("complete without lease token: %v", err)

@@ -27,15 +27,15 @@ var (
 
 // TurnClosedError carries the durable turn state, independently of source revisions.
 type TurnClosedError struct {
-	TurnID   string    `json:"turn_id"`
-	Deadline time.Time `json:"deadline"`
-	Status   Status    `json:"status"`
-	expired  bool
+	TurnID      string    `json:"turn_id"`
+	Deadline    time.Time `json:"deadline"`
+	Status      Status    `json:"status"`
+	FailureKind string    `json:"failure_kind,omitempty"`
 }
 
 func (e *TurnClosedError) Error() string {
-	if e.expired {
-		return "This turn passed its deadline and was failed; nothing can be proposed or read for it. Ask again to start a new turn."
+	if e.FailureKind == "expired" {
+		return fmt.Sprintf("This turn expired at %s; nothing can be proposed or read for it. Ask again to start a new turn.", e.Deadline.Format(time.RFC3339Nano))
 	}
 	return "This turn is already terminal; nothing can be proposed or read for it. Ask again to start a new turn."
 }
@@ -140,6 +140,7 @@ type Turn struct {
 	AgentActorID   string     `json:"agent_actor_id"`
 	EvidenceRefs   []string   `json:"evidence_refs,omitempty"`
 	Failure        string     `json:"failure,omitempty"`
+	FailureKind    string     `json:"failure_kind,omitempty"`
 	ClaimedAt      *time.Time `json:"claimed_at,omitempty"`
 	LeaseToken     string     `json:"lease_token,omitempty"`
 	LeaseOwner     string     `json:"lease_owner,omitempty"`
@@ -152,6 +153,10 @@ type Turn struct {
 }
 type ClaimInput struct {
 	RunnerID string `json:"runner_id"`
+}
+type ReleaseInput struct {
+	RunnerID   string `json:"runner_id"`
+	LeaseToken string `json:"lease_token"`
 }
 type FailInput struct {
 	Reason     string `json:"reason"`
