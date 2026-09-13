@@ -259,6 +259,8 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "pm turns claim" {
 		status, _ := asMap(result.Data)["status_code"].(int)
 		if status == 204 {
+			data := asMap(result.Data)
+			data["body"] = map[string]any{"claimed": false, "reason": "nothing to claim"}
 			result.Text = "No claimable turn"
 			return result, parsed.name, nil
 		}
@@ -466,8 +468,8 @@ func formatWorkCommandText(name string, body any) string {
 			item := asMap(row)
 			line := fmt.Sprintf("%s  %s  status=%s", anyString(item["id"]), anyString(item["work_ref"]), firstNonEmpty(anyString(item["status"]), "unknown"))
 			if name == "pm decisions list" {
-				if flag := decisionFreshnessFlag(item); flag != "" {
-					line += "  " + flag
+				if flag := decisionOperatorFlags(item); flag != "" {
+					line += "  " + strings.ReplaceAll(flag, "\n", "  ")
 				}
 			}
 			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"])); title != "" {
@@ -521,10 +523,29 @@ func formatWorkCommandText(name string, body any) string {
 
 func formatPMDecisionGetText(root map[string]any) string {
 	body := formatPrettyBody(root)
-	if flag := decisionFreshnessFlag(root); flag != "" {
+	if flag := decisionOperatorFlags(root); flag != "" {
 		return flag + "\n" + body
 	}
 	return body
+}
+
+func decisionIsAwaiting(item map[string]any) bool {
+	status := strings.ToLower(strings.TrimSpace(anyString(item["status"])))
+	return status == "" || status == "awaiting_answer"
+}
+
+func decisionOperatorFlags(item map[string]any) string {
+	if !decisionIsAwaiting(item) {
+		return ""
+	}
+	var parts []string
+	if v, ok := item["can_answer"].(bool); ok && !v {
+		parts = append(parts, "waiting on someone else")
+	}
+	if flag := decisionFreshnessFlag(item); flag != "" {
+		parts = append(parts, flag)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func decisionFreshnessFlag(item map[string]any) string {

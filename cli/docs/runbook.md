@@ -549,13 +549,36 @@ omp may silently substitute models; every omp run must show
 omp. The prompt stays small: the PM loads tracker context through
 `anx work list|get` and `anx pm context`, never from a stuffed dump. Proposed
 decisions must bind `work_ref` to a task. To attach evidence, the harness must
-end its answer with a `---evidence---` block (one typed ref per line) or a JSON
-`evidence_refs` array; mentions in prose are not recorded. `pm serve` verifies
-each attached ref against core and drops unresolvable ones instead of failing
-the turn.
+end its answer with a `---evidence---` block (one typed ref per line: `card:`,
+`work:`, `artifact:`, `event:`, `decision:`, `topic:`, `document:`) or a JSON
+`evidence_refs` array on the same object as the assistant text. Nested tool
+output is not harvested. Mentions in prose are not recorded. `pm serve`
+verifies each attached ref against core (`topics get` / `docs get` included)
+and drops unresolvable ones instead of failing the turn.
+
+Turn text is capped at the claimed turn's `max_output_bytes`. When the turn
+omits that field, the runner uses 64000 (core's maximum accepted turn text)
+minus room for a truncation marker. Evidence is parsed from the full harness
+output first; if the stored reply is cut, the runner appends
+`[reply truncated by anx pm serve at <N> bytes; <M> bytes were dropped]` and
+logs a stderr warning with those sizes. The marker is included in the byte
+budget so core still accepts the text.
+
+`complete` and `fail` are retried on network errors, HTTP 5xx, and 429, with
+bounded exponential backoff (1s, 2s, 4s, 8s, 16s; at most about one minute or
+until the turn deadline). Identical terminal replays are idempotent, so a
+retry after a lost response is safe. `lease_required` is not retried. If the
+lease was lost (`lease_mismatch`, `turn_closed`, `turn_not_claimed`), the
+runner reads the turn: already terminal logs `turn already <status>; nothing
+to do` and moves on; still pending and claimable re-claims and re-runs the
+harness (it does not replay a stale reply under a new lease). If retries are
+exhausted, the runner fails the turn with `complete failed after N attempts:
+<last error>`. If `fail` also cannot be delivered, it releases the lease (best
+effort), logs that, and moves to the next turn. A live lease is never left
+held with no further action.
 
 Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
-2 minutes). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
+2 minutes; core accepts `ANX_PM_MAX_OUTPUT_BYTES` up to 64000). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
 tools before the lease expires. `ANX_PM_MAX_CONCURRENT` (default 2) bounds
 workspace sending turns. `make pm-serve` runs the seeded PM persona.
 

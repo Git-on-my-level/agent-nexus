@@ -123,6 +123,13 @@ func TestExtractEvidenceRefsIgnoresProseAndParsesDeliberateSources(t *testing.T)
 			want: []string{"decision:pm_ok"},
 			body: "hello",
 		},
+		{
+			name: "nested tool evidence_refs ignored",
+			raw:  `{"messages":[{"role":"tool","text":"ok","evidence_refs":["decision:from_tool"]},{"role":"assistant","text":"Done.","evidence_refs":["decision:from_assistant"]}],"result":{"output":{"evidence_refs":["decision:nested_tool"]}}}`,
+			text: "Done.",
+			want: []string{"decision:from_assistant"},
+			body: "Done.",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := tc.raw
@@ -160,6 +167,10 @@ func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
 			io.WriteString(w, `{"work":{"ref":"card:ok"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact:art_ok":
 			io.WriteString(w, `{"id":"art_ok"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic:ops-ok":
+			io.WriteString(w, `{"topic":{"ref":"topic:ops-ok"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/docs/document:doc-ok":
+			io.WriteString(w, `{"document":{"ref":"document:doc-ok"}}`)
 		case r.Method == http.MethodGet:
 			w.WriteHeader(http.StatusNotFound)
 			io.WriteString(w, `{"error":{"code":"not_found","message":"PM record not found"}}`)
@@ -177,7 +188,7 @@ func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 
-	text := "Mention decision:pm_placeholder and card:ghost.\n\n---evidence---\ndecision:pm_ok\ndecision:pm_missing\ncard:ok\ntopic:ops-1\nartifact:art_ok\n"
+	text := "Mention decision:pm_placeholder and card:ghost.\n\n---evidence---\ndecision:pm_ok\ndecision:pm_missing\ncard:ok\ntopic:ops-ok\ntopic:ops-missing\ndocument:doc-ok\nartifact:art_ok\n"
 	if err := app.completeTurn(context.Background(), cfg, "turn-1", "lease-1", text, nil, 16000); err != nil {
 		t.Fatalf("completeTurn: %v", err)
 	}
@@ -186,22 +197,19 @@ func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
 	}
 	refs, _ := completeBody["evidence_refs"].([]any)
 	joined := fmt.Sprint(refs)
-	if !strings.Contains(joined, "decision:pm_ok") || !strings.Contains(joined, "card:ok") || !strings.Contains(joined, "artifact:art_ok") {
+	if !strings.Contains(joined, "decision:pm_ok") || !strings.Contains(joined, "card:ok") || !strings.Contains(joined, "artifact:art_ok") || !strings.Contains(joined, "topic:ops-ok") || !strings.Contains(joined, "document:doc-ok") {
 		t.Fatalf("kept refs %v", refs)
 	}
-	if strings.Contains(joined, "decision:pm_missing") || strings.Contains(joined, "topic:ops-1") || strings.Contains(joined, "pm_placeholder") || strings.Contains(joined, "card:ghost") {
+	if strings.Contains(joined, "decision:pm_missing") || strings.Contains(joined, "topic:ops-missing") || strings.Contains(joined, "pm_placeholder") || strings.Contains(joined, "card:ghost") {
 		t.Fatalf("dropped refs leaked: %v", refs)
 	}
 	logs := stderr.String()
-	if !strings.Contains(logs, "pm serve: dropping evidence ref decision:pm_missing:") || !strings.Contains(logs, "pm serve: dropping evidence ref topic:ops-1: unsupported evidence kind") {
+	if !strings.Contains(logs, "pm serve: dropping evidence ref decision:pm_missing:") || !strings.Contains(logs, "pm serve: dropping evidence ref topic:ops-missing:") {
 		t.Fatalf("drop log %q", logs)
 	}
 	getJoined := strings.Join(gets, "\n")
-	if !strings.Contains(getJoined, "/pm/decisions/decision:pm_ok") || !strings.Contains(getJoined, "/pm/decisions/decision:pm_missing") || !strings.Contains(getJoined, "/work/card:ok") || !strings.Contains(getJoined, "/artifacts/artifact:art_ok") {
+	if !strings.Contains(getJoined, "/pm/decisions/decision:pm_ok") || !strings.Contains(getJoined, "/pm/decisions/decision:pm_missing") || !strings.Contains(getJoined, "/work/card:ok") || !strings.Contains(getJoined, "/artifacts/artifact:art_ok") || !strings.Contains(getJoined, "/topics/topic:ops-ok") || !strings.Contains(getJoined, "/docs/document:doc-ok") {
 		t.Fatalf("lookups %v", gets)
-	}
-	if strings.Contains(getJoined, "/topics/") {
-		t.Fatalf("unsupported kind was looked up: %v", gets)
 	}
 
 	stderr.Reset()
@@ -1043,9 +1051,22 @@ func claimedTurn() map[string]any {
 	return map[string]any{
 		"id":          "turn-1",
 		"lease_token": "lease-1",
+		"lease_owner": "runner-1",
 		"deadline":    time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339Nano),
 		"text":        "What needs my decision?",
 	}
+}
+
+func stubTerminalSleep(t *testing.T) {
+	t.Helper()
+	prev := sleepFn
+	sleepFn = func(ctx context.Context, _ time.Duration) error {
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return nil
+	}
+	t.Cleanup(func() { sleepFn = prev })
 }
 
 func TestTruncateToMaxBytesKeepsUTF8RuneBoundaries(t *testing.T) {
@@ -1668,4 +1689,305 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestClipReplyForTurnAddsTruncationMarker(t *testing.T) {
+	text := strings.Repeat("a", 80)
+	got, dropped := clipReplyForTurn(text, 60)
+	if dropped <= 0 {
+		t.Fatalf("expected dropped bytes, got %d", dropped)
+	}
+	if !strings.Contains(got, "[reply truncated by anx pm serve at 60 bytes;") || !strings.Contains(got, "bytes were dropped]") {
+		t.Fatalf("missing marker: %q", got)
+	}
+	if len(got) > 60 {
+		t.Fatalf("clipped reply exceeded limit: %d", len(got))
+	}
+	if clip, n := clipReplyForTurn("short", 60); clip != "short" || n != 0 {
+		t.Fatalf("short text should pass through: %q %d", clip, n)
+	}
+}
+
+func TestCompleteTurnTruncatesWithMarkerAndKeepsEvidence(t *testing.T) {
+	var completeBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &completeBody); err != nil {
+				t.Errorf("complete body: %v", err)
+			}
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/decisions/decision:pm_ok":
+			io.WriteString(w, `{"id":"pm_ok"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	body := strings.Repeat("Filler anal", 40) + " DO NOT SHIP THE RELEASE"
+	text := body + "\n\n---evidence---\ndecision:pm_ok\n"
+	if err := app.completeTurn(context.Background(), cfg, "turn-1", "lease-1", text, nil, 80); err != nil {
+		t.Fatalf("completeTurn: %v", err)
+	}
+	stored := anyString(completeBody["text"])
+	if !strings.Contains(stored, "[reply truncated by anx pm serve at 80 bytes;") || !strings.Contains(stored, "bytes were dropped]") {
+		t.Fatalf("stored text missing marker: %q", stored)
+	}
+	if len(stored) > 80 {
+		t.Fatalf("stored text %d exceeded 80", len(stored))
+	}
+	if strings.Contains(stored, "DO NOT SHIP THE RELEASE") {
+		t.Fatalf("expected conclusion to be cut, got %q", stored)
+	}
+	refs, _ := completeBody["evidence_refs"].([]any)
+	if fmt.Sprint(refs) != "[decision:pm_ok]" {
+		t.Fatalf("evidence dropped: %v", refs)
+	}
+	if !strings.Contains(stderr.String(), "reply truncated by anx pm serve at 80 bytes") {
+		t.Fatalf("missing truncation warning: %s", stderr.String())
+	}
+}
+
+func TestHandleClaimedTurnRetriesCompleteThenSucceeds(t *testing.T) {
+	stubTerminalSleep(t)
+	completeCalls := 0
+	var lastBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &lastBody)
+			if completeCalls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				io.WriteString(w, `{"error":{"code":"unavailable","message":"temporary"}}`)
+				return
+			}
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected settled turn")
+	}
+	if completeCalls != 2 {
+		t.Fatalf("complete calls=%d", completeCalls)
+	}
+	if anyString(lastBody["text"]) != "Approve the restock." {
+		t.Fatalf("reply %v", lastBody["text"])
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "complete retry 1") || !strings.Contains(logs, "temporary") {
+		t.Fatalf("expected one retry log, got %s", logs)
+	}
+	if strings.Count(logs, "complete retry") != 1 {
+		t.Fatalf("retry log count: %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnPersistentComplete503FailsAndReleases(t *testing.T) {
+	stubTerminalSleep(t)
+	completeCalls := 0
+	var failReason string
+	released := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			var payload map[string]any
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &payload)
+			failReason = anyString(payload["reason"])
+			io.WriteString(w, `{"id":"turn-1","status":"failed"}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			released++
+			io.WriteString(w, `{"id":"turn-1","status":"sending"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected settled after fail")
+	}
+	if completeCalls != 1+len(terminalRetryDelays) {
+		t.Fatalf("complete calls=%d want %d", completeCalls, 1+len(terminalRetryDelays))
+	}
+	want := fmt.Sprintf("complete failed after %d attempts:", completeCalls)
+	if !strings.Contains(failReason, want) || !strings.Contains(failReason, "core down") {
+		t.Fatalf("fail reason %q", failReason)
+	}
+	if released != 0 {
+		t.Fatalf("successful fail should not also release, released=%d", released)
+	}
+	if !strings.Contains(stderr.String(), "complete retry") {
+		t.Fatalf("missing retry logs: %s", stderr.String())
+	}
+}
+
+func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
+	stubTerminalSleep(t)
+	released := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, `{"error":{"code":"unavailable","message":"complete 503"}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, `{"error":{"code":"unavailable","message":"fail 503"}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			released++
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected move-on after undeliverable fail")
+	}
+	if released != 1 {
+		t.Fatalf("released=%d", released)
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "fail request failed") || !strings.Contains(logs, "releasing lease") {
+		t.Fatalf("expected fail+release logs: %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnLeaseMismatchAlreadyCompletedDoesNotRerun(t *testing.T) {
+	stubTerminalSleep(t)
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		runs++
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			w.WriteHeader(http.StatusConflict)
+			io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"the turn is already delivered and no retry is needed"}}`)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			io.WriteString(w, `{"id":"turn-1","status":"delivered","response":"Approve the restock."}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "true", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected settled")
+	}
+	if runs != 1 {
+		t.Fatalf("harness runs=%d", runs)
+	}
+	if !strings.Contains(stderr.String(), "turn already delivered; nothing to do") {
+		t.Fatalf("logs %s", stderr.String())
+	}
+}
+
+func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
+	stubTerminalSleep(t)
+	runs := 0
+	completeCalls := 0
+	claimed := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		runs++
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			if completeCalls == 1 {
+				w.WriteHeader(http.StatusConflict)
+				io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`)
+				return
+			}
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			claimed++
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-2","lease_owner":"runner-1"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected settled after re-run")
+	}
+	if runs != 2 {
+		t.Fatalf("harness runs=%d want 2", runs)
+	}
+	if claimed != 1 {
+		t.Fatalf("claim calls=%d", claimed)
+	}
+	if completeCalls != 2 {
+		t.Fatalf("complete calls=%d", completeCalls)
+	}
+	if !strings.Contains(stderr.String(), "re-claimed after lease loss; re-running harness") {
+		t.Fatalf("logs %s", stderr.String())
+	}
 }
