@@ -290,10 +290,9 @@ export function turnState(turn, now = Date.now()) {
     };
   const created = Date.parse(turn?.created_at ?? "");
   const waited = Number.isFinite(created) ? now - created : Number.NaN;
-  // A turn nobody has leased is queued, not being thought about. Older cores
-  // omit lease_owner; then the runner state is unknown and we say nothing.
-  const claimed =
-    turn?.lease_owner === undefined ? true : Boolean(String(turn.lease_owner));
+  // A turn nobody has claimed is queued, not being thought about. Core
+  // reports `claimed`; an older core omits it, and then we assume claimed.
+  const claimed = turn?.claimed === undefined ? true : Boolean(turn.claimed);
   return {
     ...base,
     kind: "pending",

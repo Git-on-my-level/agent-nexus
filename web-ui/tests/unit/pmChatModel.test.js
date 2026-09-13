@@ -80,7 +80,7 @@ describe("PM chat presentation model", () => {
         {
           status: "sending",
           created_at: "2026-09-09T10:00:30Z",
-          lease_owner: "",
+          claimed: false,
         },
         now,
       ),
@@ -90,7 +90,7 @@ describe("PM chat presentation model", () => {
         {
           status: "sending",
           created_at: "2026-09-09T10:00:30Z",
-          lease_owner: "runner-1",
+          claimed: true,
         },
         now,
       ),
