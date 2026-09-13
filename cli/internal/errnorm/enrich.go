@@ -68,6 +68,12 @@ func enrichRemoteError(e *Error, httpStatus int) {
 		hint, recovery = enrichKeyMismatch(httpStatus, msg)
 	case "agent_revoked":
 		hint, recovery = enrichAgentRevoked()
+	case "human_proposal_pending":
+		hint, recovery = enrichHumanProposalPending(e)
+	case "busy":
+		if strings.EqualFold(lookupErrorDetail(e, "reason"), "queue") {
+			hint, recovery = enrichPMBusy(e)
+		}
 	}
 
 	if hint == "" && recovery == nil {
@@ -128,6 +134,11 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 			return enrichPMBusy(e)
 		}
 		return "", nil
+	case "pm.turns.decisions.create":
+		if code == "human_proposal_pending" {
+			return enrichHumanProposalPending(e)
+		}
+		return "", nil
 	case "pm.actions.acknowledge":
 		if code == "conflict" {
 			return "This action is not in a state that can be acknowledged. Reconcile first if a read-back can still advance it (`anx pm actions reconcile <id>`).",
@@ -147,6 +158,8 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	}
 	existingID := lookupErrorDetail(e, "existing_decision_id")
 	switch code {
+	case "human_proposal_pending":
+		return enrichHumanProposalPending(e)
 	case "invalid_request":
 		if commandID == "pm.actions.reconcile" && strings.Contains(strings.ToLower(strings.TrimSpace(e.Message)), "nothing has been delivered yet") {
 			return "This action is already acknowledged or was never delivered, so there is nothing to read back. Inspect it with `anx pm actions get <id>`.",
@@ -316,19 +329,39 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 }
 
 func enrichPMBusy(e *Error) (string, map[string]any) {
-	if strings.EqualFold(lookupErrorDetail(e, "reason"), "conversation") {
+	switch strings.ToLower(lookupErrorDetail(e, "reason")) {
+	case "conversation":
 		return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
 			map[string]any{
 				"kind":        "busy",
 				"reason":      "conversation",
 				"refresh_cli": "anx pm conversations get <id>",
 			}
+	case "queue":
+		return "The PM queue for this workspace is full; try again in a moment or ask a runner operator to attach more capacity.",
+			map[string]any{
+				"kind":   "busy",
+				"reason": "queue",
+			}
+	default:
+		return "The PM is at its in-flight limit for this workspace; wait for another turn to finish or expire, or release a stuck runner",
+			map[string]any{
+				"kind":   "busy",
+				"reason": "capacity",
+			}
 	}
-	return "The PM is at its in-flight limit for this workspace; wait for another turn to finish or expire, or release a stuck runner",
-		map[string]any{
-			"kind":   "busy",
-			"reason": "capacity",
-		}
+}
+
+func enrichHumanProposalPending(e *Error) (string, map[string]any) {
+	id := lookupErrorDetail(e, "pending_decision_id")
+	rec := map[string]any{"kind": "human_proposal_pending"}
+	proposal := "A human proposal"
+	if id != "" {
+		rec["pending_decision_id"] = id
+		rec["refresh_cli"] = "anx pm decisions get " + id
+		proposal = "A human proposal " + id
+	}
+	return proposal + " is already waiting on this task. It must be answered or declined before the PM can propose something different; an identical proposal is accepted as the same decision.", rec
 }
 
 func lookupErrorDetail(e *Error, key string) string {

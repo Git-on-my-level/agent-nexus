@@ -565,10 +565,68 @@ func TestEnrichForCommandPMBusyReasons(t *testing.T) {
 		t.Fatalf("missing reason should use capacity hint, got %q", missing.Hint)
 	}
 
+	queueBody := []byte(`{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"queue"}}}`)
+	queueHint := "PM queue for this workspace is full"
+	queue := FromHTTPFailure(429, queueBody)
+	if !strings.Contains(queue.Hint, queueHint) {
+		t.Fatalf("queue busy without a command should already name the queue, got %q", queue.Hint)
+	}
+	if strings.Contains(queue.Hint, capacityHint) || strings.Contains(queue.Hint, conversationHint) {
+		t.Fatalf("queue busy used another reason's wording: %q", queue.Hint)
+	}
+	EnrichForCommand(queue, "pm.ask")
+	if !strings.Contains(queue.Hint, queueHint) || !strings.Contains(queue.Hint, "attach more capacity") {
+		t.Fatalf("pm.ask queue hint=%q", queue.Hint)
+	}
+	queueDetails, _ := queue.Details.(map[string]any)
+	queueRec, _ := queueDetails["anx_cli_recovery"].(map[string]any)
+	if queueRec["reason"] != "queue" {
+		t.Fatalf("queue recovery=%#v", queueRec)
+	}
+
 	other := FromHTTPFailure(429, conversationBody)
 	EnrichForCommand(other, "pm.decisions.answer")
 	if strings.Contains(other.Hint, conversationHint) || strings.Contains(other.Hint, capacityHint) {
 		t.Fatalf("non-message PM commands must not get message busy hints, got %q", other.Hint)
+	}
+}
+
+func TestEnrichHumanProposalPending(t *testing.T) {
+	t.Parallel()
+
+	generic := FromHTTPFailure(409, []byte(`{"error":{"code":"human_proposal_pending","message":"Human proposal decision-7 is pending; a human must decline or answer it first.","details":{"pending_decision_id":"decision-7"}}}`))
+	if strings.Contains(strings.ToLower(generic.Hint), "command help") {
+		t.Fatalf("human_proposal_pending still used the generic hint: %q", generic.Hint)
+	}
+	if !strings.Contains(generic.Hint, "A human proposal decision-7 is already waiting on this task") {
+		t.Fatalf("hint missing pending id, got %q", generic.Hint)
+	}
+	if !strings.Contains(generic.Hint, "answered or declined") || !strings.Contains(generic.Hint, "identical proposal is accepted") {
+		t.Fatalf("hint missing recovery, got %q", generic.Hint)
+	}
+	details, _ := generic.Details.(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
+	if rec["kind"] != "human_proposal_pending" || rec["pending_decision_id"] != "decision-7" {
+		t.Fatalf("recovery=%#v", rec)
+	}
+
+	for _, commandID := range []string{"pm.turns.decisions.create", "pm.decisions.create"} {
+		err := FromHTTPFailure(409, []byte(`{"error":{"code":"human_proposal_pending","message":"Human proposal decision-3 is pending; a human must decline or answer it first.","details":{"pending_decision_id":"decision-3"}}}`))
+		EnrichForCommand(err, commandID)
+		if !strings.Contains(err.Hint, "A human proposal decision-3 is already waiting on this task") {
+			t.Fatalf("%s hint=%q", commandID, err.Hint)
+		}
+		if strings.Contains(strings.ToLower(err.Hint), "command help") {
+			t.Fatalf("%s still used the generic hint: %q", commandID, err.Hint)
+		}
+	}
+
+	missing := FromHTTPFailure(409, []byte(`{"error":{"code":"human_proposal_pending","message":"Human proposal is pending; a human must decline or answer it first."}}`))
+	if !strings.Contains(missing.Hint, "A human proposal is already waiting on this task") {
+		t.Fatalf("missing id hint=%q", missing.Hint)
+	}
+	if strings.Contains(missing.Hint, "A human proposal  is already") {
+		t.Fatalf("missing id left a double space: %q", missing.Hint)
 	}
 }
 

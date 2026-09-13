@@ -2337,10 +2337,10 @@ func TestPMServeSkipWindowDoesNotChurnClaimRelease(t *testing.T) {
 	if gotRuns != 1 {
 		t.Fatalf("harness runs=%d want 1", gotRuns)
 	}
-	if gotClaims > 4 {
+	if gotClaims > 2 {
 		t.Fatalf("claim churn during skip window: claims=%d", gotClaims)
 	}
-	if gotReleases > 3 {
+	if gotReleases > 1 {
 		t.Fatalf("release churn during skip window: releases=%d", gotReleases)
 	}
 	logs := stderr.String()

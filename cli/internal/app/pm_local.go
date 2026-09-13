@@ -223,6 +223,9 @@ func (m *pmTurnMemory) noteLoss(id string) {
 	}
 	e.skipUntil = nowFn().Add(e.skipBackoff)
 	e.skipLogged = false
+	if e.skipUntil.After(m.holdClaimUntil) {
+		m.holdClaimUntil = e.skipUntil
+	}
 }
 
 func (m *pmTurnMemory) markGivenUp(id string) {
@@ -1250,12 +1253,17 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 		return false, false
 	}
 	a.turnMem().noteLoss(turnID)
-	if skip, givenUp, _ := a.turnMem().claimDefer(turnID); skip || givenUp || !a.turnMem().canRunHarness(turnID) {
+	if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip || givenUp || !a.turnMem().canRunHarness(turnID) {
 		reason := "skip window after repeated lease loss"
 		if givenUp || !a.turnMem().canRunHarness(turnID) {
 			a.turnMem().markGivenUp(turnID)
 			a.logGiveUpTurn(turnID)
 			reason = "given up after harness cap"
+		} else if a.turnMem().consumeSkipLog(turnID) {
+			a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
+		}
+		if skip && !givenUp {
+			a.turnMem().holdClaimsUntil(until)
 		}
 		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, reason)
 		return true, false
