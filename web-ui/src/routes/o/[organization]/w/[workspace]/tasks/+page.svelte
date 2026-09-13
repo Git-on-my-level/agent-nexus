@@ -4,19 +4,21 @@
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
+  import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import WorkViews from "$lib/components/pm/WorkViews.svelte";
   import {
-    PHASES,
-    label,
+    errorMessage,
     isNexusOwned,
+    isSessionExpired,
+    label,
+    PHASES,
+    sourceLabel,
     workFreshness,
     workKey,
-    errorMessage,
-    sourceLabel,
   } from "$lib/pm/presentation.js";
   import { navIconPath } from "$lib/icons.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
@@ -38,6 +40,17 @@
   let decisionsLoaded = $state(false);
   let shortcutsOpen = $state(false);
   let moveError = $state("");
+  let sessionExpired = $state(false);
+  function signInAgain() {
+    restartSession({
+      organizationSlug: $page.params.organization,
+      workspaceSlug: $page.params.workspace,
+      hostedMode: $page.data?.shellCapabilities?.mode === "hosted",
+      workspaceId: $page.data?.workspace?.workspaceId,
+      currentAppPath: "/tasks",
+      search: $page.url.search,
+    });
+  }
   let moveNotice = $state(null);
   // A pending "done" move waiting for its evidence ref.
   let evidenceFor = $state(null);
@@ -170,7 +183,10 @@
       if (!decisionsLoaded) void loadDecisions();
       if (!boardsLoaded) void loadBoards();
     } catch (err) {
-      if (id === requestId) error = errorMessage(err);
+      if (id === requestId) {
+        error = errorMessage(err);
+        sessionExpired = isSessionExpired(err);
+      }
     } finally {
       if (id === requestId) loading = false;
     }
@@ -408,6 +424,7 @@
       })
       .catch((err) => {
         error = errorMessage(err);
+        sessionExpired = isSessionExpired(err);
         loading = false;
       });
     const timer = setInterval(() => {
@@ -522,7 +539,7 @@
     <!-- The board is a desktop surface: 18rem columns cannot be dragged on a
          390px screen, so the toggle that leads there is hidden below 640px. -->
     <nav
-      class="flex rounded-md border border-line bg-bg-soft p-0.5"
+      class="hidden rounded-md border border-line bg-bg-soft p-0.5 sm:flex"
       aria-label="Task view"
     >
       <a
@@ -706,7 +723,8 @@
     <StateError
       title="Tasks could not be refreshed"
       message={error}
-      onretry={() => load()}
+      onretry={sessionExpired ? signInAgain : () => load()}
+      retryLabel={sessionExpired ? "Sign in again" : "Retry"}
       retrying={loading}
     />
     {#if records.length}

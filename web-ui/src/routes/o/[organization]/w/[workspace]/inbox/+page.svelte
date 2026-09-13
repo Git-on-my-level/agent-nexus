@@ -10,11 +10,13 @@
     selectedActorId,
   } from "$lib/actorSession";
   import { initializeAuthSession } from "$lib/authSession";
+  import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatTimestamp } from "$lib/formatDate";
   import {
     errorMessage,
     isNexusOwned,
+    isSessionExpired,
     taskDetailPath,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -227,6 +229,11 @@
       if (results[0].status === "fulfilled") {
         decisions = results[0].value.items || [];
       } else error = errorMessage(results[0].reason);
+      // A refused session will refuse the retry too; offer sign-in instead.
+      sessionExpired = results.some(
+        (result) =>
+          result.status === "rejected" && isSessionExpired(result.reason),
+      );
       // Each list is one page. Counts drawn from partial pages are lower
       // bounds, and the reader must be told so rather than shown a total.
       truncated = results.some(
@@ -353,9 +360,34 @@
     if (!replacement) return "";
     notice = "";
     supersededHref = href({ item: `decision:${replacement}` });
-    return "The PM replaced this proposal before you answered. Open the replacement to decide on it.";
+    // The replacement can be the reader's own board move; say who.
+    const by = String(details?.superseded_by_proposed_by ?? "").trim();
+    const origin = String(details?.superseded_by_origin_kind ?? "").trim();
+    const who =
+      by && by === ($selectedActorId || "")
+        ? "You replaced this proposal (by moving the task)"
+        : origin === "human" && by
+          ? `${actorDisplayLabel(by, $actorRegistry, $principalRegistry) || "Someone"} replaced this proposal`
+          : "The PM replaced this proposal";
+    return `${who} before it was answered. Open the replacement to decide on it.`;
+  }
+  function errorCode(err) {
+    return String(
+      err?.body?.error?.code ?? err?.details?.error?.code ?? err?.code ?? "",
+    );
   }
   let supersededHref = $state("");
+  let sessionExpired = $state(false);
+  function signInAgain() {
+    restartSession({
+      organizationSlug: $page.params.organization,
+      workspaceSlug: $page.params.workspace,
+      hostedMode: $page.data?.shellCapabilities?.mode === "hosted",
+      workspaceId: $page.data?.workspace?.workspaceId,
+      currentAppPath: "/inbox",
+      search: $page.url.search,
+    });
+  }
 
   async function deliver() {
     if (!selectedDecision || busy) return;
@@ -369,6 +401,13 @@
       notice = "Delivery request recorded.";
     } catch (err) {
       const raw = errorMessage(err);
+      if (errorCode(err) === "source_revision_changed") {
+        // Terminal, and the receipt below says so; a Retry would contradict it.
+        notice =
+          "Not delivered: the task changed after this was approved. A fresh proposal and approval are needed.";
+        await refreshReceipt();
+        return;
+      }
       // Core has no executor for this source yet: the approval is intact and
       // the action stays pending. That is not an outage.
       error =
@@ -589,7 +628,12 @@
     {/if}
   </nav>
   {#if error}
-    <StateError message={error} onretry={load} retrying={loading} />
+    <StateError
+      message={error}
+      onretry={sessionExpired ? signInAgain : load}
+      retryLabel={sessionExpired ? "Sign in again" : "Retry"}
+      retrying={loading}
+    />
     {#if supersededHref}
       <a class="ui-prose-link text-meta" href={supersededHref}
         >Open the replacement</a

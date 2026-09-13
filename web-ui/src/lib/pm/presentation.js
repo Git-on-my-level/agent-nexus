@@ -486,9 +486,21 @@ export function decisionSummary(item, taskTitle = "") {
     return { title, ask: title === ask ? "" : ask };
   }
   const body = stripDecisionPrefix(item?.instruction);
-  const ask = sentenceCase(firstSentence(body));
+  const ask = phaseAsk(item, body) || sentenceCase(firstSentence(body));
   const title = String(taskTitle ?? "").trim() || ask || "Decision";
   return { title, ask: title === ask ? "" : ask };
+}
+
+/**
+ * A phase change says where it goes first: two "Request status change at
+ * Nexus to…" rows truncated at the same width are indistinguishable.
+ */
+function phaseAsk(item, body) {
+  if (String(item?.scope ?? "") !== "work.phase") return "";
+  const phase = String(item?.payload?.phase ?? "").trim();
+  if (!phase) return "";
+  const at = body.match(/\bat\s+(.+?)\s+to\s+\S+/i)?.[1]?.trim() ?? "";
+  return at ? `Move to ${label(phase)} at ${at}` : `Move to ${label(phase)}`;
 }
 
 /**

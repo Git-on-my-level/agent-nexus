@@ -194,6 +194,24 @@ describe("structured decisions read as sentences", () => {
   });
 });
 
+describe("phase-change decisions lead with the phase", () => {
+  it("names the target phase before the source so truncated rows stay distinct", async () => {
+    const { decisionSummary } = await import("$lib/pm/presentation.js");
+    const item = {
+      scope: "work.phase",
+      instruction: "request status change at Nexus to Blocked",
+      payload: { phase: "blocked" },
+    };
+    expect(decisionSummary(item, "Tune core combat loop")).toEqual({
+      title: "Tune core combat loop",
+      ask: "Move to Blocked at Nexus",
+    });
+    expect(
+      decisionSummary({ ...item, instruction: "move it" }, "Tune").ask,
+    ).toBe("Move to Blocked");
+  });
+});
+
 describe("freshness names the cause of a failed read", () => {
   it("blames the reader, not the source, for local causes", async () => {
     const { freshness } = await import("$lib/pm/presentation.js");

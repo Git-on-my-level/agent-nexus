@@ -1,6 +1,7 @@
 <script>
   import { browser, dev } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { sanitizeHostedReturnPath } from "$lib/hosted/launchFlow.js";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
   import { get } from "svelte/store";
@@ -36,11 +37,16 @@
     if (!get(authenticatedAgent)?.agent_id) {
       return;
     }
-    const pathname = get(page).url.pathname;
-    if (isAlreadyAtWorkspaceHome(pathname, org, ws)) {
+    const snapshot = get(page);
+    const pathname = snapshot.url.pathname;
+    // A session that expired mid-task comes back here with where it was.
+    const returnTo = sanitizeHostedReturnPath(
+      snapshot.url.searchParams.get("return_to") ?? "/",
+    );
+    if (returnTo === "/" && isAlreadyAtWorkspaceHome(pathname, org, ws)) {
       return;
     }
-    void goto(workspacePath(org, ws));
+    void goto(workspacePath(org, ws, returnTo));
   }
 
   let registrationName = $state("");

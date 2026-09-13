@@ -5,6 +5,7 @@ import {
   classifyWorkspaceBootstrap,
   mergePrincipals,
   reactivateStaleDevPersonaSession,
+  restartSession,
   shouldRedirectToLoginForBootstrapState,
   WORKSPACE_BOOTSTRAP_STATES,
 } from "../../src/lib/workspaceBootstrap.js";
@@ -235,5 +236,23 @@ describe("reactivateStaleDevPersonaSession", () => {
       call.url.endsWith("/auth/dev/session"),
     );
     expect(JSON.parse(session.body)).toEqual({ persona_id: "maya" });
+  });
+});
+
+describe("restartSession", () => {
+  it("drops the client session and loads the login route as a fresh document, keeping the return path", () => {
+    const assigned = [];
+    const destination = restartSession({
+      organizationSlug: "acme",
+      workspaceSlug: "proj",
+      hostedMode: false,
+      currentAppPath: "/pm",
+      search: "?conversation=c1",
+      assign: (url) => assigned.push(url),
+    });
+    expect(destination).toBe(
+      "/o/acme/w/proj/login?return_to=%2Fpm%3Fconversation%3Dc1",
+    );
+    expect(assigned).toEqual([destination]);
   });
 });

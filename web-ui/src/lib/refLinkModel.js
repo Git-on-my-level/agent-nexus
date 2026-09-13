@@ -274,7 +274,12 @@ const LINK_RESOLVERS = {
       organizationSlug,
     ),
   topic: () => "",
-  card: () => "",
+  card: ({ workspaceSlug, organizationSlug, value }) =>
+    buildInternalHref(
+      workspaceSlug,
+      `/tasks/${encodeURIComponent(`card:${value}`)}`,
+      organizationSlug,
+    ),
   message: ({ workspaceSlug, organizationSlug, threadId, value }) =>
     buildInternalHref(
       workspaceSlug,

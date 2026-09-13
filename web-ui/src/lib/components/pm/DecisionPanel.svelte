@@ -59,6 +59,11 @@
       !selected?.actor_id ||
       selected.actor_id === currentActorId,
   );
+  // Core says whether the task still matches the revision this was approved
+  // at; delivery of a stale approval is refused, so do not offer it.
+  let targetMoved = $derived(
+    selected?.target_current === false || selected?.work_missing === true,
+  );
   let handedOff = $derived(
     Boolean(action?.attempts?.some((attempt) => attempt?.sent_at)),
   );
@@ -448,7 +453,14 @@
           </p>
         {/if}
         <div class="mt-4 flex flex-wrap items-center gap-2">
-          {#if action.status === "pending_delivery" && !undeliverable && isApprover}
+          {#if action.status === "pending_delivery" && !undeliverable && targetMoved}
+            <p class="text-meta text-warn-text">
+              {selected?.work_missing
+                ? "The task this approval refers to no longer exists, so it cannot be delivered."
+                : "The task changed after this was approved, so this approval cannot be delivered."}
+              A fresh proposal and approval are needed.
+            </p>
+          {:else if action.status === "pending_delivery" && !undeliverable && isApprover}
             <button class="ui-btn-primary" onclick={onDeliver} disabled={busy}
               >{busy && busyWith === "deliver"
                 ? "Requesting delivery…"

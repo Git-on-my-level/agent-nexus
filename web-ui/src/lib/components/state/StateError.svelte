@@ -12,6 +12,7 @@
     message = "This didn't load.",
     onretry,
     retrying = false,
+    retryLabel = "Retry",
     supportHint = false,
     class: className = "",
   } = $props();
@@ -44,7 +45,7 @@
       disabled={retrying}
       class="mt-2"
     >
-      {retrying ? "Retrying…" : "Retry"}
+      {retrying ? "Retrying…" : retryLabel}
     </Button>
   {/if}
 </div>

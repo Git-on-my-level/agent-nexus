@@ -142,6 +142,15 @@
     // second arrow press moves it again instead of dropping focus on body.
     Promise.resolve(onMove(work, nextPhase)).then(async () => {
       await tick();
+      // A move can open a form (evidence for Done); the field it focused
+      // keeps the keyboard, otherwise typing would land on the card.
+      const active = document.activeElement;
+      if (
+        active &&
+        active !== document.body &&
+        active.matches("input, textarea, select, [contenteditable='true']")
+      )
+        return;
       document
         .querySelector(`[data-work-ref="${CSS.escape(ref)}"][tabindex="0"]`)
         ?.focus();

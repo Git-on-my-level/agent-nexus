@@ -7,6 +7,7 @@ import { dev } from "$app/environment";
 import {
   authenticatedAgent,
   authSessionReady,
+  clearAuthSession,
   initializeAuthSession,
   isHumanWorkspacePrincipal,
 } from "$lib/authSession";
@@ -24,6 +25,7 @@ import {
   appPath,
   stripBasePath,
   stripWorkspacePath,
+  workspacePath,
 } from "$lib/workspacePaths";
 import {
   devActorMode,
@@ -157,6 +159,37 @@ export function buildLoginRedirectDestination({
     params.set("return_to", returnPath);
   }
   return params.size > 0 ? `${loginPath}?${params.toString()}` : loginPath;
+}
+
+/**
+ * A session core no longer honours cannot be repaired by retrying the same
+ * request, and an in-app link to /login keeps the stale client session and
+ * bounces straight back. Drop the client copy and load the login route as a
+ * fresh document: the server issues a new session (dev mode re-issues the
+ * default persona on its own; hosted mode shows sign-in) and the login page
+ * returns to `returnPath`.
+ */
+export function restartSession({
+  organizationSlug,
+  workspaceSlug,
+  hostedMode = false,
+  workspaceId = "",
+  currentAppPath = "/",
+  search = "",
+  assign = (url) => globalThis.location?.assign(url),
+} = {}) {
+  clearAuthSession(workspaceSlug);
+  const destination = buildLoginRedirectDestination({
+    hostedMode,
+    organizationSlug,
+    workspaceSlug,
+    workspaceId,
+    currentAppPath,
+    search,
+    workspacePath,
+  });
+  assign(destination);
+  return destination;
 }
 
 export function installWorkspaceBootstrapLoopGuards({ browser }) {

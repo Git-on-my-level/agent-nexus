@@ -4,6 +4,7 @@
   import { beforeNavigate, goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
+  import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { resolveRefLink } from "$lib/refLinkModel.js";
@@ -80,6 +81,42 @@
   );
   let waiting = $derived(hasPendingTurn(turns, now));
   let sessionExpired = $state(false);
+  function signInAgain() {
+    restartSession({
+      organizationSlug: $page.params.organization,
+      workspaceSlug: $page.params.workspace,
+      hostedMode: $page.data?.shellCapabilities?.mode === "hosted",
+      workspaceId: $page.data?.workspace?.workspaceId,
+      currentAppPath: "/pm",
+      search: $page.url.search,
+    });
+  }
+  // Task titles for the refs the PM names; a raw card ref is not a label.
+  let workTitles = $state({});
+  async function loadWorkTitles() {
+    try {
+      const titles = {};
+      let cursor = "";
+      for (let pages = 0; pages < 4; pages += 1) {
+        const result = await coreClient.listWork({ limit: 50, cursor });
+        for (const item of result?.work || []) {
+          const title = String(item?.title ?? "").trim();
+          if (!title) continue;
+          if (item.ref) titles[item.ref] = title;
+          if (item.id) titles[`card:${item.id}`] = title;
+          if (item.handle) titles[`card:${item.handle}`] = title;
+        }
+        cursor = result?.next_cursor || "";
+        if (!cursor) break;
+      }
+      workTitles = titles;
+    } catch {
+      // Titles are a courtesy; the refs still link.
+    }
+  }
+  function workTitle(ref) {
+    return workTitles[String(ref ?? "")] || "";
+  }
   let showJump = $derived(Boolean(turns.length) && !atBottom);
 
   beforeNavigate(({ cancel, type }) => {
@@ -313,6 +350,7 @@
         authDriver: "pm-conversation",
       });
       await loadList();
+      void loadWorkTitles();
       ready = true;
       // Landing on an empty composer while a conversation already exists
       // reads as "nothing happened". Open the most recent one instead; the
@@ -423,6 +461,7 @@
     if (ref.startsWith("card:") || ref.startsWith("work:"))
       return {
         ...resolved,
+        label: workTitle(ref) || resolved.label,
         href: workspaceHref(`/tasks/${encodeURIComponent(ref)}`),
         isExternal: false,
       };
@@ -724,10 +763,16 @@
                         >
                         {#if record?.work_ref}
                           <a
-                            class="min-w-0 truncate font-mono text-micro text-fg-muted hover:text-accent-text"
+                            class="min-w-0 truncate text-micro text-fg-muted hover:text-accent-text {workTitle(
+                              record.work_ref,
+                            )
+                              ? ''
+                              : 'font-mono'}"
                             href={workspaceHref(
                               `/tasks/${encodeURIComponent(record.work_ref)}`,
-                            )}>{record.work_ref}</a
+                            )}
+                            title={record.work_ref}
+                            >{workTitle(record.work_ref) || record.work_ref}</a
                           >
                         {/if}
                         {#if record}
@@ -766,8 +811,10 @@
         >
           <span class="min-w-0 flex-1 break-words">{error}</span>
           {#if sessionExpired}
-            <a class="ui-prose-link text-micro" href={workspaceHref("/login")}
-              >Sign in again</a
+            <button
+              class="ui-prose-link text-micro"
+              type="button"
+              onclick={signInAgain}>Sign in again</button
             >
           {:else}
             <button

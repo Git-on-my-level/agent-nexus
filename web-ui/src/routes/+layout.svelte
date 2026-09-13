@@ -359,6 +359,9 @@
     ) {
       return;
     }
+    // Bootstrap already loaded them for this workspace; a second read on
+    // every ready flip only adds to the auth chatter on first paint.
+    if (devFixturePersonas.length > 0) return;
     void loadDevFixturePersonas();
   });
 

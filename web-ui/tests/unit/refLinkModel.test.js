@@ -195,8 +195,8 @@ describe("RefLink model", () => {
       routedValue: "card-1",
       primaryLabel: "Restock lemons",
       secondaryLabel: "",
-      href: "",
-      isLink: false,
+      href: "/o/acme/w/proj/tasks/card%3Acard-1",
+      isLink: true,
     });
   });
 
