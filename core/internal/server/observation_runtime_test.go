@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/primitives"
 	"context"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -45,55 +47,75 @@ func (r *typedErrorReader) Read(_ context.Context, target observation.Target) (o
 }
 
 func TestObservationRuntimePersistsTypedRefreshErrorAndLastGood(t *testing.T) {
-	h := newPrimitivesTestServer(t)
-	s := h.primitiveStore.(*primitives.Store)
-	ctx := context.Background()
-	b, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Typed errors"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	work, err := s.CreateWork(ctx, "actor-1", asString(b["id"]), map[string]any{"title": "Initial", "source": map[string]any{"authority": "github", "connection_id": "fixture", "native_id": "org/repo#1"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ref := asString(work["ref"])
-	reader := &typedErrorReader{}
-	binding := ObservationBinding{WorkRef: ref, SourceNativeID: "org/repo#1", Target: observation.Target{WorkspaceID: "ws_main", ConnectionID: "fixture", Source: "github", Kind: "issue", NativeID: "1", Repository: "org/repo"}, Reader: reader, Policy: observation.RefreshPolicy{Interval: time.Minute, StaleAfter: time.Hour, Timeout: time.Second, MaxBackoff: time.Hour}}
-	runtime, err := NewObservationRuntime(s, []ObservationBinding{binding})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = runtime.Tick(ctx); err != nil {
-		t.Fatal(err)
-	}
-	reader.fail = &observation.ReadError{Kind: observation.ErrPolicy, Message: "generated reader has no active version"}
-	if _, err = s.RequestWorkRefresh(ctx, "actor-1", ref); err != nil {
-		t.Fatal(err)
-	}
-	if err = runtime.Tick(ctx); err == nil {
-		t.Fatal("policy denial not returned")
-	}
-	current, err := s.GetWork(ctx, ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if current["title"] != "good observation" {
-		t.Fatalf("lost last good observation: %#v", current)
-	}
-	refresh, _ := current["refresh"].(map[string]any)
-	fresh, _ := current["freshness"].(map[string]any)
-	refreshErr, _ := refresh["last_error"].(map[string]any)
-	freshErr, _ := fresh["last_error"].(map[string]any)
-	if asString(refreshErr["code"]) != "policy_denied" || asString(refreshErr["message"]) != "Generated reader has no active version" {
-		t.Fatalf("refresh last_error %#v", refresh["last_error"])
-	}
-	if asString(freshErr["code"]) != "policy_denied" || asString(freshErr["message"]) != "Generated reader has no active version" {
-		t.Fatalf("freshness last_error %#v", fresh["last_error"])
-	}
-	if refresh["failures"] == nil || asString(refresh["last_attempt_at"]) == "" {
-		t.Fatalf("lost failure bookkeeping: %#v", refresh)
+	for _, tc := range []struct {
+		name    string
+		failure *observation.ReadError
+		message string
+	}{
+		{"no active revision", &observation.ReadError{Kind: observation.ErrPolicy, Message: "generated reader has no active version"}, "Generated reader has no active version"},
+		{"isolation unavailable", &observation.ReadError{Kind: observation.ErrIsolation, Message: "Seatbelt runner unavailable: sandbox-exec cannot exec a deny-default probe"}, "Seatbelt runner unavailable: sandbox-exec cannot exec a deny-default probe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newPMStoreTestEnv(t)
+			s := env.primitiveStore.(*primitives.Store)
+			ctx := context.Background()
+			actorID := actors.SystemActorID
+			b, err := s.CreateBoard(ctx, actorID, map[string]any{"title": "Typed errors"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			work, err := s.CreateWork(ctx, actorID, asString(b["id"]), map[string]any{"title": "Initial", "source": map[string]any{"authority": "github", "connection_id": "fixture", "native_id": "org/repo#1"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref := asString(work["ref"])
+			reader := &typedErrorReader{}
+			binding := ObservationBinding{WorkRef: ref, SourceNativeID: "org/repo#1", Target: observation.Target{WorkspaceID: "ws_main", ConnectionID: "fixture", Source: "github", Kind: "issue", NativeID: "1", Repository: "org/repo"}, Reader: reader, Policy: observation.RefreshPolicy{Interval: time.Minute, StaleAfter: time.Hour, Timeout: time.Second, MaxBackoff: time.Hour}}
+			runtime, err := NewObservationRuntime(s, []ObservationBinding{binding})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = runtime.Tick(ctx); err != nil {
+				t.Fatal(err)
+			}
+			good, err := s.GetWork(ctx, ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader.fail = tc.failure
+			if _, err = s.RequestWorkRefresh(ctx, actorID, ref); err != nil {
+				t.Fatal(err)
+			}
+			if err = runtime.Tick(ctx); err == nil {
+				t.Fatal("refresh error not returned")
+			}
+			current, err := s.GetWork(ctx, ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(current["latest_observation"], good["latest_observation"]) {
+				t.Fatalf("last good observation changed: %#v", current["latest_observation"])
+			}
+			if current["title"] != "good observation" {
+				t.Fatalf("lost last good observation: %#v", current)
+			}
+			refresh, _ := current["refresh"].(map[string]any)
+			fresh, _ := current["freshness"].(map[string]any)
+			refreshErr, _ := refresh["last_error"].(map[string]any)
+			freshErr, _ := fresh["last_error"].(map[string]any)
+			if asString(refreshErr["code"]) != string(tc.failure.Kind) || asString(refreshErr["message"]) != tc.message {
+				t.Fatalf("refresh last_error %#v", refresh["last_error"])
+			}
+			if asString(freshErr["code"]) != string(tc.failure.Kind) || asString(freshErr["message"]) != tc.message {
+				t.Fatalf("freshness last_error %#v", fresh["last_error"])
+			}
+			if refresh["failures"] == nil || asString(refresh["last_attempt_at"]) == "" {
+				t.Fatalf("lost failure bookkeeping: %#v", refresh)
+			}
+		})
 	}
 }
+
 func TestObservationRuntimePersistsUnchangedReadsAndOutage(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)
@@ -275,5 +297,13 @@ func TestJITAndInvestigationTransportsFailClosedWithoutSandbox(t *testing.T) {
 	}
 	if _, err = invRuntime.bindings[0].Reader.Read(context.Background(), invRuntime.bindings[0].Target); err == nil {
 		t.Fatal("investigation ran without a bound isolated executor")
+	}
+}
+
+func TestJITBoundReaderMissingManagerReportsIsolation(t *testing.T) {
+	_, err := (jitBoundReader{}).Read(context.Background(), observation.Target{})
+	out := observation.PersistableRefreshError(err, "github", time.Time{})
+	if out["code"] != "isolation_unavailable" || out["message"] != "Generated reader has no isolation manager" {
+		t.Fatal(out)
 	}
 }

@@ -3,6 +3,7 @@ package observation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,12 +58,13 @@ func TestIsolationNeverFallsBackToHostExecution(t *testing.T) {
 // The fake executor tests durable lifecycle transitions only. It is package-private
 // and cannot be supplied by production callers as an isolation substitute.
 type fixtureIsolator struct {
-	output []byte
-	err    error
-	calls  int
+	output       []byte
+	availableErr error
+	err          error
+	calls        int
 }
 
-func (f *fixtureIsolator) Available() error { return nil }
+func (f *fixtureIsolator) Available() error { return f.availableErr }
 func (f *fixtureIsolator) Run(context.Context, string, []byte, IsolationLimits) ([]byte, error) {
 	f.calls++
 	return f.output, f.err
@@ -106,6 +108,21 @@ func TestJITRequiresFixturesCanaryAndAtomicActivation(t *testing.T) {
 	if _, err := manager.Canary(context.Background(), "fixture", first.Revision, source); err != nil {
 		t.Fatal(err)
 	}
+	// A failed host probe blocks activation and remains the refresh diagnosis.
+	probe := &ReadError{Kind: ErrIsolation, Message: "Seatbelt runner unavailable: fixture probe failed"}
+	fake.availableErr = probe
+	manager.runner = fake
+	if err := manager.Activate("fixture", first.Revision); err != probe {
+		t.Fatalf("activation lost probe reason: %v", err)
+	}
+	state, err := manager.Status("fixture")
+	if err != nil || state.Active != "" || state.Versions[first.Revision].State != "canaried" {
+		t.Fatalf("failed activation changed state: %+v %v", state, err)
+	}
+	if _, err := manager.Read(context.Background(), "fixture", source); err != probe {
+		t.Fatalf("refresh masked failed activation: %v", err)
+	}
+	fake.availableErr = nil
 	if err := manager.Activate("fixture", first.Revision); err != nil {
 		t.Fatal(err)
 	}
@@ -269,5 +286,34 @@ func TestJITStageRecoversArtifactPublishedBeforeStateCommit(t *testing.T) {
 	}
 	if recovered.Revision != first.Revision || recovered.State != "staged" {
 		t.Fatal("orphan recovery invented validation")
+	}
+}
+
+func TestJITReadReportsIsolationBeforeMissingActiveVersion(t *testing.T) {
+	manager, err := NewJITManager(filepath.Join(t.TempDir(), "managed"), fixtureJITPolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fixtureIsolator{}
+	manager.runner = fake
+	probe := &ReadError{Kind: ErrIsolation, Message: "Seatbelt runner unavailable: sandbox-exec cannot exec a deny-default probe"}
+	for _, availableErr := range []error{probe, nil, probe} {
+		fake.availableErr = availableErr
+		// Nil source must never be read in either preflight failure case.
+		_, err := manager.Read(context.Background(), "fixture", nil)
+		var typed *ReadError
+		if !errors.As(err, &typed) {
+			t.Fatalf("untyped failure: %v", err)
+		}
+		if availableErr != nil {
+			if typed != probe {
+				t.Fatalf("lost probe reason: %v", err)
+			}
+		} else if typed.Kind != ErrPolicy || typed.Message != "generated reader has no active version" {
+			t.Fatalf("available runner without revision: %v", err)
+		}
+	}
+	if fake.calls != 0 {
+		t.Fatal("executed reader during failed preflight")
 	}
 }

@@ -337,6 +337,7 @@ func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now t
 	t := *candidate
 	t.LeaseToken = newLeaseToken()
 	t.LeaseOwner = runner
+	t.ClaimedAt = &now
 	t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, ttl)
 	t.MaxOutputBytes = maxOutput
 	t.Revision++

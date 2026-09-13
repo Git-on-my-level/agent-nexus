@@ -220,7 +220,7 @@ func (r jitBoundReader) Capabilities() observation.Capabilities {
 
 func (r jitBoundReader) Read(ctx context.Context, target observation.Target) (observation.Report, error) {
 	if r.manager == nil {
-		return observation.Report{}, fmt.Errorf("generated reader has no isolation manager")
+		return observation.Report{}, &observation.ReadError{Kind: observation.ErrIsolation, Message: "generated reader has no isolation manager"}
 	}
 	return r.manager.Read(ctx, r.adapter, r.source)
 }

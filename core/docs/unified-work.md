@@ -99,6 +99,11 @@ profile: process-exec of the artifact, scratch writes, `(deny network*)`,
 `(deny process-fork)`, and content-read denials for `/Users`, `/Volumes` (except
 the artifact and scratch), keychains and `/private/etc`. Hosts without an
 enforced runner fail closed. A managed directory is not a sandbox.
+JIT refresh checks runner availability before requiring an active revision, so
+an activation blocked by a failed probe reports `isolation_unavailable` with the
+probe reason in both `refresh.last_error` and `freshness.last_error`. The last
+good observation remains intact. `policy_denied` / "Generated reader has no
+active version" applies only when the runner is available and no revision is active.
 
 macOS 26 dyld requires a literal `/` read grant; other ancestors retain only
 metadata access. Artifact, scratch, and dyld subtree grants remain bounded.
@@ -139,6 +144,12 @@ model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages
 queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
 runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
 `POST /pm/turns/{id}/fail` require that lease token when a lease is held.
+Every HTTP turn representation includes read-only `claimed`, derived from the
+current unexpired lease, plus `claimed_at` when the latest claim time is known.
+That timestamp survives completion and expiry; older records omit it. Public
+turns (including history, single-turn reads, and message replays) omit lease
+credentials. Only the authenticated claim response returns the lease token,
+owner, and expiry needed by the runner protocol.
 `ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/complete/fail to that actor;
 `make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
 
