@@ -167,10 +167,15 @@ func TestRound13NonHumanOriginGuard(t *testing.T) {
 				d.Scope = scope
 				_, _, err = st.proposeDecision(ctx, d, "", "")
 				var pending *HumanProposalPendingError
-				if !errors.As(err, &pending) || pending.PendingDecisionID != prior.ID {
-					t.Fatalf("%v", err)
+				if scope == prior.Scope {
+					if !errors.As(err, &pending) || pending.PendingDecisionID != prior.ID {
+						t.Fatalf("%v", err)
+					}
+				} else if err != nil {
+					t.Fatalf("independent scope blocked: %v", err)
 				}
 				// Origin alone is not changed intent, including a different channel destination.
+				d.ID = "replay"
 				d.Scope = prior.Scope
 				d.Instruction = prior.Instruction
 				d.Origin = &Origin{Transport: "telegram", ChannelID: "another-chat"}

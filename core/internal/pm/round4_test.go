@@ -236,7 +236,7 @@ func TestRound4ValidatedChannelProposalProvenance(t *testing.T) {
 	origin := Origin{Transport: "telegram", TenantID: "bot", ChannelID: "channel", ExternalUserID: "user"}
 	bind(t, s, p, origin, true)
 	d, err := s.ProposeDecision(context.Background(), p, DecisionInput{RequestKey: "channel", WorkRef: "work:1", Instruction: "Move", Scope: "github", TargetRevision: "r1", Origin: &origin})
-	if err != nil || d.ProposedBy != p.ActorID || d.OriginKind != "channel" || d.TurnID != "" {
+	if err != nil || d.ProposedBy != p.ActorID || d.OriginKind != "human" || d.TurnID != "" {
 		t.Fatalf("%+v %v", d, err)
 	}
 }

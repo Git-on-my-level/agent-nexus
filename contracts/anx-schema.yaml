@@ -850,7 +850,9 @@ conversational_pm:
     - PM turn response operations require the configured PM actor; an empty identity fails closed.
     - Identical turn proposals reuse the awaiting decision for workspace, actor, work_ref, scope, target revision, payload and instruction; changed intent supersedes it atomically with superseded_by and superseded_reason.
     - Reusing a request key with a changed target revision conflicts with existing_decision_id in error details; source revisions are opaque and cannot be ordered.
-    - Direct proposals require a human; agents propose through turns addressed to a requesting human.
+    - Direct proposals require a human; agents propose through turns addressed to a requesting human. Human channel proposals retain origin_kind human and store channel identity in origin.
+    - A different non-human proposal is blocked by an awaiting human-origin decision only on the same work and scope in the workspace.
+    - Claim returns 429 busy with reason capacity, in_flight, limit and waiting when eligible waiting work exists at the workspace lease cap; runners sleep one poll interval. No waiting work returns 204 even at capacity; owned lease recovery remains allowed.
     - Open turns expire on reads and periodic maintenance even without a runner.
     - Action deliverable reflects configured executors; unavailable dispatch records no attempt and leaves the action unchanged.
     - Pending actions and failed actions with no sent attempt have nothing to reconcile and return invalid_request.

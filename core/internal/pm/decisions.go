@@ -43,8 +43,6 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 	d.OriginKind = "human"
 	if turnID != "" {
 		d.OriginKind, d.TurnID = "pm_turn", turnID
-	} else if in.Origin != nil {
-		d.OriginKind = "channel"
 	}
 	d, inserted, err := s.store.proposeDecision(ctx, d, turnID, leaseToken)
 	if err != nil {

@@ -201,7 +201,7 @@ func TestClaimAllocatesNewWorkAndEnforcesCapacityAcrossServices(t *testing.T) {
 	if err != nil || first.ID == next.ID {
 		t.Fatalf("did not allocate new work: %+v %v", next, err)
 	}
-	if _, err = second.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "third"}); !errors.Is(err, ErrEmpty) {
+	if _, err = second.ClaimTurn(ctx, agent, ClaimInput{RunnerID: "third"}); !errors.Is(err, ErrBusy) {
 		t.Fatalf("exceeded cap: %v", err)
 	}
 	// Free one slot, then race two independent service instances for that slot.
@@ -220,7 +220,7 @@ func TestClaimAllocatesNewWorkAndEnforcesCapacityAcrossServices(t *testing.T) {
 		err := <-results
 		if err == nil {
 			successes++
-		} else if !errors.Is(err, ErrEmpty) {
+		} else if !errors.Is(err, ErrBusy) {
 			t.Fatal(err)
 		}
 	}
