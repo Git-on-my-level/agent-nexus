@@ -571,20 +571,28 @@ retry after a lost response is safe. `lease_required` is not retried. If the
 lease was lost (`lease_mismatch`, `turn_closed`, `turn_not_claimed`), the
 runner reads the turn: already terminal logs `turn already <status>; nothing
 to do` and moves on; still pending and claimable re-claims and retries (a
-saved reply is delivered before a new harness run). After two lease losses
-or undeliverable terminal calls for the same turn, this process skips
-re-claiming it for 30s (doubling up to 5 minutes) and always sleeps the
-poll interval after a release. A turn is given up after 3 harness runs in
-this process; it stays claimable for another runner until its deadline.
+saved reply is delivered with the same complete retry budget and never
+followed by a harness run). After two lease losses or undeliverable terminal
+calls for the same turn, this process skips re-claiming it for 30s (doubling
+up to 5 minutes) and always sleeps the poll interval after a release. A claim
+that returns a turn still in that skip window is released once (`released
+turn … : skip window after repeated lease loss`); later polls in the same
+window sleep without claiming so the turn is not claim/release churned. A
+turn is given up after 3 harness runs in this process; it stays claimable for
+another runner until its deadline.
 
 If `complete` cannot be delivered after retries, the runner does **not** fail
 the turn. It writes the reply to `turn-<id>.reply.md` (0600) in `--work-dir`,
-releases the lease, and logs that the turn stays claimable until its
-deadline. The next claim of that turn in this process sends the saved reply
-once before re-running the harness. The file is deleted after a successful
-complete or when the turn is already terminal. Runner-internal failures
-(harness crash, timeout, missing secret) still fail the turn with a
-reader-facing reason; technical detail stays on stderr.
+releases the lease (`released turn … : undeliverable terminal call`), and
+logs that the turn stays claimable until its deadline. The next claim of that
+turn in this process retries `complete` from the saved reply with the same
+bounded budget and does **not** run the harness while that file exists. If
+complete is still undeliverable, the lease is released and the file is kept.
+The file is deleted after a successful complete or when the turn is already
+terminal. If the saved reply is unreadable or corrupt, the runner logs and
+falls back to the harness. Runner-internal failures (harness crash, timeout,
+missing secret) still fail the turn with a reader-facing reason; technical
+detail stays on stderr. Shutdown releases log `released turn … : shutdown`.
 
 Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
 2 minutes; core accepts `ANX_PM_MAX_OUTPUT_BYTES` up to 64000). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use

@@ -111,8 +111,9 @@ const (
 )
 
 type pmTurnMemory struct {
-	mu   sync.Mutex
-	byID map[string]*pmTurnMemEntry
+	mu             sync.Mutex
+	byID           map[string]*pmTurnMemEntry
+	holdClaimUntil time.Time
 }
 
 type pmTurnMemEntry struct {
@@ -298,6 +299,26 @@ func (m *pmTurnMemory) shouldPollPause(id string) bool {
 		return true
 	}
 	return !e.skipUntil.IsZero() && nowFn().Before(e.skipUntil)
+}
+
+func (m *pmTurnMemory) holdClaimsUntil(until time.Time) {
+	if m == nil || until.IsZero() {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if until.After(m.holdClaimUntil) {
+		m.holdClaimUntil = until
+	}
+}
+
+func (m *pmTurnMemory) claimsHeld() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return !m.holdClaimUntil.IsZero() && nowFn().Before(m.holdClaimUntil)
 }
 
 var terminalRetryDelays = []time.Duration{
@@ -560,7 +581,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 				a.pmLog("pm serve: release %s failed: %v\n", item.id, err)
 				continue
 			}
-			a.pmLog("pm serve: released turn %s on shutdown\n", item.id)
+			a.pmLog("pm serve: released turn %s : shutdown\n", item.id)
 			released = append(released, item.id)
 		}
 		return &commandResult{
@@ -578,6 +599,12 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		busy := active
 		mu.Unlock()
 		if busy >= maxConcurrent {
+			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
+				return shutdown()
+			}
+			continue
+		}
+		if a.turnMem().claimsHeld() {
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
 			}
@@ -653,12 +680,17 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		turn := commandResultBody(claimed)
 		turnID := anyString(turn["id"])
 		if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip {
+			reason := "skip window after repeated lease loss"
 			if givenUp {
 				a.logGiveUpTurn(turnID)
+				reason = "given up after harness cap"
 			} else if a.turnMem().consumeSkipLog(turnID) {
 				a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
 			}
-			a.releaseTurnBestEffort(serveCtx, cfg, turn, absDir)
+			if !givenUp {
+				a.turnMem().holdClaimsUntil(until)
+			}
+			a.releaseTurnBestEffort(serveCtx, cfg, turn, absDir, reason)
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
 			}
@@ -731,13 +763,15 @@ func (a *App) handleClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Res
 			return settled
 		}
 		if rerun == 1 || !a.turnMem().canRunHarness(turnID) {
+			reason := "lease lost after re-run"
 			if !a.turnMem().canRunHarness(turnID) {
 				a.turnMem().markGivenUp(turnID)
 				a.logGiveUpTurn(turnID)
+				reason = "given up after harness cap"
 			} else {
 				a.pmLog("pm serve: turn %s lease lost again after re-run; releasing lease\n", turnID)
 			}
-			a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+			a.releaseTurnBestEffort(ctx, cfg, turn, workDir, reason)
 			return true
 		}
 	}
@@ -787,11 +821,13 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 		a.turnMem().observeTerminal(turnID)
 		return true, false
 	}
-	if reply, ok := readTurnReply(workDir, turnID); ok {
+	if reply, replyErr := readTurnReply(workDir, turnID); replyErr != nil {
+		a.pmLog("pm serve: turn %s saved reply unreadable: %v; falling back to harness\n", turnID, replyErr)
+	} else if reply != "" {
 		if shuttingDown(shutdownCtx) {
 			return false, false
 		}
-		_, err := a.completeTurnAttempts(ctx, shutdownCtx, cfg, turnID, leaseToken, reply, nil, maxBytes, deadline, 1)
+		_, err := a.completeTurnUntil(ctx, shutdownCtx, cfg, turnID, leaseToken, reply, nil, maxBytes, deadline)
 		if err == nil {
 			removeTurnReply(workDir, turnID)
 			a.turnMem().observeTerminal(turnID)
@@ -805,12 +841,13 @@ func (a *App) runClaimedTurn(ctx, shutdownCtx context.Context, cfg config.Resolv
 		if terminalLeaseLost(err) {
 			return a.recoverLostLease(ctx, shutdownCtx, cfg, workDir, turn, err)
 		}
-		a.turnMem().noteLoss(turnID)
+		a.finishUndeliveredComplete(ctx, cfg, workDir, turn, err)
+		return true, false
 	}
 	if !a.turnMem().canRunHarness(turnID) {
 		a.turnMem().markGivenUp(turnID)
 		a.logGiveUpTurn(turnID)
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "given up after harness cap")
 		return true, false
 	}
 	prompt := buildPMPrompt(cfg.Agent, turn, maxBytes)
@@ -1040,7 +1077,7 @@ func (a *App) settleFailedTurn(ctx, shutdownCtx context.Context, cfg config.Reso
 			leaseToken = anyString(turn["lease_token"])
 			if _, failErr := a.failTurnUntil(ctx, shutdownCtx, cfg, turnID, leaseToken, reason, parseTurnDeadline(turn)); failErr != nil {
 				a.pmLog("pm serve: turn %s fail after re-claim failed: %v; releasing lease\n", turnID, failErr)
-				a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+				a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 			}
 			return true
 		}
@@ -1048,7 +1085,7 @@ func (a *App) settleFailedTurn(ctx, shutdownCtx context.Context, cfg config.Reso
 	}
 	a.pmLog("pm serve: turn %s fail request failed after %d attempts: %v; releasing lease\n", turnID, attempts, err)
 	a.turnMem().noteLoss(turnID)
-	a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	return true
 }
 
@@ -1167,7 +1204,7 @@ func runnerIDFromTurn(turn map[string]any, workDir string) string {
 	return id
 }
 
-func (a *App) releaseTurnBestEffort(ctx context.Context, cfg config.Resolved, turn map[string]any, workDir string) {
+func (a *App) releaseTurnBestEffort(ctx context.Context, cfg config.Resolved, turn map[string]any, workDir, reason string) {
 	turnID := anyString(turn["id"])
 	lease := anyString(turn["lease_token"])
 	runnerID := runnerIDFromTurn(turn, workDir)
@@ -1179,7 +1216,10 @@ func (a *App) releaseTurnBestEffort(ctx context.Context, cfg config.Resolved, tu
 		a.pmLog("pm serve: turn %s release failed: %v\n", turnID, err)
 		return
 	}
-	a.pmLog("pm serve: released turn %s after undeliverable terminal call\n", turnID)
+	if strings.TrimSpace(reason) == "" {
+		reason = "undeliverable terminal call"
+	}
+	a.pmLog("pm serve: released turn %s : %s\n", turnID, reason)
 }
 
 func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir string, turn map[string]any, lost error) (settled bool, retryHarness bool) {
@@ -1189,14 +1229,14 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	if err != nil {
 		a.turnMem().noteLoss(turnID)
 		a.pmLog("pm serve: turn %s get after lease loss failed: %v; releasing lease\n", turnID, err)
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease loss recovery failed")
 		return true, false
 	}
 	current := commandResultBody(got)
 	if current == nil {
 		a.turnMem().noteLoss(turnID)
 		a.pmLog("pm serve: turn %s get after lease loss returned no object; releasing lease\n", turnID)
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease loss recovery failed")
 		return true, false
 	}
 	status := firstNonEmpty(anyString(current["status"]), "unknown")
@@ -1211,11 +1251,13 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	}
 	a.turnMem().noteLoss(turnID)
 	if skip, givenUp, _ := a.turnMem().claimDefer(turnID); skip || givenUp || !a.turnMem().canRunHarness(turnID) {
+		reason := "skip window after repeated lease loss"
 		if givenUp || !a.turnMem().canRunHarness(turnID) {
 			a.turnMem().markGivenUp(turnID)
 			a.logGiveUpTurn(turnID)
+			reason = "given up after harness cap"
 		}
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, reason)
 		return true, false
 	}
 	runnerID := runnerIDFromTurn(turn, workDir)
@@ -1232,7 +1274,7 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	}
 	if anyString(claimedTurn["id"]) != turnID {
 		a.pmLog("pm serve: re-claim returned %s instead of %s; releasing the new lease\n", anyString(claimedTurn["id"]), turnID)
-		a.releaseTurnBestEffort(ctx, cfg, claimedTurn, workDir)
+		a.releaseTurnBestEffort(ctx, cfg, claimedTurn, workDir, "re-claim returned a different turn")
 		return true, false
 	}
 	copyTurnFields(turn, claimedTurn)
@@ -1255,13 +1297,19 @@ func writeTurnReply(workDir, turnID, text string) (string, error) {
 	return path, nil
 }
 
-func readTurnReply(workDir, turnID string) (string, bool) {
+func readTurnReply(workDir, turnID string) (string, error) {
 	raw, err := os.ReadFile(turnReplyPath(workDir, turnID))
 	if err != nil {
-		return "", false
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
 	}
 	text := strings.TrimSpace(string(raw))
-	return text, text != ""
+	if text == "" {
+		return "", fmt.Errorf("empty or corrupt")
+	}
+	return text, nil
 }
 
 func removeTurnReply(workDir, turnID string) {
@@ -1291,7 +1339,7 @@ func (a *App) finishUndeliveredComplete(ctx context.Context, cfg config.Resolved
 		a.turnMem().markGivenUp(turnID)
 		a.logGiveUpTurn(turnID)
 	}
-	a.releaseTurnBestEffort(ctx, cfg, turn, workDir)
+	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	path := turnReplyPath(workDir, turnID)
 	if abs, absErr := filepath.Abs(path); absErr == nil {
 		path = abs

@@ -1467,7 +1467,7 @@ func TestPMServeReleasesHeldTurnOnShutdown(t *testing.T) {
 	if anyString(got[0]["runner_id"]) == "" || anyString(got[0]["lease_token"]) != "lease-held" {
 		t.Fatalf("release body %v", got[0])
 	}
-	if !strings.Contains(stderr.String(), "released turn turn-held on shutdown") {
+	if !strings.Contains(stderr.String(), "released turn turn-held : shutdown") {
 		t.Fatalf("expected release log, got %s", stderr.String())
 	}
 }
@@ -1664,7 +1664,7 @@ func TestPMServeSignalDuringRunReleasesInsteadOfFailing(t *testing.T) {
 				t.Fatalf("release %v", got)
 			}
 			logs := stderr.String()
-			if !strings.Contains(logs, "released turn turn-held on shutdown") {
+			if !strings.Contains(logs, "released turn turn-held : shutdown") {
 				t.Fatalf("expected release log, got %s", logs)
 			}
 			if strings.Contains(logs, "failed in") || strings.Contains(logs, "The PM harness exited") || strings.Contains(logs, "exited with status") {
@@ -2137,6 +2137,18 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	prevSleep := sleepFn
+	sleepFn = func(ctx context.Context, _ time.Duration) error {
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if strings.Contains(stderr.String(), "skipping turn") {
+			cancel()
+			return context.Canceled
+		}
+		return nil
+	}
+	t.Cleanup(func() { sleepFn = prevSleep })
 	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, cfg)
 	mu.Lock()
 	got := runs
@@ -2150,5 +2162,195 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	logs := stderr.String()
 	if strings.Count(logs, "skipping turn") != 1 {
 		t.Fatalf("skip should log once, got %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnSavedReplyPersistent503DoesNotRunHarness(t *testing.T) {
+	stubTerminalSleep(t)
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		runs++
+		return []byte("should not run"), nil, nil
+	})
+	defer restore()
+	completeCalls := 0
+	released := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			t.Errorf("saved reply must not fail the turn: %s", r.URL.Path)
+			http.NotFound(w, r)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			released++
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	dir := t.TempDir()
+	if err := os.WriteFile(turnReplyPath(dir, "turn-1"), []byte("Saved reply.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, claimedTurn(), nil) {
+		t.Fatal("expected settled after undeliverable saved reply")
+	}
+	if runs != 0 {
+		t.Fatalf("harness runs=%d want 0", runs)
+	}
+	if completeCalls != 1+len(terminalRetryDelays) {
+		t.Fatalf("complete calls=%d want %d", completeCalls, 1+len(terminalRetryDelays))
+	}
+	if released != 1 {
+		t.Fatalf("released=%d", released)
+	}
+	raw, err := os.ReadFile(turnReplyPath(dir, "turn-1"))
+	if err != nil {
+		t.Fatalf("saved reply should be kept: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "Saved reply." {
+		t.Fatalf("saved reply %q", raw)
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "released turn turn-1 : undeliverable terminal call") {
+		t.Fatalf("expected undeliverable release reason, got %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnSavedReplyDeletesWhenTurnDelivered(t *testing.T) {
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		runs++
+		return []byte("should not run"), nil, nil
+	})
+	defer restore()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	dir := t.TempDir()
+	if err := os.WriteFile(turnReplyPath(dir, "turn-1"), []byte("Saved reply.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	turn := claimedTurn()
+	turn["status"] = "delivered"
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, turn, nil) {
+		t.Fatal("expected settled")
+	}
+	if runs != 0 {
+		t.Fatalf("harness runs=%d want 0", runs)
+	}
+	if _, err := os.Stat(turnReplyPath(dir, "turn-1")); !os.IsNotExist(err) {
+		t.Fatalf("saved reply should be deleted, err=%v", err)
+	}
+}
+
+func TestPMServeSkipWindowDoesNotChurnClaimRelease(t *testing.T) {
+	frozen := time.Date(2026, 9, 13, 17, 0, 0, 0, time.UTC)
+	prevNow := nowFn
+	nowFn = func() time.Time { return frozen }
+	t.Cleanup(func() { nowFn = prevNow })
+
+	var mu sync.Mutex
+	claims := 0
+	releases := 0
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		mu.Lock()
+		runs++
+		mu.Unlock()
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	deadline := time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339Nano)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			mu.Lock()
+			claims++
+			n := claims
+			mu.Unlock()
+			fmt.Fprintf(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-%d","lease_owner":"runner-1","deadline":%q,"text":"What needs my decision?"}`, n, deadline)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			w.WriteHeader(http.StatusConflict)
+			io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			mu.Lock()
+			releases++
+			mu.Unlock()
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &lockedBuffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	polls := 0
+	prevSleep := sleepFn
+	sleepFn = func(ctx context.Context, _ time.Duration) error {
+		if ctx != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		polls++
+		if polls >= 60 {
+			cancel()
+			return context.Canceled
+		}
+		return nil
+	}
+	t.Cleanup(func() { sleepFn = prevSleep })
+	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "1s", "--work-dir", t.TempDir()}, cfg)
+	mu.Lock()
+	gotClaims, gotReleases, gotRuns := claims, releases, runs
+	mu.Unlock()
+	if gotRuns != 1 {
+		t.Fatalf("harness runs=%d want 1", gotRuns)
+	}
+	if gotClaims > 4 {
+		t.Fatalf("claim churn during skip window: claims=%d", gotClaims)
+	}
+	if gotReleases > 3 {
+		t.Fatalf("release churn during skip window: releases=%d", gotReleases)
+	}
+	logs := stderr.String()
+	if strings.Count(logs, "skipping turn") != 1 {
+		t.Fatalf("skip should log once, got %s", logs)
+	}
+	if strings.Count(logs, "released turn turn-1 : skip window after repeated lease loss") < 1 {
+		t.Fatalf("expected skip-window release reason, got %s", logs)
+	}
+	if strings.Contains(logs, "after undeliverable terminal call") {
+		t.Fatalf("skip release used the old undeliverable reason: %s", logs)
 	}
 }

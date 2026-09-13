@@ -348,8 +348,11 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 
 	stale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed"}}`))
 	EnrichForCommand(stale, "pm.actions.reconcile")
-	if !strings.Contains(stale.Hint, "stale") || !strings.Contains(strings.ToLower(stale.Hint), "propose") {
-		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
+	if !strings.Contains(stale.Hint, "read-back") || !strings.Contains(stale.Hint, "Propose the decision again") {
+		t.Fatalf("expected neutral stale-read-back hint, got %q", stale.Hint)
+	}
+	if strings.Contains(stale.Hint, "The PM must propose") || strings.Contains(strings.ToLower(stale.Hint), "approval") {
+		t.Fatalf("reconcile hint asserted who must propose or used approval language: %q", stale.Hint)
 	}
 
 	dispatchHuman := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"origin_kind":"human","proposed_by":"actor-maya"}}}`))
@@ -566,6 +569,79 @@ func TestEnrichForCommandPMBusyReasons(t *testing.T) {
 	EnrichForCommand(other, "pm.decisions.answer")
 	if strings.Contains(other.Hint, conversationHint) || strings.Contains(other.Hint, capacityHint) {
 		t.Fatalf("non-message PM commands must not get message busy hints, got %q", other.Hint)
+	}
+}
+
+func TestEnrichStaleSourceRevisionHints(t *testing.T) {
+	t.Parallel()
+
+	dispatchWorkMissing := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing","origin_kind":"pm_turn","proposed_by":"actor-gds-pm"}}}`))
+	EnrichForCommand(dispatchWorkMissing, "pm.decisions.dispatch")
+	if dispatchWorkMissing.Hint != "The task this approval refers to no longer exists; nothing was sent. Acknowledge the failed action with `anx pm actions acknowledge <id>`." {
+		t.Fatalf("dispatch work_missing hint=%q", dispatchWorkMissing.Hint)
+	}
+	if strings.Contains(dispatchWorkMissing.Hint, "The PM must propose") {
+		t.Fatalf("work_missing should not add propose-again advice: %q", dispatchWorkMissing.Hint)
+	}
+
+	reconcileWorkMissing := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing"}}}`))
+	EnrichForCommand(reconcileWorkMissing, "pm.actions.reconcile")
+	if !strings.Contains(reconcileWorkMissing.Hint, "this read-back refers to no longer exists") || !strings.Contains(reconcileWorkMissing.Hint, "anx pm actions acknowledge") {
+		t.Fatalf("reconcile work_missing hint=%q", reconcileWorkMissing.Hint)
+	}
+	if strings.Contains(strings.ToLower(reconcileWorkMissing.Hint), "approval") {
+		t.Fatalf("reconcile work_missing used approval language: %q", reconcileWorkMissing.Hint)
+	}
+
+	dispatchRevisionHuman := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"revision_changed","origin_kind":"human","proposed_by":"actor-maya"}}}`))
+	EnrichForCommand(dispatchRevisionHuman, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchRevisionHuman.Hint, "This approval is stale") || !strings.Contains(dispatchRevisionHuman.Hint, "Propose it again from the board") || strings.Contains(dispatchRevisionHuman.Hint, "The PM must propose") {
+		t.Fatalf("dispatch revision_changed human hint=%q", dispatchRevisionHuman.Hint)
+	}
+
+	dispatchRevisionPM := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"revision_changed","origin_kind":"pm_turn"}}}`))
+	EnrichForCommand(dispatchRevisionPM, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchRevisionPM.Hint, "This approval is stale") || !strings.Contains(dispatchRevisionPM.Hint, "The PM must propose the decision again") {
+		t.Fatalf("dispatch revision_changed pm_turn hint=%q", dispatchRevisionPM.Hint)
+	}
+
+	reconcileRevision := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"read-back refused","details":{"reason":"revision_changed","origin_kind":"pm_turn"}}}`))
+	EnrichForCommand(reconcileRevision, "pm.actions.reconcile")
+	if !strings.Contains(reconcileRevision.Hint, "This read-back is stale") || !strings.Contains(reconcileRevision.Hint, "The PM must propose the decision again") || strings.Contains(strings.ToLower(reconcileRevision.Hint), "approval") {
+		t.Fatalf("reconcile revision_changed hint=%q", reconcileRevision.Hint)
+	}
+
+	dispatchTarget := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"already at target","details":{"reason":"already_at_target","origin_kind":"pm_turn"}}}`))
+	EnrichForCommand(dispatchTarget, "pm.decisions.dispatch")
+	if dispatchTarget.Hint != "The task is already where this proposal asks, so there is nothing to deliver." {
+		t.Fatalf("dispatch already_at_target hint=%q", dispatchTarget.Hint)
+	}
+
+	reconcileTarget := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"already at target","details":{"reason":"already_at_target"}}}`))
+	EnrichForCommand(reconcileTarget, "pm.actions.reconcile")
+	if reconcileTarget.Hint != "The task is already where this proposal asks, so there is nothing to read back." {
+		t.Fatalf("reconcile already_at_target hint=%q", reconcileTarget.Hint)
+	}
+
+	dispatchNull := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":null}}`))
+	EnrichForCommand(dispatchNull, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchNull.Hint, "This approval is stale") || !strings.Contains(dispatchNull.Hint, "Propose the decision again") || strings.Contains(dispatchNull.Hint, "The PM must propose") {
+		t.Fatalf("dispatch null details hint=%q", dispatchNull.Hint)
+	}
+
+	reconcileNull := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":null}}`))
+	EnrichForCommand(reconcileNull, "pm.actions.reconcile")
+	if !strings.Contains(reconcileNull.Hint, "This read-back is stale") || !strings.Contains(reconcileNull.Hint, "Propose the decision again") {
+		t.Fatalf("reconcile null details hint=%q", reconcileNull.Hint)
+	}
+	if strings.Contains(reconcileNull.Hint, "The PM must propose") || strings.Contains(strings.ToLower(reconcileNull.Hint), "approval") {
+		t.Fatalf("reconcile null details asserted proposer or used approval language: %q", reconcileNull.Hint)
+	}
+
+	dispatchOmitted := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed"}}`))
+	EnrichForCommand(dispatchOmitted, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchOmitted.Hint, "Propose the decision again") || strings.Contains(dispatchOmitted.Hint, "The PM must propose") {
+		t.Fatalf("dispatch omitted details hint=%q", dispatchOmitted.Hint)
 	}
 }
 
