@@ -194,6 +194,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"stream_connect_failed":         {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
 	"stream_read_failed":            {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},
 	"timeout_exceeded":              {Recoverable: true, Hint: "Increase `--timeout` or reduce request scope."},
+	"turn_not_claimed":              {Recoverable: true, Hint: "This turn is not claimed; there is nothing to release."},
 	"unknown_actor_id":              {Recoverable: true, Hint: "Register/select a valid actor id before issuing writes."},
 	"unknown_command":               {Recoverable: true, Hint: "Run `anx help` to list available commands."},
 	"username_taken":                {Recoverable: true, Hint: "Choose a different username and retry."},

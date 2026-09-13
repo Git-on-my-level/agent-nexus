@@ -55,7 +55,7 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	var hint string
 
 	switch code {
-	case "lease_required", "lease_mismatch":
+	case "lease_required", "lease_mismatch", "turn_not_claimed":
 		hint, recovery = enrichLease(code, msg)
 	case "conflict":
 		hint, recovery = enrichLease(code, msg)
@@ -137,6 +137,10 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 				}
 		}
 		return "", nil
+	case "pm.turns.complete", "pm.turns.fail":
+		return enrichPMTurnTerminalLease(e)
+	case "pm.turns.release":
+		return enrichPMTurnReleaseLease(e)
 	case "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.create", "pm.actions.reconcile":
 	default:
 		return "", nil
@@ -205,7 +209,7 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 	details, _ := e.Details.(map[string]any)
 	if rec, _ := details["anx_cli_recovery"].(map[string]any); rec != nil {
 		switch rec["kind"] {
-		case "stale_concurrency_token", "resource_exists", "lease_required", "lease_mismatch":
+		case "stale_concurrency_token", "resource_exists", "lease_required", "lease_mismatch", "turn_not_claimed":
 			return "", nil
 		}
 	}
@@ -313,8 +317,15 @@ func enrichLease(code, msg string) (string, map[string]any) {
 		return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`).",
 			map[string]any{"kind": "lease_required", "field": "lease_token"}
 	case "lease_mismatch":
+		if leaseReplayAlreadyTerminal(lmsg) {
+			return "This turn is already delivered and no retry is needed.",
+				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+		}
 		return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
 			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	case "turn_not_claimed":
+		return "This turn is not claimed; there is nothing to release.",
+			map[string]any{"kind": "turn_not_claimed"}
 	case "conflict":
 		if strings.Contains(lmsg, "this turn is not claimed") || strings.Contains(lmsg, "lease") {
 			if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "released") || strings.Contains(lmsg, "re-claim") || strings.Contains(lmsg, "reclaim") {
@@ -323,6 +334,49 @@ func enrichLease(code, msg string) (string, map[string]any) {
 			}
 			return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`). If the lease was released or re-claimed, claim the turn again.",
 				map[string]any{"kind": "lease_required", "field": "lease_token"}
+		}
+	}
+	return "", nil
+}
+
+func leaseReplayAlreadyTerminal(msg string) bool {
+	return strings.Contains(msg, "already delivered") || strings.Contains(msg, "no retry is needed") || strings.Contains(msg, "no retry needed")
+}
+
+func enrichPMTurnTerminalLease(e *Error) (string, map[string]any) {
+	if e == nil {
+		return "", nil
+	}
+	code := strings.TrimSpace(e.Code)
+	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
+	if (code == "lease_mismatch" || code == "lease_required" || code == "conflict") && leaseReplayAlreadyTerminal(lmsg) {
+		return "This turn is already delivered and no retry is needed.",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	}
+	return "", nil
+}
+
+func enrichPMTurnReleaseLease(e *Error) (string, map[string]any) {
+	if e == nil {
+		return "", nil
+	}
+	code := strings.TrimSpace(e.Code)
+	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
+	switch code {
+	case "turn_not_claimed":
+		return "This turn is not claimed; there is nothing to release.",
+			map[string]any{"kind": "turn_not_claimed"}
+	case "lease_mismatch":
+		return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	case "conflict":
+		if strings.Contains(lmsg, "not claimed") {
+			return "This turn is not claimed; there is nothing to release.",
+				map[string]any{"kind": "turn_not_claimed"}
+		}
+		if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "lease") {
+			return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
+				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
 		}
 	}
 	return "", nil

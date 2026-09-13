@@ -462,10 +462,22 @@ The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
 `pm turns propose <turn-id> --from-file ...`, `pm turns complete <turn-id>
 --from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
 cannot impersonate it. Claim is lease-based and idempotent for the same
-`runner_id`; HTTP 204 means no claimable turn. Channel ingress (Telegram and
-Discord) creates conversations with `origin` and posts through the same
-`/pm/conversations/{id}/messages` pipeline; those turns are claimed, completed,
-and failed identically. The channels lane owns transport authentication.
+`runner_id`; HTTP 204 means no claimable turn. `--runner-id` defaults to the
+authenticated actor id. Text output prints `runner_id` and `lease_token` so
+the same runner can release later:
+
+```sh
+anx --agent pm pm turns claim --runner-id "$RUNNER_ID"
+# turn-1  status=in progress  runner_id=runner-1  lease_token=...
+anx --agent pm pm turns release turn-1 --from-file - <<'EOF'
+{"runner_id":"runner-1","lease_token":"<lease_token from claim>"}
+EOF
+```
+
+Channel ingress (Telegram and Discord) creates conversations with `origin` and
+posts through the same `/pm/conversations/{id}/messages` pipeline; those turns
+are claimed, completed, and failed identically. The channels lane owns
+transport authentication.
 
 ### PM runner (`anx pm serve`)
 

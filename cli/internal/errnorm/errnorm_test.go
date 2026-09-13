@@ -440,6 +440,36 @@ func TestEnrichLeaseTokenErrors(t *testing.T) {
 	if !strings.Contains(revision.Hint, "re-read it and retry") {
 		t.Fatalf("generic PM conflict should keep revision hint, got %q", revision.Hint)
 	}
+
+	delivered := FromHTTPFailure(409, []byte(`{"error":{"code":"lease_mismatch","message":"the turn is already delivered and no retry is needed"}}`))
+	if !strings.Contains(delivered.Hint, "already delivered and no retry is needed") {
+		t.Fatalf("delivered replay hint=%q", delivered.Hint)
+	}
+	if strings.Contains(delivered.Hint, "claim the turn again") || strings.Contains(delivered.Hint, "re-read it and retry") {
+		t.Fatalf("delivered replay still asked for retry: %q", delivered.Hint)
+	}
+	EnrichForCommand(delivered, "pm.turns.complete")
+	if !strings.Contains(delivered.Hint, "already delivered and no retry is needed") {
+		t.Fatalf("complete delivered hint=%q", delivered.Hint)
+	}
+
+	releaseMismatch := FromHTTPFailure(409, []byte(`{"error":{"code":"lease_mismatch","message":"the lease was released or re-claimed; claim the turn again"}}`))
+	EnrichForCommand(releaseMismatch, "pm.turns.release")
+	if !strings.Contains(releaseMismatch.Hint, "does not match the current lease") {
+		t.Fatalf("release mismatch hint=%q", releaseMismatch.Hint)
+	}
+	if strings.Contains(releaseMismatch.Hint, "re-read it and retry") {
+		t.Fatalf("release mismatch still used revision hint: %q", releaseMismatch.Hint)
+	}
+
+	notClaimed := FromHTTPFailure(409, []byte(`{"error":{"code":"turn_not_claimed","message":"this turn is not claimed"}}`))
+	if !strings.Contains(notClaimed.Hint, "not claimed; there is nothing to release") {
+		t.Fatalf("turn_not_claimed hint=%q", notClaimed.Hint)
+	}
+	EnrichForCommand(notClaimed, "pm.turns.release")
+	if !strings.Contains(notClaimed.Hint, "nothing to release") {
+		t.Fatalf("release turn_not_claimed hint=%q", notClaimed.Hint)
+	}
 }
 
 func TestEnrichForCommandPMBusyReasons(t *testing.T) {
