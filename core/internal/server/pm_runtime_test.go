@@ -3,14 +3,19 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/actors"
+	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
+	"agent-nexus-core/internal/storage"
 )
 
 func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
@@ -96,7 +101,7 @@ func TestPMRuntimeDoesNotTrustBodyIdentityOrConfigureProvider(t *testing.T) {
 	if err = json.NewDecoder(resp.Body).Decode(&c); err != nil {
 		t.Fatal(err)
 	}
-	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 202)
+	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/conversations/"+asString(c["id"])+"/messages", map[string]any{"request_key": "turn", "text": "What changed?"}, seed.AccessToken, 503)
 }
 
 func TestPMRuntimeBridgeFailsClosedWithoutRuntimeEnvelope(t *testing.T) {
@@ -162,7 +167,7 @@ func TestPMRuntimeReplyUsesConversationAuthorization(t *testing.T) {
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	seed := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "reply-fixture", "reply-fixture-actor", "reply-fixture", "reply-fixture-token")
-	handler, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	handler, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: seed.ActorID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,18 +244,143 @@ func TestPMRuntimeSourceReconcileDoesNotVerifyUnsentWrite(t *testing.T) {
 		t.Fatal(answer)
 	}
 	action := post("/pm/decisions/"+asString(d["id"])+"/dispatch", map[string]any{}, 200)
-	if action["status"] != "unknown" {
-		t.Fatalf("unsent source write was not left unknown: %v", action)
+	if action["status"] != "pending_delivery" {
+		t.Fatalf("unsent source write was not left pending: %v", action)
 	}
-	receipt := post("/pm/actions/"+asString(action["id"])+"/reconcile", map[string]any{}, 200)
-	if receipt["status"] == "verified" {
-		t.Fatalf("unchanged source revision certified an unsent write: %v", receipt)
+	post("/pm/actions/"+asString(action["id"])+"/reconcile", map[string]any{}, 409)
+	receipt, err := reconcileSourceRead(ctx, store, runtime, pm.Action{ID: asString(action["id"]), WorkRef: ref, TargetRevision: "abc"})
+	if err != nil || receipt.Status != pm.Unknown || receipt.IndependentlyVerified {
+		t.Fatalf("unsent write verified: %+v %v", receipt, err)
 	}
-	if receipt["status"] != "unknown" {
-		t.Fatalf("reconcile %+v", receipt)
+
+}
+
+func newPMStoreTestEnv(t *testing.T) authIntegrationEnv {
+	t.Helper()
+	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
-	raw, _ := receipt["receipt"].(map[string]any)
-	if raw["independently_verified"] == true {
-		t.Fatalf("unsent write marked independently verified: %v", receipt)
+	t.Cleanup(func() { _ = ws.Close() })
+	registry := actors.NewStore(ws.DB())
+	if _, err = registry.EnsureSystemActor(context.Background(), time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	return authIntegrationEnv{workspace: ws, registry: registry, authStore: auth.NewStore(ws.DB()), primitiveStore: primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)}
+}
+func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
+	env := newPMStoreTestEnv(t)
+	ctx := context.Background()
+	human := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "phase-human", "phase-human-actor", "phase-human", "phase-token")
+	machine := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "phase-agent", "phase-agent-actor", "phase-agent", "phase-agent-token")
+	store := env.primitiveStore.(*primitives.Store)
+	board, err := store.CreateBoard(ctx, human.ActorID, map[string]any{"title": "Phases"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt, err := NewPMRuntime(env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: machine.ActorID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := pm.Principal{WorkspaceID: "ws_main", ActorID: human.ActorID, Human: true}
+	for _, authority := range []string{"nexus", "github", "multica", "git", "ssh_git"} {
+		t.Run(authority, func(t *testing.T) {
+			w, err := store.CreateWork(ctx, p.ActorID, asString(board["id"]), map[string]any{"title": authority, "source": map[string]any{"authority": authority, "connection_id": "fixture", "native_id": authority, "revision": "r1"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			revision := "r1"
+			if authority == "nexus" {
+				revision = "1"
+			}
+			input := pm.DecisionInput{RequestKey: authority, WorkRef: asString(w["ref"]), Instruction: "Prose is not the target", Scope: "work.phase", TargetRevision: revision, Payload: &pm.ActionPayload{Phase: "ready"}}
+			agent := pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}
+			ad, err := rt.Service.ProposeDecision(ctx, agent, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = rt.Service.AnswerDecision(ctx, agent, ad.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.Is(err, pm.ErrForbidden) {
+				t.Fatal(err)
+			}
+			agent.Human = true
+			if _, err = rt.Service.AnswerDecision(ctx, agent, ad.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.Is(err, pm.ErrForbidden) {
+				t.Fatalf("forged human: %v", err)
+			}
+			d, err := rt.Service.ProposeDecision(ctx, p, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err = rt.Service.AnswerDecision(ctx, p, d.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			agent.Human = false
+			if _, err = rt.Service.DispatchDecision(ctx, agent, d.ID); !errors.Is(err, pm.ErrForbidden) {
+				t.Fatalf("agent dispatched phase action: %v", err)
+			}
+			a, err := rt.Service.DispatchDecision(ctx, p, d.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated, err := store.GetWork(ctx, input.WorkRef)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if authority != "nexus" {
+				if a.Status != pm.Pending || !strings.Contains(a.Receipt.Detail, "executor required") || updated["phase"] != w["phase"] || updated["version"] != w["version"] {
+					t.Fatalf("source changed: %+v %v", a, updated)
+				}
+				return
+			}
+			if a.Status != pm.Reported || updated["phase"] != "ready" || updated["version"] != int64(2) {
+				t.Fatalf("phase not committed: %+v %v", a, updated)
+			}
+			a, err = rt.Service.ReconcileAction(ctx, p, a.ID)
+			if err != nil || a.Status != pm.Verified {
+				t.Fatalf("readback: %+v %v", a, err)
+			}
+			// The executor's transaction rejects a revision changed since authorization.
+			if _, err = executeWorkPhase(ctx, store, pm.Action{ActorID: p.ActorID, WorkRef: input.WorkRef, Scope: "work.phase", TargetRevision: "1", Payload: &pm.ActionPayload{Phase: "review"}}); !errors.Is(err, pm.ErrStale) {
+				t.Fatalf("stale execute %v", err)
+			}
+			input.RequestKey = "stale"
+			input.Payload = &pm.ActionPayload{Phase: "review"}
+			stale, err := rt.Service.ProposeDecision(ctx, p, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = rt.Service.AnswerDecision(ctx, p, stale.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = rt.Service.DispatchDecision(ctx, p, stale.ID); !errors.Is(err, pm.ErrStale) {
+				t.Fatalf("stale dispatch %v", err)
+			}
+		})
+	}
+}
+
+func TestPMRuntimeRespondRequiresConfiguredUnrevokedActor(t *testing.T) {
+	env := newPMStoreTestEnv(t)
+	ctx := context.Background()
+	selected := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "selected-pm", "selected-pm-actor", "selected-pm", "selected-token")
+	other := seedMachinePrincipalForLockoutTest(t, ctx, env.workspace.DB(), "other-pm", "other-pm-actor", "other-pm", "other-token")
+	rt, err := NewPMRuntime(env.workspace.DB(), env.primitiveStore.(*primitives.Store), env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := pm.Principal{WorkspaceID: "ws_main", ActorID: other.ActorID}
+	if _, err = rt.Service.ClaimTurn(ctx, p, pm.ClaimInput{}); !errors.Is(err, pm.ErrForbidden) {
+		t.Fatalf("unselected agent claimed: %v", err)
+	}
+	p.ActorID = selected.ActorID
+	if _, err = rt.Service.ClaimTurn(ctx, p, pm.ClaimInput{}); !errors.Is(err, pm.ErrEmpty) {
+		t.Fatalf("selected actor denied: %v", err)
+	}
+	if _, err = env.workspace.DB().ExecContext(ctx, "UPDATE agents SET revoked_at=? WHERE id=?", time.Now().UTC().Format(time.RFC3339Nano), selected.AgentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = rt.Service.ClaimTurn(ctx, p, pm.ClaimInput{}); !errors.Is(err, pm.ErrForbidden) {
+		t.Fatalf("revoked PM claimed: %v", err)
 	}
 }

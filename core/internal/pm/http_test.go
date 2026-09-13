@@ -147,3 +147,35 @@ func TestHTTPClaimAndFailTurns(t *testing.T) {
 		t.Fatalf("fail %d %s", fail.Code, fail.Body.String())
 	}
 }
+
+func TestHTTPDecisionOwnerIsTheOnlyAnsweringHuman(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	ctx := context.Background()
+	d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "actor-bound", WorkRef: "work:1", Instruction: "Review", Scope: "work.annotate", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := Principal{WorkspaceID: p.WorkspaceID, ActorID: "second-human", Human: true}
+	h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return second, nil }}
+	read := httptest.NewRecorder()
+	h.ServeHTTP(read, httptest.NewRequest("GET", "/pm/decisions/"+d.ID, nil))
+	if read.Code != 200 || !strings.Contains(read.Body.String(), `"can_answer":false`) {
+		t.Fatalf("read %d %s", read.Code, read.Body.String())
+	}
+	answer := httptest.NewRecorder()
+	h.ServeHTTP(answer, httptest.NewRequest("POST", "/pm/decisions/"+d.ID+"/answer", strings.NewReader(`{"revision":1,"approve":true,"text":"yes"}`)))
+	if answer.Code != 403 {
+		t.Fatalf("another human answered %d %s", answer.Code, answer.Body.String())
+	}
+}
+
+func TestHTTPUnconfiguredPMIdentityExplainsUnavailable(t *testing.T) {
+	s, _, p, _ := fixture(t)
+	s.cfg.AgentActorID = ""
+	h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return p, nil }}
+	out := httptest.NewRecorder()
+	h.ServeHTTP(out, httptest.NewRequest("POST", "/pm/turns/claim", strings.NewReader(`{"runner_id":"untrusted"}`)))
+	if out.Code != 503 || !strings.Contains(out.Body.String(), "ANX_PM_AGENT_ACTOR_ID") {
+		t.Fatalf("%d %s", out.Code, out.Body.String())
+	}
+}

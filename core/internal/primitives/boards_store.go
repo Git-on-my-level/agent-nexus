@@ -226,6 +226,8 @@ type UpdateBoardCardInput struct {
 }
 
 type MoveBoardCardInput struct {
+	// IfWorkVersion binds PM authorization to the canonical work revision.
+	IfWorkVersion    *int64
 	ColumnKey        string
 	BeforeCardID     string
 	AfterCardID      string
@@ -2070,6 +2072,25 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, err
+	}
+	// Every board move advances the work revision, including ordinary UI moves.
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,'nexus','{"source":{"authority":"nexus"}}',0,?,?) ON CONFLICT(card_id) DO NOTHING`, cardRow.CardID, time.Now().UTC().Format(time.RFC3339Nano), actorID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	var expected any
+	if input.IfWorkVersion != nil {
+		expected = *input.IfWorkVersion
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE work_metadata SET version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND (? IS NULL OR version=?)`, time.Now().UTC().Format(time.RFC3339Nano), actorID, cardRow.CardID, expected, expected)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed != 1 {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, ErrConflict
 	}
 	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
 		_ = tx.Rollback()

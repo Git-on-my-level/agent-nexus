@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -475,12 +476,13 @@ func main() {
 		}
 		observationRuntime.BindInvestigations(invRuntime)
 	}
+	pmActorID := configuredPMActor(os.Stderr)
 	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
 		PM: pm.Config{
 			WorkspaceID:    workspaceID,
 			WorkspaceName:  workspaceName,
 			BaseURL:        envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
-			AgentActorID:   envString("ANX_PM_AGENT_ACTOR_ID", ""),
+			AgentActorID:   pmActorID,
 			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
 			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
 			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
@@ -949,4 +951,13 @@ func fileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+// configuredPMActor warns once at startup while leaving read-only PM records available.
+func configuredPMActor(stderr io.Writer) string {
+	actor := envString("ANX_PM_AGENT_ACTOR_ID", "")
+	if actor == "" {
+		fmt.Fprintln(stderr, "WARNING: ANX_PM_AGENT_ACTOR_ID is empty; PM turn creation and response operations are unavailable")
+	}
+	return actor
 }

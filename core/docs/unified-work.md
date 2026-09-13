@@ -194,3 +194,47 @@ go test ./internal/server -run 'TestWork|TestObservationRuntime|TestPMRuntime'
 Run `make -C core check` and `make contract-check` for component/contract gates.
 Peer `internal/pm` and `internal/observation` packages must be integrated before
 building the runtime-wiring commit.
+
+### PM phase actions and identity boundaries
+
+A `work.phase` decision carries `payload: {"phase": "ready"}` (or backlog,
+in_progress, blocked, review, done). The instruction is explanatory prose and
+does not supply mutation parameters. Approvals without a valid structured target
+are rejected. For done, `payload.resolution_refs` must contain evidence references;
+execution still uses the canonical card completion gate.
+
+Nexus-owned phase actions use the board move transaction with a work revision
+precondition. All board moves advance the work revision; board and work reads
+therefore share the same phase. Execution reads back the canonical phase and
+reconciliation records verification. Source-owned phase requests never mutate
+the projection. Without a source executor their action and receipt remain
+pending_delivery and explain that an executor is required.
+
+Decision and action reads stay workspace-visible, subject to existing read
+authorization. Only the decision's human actor may answer; clients must use the
+derived `can_answer` field for answer controls. Dispatch revalidates that the
+decision owner, answering actor and action approver agree, as well as current
+approval permission, scope, structured payload and target revision.
+
+Set `ANX_PM_AGENT_ACTOR_ID` to the selected PM identity. With an empty value, core
+warns at startup and turn creation/response operations fail closed. Claim,
+context, proposal, completion and failure operations require that configured,
+currently authorized actor. A new turn reuses an awaiting decision for the same
+workspace, requesting actor, work_ref and scope, preserves its existing target,
+and records the reference in `turn.decision_ids`.
+
+Claim allocates new work; it never reoffers an active lease, even to the same
+runner. No capacity or no free work returns the existing 204 response. Capacity
+counting and allocation share one SQLite transaction. Unpaginated service reads
+walk all batches internally; existing HTTP cursor contracts remain unchanged.
+
+Reconciliation preserves read-back receipts even when they cannot advance the
+action's monotonic status. `reconciliation_conflict: true` marks that mismatch;
+clients should display the receipt detail rather than infer success from status
+alone. This does not authorize a blind retry.
+
+For isolated contract/core lanes, `ANX_CONTRACT_SKIP_CONSUMER_MIRRORS=1` keeps
+`make contract-gen` and `make contract-check` from writing CLI/UI mirrors.
+Integration must subsequently regenerate those consumer mirrors. UI phase drags
+and CLI PM proposals must send the structured payload; legacy prose-only pending
+decisions must be rejected/superseded and proposed again with that payload.

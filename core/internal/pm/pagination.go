@@ -101,7 +101,11 @@ func (s *Service) ConversationPage(ctx context.Context, p Principal, limit int, 
 	return recordPage(ctx, s, p, "conversation", limit, cursor, func(c Conversation) bool { return s.authorize(ctx, p, "pm.read", c.WorkRef) == nil })
 }
 func (s *Service) DecisionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Decision], error) {
-	return recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) bool { return s.authorize(ctx, p, "pm.read", d.WorkRef) == nil })
+	page, err := recordPage(ctx, s, p, "decision", limit, cursor, func(d Decision) bool { return s.authorize(ctx, p, "pm.read", d.WorkRef) == nil })
+	for i, d := range page.Items {
+		page.Items[i] = s.decisionForReader(ctx, p, d)
+	}
+	return page, err
 }
 func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Action], error) {
 	return recordPage(ctx, s, p, "action", limit, cursor, func(a Action) bool { return s.authorize(ctx, p, "pm.read", a.WorkRef) == nil })

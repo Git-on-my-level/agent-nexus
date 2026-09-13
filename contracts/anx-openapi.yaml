@@ -6275,6 +6275,10 @@ components:
           type: array
           items:
             type: string
+        decision_ids:
+          type: array
+          items:
+            type: string
         failure:
           type: string
         lease_token:
@@ -6287,7 +6291,20 @@ components:
           type: integer
         origin:
           $ref: '#/components/schemas/PMOrigin'
+    PMActionPayload:
+      type: object
+      additionalProperties: false
+      description: Exact action parameters bound to approval; work.phase requires phase. Instruction is prose and is never parsed for a phase. Completion retains the canonical card evidence gate.
+      properties:
+        phase:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        resolution_refs:
+          type: array
+          items:
+            type: string
     PMDecision:
+      description: Workspace-visible for reading; only actor_id may answer. Clients must show answer controls only to that human.
       type: object
       additionalProperties: true
       properties:
@@ -6298,10 +6315,15 @@ components:
         created_at: *id005
         instruction:
           type: string
+        payload:
+          $ref: '#/components/schemas/PMActionPayload'
         scope:
           type: string
         target_revision:
           type: string
+        can_answer:
+          type: boolean
+          description: Derived for the current reader; true only for the awaiting decision owner with human approval authority.
         answer:
           type: string
         answered_by:
@@ -6349,6 +6371,8 @@ components:
           type: string
         instruction:
           type: string
+        payload:
+          $ref: '#/components/schemas/PMActionPayload'
         scope:
           type: string
         target_revision:
@@ -6366,6 +6390,9 @@ components:
           - verified
           - failed
           - unknown
+        reconciliation_conflict:
+          type: boolean
+          description: Latest read-back could not advance the action status. Receipt preserves that evidence even when its status is lower.
         receipt:
           $ref: '#/components/schemas/PMReceipt'
         attempts:
@@ -6435,6 +6462,8 @@ components:
           type: string
         instruction:
           type: string
+        payload:
+          $ref: '#/components/schemas/PMActionPayload'
         scope:
           type: string
         target_revision:

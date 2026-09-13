@@ -86,9 +86,28 @@ func requireIsolationError(t *testing.T, err error) {
 
 func TestSeatbeltProfileIsDenyDefault(t *testing.T) {
 	profile := seatbeltProfile("/tmp/reader", "/tmp/scratch")
-	for _, needle := range []string{"(deny default)", "(deny network*)", "(deny process-fork)", `(deny file-read-data (subpath "/Users")`, "(allow process-exec*", `(literal "/tmp/reader")`, `(subpath "/tmp/scratch")`} {
+	for _, needle := range []string{"(deny default)", "(deny network*)", "(deny process-fork)", "(allow process-exec*", `(literal "/tmp/reader")`, `(subpath "/tmp/scratch")`} {
 		if !strings.Contains(profile, needle) {
 			t.Fatalf("profile missing %q:\n%s", needle, profile)
+		}
+	}
+
+	for _, broad := range []string{"(allow file-read*)", "(allow file-map-executable)", "(allow mach-lookup)", "(allow mach-priv-host-port)", "(allow ipc-posix-shm)"} {
+		if strings.Contains(profile, broad) {
+			t.Fatalf("ambient permission %s", broad)
+		}
+	}
+	for _, path := range []string{"/Users", "/Volumes", "/Applications", "/opt", "/private/etc", "/private/var", "/Library", "/tmp"} {
+		if strings.Contains(profile, `(subpath "`+path+`")`) {
+			t.Fatalf("broad read root %s", path)
+		}
+	}
+	for _, bad := range []string{"relative", "/tmp/reader\"injection", "/tmp/new\nline"} {
+		if got := seatbeltProfile(bad, "/tmp/scratch"); got != "(version 1)(deny default)" {
+			t.Fatalf("unsafe artifact allowed %q", bad)
+		}
+		if got := seatbeltProfile("/tmp/reader", bad); got != "(version 1)(deny default)" {
+			t.Fatalf("unsafe scratch allowed %q", bad)
 		}
 	}
 }
@@ -477,4 +496,35 @@ func (r jitBoundTestReader) Capabilities() Capabilities {
 func (r jitBoundTestReader) Read(ctx context.Context, target Target) (Report, error) {
 	_ = target
 	return r.manager.Read(ctx, r.id, r.source)
+}
+
+// A harmless fixture outside every allowlisted root must be unreadable, even
+// under /private/tmp which was exposed by the old file-read* plus denylist.
+func TestSeatbeltDeniesUnlistedReadAndAllowsScratch(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Seatbelt is macOS-only")
+	}
+	runner := isolationRunnerOrSkip(t)
+	dir := isolationWorkDir(t)
+	secret := filepath.Join(dir, "outside-reader")
+	if err := os.WriteFile(secret, []byte("harmless denial fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	binary := compileIsolatedFixture(t, dir, "allowlist-reader", fmt.Sprintf(`
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+int main(void) {
+ if (open(%q,O_RDONLY)>=0) return 10;
+ int fd=open("scratch-test",O_RDWR|O_CREAT,0600);
+ if(fd<0 || write(fd,"x",1)!=1) return 11;
+ close(fd);
+ fd=open("scratch-test",O_RDONLY);
+ if(fd<0) return 12;
+ close(fd);puts("{}");return 0;
+}
+`, secret))
+	if _, err := runner.Run(context.Background(), binary, []byte("{}"), isolationTestPolicy().Limits); err != nil {
+		t.Fatal(err)
+	}
 }

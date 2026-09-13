@@ -144,8 +144,15 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			}
 		}
 		switch permission {
-		case "pm.access", "pm.read", "pm.propose", "pm.respond", "pm.delivery.reconcile":
+		case "pm.access", "pm.read", "pm.propose", "pm.delivery.reconcile":
 			return nil
+		case "pm.respond":
+			if strings.TrimSpace(cfg.PM.AgentActorID) == "" {
+				return pm.ErrPMIdentity
+			}
+			if p.ActorID == cfg.PM.AgentActorID {
+				return nil
+			}
 		case "pm.bind.target":
 			if p.Human && actual.PrincipalKind != string(auth.PrincipalKindHuman) {
 				return pm.ErrForbidden
@@ -162,7 +169,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 					return nil
 				}
 			}
-		case "pm.action.github", "pm.action.multica", "pm.action.ssh_git":
+		case "pm.action.work.phase", "pm.action.github", "pm.action.multica", "pm.action.ssh_git":
 			// Humans may request source follow-through. Execute stays unavailable
 			// until a dedicated authorized source executor is supplied.
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
@@ -229,10 +236,11 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		v, _ := w["version"].(int64)
 		return strconv.FormatInt(v, 10), nil
 	}
-	// Native annotations are the only permitted mutation. GitHub/Multica/SSH
-	// source writes stay unavailable: no dedicated test item is authorized.
+	// Native mutations use canonical stores; source writes require a dedicated executor.
 	deps.Execute = func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
 		switch a.Scope {
+		case "work.phase":
+			return executeWorkPhase(ctx, store, a)
 		case "work.annotate":
 			return executeNativeAnnotation(ctx, store, a)
 		case "github", "multica", "ssh_git":
@@ -242,6 +250,15 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 	}
 	deps.Reconcile = func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
+		if a.Scope == "work.phase" {
+			w, err := store.GetWork(ctx, a.WorkRef)
+			if err != nil {
+				return pm.Receipt{}, err
+			}
+			if anyString(workSourceMap(w)["authority"]) == "nexus" {
+				return readBackWorkPhase(ctx, store, a, true)
+			}
+		}
 		if a.Scope == "work.annotate" {
 			return reconcileNativeAnnotation(ctx, store, a)
 		}
@@ -373,4 +390,51 @@ func reconcileSourceRead(ctx context.Context, store *primitives.Store, runtime *
 func workSourceMap(w map[string]any) map[string]any {
 	source, _ := w["source"].(map[string]any)
 	return source
+}
+
+func executeWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action) (pm.Receipt, error) {
+	if a.Payload == nil || a.Payload.Phase == "" {
+		return pm.Receipt{}, pm.ErrInvalid
+	}
+	w, err := store.GetWork(ctx, a.WorkRef)
+	if err != nil {
+		return pm.Receipt{}, err
+	}
+	if anyString(workSourceMap(w)["authority"]) != "nexus" {
+		return pm.Receipt{}, pm.ErrUnavailable
+	}
+	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
+	if err != nil {
+		return pm.Receipt{}, pm.ErrInvalid
+	}
+	input := primitives.MoveBoardCardInput{ColumnKey: a.Payload.Phase, IfWorkVersion: &version}
+	if len(a.Payload.ResolutionRefs) > 0 {
+		input.ResolutionRefs = &a.Payload.ResolutionRefs
+	}
+	_, err = store.MoveBoardCard(ctx, a.ActorID, "", anyString(w["id"]), input)
+	if errors.Is(err, primitives.ErrConflict) {
+		return pm.Receipt{}, pm.ErrStale
+	}
+	if err != nil {
+		return pm.Receipt{}, err
+	}
+	return readBackWorkPhase(ctx, store, a, false)
+}
+func readBackWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action, reconcile bool) (pm.Receipt, error) {
+	w, err := store.GetWork(ctx, a.WorkRef)
+	if err != nil {
+		return pm.Receipt{}, err
+	}
+	if a.Payload == nil || anyString(workSourceMap(w)["authority"]) != "nexus" {
+		return pm.Receipt{}, pm.ErrInvalid
+	}
+	phase := anyString(w["phase"])
+	if phase != a.Payload.Phase {
+		return pm.Receipt{Status: pm.Unknown, Detail: "Canonical phase does not match requested phase: " + phase}, nil
+	}
+	status := pm.Reported
+	if reconcile {
+		status = pm.Verified
+	}
+	return pm.Receipt{Status: status, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: reconcile, Detail: "Read back canonical Nexus phase: " + phase}, nil
 }
