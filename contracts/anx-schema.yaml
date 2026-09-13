@@ -826,6 +826,7 @@ conversational_pm:
   decision_answer_scope: actor_id
   decision_dispatch_scope: actor_id
   action_acknowledgement_scope: actor_id
+  undeliverable_pending_acknowledgement: preserves_approval_and_detail_requires_fresh_proposal_to_deliver
   action_acknowledgement_fields: [acknowledged_by, acknowledged_at]
   turn_failure_kind: [expired]
   decision_provenance: [proposed_by, origin_kind, turn_id]
@@ -852,6 +853,9 @@ conversational_pm:
     - attempts.sent_at records entry into executor handoff, not confirmed delivery; preflight failures and confirmed native failures before commit omit it; native commit uncertainty is resolved by canonical read-back when possible.
     - New decisions record proposed_by and origin_kind; PM turn proposals also record turn_id. Supersession preserves each record's proposer.
     - Rejected decisions are declined; legacy superseded records without superseded_by are read as declined. Superseded is reserved for replacements.
+    - Superseded decisions persist superseded_by_proposed_by and superseded_by_origin_kind from their replacement when known.
+    - Native post-commit canonical store read-back is independently verified in dispatch; external reports remain source_reported.
+    - Open turn complete, fail, propose and context require an active lease; release or lease expiry requires claiming first.
     - Replacement proposals persist supersedes with the replaced decision ID and supersedes_proposed_by / supersedes_origin_kind when known; create/propose responses, replays and reads expose this attribution.
     - Human approval and scope-specific authority are required for downstream actions.
     - Answer and durable delivery intent are atomic; an answer is not an applied outcome.

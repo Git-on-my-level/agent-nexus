@@ -58,6 +58,13 @@ func TestHTTPTurnClosedLifecycle(t *testing.T) {
 					}
 				}
 				agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
+				body := op.body
+				if state == "live" {
+					claimed := claimTestTurn(t, s, ctx, agent, turn.ID)
+					if op.path == "complete" || op.path == "fail" {
+						body = strings.TrimSuffix(body, "}") + fmt.Sprintf(`,"lease_token":%q}`, claimed.LeaseToken)
+					}
+				}
 				h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return agent, nil }}
 				// Repeated requests to an expired turn must retain the same typed failure.
 				attempts := 1
@@ -66,7 +73,7 @@ func TestHTTPTurnClosedLifecycle(t *testing.T) {
 				}
 				for i := 0; i < attempts; i++ {
 					w := httptest.NewRecorder()
-					h.ServeHTTP(w, httptest.NewRequest(op.method, "/pm/turns/"+turn.ID+"/"+op.path, strings.NewReader(op.body)))
+					h.ServeHTTP(w, httptest.NewRequest(op.method, "/pm/turns/"+turn.ID+"/"+op.path, strings.NewReader(body)))
 					if state == "live" {
 						if w.Code != op.success {
 							t.Fatalf("live: %d %s", w.Code, w.Body.String())

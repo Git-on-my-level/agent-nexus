@@ -180,27 +180,52 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 	return tx.Commit()
 }
 
-// insertTurn enforces capacity and session serialization in the same SQLite
-// statement as admission, including across multiple Service instances.
+// insertTurn observes admission and its failure reason under the same write lock,
+// including across multiple Service instances. Duplicate IDs are replayed by callers.
 func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool, error) {
 	b, err := json.Marshal(t)
 	if err != nil {
 		return false, err
 	}
-	r, err := s.db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body)
- SELECT 'turn',?,?,?,?,1,? WHERE
- (SELECT count(*) FROM pm_records WHERE kind='turn' AND workspace_id=?
- AND json_extract(body,'$.status') IN ('pending_delivery','sending')
- AND julianday(json_extract(body,'$.deadline'))>julianday('now')) < ?
- AND NOT EXISTS(SELECT 1 FROM pm_records WHERE kind='turn' AND workspace_id=? AND parent_id=?
- AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown')
- AND julianday(json_extract(body,'$.deadline'))>julianday('now'))
- ON CONFLICT(kind,id) DO NOTHING`, t.ID, t.WorkspaceID, t.ActorID, t.ConversationID, b, t.WorkspaceID, maxConcurrent, t.WorkspaceID, t.ConversationID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
-	n, err := r.RowsAffected()
-	return n == 1, err
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision WHERE kind='turn' AND id=?", t.ID); err != nil {
+		return false, err
+	}
+	var existing string
+	err = tx.QueryRowContext(ctx, "SELECT id FROM pm_records WHERE kind='turn' AND id=?", t.ID).Scan(&existing)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	err = tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='turn' AND workspace_id=? AND parent_id=?
+ AND json_extract(body,'$.status') IN ('pending_delivery','sending','unknown')
+ AND julianday(json_extract(body,'$.deadline'))>julianday('now') ORDER BY rowid LIMIT 1`, t.WorkspaceID, t.ConversationID).Scan(&existing)
+	if err == nil {
+		return false, &BusyError{Reason: "conversation", TurnID: existing}
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	var inFlight int
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM pm_records WHERE kind='turn' AND workspace_id=?
+ AND json_extract(body,'$.status') IN ('pending_delivery','sending')
+ AND julianday(json_extract(body,'$.deadline'))>julianday('now')`, t.WorkspaceID).Scan(&inFlight)
+	if err != nil {
+		return false, err
+	}
+	if inFlight >= maxConcurrent {
+		return false, &BusyError{Reason: "capacity", InFlight: inFlight, Limit: maxConcurrent}
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, t.ID, t.WorkspaceID, t.ActorID, t.ConversationID, b); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 // proposeDecision serializes proposal deduplication and turn linkage in SQLite,
@@ -247,6 +272,8 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 				d.SupersedesOriginKind = prior.OriginKind
 				prior.Status = Superseded
 				prior.SupersededBy = d.ID
+				prior.SupersededByProposedBy = d.ProposedBy
+				prior.SupersededByOriginKind = d.OriginKind
 				prior.SupersededReason = "Replaced by a proposal with changed payload, instruction, target revision, or origin"
 				prior.CanAnswer = false
 				prior.Revision++

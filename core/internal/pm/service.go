@@ -213,13 +213,13 @@ func (s *Service) PostMessage(ctx context.Context, p Principal, conversationID s
 	}
 	if !inserted {
 		var replay Turn
-		if readErr := s.store.get(ctx, "turn", id, &replay); readErr == nil {
-			if replay.Text != in.Text {
-				return Turn{}, ErrConflict
-			}
-			return replay, nil
+		if readErr := s.store.get(ctx, "turn", id, &replay); readErr != nil {
+			return Turn{}, readErr
 		}
-		return Turn{}, ErrBusy
+		if replay.Text != in.Text {
+			return Turn{}, ErrConflict
+		}
+		return replay, nil
 	}
 	// Mark sending before I/O. A crash leaves an inspectable, non-replayed turn.
 	t.Status = Sending
@@ -276,11 +276,17 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 	}
 	if t.Status == Delivered {
 		if t.Response == text {
+			if err := leaseGuard(t, leaseToken); err != nil {
+				return Turn{}, err
+			}
 			return t, nil
 		}
 		return Turn{}, closedTurnError(t)
 	}
 	if t.Status == Pending {
+		if err := requireLease(t); err != nil {
+			return Turn{}, err
+		}
 		return Turn{}, ErrConflict
 	}
 	if t.Status != Sending && t.Status != Unknown {
@@ -321,11 +327,17 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	}
 	if t.Status == Failed {
 		if t.Failure == in.Reason {
+			if err := leaseGuard(t, in.LeaseToken); err != nil {
+				return Turn{}, err
+			}
 			return t, nil
 		}
 		return Turn{}, closedTurnError(t)
 	}
 	if t.Status == Pending {
+		if err := requireLease(t); err != nil {
+			return Turn{}, err
+		}
 		return Turn{}, ErrConflict
 	}
 	if t.Status != Sending && t.Status != Unknown {
@@ -475,9 +487,15 @@ func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
 func leaseHeld(t Turn, now time.Time) bool {
 	return t.LeaseToken != "" && !t.LeaseExpiresAt.IsZero() && t.LeaseExpiresAt.After(now)
 }
-func leaseGuard(t Turn, token string) error {
+func requireLease(t Turn) error {
 	if !leaseHeld(t, time.Now().UTC()) {
-		return nil
+		return fmt.Errorf("%w: this turn is not claimed; claim it first", ErrConflict)
+	}
+	return nil
+}
+func leaseGuard(t Turn, token string) error {
+	if err := requireLease(t); err != nil {
+		return err
 	}
 	if strings.TrimSpace(token) == "" || token != t.LeaseToken {
 		return ErrConflict
@@ -499,13 +517,20 @@ func newLeaseToken() string {
 	return hex.EncodeToString(b[:])
 }
 
-// GetTurn retains the requesting actor's conversation-read authorization.
+// GetTurn permits the conversation owner or configured workspace PM responder.
 func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, error) {
 	var t Turn
 	if err := s.store.get(ctx, "turn", id, &t); err != nil {
 		return Turn{}, err
 	}
-	if _, err := s.conversation(ctx, p, t.ConversationID); err != nil {
+	if p.WorkspaceID != t.WorkspaceID {
+		return Turn{}, ErrForbidden
+	}
+	if p.ActorID == s.cfg.AgentActorID {
+		if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
+			return Turn{}, err
+		}
+	} else if _, err := s.conversation(ctx, p, t.ConversationID); err != nil {
 		return Turn{}, err
 	}
 	if err := s.ExpireTurns(ctx, time.Now().UTC()); err != nil {

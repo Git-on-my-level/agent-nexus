@@ -250,6 +250,10 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 	w.WriteHeader(status)
 	body := map[string]any{"code": code, "message": message}
+	var busy *BusyError
+	if errors.As(err, &busy) {
+		body["details"] = busy
+	}
 	var closed *TurnClosedError
 	if errors.As(err, &closed) {
 		body["details"] = closed
@@ -265,7 +269,7 @@ func writeError(w http.ResponseWriter, err error) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": body})
 }
 
-// Shadow the durable lease fields, retaining them only for the claim protocol.
+// Expose the active runner identity; reserve lease credentials for claims.
 func turnResponse(t Turn, includeLease bool) any {
 	t.FailureKind = turnFailureKind(t)
 	out := struct {
@@ -275,6 +279,9 @@ func turnResponse(t Turn, includeLease bool) any {
 		LeaseOwner     string     `json:"lease_owner,omitempty"`
 		LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
 	}{Turn: t, Claimed: leaseHeld(t, time.Now().UTC())}
+	if out.Claimed {
+		out.LeaseOwner = t.LeaseOwner
+	}
 	if includeLease {
 		out.LeaseToken = t.LeaseToken
 		out.LeaseOwner = t.LeaseOwner

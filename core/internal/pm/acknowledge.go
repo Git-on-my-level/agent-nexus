@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -27,6 +28,15 @@ func (s *Service) AcknowledgeAction(ctx context.Context, p Principal, id string)
 		return a, nil
 	}
 	switch a.Status {
+	case Pending:
+		deliveryErr := s.checkDelivery(ctx, a)
+		if a.Deliverable || deliveryErr == nil {
+			return Action{}, fmt.Errorf("%w: this pending action has a delivery path", ErrConflict)
+		}
+		// Preserve the reason durably so later routing changes cannot erase it.
+		if a.Receipt.Detail == "" {
+			a.Receipt.Detail = strings.TrimSuffix(deliveryErr.Error(), "; the approval is kept and the action stays pending")
+		}
 	case Failed:
 	case Unknown:
 		if s.deps.Reconcile != nil {
@@ -41,13 +51,13 @@ func (s *Service) AcknowledgeAction(ctx context.Context, p Principal, id string)
 			}
 		}
 	default:
-		return Action{}, fmt.Errorf("%w: only failed or unresolvable unknown actions can be acknowledged", ErrConflict)
+		return Action{}, fmt.Errorf("%w: only failed, unresolvable unknown, or undeliverable pending actions can be acknowledged", ErrConflict)
 	}
 	old := a.Revision
 	now := time.Now().UTC()
 	a.Status, a.AcknowledgedBy, a.AcknowledgedAt = Acknowledged, p.ActorID, &now
 	a.Revision++
-	// Receipts and attempts remain byte-for-byte equivalent as evidence.
+	// Existing receipts and attempts are preserved; unsent pending actions retain their delivery limitation.
 	if err = s.store.cas(ctx, "action", a.ID, old, a); errors.Is(err, ErrConflict) {
 		current, readErr := s.action(ctx, p, id, "pm.read")
 		if readErr == nil && current.AcknowledgedBy == p.ActorID && current.AcknowledgedAt != nil {

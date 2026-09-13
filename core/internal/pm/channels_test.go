@@ -55,7 +55,7 @@ func TestExplicitChannelIdentityAndDeliveryRestart(t *testing.T) {
 	if _, err = s.ReceiveChannel(ctx, o, "1", "What changed?"); err != nil || *count != 1 {
 		t.Fatalf("replay %v %d", err, *count)
 	}
-	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "The source reports progress; verification is pending.", []string{"artifact:1"}); err != nil {
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "The source reports progress; verification is pending.", []string{"artifact:1"}); err != nil {
 		t.Fatal(err)
 	}
 	d, err := s.QueueTurnDelivery(ctx, turn.ID)
@@ -230,7 +230,7 @@ func TestLongReplyOutboxIsAtomicOrderedAndNeverResendsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, strings.Repeat("Evidence 🌍. ", 400), nil); err != nil {
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, strings.Repeat("Evidence 🌍. ", 400), nil); err != nil {
 		t.Fatal(err)
 	}
 	fragments, err := s.QueueTurnDeliveries(ctx, turn.ID)
@@ -279,7 +279,7 @@ func TestExplicitDeliveryRetryRequiresVerifiedNonDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CompleteTurn(ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
+	if _, err = claimAndComplete(t, s, ctx, Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
 		t.Fatal(err)
 	}
 	d, err := s.QueueTurnDelivery(ctx, turn.ID)

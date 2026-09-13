@@ -52,8 +52,8 @@ func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
 		t.Fatal(answer)
 	}
 	action := post("/pm/decisions/"+asString(d["id"])+"/dispatch", map[string]any{}, 200)
-	if action["status"] != "source_reported" {
-		t.Fatalf("dispatch incorrectly verified or failed: %v", action)
+	if action["status"] != "verified" || action["receipt"].(map[string]any)["independently_verified"] != true {
+		t.Fatalf("dispatch did not verify canonical read-back: %v", action)
 	}
 	receipt := post("/pm/actions/"+asString(action["id"])+"/reconcile", map[string]any{}, 200)
 	if receipt["status"] != "verified" {
@@ -181,14 +181,14 @@ func TestPMRuntimeReplyUsesConversationAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn := pm.Turn{ID: "fixture-turn", ConversationID: "fixture-conversation", WorkspaceID: "ws_main", ActorID: seed.ActorID, AgentActorID: seed.ActorID, Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(time.Minute)}
+	turn := pm.Turn{ID: "fixture-turn", ConversationID: "fixture-conversation", WorkspaceID: "ws_main", ActorID: seed.ActorID, AgentActorID: seed.ActorID, LeaseToken: "fixture-token", LeaseOwner: "runner", LeaseExpiresAt: time.Now().Add(time.Minute), Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(time.Minute)}
 	body, _ := json.Marshal(turn)
 	if _, err = env.workspace.DB().ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, turn.ID, turn.WorkspaceID, turn.ActorID, turn.ConversationID, body); err != nil {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
-	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/turns/fixture-turn/complete", map[string]any{"text": "Evidence reviewed", "evidence_refs": []string{}}, seed.AccessToken, 200)
+	postJSONExpectStatusWithAuth(t, srv.URL+"/pm/turns/fixture-turn/complete", map[string]any{"lease_token": "fixture-token", "text": "Evidence reviewed", "evidence_refs": []string{}}, seed.AccessToken, 200)
 }
 
 type matchingRevisionReader struct{}
@@ -347,7 +347,7 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 				}
 				return
 			}
-			if a.Status != pm.Reported || updated["phase"] != "ready" || updated["version"] != int64(2) {
+			if a.Status != pm.Verified || !a.Receipt.IndependentlyVerified || updated["phase"] != "ready" || updated["version"] != int64(2) {
 				t.Fatalf("phase not committed: %+v %v", a, updated)
 			}
 			a, err = rt.Service.ReconcileAction(ctx, p, a.ID)
@@ -459,6 +459,10 @@ func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
 		turn, err := rt.Service.PostMessage(ctx, owner, c.ID, pm.MessageInput{RequestKey: "m", Text: "Next step?"})
 		if err != nil {
 			t.Fatal(err)
+		}
+		claimed, err := rt.Service.ClaimTurn(ctx, agent, pm.ClaimInput{RunnerID: owner.ActorID})
+		if err != nil || claimed.ID != turn.ID {
+			t.Fatalf("claim: %+v %v", claimed, err)
 		}
 		d, err := rt.Service.ProposeForTurn(ctx, agent, turn.ID, input)
 		if !owner.Human {

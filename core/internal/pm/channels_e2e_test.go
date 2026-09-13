@@ -37,7 +37,7 @@ func TestChannelE2ETelegramBoundTurnReplyDedupAndUnbound(t *testing.T) {
 	if err != nil || len(turns.Turns) != 1 {
 		t.Fatalf("turns %d %v", len(turns.Turns), err)
 	}
-	if _, err = s.CompleteTurn(context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turns.Turns[0].ID, "Nothing is waiting on you.", nil); err != nil {
+	if _, err = claimAndComplete(t, s, context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turns.Turns[0].ID, "Nothing is waiting on you.", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.DeliverPending(context.Background(), sender, 50); err != nil {
@@ -94,7 +94,7 @@ func TestChannelE2EDiscordInteractionAndComponent(t *testing.T) {
 	if err != nil || len(turns.Turns) != 1 {
 		t.Fatalf("turns %d %v", len(turns.Turns), err)
 	}
-	if _, err = s.CompleteTurn(context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turns.Turns[0].ID, "Nothing is waiting on you.", nil); err != nil {
+	if _, err = claimAndComplete(t, s, context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turns.Turns[0].ID, "Nothing is waiting on you.", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.DeliverPending(context.Background(), sender, 50); err != nil {
@@ -199,7 +199,7 @@ func TestChannelE2ERetry429ThenDeliverOnceAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CompleteTurn(context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
+	if _, err = claimAndComplete(t, s, context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
 		t.Fatal(err)
 	}
 	sender := HTTPSender{TelegramToken: "secret", TelegramBotID: "bot", TelegramAPIBase: tg.URL()}
@@ -242,7 +242,7 @@ func TestChannelE2EDiscord409RetriesThenDeliversOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CompleteTurn(context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
+	if _, err = claimAndComplete(t, s, context.Background(), Principal{WorkspaceID: "ws", ActorID: "pm-agent"}, turn.ID, "Response", nil); err != nil {
 		t.Fatal(err)
 	}
 	sender := HTTPSender{DiscordToken: "secret", DiscordApplicationID: "app", DiscordAPIBase: fake.URL() + "/api/v10"}

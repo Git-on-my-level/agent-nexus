@@ -107,6 +107,7 @@ func TestTurnProposalDedupeAndLink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		claimTestTurn(t, s, ctx, agent, turn.ID)
 		d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}})
 		if err != nil {
 			t.Fatal(err)
@@ -284,6 +285,7 @@ func TestConcurrentTurnProposalsReuseExactPendingTarget(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		claimTestTurn(t, s, ctx, agent, turn.ID)
 		ids[i] = turn.ID
 	}
 	type result struct {

@@ -43,9 +43,12 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn := pm.Turn{ID: "r6-turn", ConversationID: conv.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, AgentActorID: machine.ActorID, Status: pm.Pending, Revision: 1, Deadline: time.Now().Add(time.Minute)}
+	turn := pm.Turn{ID: "r6-turn", ConversationID: conv.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, AgentActorID: machine.ActorID, Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(time.Minute)}
 	body, _ := json.Marshal(turn)
 	if _, err := db.Exec(`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, turn.ID, p.WorkspaceID, p.ActorID, conv.ID, body); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Service.ClaimTurn(ctx, pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}, pm.ClaimInput{RunnerID: "r6"}); err != nil {
 		t.Fatal(err)
 	}
 	input := pm.DecisionInput{RequestKey: "r6-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{ref}}}
@@ -167,7 +170,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	applied, err := rt.Service.DispatchDecision(ctx, p, fresh.ID)
-	if err != nil || applied.Status != pm.Reported {
+	if err != nil || applied.Status != pm.Verified || !applied.Receipt.IndependentlyVerified {
 		t.Fatalf("valid completion: %+v %v", applied, err)
 	}
 	completed, err := store.GetWork(ctx, input.WorkRef)

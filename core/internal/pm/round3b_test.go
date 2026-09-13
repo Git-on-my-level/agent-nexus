@@ -45,7 +45,7 @@ func TestHTTPTurnClaimVisibility(t *testing.T) {
 				if got, exists := turn["claimed"]; !exists || got != claimed {
 					t.Fatalf("claimed: %#v", turn)
 				}
-				for _, key := range []string{"lease_token", "lease_owner", "lease_expires_at"} {
+				for _, key := range []string{"lease_token", "lease_expires_at"} {
 					if _, ok := turn[key]; ok {
 						t.Fatalf("public turn leaked %s: %#v", key, turn)
 					}

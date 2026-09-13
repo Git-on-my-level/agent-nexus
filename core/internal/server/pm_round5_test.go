@@ -206,7 +206,7 @@ func TestRound5PostWriteCanonicalRecovery(t *testing.T) {
 					},
 					Reconcile: func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
 						if scope == "work.phase" {
-							return readBackWorkPhase(ctx, store, a, true)
+							return readBackWorkPhase(ctx, store, a)
 						}
 						return reconcileNativeAnnotation(ctx, store, a)
 					},
@@ -296,7 +296,7 @@ func TestRound5NativeReadbackMismatchIsFailed(t *testing.T) {
 	store := round5MutationStore{}
 	a := pm.Action{WorkRef: "work:one", Payload: &pm.ActionPayload{Phase: "ready"}, Instruction: `{"next_action":"review"}`}
 	for _, read := range []func() (pm.Receipt, error){
-		func() (pm.Receipt, error) { return readBackWorkPhase(context.Background(), store, a, true) },
+		func() (pm.Receipt, error) { return readBackWorkPhase(context.Background(), store, a) },
 		func() (pm.Receipt, error) { return reconcileNativeAnnotation(context.Background(), store, a) },
 	} {
 		r, err := read()

@@ -1336,7 +1336,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Acknowledge a failed or unresolvable action.
+- Why: Acknowledge a failed, unresolvable, or undeliverable action.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMAction`.
@@ -1600,7 +1600,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
-- Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
+- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
 
 ## `pm.turns.get`
 

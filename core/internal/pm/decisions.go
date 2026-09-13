@@ -227,7 +227,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	receipt, execErr := s.deps.Execute(bounded, a)
 	var nativeErr *NativeExecutionError
 	native := errors.As(execErr, &nativeErr)
-	verifiedReadBack := false
+	verifiedReadBack := receipt.NativeReadBack
+	receipt.NativeReadBack = false
 	if native {
 		receipt = Receipt{Status: Failed, Detail: nativeErr.Error()}
 		if !nativeErr.WriteStarted {
@@ -238,6 +239,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 			if s.deps.Reconcile != nil {
 				read, readErr := s.deps.Reconcile(readCtx, a)
 				if readErr == nil && validateReceipt(read, true) == nil {
+					read.NativeReadBack = false
 					receipt = read
 					verifiedReadBack = true
 					if receipt.Status == Failed {
@@ -311,6 +313,9 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	// Human handling is a display state, not evidence of source acknowledgement.
 	sourceStatus := a.Status
 	if a.Status == Acknowledged && a.AcknowledgedAt != nil {
+		if !hasSentAttempt(a) {
+			return Action{}, ErrNothingDelivered
+		}
 		sourceStatus = a.Receipt.Status
 	}
 	if sourceStatus == Pending || (sourceStatus == Failed && !hasSentAttempt(a)) {
@@ -328,6 +333,7 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	if err != nil {
 		return Action{}, err
 	}
+	r.NativeReadBack = false
 	if err = validateReceipt(r, true); err != nil {
 		return Action{}, err
 	}
@@ -363,6 +369,9 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 	if err := s.requireOpenTurn(ctx, t); err != nil {
 		return ContextPage{}, err
 	}
+	if err := requireLease(t); err != nil {
+		return ContextPage{}, err
+	}
 	var c Conversation
 	if err := s.store.get(ctx, "conversation", t.ConversationID, &c); err != nil {
 		return ContextPage{}, err
@@ -384,6 +393,9 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 		return Decision{}, ErrForbidden
 	}
 	if err := s.requireOpenTurn(ctx, t); err != nil {
+		return Decision{}, err
+	}
+	if err := requireLease(t); err != nil {
 		return Decision{}, err
 	}
 	var c Conversation
@@ -433,7 +445,7 @@ func (s *Service) checkDelivery(ctx context.Context, a Action) error {
 	return s.deps.CheckDelivery(ctx, a)
 }
 func (s *Service) actionForReader(ctx context.Context, a Action) Action {
-	a.Deliverable = s.checkDelivery(ctx, a) == nil
+	a.Deliverable = !(a.AcknowledgedAt != nil && !hasSentAttempt(a)) && s.checkDelivery(ctx, a) == nil
 	return a
 }
 func NoDeliveryPath(source string) error {

@@ -114,9 +114,11 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 				t.Fatal(err)
 			}
 			agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
+			claimTestTurn(t, s, ctx, agent, turn.ID)
 			in := DecisionInput{RequestKey: "first", WorkRef: "work:1", Scope: "assignment", Instruction: "Assign", TargetRevision: "r1"}
 			var prior Decision
 			if kind == "human_replaces_pm" {
+				claimTestTurn(t, s, ctx, agent, turn.ID)
 				prior, err = s.ProposeForTurn(ctx, agent, turn.ID, in)
 			} else {
 				prior, err = s.ProposeDecision(ctx, p, in)
@@ -172,7 +174,7 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			if err := st.get(ctx, "decision", prior.ID, &old); err != nil {
 				t.Fatal(err)
 			}
-			if old.Status != Superseded || old.SupersededBy != replacement.ID || old.ProposedBy != prior.ProposedBy || old.OriginKind != prior.OriginKind {
+			if old.SupersededByProposedBy != replacement.ProposedBy || old.SupersededByOriginKind != replacement.OriginKind || old.Status != Superseded || old.SupersededBy != replacement.ID || old.ProposedBy != prior.ProposedBy || old.OriginKind != prior.OriginKind {
 				t.Fatal(old)
 			}
 			s, err = NewService(st, s.cfg, s.deps)
@@ -183,8 +185,12 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			if err != nil || got.Supersedes != prior.ID || got.SupersedesProposedBy != prior.ProposedBy || got.SupersedesOriginKind != prior.OriginKind {
 				t.Fatalf("persisted replacement: %+v %v", got, err)
 			}
+			oldRead, err := s.decision(ctx, p, prior.ID, "pm.read")
+			if err != nil || oldRead.SupersededByProposedBy != replacement.ProposedBy || oldRead.SupersededByOriginKind != replacement.OriginKind {
+				t.Fatalf("old attribution: %+v %v", oldRead, err)
+			}
 			page, err := s.DecisionPage(ctx, p, 50, "")
-			if err != nil || len(page.Items) != 2 || page.Items[0].Supersedes != prior.ID || page.Items[1].Status != Superseded {
+			if err != nil || len(page.Items) != 2 || page.Items[0].Supersedes != prior.ID || page.Items[1].Status != Superseded || page.Items[1].SupersededByProposedBy != replacement.ProposedBy || page.Items[1].SupersededByOriginKind != replacement.OriginKind {
 				t.Fatalf("page: %+v %v", page, err)
 			}
 		})

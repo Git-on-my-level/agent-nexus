@@ -5780,9 +5780,9 @@ export const commandRegistry: CommandSpec[] = [
     "method": "POST",
     "path": "/pm/actions/{action_id}/acknowledge",
     "operation_id": "pmActionsAcknowledge",
-    "summary": "Acknowledge a failed or unresolvable action",
-    "description": "Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.",
-    "why": "Acknowledge a failed or unresolvable action.",
+    "summary": "Acknowledge a failed, unresolvable, or undeliverable action",
+    "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions also retain their no-delivery-path reason in receipt.detail when it was empty. Other states return 409; other actors return 403.",
+    "why": "Acknowledge a failed, unresolvable, or undeliverable action.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -5966,7 +5966,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/actions/{action_id}/reconcile",
     "operation_id": "pmActionsReconcile",
     "summary": "Read back an action outcome without resending",
-    "description": "Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Failed actions without a sent attempt remain unreconcilable, including after acknowledgement.",
+    "description": "Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.",
     "why": "Read back an action outcome without resending.",
     "input_mode": "json-body",
     "streaming": {
@@ -6970,6 +6970,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}/complete",
     "operation_id": "pmTurnsComplete",
     "summary": "Record a selected PM agent response",
+    "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\"; released or expired lease tokens never authorize completion. Identical terminal completion replays also refuse a cleared lease.",
     "why": "Record a selected PM agent response.",
     "input_mode": "json-body",
     "streaming": {
@@ -7050,6 +7051,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}/context",
     "operation_id": "pmTurnsContext",
     "summary": "Read requesting principal context as selected PM agent",
+    "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\".",
     "why": "Read requesting principal context as selected PM agent.",
     "input_mode": "none",
     "streaming": {
@@ -7112,6 +7114,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}/decisions",
     "operation_id": "pmTurnsDecisionsCreate",
     "summary": "Record a selected PM agent proposal",
+    "description": "Requires an active lease. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\".",
     "why": "Record a selected PM agent proposal.",
     "input_mode": "json-body",
     "streaming": {
@@ -7243,7 +7246,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Selected PM agent only. When a lease is held, lease_token must match.",
+    "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.",
     "body_schema": {
       "required": [
         {
@@ -7296,6 +7299,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/turns/{turn_id}",
     "operation_id": "pmTurnsGet",
     "summary": "Read a PM conversation turn",
+    "description": "The requesting actor with conversation read permission or the configured PM actor with pm.respond permission may read the turn in its workspace. Active lease_owner is the runner ID; lease_token is returned only by claim.",
     "why": "Read a PM conversation turn.",
     "input_mode": "none",
     "streaming": {
