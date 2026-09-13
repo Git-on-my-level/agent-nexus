@@ -97,13 +97,16 @@
   let voidReason = $derived(proposalVoidReason(selected, work));
   let stale = $derived(voidReason === "stale");
   let moot = $derived(voidReason === "moot");
+  let gone = $derived(voidReason === "gone");
   function dismissVoid(event) {
     event.preventDefault();
     if (busy || !voidReason) return;
     choice = "reject";
-    answer = moot
-      ? `Already at ${label(targetPhase || work?.phase || "")}; nothing to do.`
-      : "The task changed after this was proposed; the proposal no longer applies.";
+    answer = gone
+      ? "The task this proposal refers to no longer exists."
+      : moot
+        ? `Already at ${label(targetPhase || work?.phase || "")}; nothing to do.`
+        : "The task changed after this was proposed; the proposal no longer applies.";
     onAnswer?.(event);
   }
   let unappliable = $derived(
@@ -167,6 +170,21 @@
           class="mt-3 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"
         >
           The task is already at {label(targetPhase)}, so there is nothing left
+          to approve.
+          <button
+            class="ui-prose-link"
+            type="button"
+            onclick={dismissVoid}
+            disabled={busy}>Dismiss this proposal</button
+          >
+        </p>
+      {/if}
+      {#if gone}
+        <p
+          id="decision-gone-note"
+          class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
+        >
+          The task this proposal refers to no longer exists, so there is nothing
           to approve.
           <button
             class="ui-prose-link"
@@ -309,12 +327,15 @@
               unappliable ||
               stale ||
               moot ||
+              gone ||
               missingEvidence}
             aria-describedby={stale
               ? "decision-stale-note"
-              : missingEvidence
-                ? "decision-evidence-note"
-                : undefined}
+              : gone
+                ? "decision-gone-note"
+                : missingEvidence
+                  ? "decision-evidence-note"
+                  : undefined}
             >{busy && choice === "approve" ? "Approving…" : "Approve"}</button
           >
           <button

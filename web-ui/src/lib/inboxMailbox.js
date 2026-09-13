@@ -37,13 +37,15 @@ const WATCHING_DECISION_STATUSES = new Set([
  * failed delivery needs the reader again.
  */
 /**
- * An awaiting proposal can be moot (the task is already where it asks) or
- * stale (the task changed since). Neither can be approved; neither is the
- * reader's obligation. Core may publish these as already_at_target and
- * target_current; the work record is the fallback.
+ * An awaiting proposal can be gone (the task it names no longer exists),
+ * moot (the task is already where it asks) or stale (the task changed
+ * since). None can be approved; none is the reader's obligation. Core
+ * publishes these as work_missing, already_at_target and target_current;
+ * the work record is the fallback.
  */
 export function proposalVoidReason(decision, work = null) {
   if (String(decision?.status ?? "") !== "awaiting_answer") return "";
+  if (decision?.work_missing === true) return "gone";
   if (decision?.already_at_target === true) return "moot";
   if (decision?.target_current === false) return "stale";
   if (!work) return "";
@@ -126,8 +128,13 @@ export function classifyInboxRow(row, now = Date.now()) {
     // A failed delivery is the reader's problem again, not a thing to watch.
     if (row.status === "failed" || row.status === "receipt_unavailable")
       return "needs-you";
-    // A moot or stale proposal is nobody's obligation; it waits to be tidied.
-    if (row.status === "void_moot" || row.status === "void_stale")
+    // A moot, stale or orphaned proposal is nobody's obligation; it waits to
+    // be tidied.
+    if (
+      row.status === "void_moot" ||
+      row.status === "void_stale" ||
+      row.status === "void_gone"
+    )
       return "watching";
     if (WATCHING_DECISION_STATUSES.has(row.status)) return "watching";
     return "handled";
@@ -186,6 +193,8 @@ export function inboxRowBadge(row, now = Date.now()) {
       return { label: "Already there", tone: "neutral" };
     if (row.status === "void_stale")
       return { label: "Task changed since", tone: "neutral" };
+    if (row.status === "void_gone")
+      return { label: "Task no longer exists", tone: "neutral" };
     return receiptSignal(row.status);
   }
   if (row.kind === "update") {

@@ -234,3 +234,49 @@ describe("answered decisions without receipts", () => {
     });
   });
 });
+
+describe("proposals core marks as void", () => {
+  it("read as gone, already there, or changed since, and wait under Watching", () => {
+    const rows = buildInboxRows({
+      decisions: [
+        {
+          id: "gone",
+          status: "awaiting_answer",
+          can_answer: false,
+          work_missing: true,
+          instruction: "Move to done",
+          work_ref: "card:deleted",
+        },
+        {
+          id: "moot",
+          status: "awaiting_answer",
+          can_answer: true,
+          already_at_target: true,
+          instruction: "Move to done",
+          work_ref: "card:a",
+        },
+        {
+          id: "stale",
+          status: "awaiting_answer",
+          can_answer: true,
+          target_current: false,
+          instruction: "Move to done",
+          work_ref: "card:a",
+        },
+      ],
+    });
+    const byId = (id) => rows.find((row) => row.id === `decision:${id}`);
+    expect(byId("gone").mailbox).toBe("watching");
+    expect(inboxRowBadge(byId("gone"))).toMatchObject({
+      label: "Task no longer exists",
+    });
+    expect(byId("moot").mailbox).toBe("watching");
+    expect(inboxRowBadge(byId("moot"))).toMatchObject({
+      label: "Already there",
+    });
+    expect(byId("stale").mailbox).toBe("watching");
+    expect(inboxRowBadge(byId("stale"))).toMatchObject({
+      label: "Task changed since",
+    });
+  });
+});
