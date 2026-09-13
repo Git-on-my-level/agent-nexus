@@ -111,6 +111,7 @@
       choice = "";
       reply = "";
       notice = "";
+      supersededHref = "";
     });
   });
   $effect(() => {
@@ -318,11 +319,26 @@
         }
       }
     } catch (err) {
-      error = errorMessage(err);
+      error = supersededMessage(err) || errorMessage(err);
     } finally {
       busy = false;
     }
   }
+
+  /**
+   * A 409 on an answer or delivery can mean the PM replaced this proposal;
+   * core names the replacement in the error details.
+   */
+  function supersededMessage(err) {
+    const details =
+      err?.body?.error?.details ?? err?.details?.details ?? err?.details ?? {};
+    const replacement = String(details?.superseded_by ?? "").trim();
+    if (!replacement) return "";
+    notice = "";
+    supersededHref = href({ item: `decision:${replacement}` });
+    return "The PM replaced this proposal before you answered. Open the replacement to decide on it.";
+  }
+  let supersededHref = $state("");
 
   async function deliver() {
     if (!selectedDecision || busy) return;
@@ -338,9 +354,11 @@
       const raw = errorMessage(err);
       // Core has no executor for this source yet: the approval is intact and
       // the action stays pending. That is not an outage.
-      error = /not configured|unavailable/i.test(raw)
-        ? "No delivery path is configured for this source yet. The approved request stays pending until one is."
-        : raw;
+      error =
+        supersededMessage(err) ||
+        (/not configured|unavailable/i.test(raw)
+          ? "No delivery path is configured for this source yet. The approved request stays pending until one is."
+          : raw);
       await refreshReceipt();
     } finally {
       busy = false;
@@ -538,6 +556,11 @@
   </nav>
   {#if error}
     <StateError message={error} onretry={load} retrying={loading} />
+    {#if supersededHref}
+      <a class="ui-prose-link text-meta" href={supersededHref}
+        >Open the replacement</a
+      >
+    {/if}
   {/if}
   {#if notice}
     <p class="text-micro text-fg-muted" role="status">{notice}</p>
