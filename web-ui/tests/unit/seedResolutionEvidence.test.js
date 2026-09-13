@@ -47,8 +47,7 @@ describe("seed resolution evidence order", () => {
       const createPlan = [];
       for (const card of seed.cards ?? []) {
         const cardId =
-          String(card?.id ?? "").trim() ||
-          String(card?.thread_id ?? "").trim();
+          String(card?.id ?? "").trim() || String(card?.thread_id ?? "").trim();
         for (const item of resolutionEvidenceToCreateBeforeCard(seed, card)) {
           createPlan.push(`${item.kind}:${item.id}`);
           createPlan.push(`card:${cardId}`);

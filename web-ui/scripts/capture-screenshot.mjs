@@ -215,39 +215,41 @@ async function installTopicMessagesFixture(page) {
       }),
     }),
   );
-  await page.route(/\/(threads|topics)\/0ae18e22-f\/workspace(\?.*)?$/, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        topic_id: topicId,
-        topic: {
-          id: topicId,
-          topic_ref: `topic:${topicId}`,
-          thread_id: topicId,
-          title: "CLI message affordances",
-          state: "active",
-          summary: "Dogfood canonical topic messages.",
-          current_summary: "Dogfood canonical topic messages.",
-          owner_refs: [],
-          document_refs: [],
-          board_refs: [],
-          related_refs: [],
-          updated_at: "2026-05-03T13:15:00.000Z",
-          updated_by: actorId,
-          provenance: { sources: ["event:evt-topic-message-1"] },
-        },
-        context: {
-          recent_events: timeline,
-          key_artifacts: [],
-          open_cards: [],
+  await page.route(
+    /\/(threads|topics)\/0ae18e22-f\/workspace(\?.*)?$/,
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          topic_id: topicId,
+          topic: {
+            id: topicId,
+            topic_ref: `topic:${topicId}`,
+            thread_id: topicId,
+            title: "CLI message affordances",
+            state: "active",
+            summary: "Dogfood canonical topic messages.",
+            current_summary: "Dogfood canonical topic messages.",
+            owner_refs: [],
+            document_refs: [],
+            board_refs: [],
+            related_refs: [],
+            updated_at: "2026-05-03T13:15:00.000Z",
+            updated_by: actorId,
+            provenance: { sources: ["event:evt-topic-message-1"] },
+          },
+          context: {
+            recent_events: timeline,
+            key_artifacts: [],
+            open_cards: [],
+            documents: [],
+          },
+          boards: [],
+          board_memberships: [],
           documents: [],
-        },
-        boards: [],
-        board_memberships: [],
-        documents: [],
+        }),
       }),
-    }),
   );
   await page.route(/\/(threads|topics)\/0ae18e22-f\/timeline$/, (route) =>
     route.fulfill({

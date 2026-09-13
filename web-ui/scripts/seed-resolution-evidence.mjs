@@ -109,9 +109,7 @@ export function resolutionEvidenceToCreateBeforeCard(seed, card) {
     }
     seen.add(key);
     const record =
-      prefix === "event"
-        ? findSeedEvent(seed, id)
-        : findSeedArtifact(seed, id);
+      prefix === "event" ? findSeedEvent(seed, id) : findSeedArtifact(seed, id);
     items.push({ kind: prefix, id, record });
   }
   return items;

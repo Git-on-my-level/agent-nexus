@@ -23,7 +23,8 @@ function* walkSvelteFiles(dir, base) {
     const path = join(dir, name);
     const stat = statSync(path);
     if (stat.isDirectory()) {
-      if (name === "node_modules" || name === ".svelte-kit" || name === "build") continue;
+      if (name === "node_modules" || name === ".svelte-kit" || name === "build")
+        continue;
       yield* walkSvelteFiles(path, base);
     } else if (name.endsWith(".svelte")) {
       yield relative(base, path);
@@ -54,9 +55,8 @@ function stripSvelteScriptForBraceDepth(script) {
   t = t.replace(/`(?:\\.|[^`\\])*`/g, (m) => m.replace(/[^\n]/g, " "));
   t = t.replace(/"(?:\\.|[^"\\])*"/g, (m) => m.replace(/[^\n]/g, " "));
   t = t.replace(/'(?:\\.|[^'\\])*'/g, (m) => m.replace(/[^\n]/g, " "));
-  t = t.replace(
-    /\/(?:\\.|[^/\\\n])+\/[gimsuy]*/g,
-    (m) => m.replace(/[^\n]/g, " "),
+  t = t.replace(/\/(?:\\.|[^/\\\n])+\/[gimsuy]*/g, (m) =>
+    m.replace(/[^\n]/g, " "),
   );
   t = t.replace(/\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
   t = t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
@@ -107,7 +107,10 @@ function checkFile(absPath) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineForBraces = depthLines[i] ?? "";
-    const lineNum = content.slice(0, content.indexOf(scriptContent)).split(/\r?\n/).length + i + 1;
+    const lineNum =
+      content.slice(0, content.indexOf(scriptContent)).split(/\r?\n/).length +
+      i +
+      1;
 
     // Reactive statement: $: ...
     if (/^\s*\$:/.test(line)) {

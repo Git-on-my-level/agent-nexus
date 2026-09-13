@@ -1136,10 +1136,7 @@ async function postSeedEvent(sourceEvent) {
   }
   const actorId = pickActorId(sourceEvent.actor_id);
   const mappedThreadId = mapThreadId(sourceEvent.thread_id);
-  const payload = normalizeEventPayload(
-    sourceEvent.type,
-    sourceEvent.payload,
-  );
+  const payload = normalizeEventPayload(sourceEvent.type, sourceEvent.payload);
   const refs = mapRefs(sourceEvent.refs);
   const eventPayload = {
     type: sourceEvent.type,
@@ -1479,7 +1476,9 @@ async function issueAssertionTokens(agentID, keyID, privateKeyBase64) {
   const accessToken = String(tokens.access_token ?? "").trim();
   const refreshToken = String(tokens.refresh_token ?? "").trim();
   if (!accessToken || !refreshToken) {
-    throw new Error("assertion token response missing access_token/refresh_token");
+    throw new Error(
+      "assertion token response missing access_token/refresh_token",
+    );
   }
   return {
     access_token: accessToken,

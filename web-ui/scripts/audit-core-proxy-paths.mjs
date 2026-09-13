@@ -37,7 +37,11 @@ const samples = /** @type {Sample[]} */ ([
   { method: "POST", path: "/topics/t-1/trash" },
   { method: "POST", path: "/topics/t-1/restore" },
   { method: "POST", path: "/artifacts" },
-  { method: "POST", path: "/artifacts/attachments", note: "createArtifactAttachment" },
+  {
+    method: "POST",
+    path: "/artifacts/attachments",
+    note: "createArtifactAttachment",
+  },
   { method: "GET", path: "/artifacts" },
   { method: "POST", path: "/artifacts/a-1/archive" },
   { method: "GET", path: "/artifacts/a-1/content", note: "getArtifactContent" },
