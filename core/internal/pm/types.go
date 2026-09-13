@@ -12,16 +12,26 @@ import (
 )
 
 var (
-	ErrForbidden   = errors.New("PM permission denied")
-	ErrInvalid     = errors.New("invalid PM request")
-	ErrConflict    = errors.New("PM revision or state conflict")
-	ErrNotFound    = errors.New("PM record not found")
-	ErrStale       = errors.New("approved source revision has changed")
-	ErrUnavailable = errors.New("PM capability is not configured")
-	ErrPMIdentity  = fmt.Errorf("%w: ANX_PM_AGENT_ACTOR_ID is required", ErrUnavailable)
-	ErrBusy        = errors.New("PM execution capacity reached")
-	ErrEmpty       = errors.New("no claimable PM turn")
+	ErrForbidden        = errors.New("PM permission denied")
+	ErrInvalid          = errors.New("invalid PM request")
+	ErrConflict         = errors.New("PM revision or state conflict")
+	ErrNotFound         = errors.New("PM record not found")
+	ErrStale            = errors.New("approved source revision has changed")
+	ErrUnavailable      = errors.New("PM capability is not configured")
+	ErrPMIdentity       = fmt.Errorf("%w: ANX_PM_AGENT_ACTOR_ID is required", ErrUnavailable)
+	ErrNothingDelivered = fmt.Errorf("%w: Nothing has been delivered yet, so there is nothing to read back", ErrInvalid)
+	ErrBusy             = errors.New("PM execution capacity reached")
+	ErrEmpty            = errors.New("no claimable PM turn")
 )
+
+// DecisionConflict preserves immutable request-key intent while identifying the
+// existing record the client can inspect. Source revisions are opaque, unordered.
+type DecisionConflict struct{ ExistingDecisionID string }
+
+func (e *DecisionConflict) Error() string {
+	return "This request key already identifies a different proposal; inspect the existing decision or use a new request key"
+}
+func (e *DecisionConflict) Unwrap() error { return ErrConflict }
 
 type Status string
 
@@ -134,22 +144,24 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	CanAnswer      bool           `json:"can_answer"`
-	Payload        *ActionPayload `json:"payload,omitempty"`
-	ID             string         `json:"id"`
-	WorkspaceID    string         `json:"workspace_id"`
-	ActorID        string         `json:"actor_id"`
-	WorkRef        string         `json:"work_ref"`
-	Instruction    string         `json:"instruction"`
-	Scope          string         `json:"scope"`
-	TargetRevision string         `json:"target_revision"`
-	Status         Status         `json:"status"`
-	Revision       int            `json:"revision"`
-	Answer         string         `json:"answer,omitempty"`
-	AnsweredBy     string         `json:"answered_by,omitempty"`
-	ActionID       string         `json:"action_id,omitempty"`
-	Origin         *Origin        `json:"origin,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
+	SupersededBy     string         `json:"superseded_by,omitempty"`
+	SupersededReason string         `json:"superseded_reason,omitempty"`
+	CanAnswer        bool           `json:"can_answer"`
+	Payload          *ActionPayload `json:"payload,omitempty"`
+	ID               string         `json:"id"`
+	WorkspaceID      string         `json:"workspace_id"`
+	ActorID          string         `json:"actor_id"`
+	WorkRef          string         `json:"work_ref"`
+	Instruction      string         `json:"instruction"`
+	Scope            string         `json:"scope"`
+	TargetRevision   string         `json:"target_revision"`
+	Status           Status         `json:"status"`
+	Revision         int            `json:"revision"`
+	Answer           string         `json:"answer,omitempty"`
+	AnsweredBy       string         `json:"answered_by,omitempty"`
+	ActionID         string         `json:"action_id,omitempty"`
+	Origin           *Origin        `json:"origin,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
 }
 type AnswerInput struct {
 	Revision int    `json:"revision"`
@@ -157,6 +169,7 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
+	Deliverable            bool           `json:"deliverable"`
 	ReconciliationConflict bool           `json:"reconciliation_conflict"`
 	Payload                *ActionPayload `json:"payload,omitempty"`
 	ID                     string         `json:"id"`
@@ -223,8 +236,9 @@ type DispatchRequest struct {
 // Authorize must consult current principal permissions on EVERY operation.
 // Execute must atomically enforce TargetRevision at the source if supported;
 // otherwise it must fail closed when a race cannot be excluded. The action ID
-// is the stable remote idempotency key. ErrUnavailable must only be returned
-// before effects: it means no executor exists and keeps the action pending.
+// is the stable remote idempotency key. CheckDelivery is a required read-only
+// preflight using the same routing as Execute. Missing executors must be rejected
+// there, before recording any attempt. Errors after Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
 	Authorize       func(context.Context, Principal, string, string) error
@@ -233,6 +247,7 @@ type Dependencies struct {
 	ReadContextPage func(context.Context, Principal, string, string, string, int) (ContextPage, error)
 	Dispatch        func(context.Context, DispatchRequest) error
 	CurrentRevision func(context.Context, Principal, string) (string, error)
+	CheckDelivery   func(context.Context, Action) error
 	Execute         func(context.Context, Action) (Receipt, error)
 	Reconcile       func(context.Context, Action) (Receipt, error)
 }

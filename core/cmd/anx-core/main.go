@@ -574,8 +574,8 @@ func main() {
 				case <-maintenanceCtx.Done():
 					return
 				case <-ticker.C:
-					if err := pmRuntime.Drain(maintenanceCtx); err != nil {
-						fmt.Fprintf(os.Stderr, "pm channel drain: %v\n", err)
+					if err := pmRuntime.Tick(maintenanceCtx); err != nil {
+						fmt.Fprintf(os.Stderr, "pm maintenance: %v\n", err)
 					}
 				}
 			}

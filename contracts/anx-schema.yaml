@@ -829,7 +829,12 @@ conversational_pm:
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
     - PM turn response operations require the configured PM actor; an empty identity fails closed.
-    - Turn proposals reuse the awaiting decision for workspace, actor, work_ref and scope without changing its approved target.
+    - Identical turn proposals reuse the awaiting decision for workspace, actor, work_ref, scope, target revision, payload and instruction; changed intent supersedes it atomically with superseded_by and superseded_reason.
+    - Reusing a request key with a changed target revision conflicts with existing_decision_id in error details; source revisions are opaque and cannot be ordered.
+    - Direct proposals require a human; agents propose through turns addressed to a requesting human.
+    - Open turns expire on reads and periodic maintenance even without a runner.
+    - Action deliverable reflects configured executors; unavailable dispatch records no attempt and leaves the action unchanged.
+    - Pending actions have nothing to reconcile and return invalid_request, never a revision conflict.
     - Human approval and scope-specific authority are required for downstream actions.
     - Answer and durable delivery intent are atomic; an answer is not an applied outcome.
     - Revalidate source revision before dispatch; source tools must enforce the same precondition.

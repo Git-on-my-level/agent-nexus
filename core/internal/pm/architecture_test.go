@@ -268,7 +268,7 @@ func TestConcurrentTurnProposalsReuseExactPendingTarget(t *testing.T) {
 	results := make(chan result, 2)
 	for i, svc := range []*Service{s, second} {
 		go func(i int, svc *Service) {
-			d, err := svc.ProposeForTurn(ctx, agent, ids[i], DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: fmt.Sprint("Target ", i), TargetRevision: fmt.Sprint(i), Payload: &ActionPayload{Phase: []string{"ready", "review"}[i]}})
+			d, err := svc.ProposeForTurn(ctx, agent, ids[i], DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Same target", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}})
 			results <- result{d, err}
 		}(i, svc)
 	}

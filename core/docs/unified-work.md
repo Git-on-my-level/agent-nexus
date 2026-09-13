@@ -100,6 +100,16 @@ profile: process-exec of the artifact, scratch writes, `(deny network*)`,
 the artifact and scratch), keychains and `/private/etc`. Hosts without an
 enforced runner fail closed. A managed directory is not a sandbox.
 
+Sysctl reads use exact names only: hw.ncpu, hw.pagesize, kern.osrelease,
+kern.version, hw.memsize, sysctl.proc_translated, hw.optional.armv8_1_atomics,
+hw.optional.armv8_crc32, hw.optional.armv8_2_sha512, hw.optional.armv8_2_sha3,
+and hw.optional.arm.FEAT_DIT. These cover Go runtime sizing and CPU detection
+plus system metadata. No prefix grant or kern.procargs2 access is permitted.
+The profile and controlled process-argument denial/Go runtime probes live in
+`internal/observation/isolation_integration_test.go`. Require
+`ANX_OBSERVATION_ISOLATION_TEST=1` for host qualification; unavailable enforcement
+must fail that gate rather than count as successful runtime proof.
+
 Seatbelt cannot set Darwin `RLIMIT_AS`/`DATA`/`RSS` (the kernel returns
 Invalid argument) and must not set `RLIMIT_NPROC` (it is user-global). CPU,
 file size, open files and core dumps are applied with `ulimit` in a trusted
@@ -128,7 +138,7 @@ model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages
 queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
 runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
 `POST /pm/turns/{id}/fail` require that lease token when a lease is held.
-`ANX_PM_AGENT_ACTOR_ID` (optional) restricts claim/complete/fail to that actor;
+`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/complete/fail to that actor;
 `make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
 
 The optional existing-bridge path is separate. `ANX_PM_BRIDGE_ENABLED` defaults
@@ -207,8 +217,12 @@ Nexus-owned phase actions use the board move transaction with a work revision
 precondition. All board moves advance the work revision; board and work reads
 therefore share the same phase. Execution reads back the canonical phase and
 reconciliation records verification. Source-owned phase requests never mutate
-the projection. Without a source executor their action and receipt remain
-pending_delivery and explain that an executor is required.
+the projection. Without a source executor, dispatch returns 503 `unavailable`
+with an explanation and leaves the approved pending action unchanged, including
+its revision and attempts. Action get/list/page responses derive `deliverable`
+from configured scope/source routing; clients should hide Deliver when false.
+Pending reconciliation returns 400 `invalid_request`: nothing has been delivered
+yet, so there is nothing to read back.
 
 Decision and action reads stay workspace-visible, subject to existing read
 authorization. Only the decision's human actor may answer; clients must use the
@@ -219,9 +233,26 @@ approval permission, scope, structured payload and target revision.
 Set `ANX_PM_AGENT_ACTOR_ID` to the selected PM identity. With an empty value, core
 warns at startup and turn creation/response operations fail closed. Claim,
 context, proposal, completion and failure operations require that configured,
-currently authorized actor. A new turn reuses an awaiting decision for the same
-workspace, requesting actor, work_ref and scope, preserves its existing target,
-and records the reference in `turn.decision_ids`.
+currently authorized actor. Direct proposals require a human principal; agents
+must propose through a turn addressed to a currently authorized human. An agent's
+own conversation cannot create an unanswerable self-addressed decision.
+
+New proposals reuse an awaiting decision for the same workspace, human, work_ref
+and scope only when instruction, payload, target revision and origin match.
+Changed intent atomically supersedes the earlier awaiting decision, records
+`superseded_by` and `superseded_reason`, creates the replacement, and links it
+in `turn.decision_ids`. Old turn links remain as audit history.
+
+Request keys remain immutable. Reusing one with changed content or target revision
+returns 409 with `error.details.existing_decision_id`; revisions are opaque source
+identifiers and cannot be ordered. Clients can link the existing decision or use
+a new key to propose replacement intent.
+
+Conversation history and `GET /pm/turns/{turn_id}` expire open turns on read.
+The existing five-second PM maintenance tick also expires them without any runner,
+channel sender, or read. The required `deadline` is an RFC3339 timestamp. Expired
+turns become failed, lose their lease, and report: "The PM did not answer before
+the deadline. Retry, or check that a runner is attached."
 
 Claim allocates new work; it never reoffers an active lease, even to the same
 runner. No capacity or no free work returns the existing 204 response. Capacity
@@ -233,8 +264,6 @@ action's monotonic status. `reconciliation_conflict: true` marks that mismatch;
 clients should display the receipt detail rather than infer success from status
 alone. This does not authorize a blind retry.
 
-For isolated contract/core lanes, `ANX_CONTRACT_SKIP_CONSUMER_MIRRORS=1` keeps
-`make contract-gen` and `make contract-check` from writing CLI/UI mirrors.
-Integration must subsequently regenerate those consumer mirrors. UI phase drags
+`make contract-gen` and `make contract-check` regenerate all consumer mirrors. UI phase drags
 and CLI PM proposals must send the structured payload; legacy prose-only pending
 decisions must be rejected/superseded and proposed again with that payload.

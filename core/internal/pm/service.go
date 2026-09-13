@@ -43,6 +43,9 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 	if p.ActorID == "" || p.WorkspaceID != s.cfg.WorkspaceID {
 		return ErrForbidden
 	}
+	if permission == "pm.propose" && !p.Human {
+		return ErrForbidden
+	}
 	if permission == "pm.respond" {
 		if strings.TrimSpace(s.cfg.AgentActorID) == "" {
 			return ErrPMIdentity
@@ -340,30 +343,28 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 		return Turn{}, ErrInvalid
 	}
 	now := time.Now().UTC()
-	if err := s.expireStaleTurns(ctx, p, now); err != nil {
+	if err := s.ExpireTurns(ctx, now); err != nil {
 		return Turn{}, err
 	}
 	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.TurnTimeout, s.cfg.MaxOutputBytes)
 }
 
-func (s *Service) expireStaleTurns(ctx context.Context, p Principal, now time.Time) error {
-	turns, err := listOpenTurns(ctx, s.store, p.WorkspaceID)
+// ExpireTurns is workspace maintenance and does not require a runner identity.
+func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
+	turns, err := listOpenTurns(ctx, s.store, s.cfg.WorkspaceID)
 	if err != nil {
 		return err
 	}
 	for _, t := range turns {
-		if t.Status != Sending && t.Status != Unknown {
+		if t.Status != Pending && t.Status != Sending && t.Status != Unknown {
 			continue
 		}
-		if s.cfg.AgentActorID != "" && t.AgentActorID != "" && t.AgentActorID != s.cfg.AgentActorID && t.AgentActorID != p.ActorID {
-			continue
-		}
-		if !now.After(t.Deadline) {
+		if t.Deadline.After(now) {
 			continue
 		}
 		old := t.Revision
 		t.Status = Failed
-		t.Failure = "deadline passed before a runner completed the turn"
+		t.Failure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."
 		t.LeaseToken = ""
 		t.LeaseOwner = ""
 		t.LeaseExpiresAt = time.Time{}
@@ -399,4 +400,20 @@ func newLeaseToken() string {
 		return stableID("lease", fmt.Sprint(time.Now().UnixNano()))
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// GetTurn retains the requesting actor's conversation-read authorization.
+func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, error) {
+	var t Turn
+	if err := s.store.get(ctx, "turn", id, &t); err != nil {
+		return Turn{}, err
+	}
+	if _, err := s.conversation(ctx, p, t.ConversationID); err != nil {
+		return Turn{}, err
+	}
+	if err := s.ExpireTurns(ctx, time.Now().UTC()); err != nil {
+		return Turn{}, err
+	}
+	err := s.store.get(ctx, "turn", id, &t)
+	return t, err
 }

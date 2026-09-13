@@ -73,6 +73,14 @@ func (rt *PMRuntime) ChannelIngressConfigured() bool {
 		(len(rt.Ingress.DiscordPublicKey) == ed25519.PublicKeySize && rt.Ingress.DiscordApplicationID != "")
 }
 
+// Tick runs turn expiry even when no runner or channel sender is attached.
+func (rt *PMRuntime) Tick(ctx context.Context) error {
+	if rt == nil || rt.Service == nil {
+		return nil
+	}
+	return errors.Join(rt.Service.ExpireTurns(ctx, time.Now().UTC()), rt.Drain(ctx))
+}
+
 func (rt *PMRuntime) Drain(ctx context.Context) error {
 	if rt == nil || rt.Service == nil || rt.Sender == nil {
 		return nil
@@ -144,7 +152,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			}
 		}
 		switch permission {
-		case "pm.access", "pm.read", "pm.propose", "pm.delivery.reconcile":
+		case "pm.access", "pm.read", "pm.delivery.reconcile":
 			return nil
 		case "pm.respond":
 			if strings.TrimSpace(cfg.PM.AgentActorID) == "" {
@@ -158,7 +166,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 				return pm.ErrForbidden
 			}
 			return nil
-		case "pm.approve", "pm.bind":
+		case "pm.propose", "pm.approve", "pm.bind":
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				return nil
 			}
@@ -236,18 +244,37 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		v, _ := w["version"].(int64)
 		return strconv.FormatInt(v, 10), nil
 	}
+	// The registry is the single source of configured native execution paths.
+	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
+		"work.phase": func(ctx context.Context, a pm.Action) (pm.Receipt, error) { return executeWorkPhase(ctx, store, a) },
+		"work.annotate": func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
+			return executeNativeAnnotation(ctx, store, a)
+		},
+	}
+	deps.CheckDelivery = func(ctx context.Context, a pm.Action) error {
+		w, err := store.GetWork(ctx, a.WorkRef)
+		if err != nil {
+			return err
+		}
+		authority := anyString(workSourceMap(w)["authority"])
+		if authority == "nexus" && nativeExecutors[a.Scope] != nil {
+			return nil
+		}
+		source := authority
+		if source == "github" {
+			source = "GitHub"
+		}
+		if source == "nexus" || source == "" {
+			source = a.Scope
+		}
+		return pm.NoDeliveryPath(source)
+	}
 	// Native mutations use canonical stores; source writes require a dedicated executor.
 	deps.Execute = func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
-		switch a.Scope {
-		case "work.phase":
-			return executeWorkPhase(ctx, store, a)
-		case "work.annotate":
-			return executeNativeAnnotation(ctx, store, a)
-		case "github", "multica", "ssh_git":
-			return pm.Receipt{}, pm.ErrUnavailable
-		default:
-			return pm.Receipt{}, pm.ErrForbidden
+		if execute := nativeExecutors[a.Scope]; execute != nil {
+			return execute(ctx, a)
 		}
+		return pm.Receipt{}, pm.ErrUnavailable
 	}
 	deps.Reconcile = func(ctx context.Context, a pm.Action) (pm.Receipt, error) {
 		if a.Scope == "work.phase" {
