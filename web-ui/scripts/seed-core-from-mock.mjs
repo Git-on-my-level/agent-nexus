@@ -15,6 +15,10 @@ import {
 } from "../../scripts/seed-core-lib.mjs";
 import { listDevSeedThreadRefViolations } from "../src/lib/devWorkspaceFixtures.js";
 import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
+import {
+  listResolutionEvidenceViolations,
+  resolutionEvidenceToCreateBeforeCard,
+} from "./seed-resolution-evidence.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.ANX_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -72,6 +76,14 @@ if (threadRefViolations.length > 0) {
   );
 }
 
+const resolutionEvidenceViolations = listResolutionEvidenceViolations(seed);
+if (resolutionEvidenceViolations.length > 0) {
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `dev seed resolution evidence order:\n${resolutionEvidenceViolations.join("\n")}`,
+  );
+}
+
 function normalizeSeedCardResolution(raw) {
   const s = String(raw ?? "").trim();
   if (!s || s === "unresolved" || s === "superseded") {
@@ -91,6 +103,8 @@ const topicIdMap = new Map();
 const documentIdMap = new Map();
 const boardIdMap = new Map();
 const cardIdMap = new Map();
+const postedEventIds = new Set();
+const seededArtifactIds = new Set();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
@@ -117,10 +131,12 @@ async function main() {
     await seedActors();
     await seedTopics();
     await seedDocuments();
-    await seedBoards();
-    await applySeedTopicAndBoardLifecycle();
+    // Artifacts (and packets) that done cards cite as resolution evidence must
+    // exist before those cards are created.
     await seedPackets();
     await seedArtifacts();
+    await seedBoards();
+    await applySeedTopicAndBoardLifecycle();
     // Register seeded agent principals before posting mention-heavy events so
     // @handle routing resolves against durable auth principals during seeding.
     if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
@@ -557,6 +573,10 @@ async function seedPackets() {
     };
 
     await request("POST", path, payload);
+    const artifactId = String(sourceArtifact.id ?? "").trim();
+    if (artifactId) {
+      seededArtifactIds.add(artifactId);
+    }
   }
 }
 
@@ -773,6 +793,10 @@ async function seedArtifacts() {
   const sourceArtifacts = Array.isArray(seed.artifacts) ? seed.artifacts : [];
 
   for (const sourceArtifact of sourceArtifacts) {
+    const artifactId = String(sourceArtifact.id ?? "").trim();
+    if (artifactId && seededArtifactIds.has(artifactId)) {
+      continue;
+    }
     const kind = String(sourceArtifact.kind ?? "").trim();
     if (packetKinds.has(kind)) {
       continue;
@@ -804,10 +828,16 @@ async function seedArtifacts() {
         content_type: contentType,
         content,
       });
+      if (artifactId) {
+        seededArtifactIds.add(artifactId);
+      }
       await trashSeedArtifactIfNeeded(sourceArtifact);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isAlreadyExistsConflict(msg)) {
+        if (artifactId) {
+          seededArtifactIds.add(artifactId);
+        }
         await trashSeedArtifactIfNeeded(sourceArtifact);
         continue;
       }
@@ -882,6 +912,7 @@ async function seedBoards() {
         );
         continue;
       }
+      await seedResolutionEvidenceForCard(sourceCard);
       if (
         linkedThreadId &&
         linkedThreadId === String(currentBoard?.thread_id ?? "").trim()
@@ -1057,6 +1088,77 @@ async function seedBoards() {
   }
 }
 
+async function seedResolutionEvidenceForCard(sourceCard) {
+  for (const item of resolutionEvidenceToCreateBeforeCard(seed, sourceCard)) {
+    if (item.kind === "event") {
+      await seedEventById(item.id);
+      continue;
+    }
+    if (item.kind === "artifact") {
+      await seedArtifactById(item.id);
+    }
+  }
+}
+
+async function seedEventById(eventId) {
+  const id = String(eventId ?? "").trim();
+  if (!id || postedEventIds.has(id)) {
+    return;
+  }
+  const sourceEvent = (seed.events ?? []).find(
+    (event) => String(event?.id ?? "").trim() === id,
+  );
+  if (!sourceEvent) {
+    throw new Error(`resolution evidence event ${id} is not in the seed`);
+  }
+  if (!shouldSeedLegacyEvent(sourceEvent)) {
+    throw new Error(
+      `resolution evidence event ${id} is skipped by the seed runner`,
+    );
+  }
+  await postSeedEvent(sourceEvent);
+}
+
+async function seedArtifactById(artifactId) {
+  const id = String(artifactId ?? "").trim();
+  if (!id || seededArtifactIds.has(id)) {
+    return;
+  }
+  throw new Error(
+    `resolution evidence artifact ${id} is not in the seed or was not created before cards`,
+  );
+}
+
+async function postSeedEvent(sourceEvent) {
+  const sourceId = String(sourceEvent.id ?? "").trim();
+  if (sourceId && postedEventIds.has(sourceId)) {
+    return;
+  }
+  const actorId = pickActorId(sourceEvent.actor_id);
+  const mappedThreadId = mapThreadId(sourceEvent.thread_id);
+  const payload = normalizeEventPayload(
+    sourceEvent.type,
+    sourceEvent.payload,
+  );
+  const refs = mapRefs(sourceEvent.refs);
+  const eventPayload = {
+    type: sourceEvent.type,
+    thread_id: mappedThreadId,
+    refs,
+    summary: sourceEvent.summary,
+    payload,
+    provenance: sourceEvent.provenance,
+    ...(sourceId ? { id: sourceId } : {}),
+  };
+  await requestRetryOnServerError("POST", "/events", {
+    actor_id: actorId,
+    event: eventPayload,
+  });
+  if (sourceId) {
+    postedEventIds.add(sourceId);
+  }
+}
+
 async function seedEvents() {
   let posted = 0;
   let skipped = 0;
@@ -1069,29 +1171,13 @@ async function seedEvents() {
     if (!shouldSeedLegacyEvent(sourceEvent)) {
       continue;
     }
-    const actorId = pickActorId(sourceEvent.actor_id);
-    const mappedThreadId = mapThreadId(sourceEvent.thread_id);
-    const payload = normalizeEventPayload(
-      sourceEvent.type,
-      sourceEvent.payload,
-    );
-    const refs = mapRefs(sourceEvent.refs);
     const sourceId = String(sourceEvent.id ?? "").trim();
-    const eventPayload = {
-      type: sourceEvent.type,
-      thread_id: mappedThreadId,
-      refs,
-      summary: sourceEvent.summary,
-      payload,
-      provenance: sourceEvent.provenance,
-      ...(sourceId ? { id: sourceId } : {}),
-    };
-
+    if (sourceId && postedEventIds.has(sourceId)) {
+      posted += 1;
+      continue;
+    }
     try {
-      await requestRetryOnServerError("POST", "/events", {
-        actor_id: actorId,
-        event: eventPayload,
-      });
+      await postSeedEvent(sourceEvent);
       posted += 1;
     } catch (error) {
       skipped += 1;

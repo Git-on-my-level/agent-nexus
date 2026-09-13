@@ -249,6 +249,17 @@ func TestHarnessChildEnvRestoresPasswdHomeAndProfile(t *testing.T) {
 	}
 }
 
+func TestHarnessChildEnvDoesNotInjectZAIAPIKey(t *testing.T) {
+	got := harnessChildEnv(config.Resolved{
+		Agent:       "pm",
+		BaseURL:     "http://127.0.0.1:8000",
+		ProfilePath: "/tmp/pm.json",
+	}, []string{"PATH=/bin"})
+	if envValue(got, "ZAI_API_KEY") != "" {
+		t.Fatal("harness injected ZAI_API_KEY from disk")
+	}
+}
+
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, item := range env {
@@ -549,21 +560,64 @@ func TestHandleClaimedTurnDirectRunnerKeepsStderrOutOfAnswer(t *testing.T) {
 	}
 }
 
-func TestHandleClaimedTurnDirectRunnerFallsBackToCombined(t *testing.T) {
+func TestHandleClaimedTurnDirectRunnerFailsWhenStdoutHasNoAssistant(t *testing.T) {
 	harness, posts := pmTurnHarness(t)
 	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve from stderr.' >&2", "{prompt}"}, nil, claimedTurn())
+	if err == nil {
+		t.Fatal("expected no_assistant failure")
+	}
+	if len(posts.complete) != 0 {
+		t.Fatalf("posted stderr as reply: %v", posts.complete)
+	}
+	if len(posts.fail) != 1 || !strings.Contains(posts.fail[0], "without a reply") {
+		t.Fatalf("fail %v", posts.fail)
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "Approve from stderr.") {
+		t.Fatalf("stderr missing from runner log: %s", logs)
+	}
+	if strings.Contains(logs, "using combined output") {
+		t.Fatalf("combined fallback still present: %s", logs)
+	}
+}
+
+func TestAssistantTextFromRunnerOutputUsesStdoutOnly(t *testing.T) {
+	if got := assistantTextFromRunnerOutput(nil); got != "" {
+		t.Fatalf("empty stdout %q", got)
+	}
+	if got := assistantTextFromRunnerOutput([]byte("Approve the restock.")); got != "Approve the restock." {
+		t.Fatalf("stdout %q", got)
+	}
+}
+
+func TestHandleClaimedTurnFailsWhenZAIAPIKeyMissing(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'should not run'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin"}, claimedTurn())
+	if err == nil {
+		t.Fatal("expected missing ZAI_API_KEY failure")
+	}
+	if len(posts.complete) != 0 {
+		t.Fatalf("complete %v", posts.complete)
+	}
+	if len(posts.fail) != 1 || !strings.Contains(posts.fail[0], "ZAI_API_KEY") {
+		t.Fatalf("fail %v", posts.fail)
+	}
+	if strings.Contains(posts.fail[0], "should not run") {
+		t.Fatalf("posted runner output as failure: %v", posts.fail)
+	}
+}
+
+func TestHandleClaimedTurnRunsWhenZAIAPIKeyExported(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "--model", "zai/glm-5.3", "{prompt}"}, []string{"PATH=/bin", "ZAI_API_KEY=from-operator"}, claimedTurn())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(posts.complete) != 1 || !strings.Contains(posts.complete[0], "Approve from stderr.") {
+	if len(posts.fail) != 0 || len(posts.complete) != 1 {
+		t.Fatalf("posts fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	if !strings.Contains(posts.complete[0], "Approve the restock.") {
 		t.Fatalf("complete %v", posts.complete)
-	}
-	logs := harness.stderr.String()
-	if !strings.Contains(logs, "using combined output for assistant text") {
-		t.Fatalf("missing fallback log: %s", logs)
-	}
-	if !strings.Contains(logs, "Approve from stderr.") {
-		t.Fatalf("stderr missing from runner log: %s", logs)
 	}
 }
 
