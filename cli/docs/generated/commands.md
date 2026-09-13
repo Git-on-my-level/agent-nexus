@@ -1559,7 +1559,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent response.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1572,7 +1572,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMContextResponse`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1585,7 +1585,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent proposal.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMDecision`.
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 
@@ -1598,9 +1598,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Record a selected PM agent failure reason without inventing a reply.
 - Concepts: `cards`, `evidence`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
-- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
+- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
 
 ## `pm.turns.get`
 

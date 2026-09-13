@@ -229,14 +229,14 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			return executeNativeAnnotation(ctx, store, a)
 		},
 	}
-	deps.CheckDelivery = func(ctx context.Context, a pm.Action) error {
+	deps.DeliveryPath = func(ctx context.Context, a pm.Action) (string, error) {
 		w, err := store.GetWork(ctx, a.WorkRef)
 		if err != nil {
-			return err
+			return "none", err
 		}
 		authority := anyString(workSourceMap(w)["authority"])
 		if authority == "nexus" && nativeExecutors[a.Scope] != nil {
-			return nil
+			return "nexus", nil
 		}
 		source := authority
 		if source == "github" {
@@ -245,7 +245,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if source == "nexus" || source == "" {
 			source = a.Scope
 		}
-		return pm.NoDeliveryPath(source)
+		return "none", pm.NoDeliveryPath(source)
 	}
 	// Native mutations use canonical stores; source writes require a dedicated executor.
 	deps.Execute = func(ctx context.Context, a pm.Action) (pm.Receipt, error) {

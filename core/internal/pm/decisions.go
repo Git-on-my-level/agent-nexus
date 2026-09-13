@@ -18,6 +18,9 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 	if !validText(in.RequestKey, 256) || !validText(in.WorkRef, 512) || !validText(in.Instruction, 16000) || !validText(in.Scope, 256) || !validText(in.TargetRevision, 512) {
 		return Decision{}, ErrInvalid
 	}
+	if !validActionPayload(in.Scope, in.Payload) {
+		return Decision{}, fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
+	}
 	if err := s.validateResolution(ctx, p, in.Scope, in.Payload); err != nil {
 		return Decision{}, err
 	}
@@ -41,6 +44,7 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 		return Decision{}, err
 	}
 	if !inserted {
+		d.Replayed = true
 		return s.decisionForReader(ctx, p, d), nil
 	}
 	if d.Origin != nil {
@@ -91,7 +95,7 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
 	}
 	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
-		return Decision{}, ErrInvalid
+		return Decision{}, fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
 	}
 	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Declined)) {
 		if in.Approve {
@@ -184,7 +188,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return a, nil
 	} // Includes unknown/sending after crash: NEVER blindly resend.
 	if !validActionPayload(a.Scope, a.Payload) {
-		return s.failBeforeSend(ctx, a, "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done. This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed.")
+		return s.failBeforeSend(ctx, a, invalidActionPayloadMessage+" This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed.")
 	}
 	if err = s.validateResolution(ctx, p, a.Scope, a.Payload); err != nil {
 		return s.failBeforeSend(ctx, a, err.Error())
@@ -409,6 +413,8 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID, leaseToken)
 }
 
+const invalidActionPayloadMessage = "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done."
+
 // Prose never supplies mutation parameters, including for legacy decisions.
 func validActionPayload(scope string, p *ActionPayload) bool {
 	if scope != "work.phase" {
@@ -439,18 +445,44 @@ func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision
 
 // Availability is a projection of trusted routing, never stored capability truth.
 func (s *Service) checkDelivery(ctx context.Context, a Action) error {
-	if s.deps.Execute == nil || s.deps.CurrentRevision == nil || s.deps.CheckDelivery == nil {
-		return NoDeliveryPath("this action")
+	_, err := s.deliveryPath(ctx, a)
+	return err
+}
+func (s *Service) deliveryPath(ctx context.Context, a Action) (string, error) {
+	if s.deps.Execute == nil || s.deps.CurrentRevision == nil {
+		return "none", NoDeliveryPath("this action")
 	}
-	return s.deps.CheckDelivery(ctx, a)
+	if s.deps.DeliveryPath != nil {
+		path, err := s.deps.DeliveryPath(ctx, a)
+		if err != nil {
+			return "none", err
+		}
+		if path == "" || path == "none" {
+			return "none", NoDeliveryPath("this action")
+		}
+		return path, nil
+	}
+	if s.deps.CheckDelivery != nil {
+		if err := s.deps.CheckDelivery(ctx, a); err != nil {
+			return "none", err
+		}
+		return "configured", nil
+	}
+	return "none", NoDeliveryPath("this action")
 }
 func (s *Service) actionForReader(ctx context.Context, a Action) Action {
 	a.Deliverable = !(a.AcknowledgedAt != nil && !hasSentAttempt(a)) && s.checkDelivery(ctx, a) == nil
 	return a
 }
-func NoDeliveryPath(source string) error {
-	return fmt.Errorf("%w: No delivery path is configured for %s yet; the approval is kept and the action stays pending", ErrUnavailable, source)
+
+type noDeliveryPathError struct{ source string }
+
+func (e *noDeliveryPathError) Error() string {
+	return fmt.Sprintf("%s: No delivery path is configured for %s yet; the approval is kept and the action stays pending", ErrUnavailable, e.source)
 }
+func (e *noDeliveryPathError) Unwrap() error { return ErrUnavailable }
+
+func NoDeliveryPath(source string) error { return &noDeliveryPathError{source: source} }
 
 // Missing sent_at on legacy failed attempts cannot establish a source handoff.
 // Other legacy delivery states already record an attempted handoff.

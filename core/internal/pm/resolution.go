@@ -45,8 +45,20 @@ func (s *Service) validateResolution(ctx context.Context, p Principal, scope str
 // Project only at the HTTP boundary: derived fields never enter persistence,
 // approval equality, idempotency checks, or the source executor's parameters.
 func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision) any {
+	path, err := s.deliveryPath(ctx, Action{DecisionID: d.ID, WorkspaceID: d.WorkspaceID, ActorID: d.ActorID, WorkRef: d.WorkRef, Instruction: d.Instruction, Scope: d.Scope, TargetRevision: d.TargetRevision, Payload: d.Payload})
+	type response struct {
+		Decision
+		Replayed               bool   `json:"replayed,omitempty"`
+		ReplayedTerminalStatus Status `json:"replayed_terminal_status,omitempty"`
+		Deliverable            bool   `json:"deliverable"`
+		DeliveryPath           string `json:"delivery_path"`
+	}
+	out := response{Decision: d, Replayed: d.Replayed, Deliverable: err == nil, DeliveryPath: path}
+	if d.Replayed && d.Status != AwaitingAnswer {
+		out.ReplayedTerminalStatus = d.Status
+	}
 	if d.Payload == nil {
-		return d
+		return out
 	}
 	type payloadResponse struct {
 		*ActionPayload
@@ -64,7 +76,7 @@ func (s *Service) decisionResponse(ctx context.Context, p Principal, d Decision)
 		payload.Resolution = append(payload.Resolution, resolved)
 	}
 	return struct {
-		Decision
+		response
 		Payload payloadResponse `json:"payload"`
-	}{d, payload}
+	}{out, payload}
 }

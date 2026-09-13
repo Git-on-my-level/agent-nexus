@@ -360,6 +360,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PMDecisionCreateRequest'
       responses:
+        '200':
+          description: Existing identical proposal; replayed is true. Terminal decisions also include replayed_terminal_status and do not create another awaiting request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
         '201':
           description: Propose a scoped PM decision
           content:
@@ -748,7 +754,8 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
-      description: Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions also retain their no-delivery-path reason in receipt.detail when it was empty. Other states return 409; other actors return 403.
+      description: >-
+        Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to "Closed by <actor>: no delivery path is configured for <source>, nothing was sent". Other states return 409; other actors return 403.
       parameters:
       - name: action_id
         in: path
@@ -927,13 +934,15 @@ paths:
       - not_found
       - conflict
       - turn_closed
+      - lease_required
+      - lease_mismatch
       - busy
       - unavailable
       x-anx-concepts:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
+      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
       parameters:
       - name: turn_id
         in: path
@@ -1009,7 +1018,7 @@ paths:
   /pm/turns/{turn_id}/context:
     post:
       operationId: pmTurnsContext
-      description: Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first".
+      description: Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Read requesting principal context as selected PM agent
       tags:
       - pm
@@ -1029,6 +1038,8 @@ paths:
       - not_found
       - conflict
       - turn_closed
+      - lease_required
+      - lease_mismatch
       - busy
       - unavailable
       x-anx-concepts:
@@ -1059,7 +1070,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first".
+      description: Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -1079,6 +1090,8 @@ paths:
       - not_found
       - conflict
       - turn_closed
+      - lease_required
+      - lease_mismatch
       - busy
       - unavailable
       x-anx-concepts:
@@ -1100,8 +1113,8 @@ paths:
             schema:
               $ref: '#/components/schemas/PMTurnProposeRequest'
       responses:
-        '201':
-          description: Record a selected PM agent proposal
+        '200':
+          description: Record or replay a selected PM agent proposal. Replays include replayed true and terminal replays also include replayed_terminal_status.
           content:
             application/json:
               schema:
@@ -1109,7 +1122,7 @@ paths:
   /pm/turns/{turn_id}/complete:
     post:
       operationId: pmTurnsComplete
-      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first"; released or expired lease tokens never authorize completion. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.
+      description: Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.
       summary: Record a selected PM agent response
       tags:
       - pm
@@ -1129,6 +1142,8 @@ paths:
       - not_found
       - conflict
       - turn_closed
+      - lease_required
+      - lease_mismatch
       - busy
       - unavailable
       x-anx-concepts:
@@ -6574,10 +6589,27 @@ components:
               title_or_summary: {type: string}
               exists: {type: boolean}
     PMDecision:
+      required: [deliverable, delivery_path]
       description: Workspace-visible for reading; only the human actor_id may answer or dispatch. Clients must show answer controls only to that human.
       type: object
       additionalProperties: true
       properties:
+        replayed:
+          type: boolean
+          readOnly: true
+          description: Response-only; true when a proposal reuses an existing decision. Absent on new proposals and ordinary reads.
+        replayed_terminal_status:
+          type: string
+          readOnly: true
+          description: Response-only status of a replayed decision that is no longer awaiting_answer. Absent on awaiting replays and ordinary reads.
+        deliverable:
+          type: boolean
+          readOnly: true
+          description: Derived on every response from the same configured scope/source executor registry as action deliverable. Availability does not imply approval, delivery, or a valid source revision.
+        delivery_path:
+          type: string
+          readOnly: true
+          description: Configured executor route (for example nexus or github); none when no route is available. Open string for future integrations; configured denotes a legacy unnamed executor.
         id: *id001
         workspace_id: *id002
         actor_id: *id003
@@ -6714,6 +6746,10 @@ components:
           type: string
           format: date-time
           readOnly: true
+        closed_without_delivery:
+          type: boolean
+          readOnly: true
+          description: True when the decision actor closed an undeliverable pending request without sending it. Receipt detail names the actor and delivery limitation. This is not an acknowledged source failure.
         deliverable:
           type: boolean
           description: Derived from configured executors for this scope and source on every read, except acknowledged unsent actions always remain false. For pending actions, false means dispatch returns unavailable (503) without recording an attempt. Acknowledging an undeliverable pending action prevents later delivery; a fresh proposal and approval are required.

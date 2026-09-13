@@ -5730,7 +5730,7 @@ export const commandRegistry = [
         "path": "/pm/actions/{action_id}/acknowledge",
         "operation_id": "pmActionsAcknowledge",
         "summary": "Acknowledge a failed, unresolvable, or undeliverable action",
-        "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions also retain their no-delivery-path reason in receipt.detail when it was empty. Other states return 409; other actors return 403.",
+        "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to \"Closed by \u003cactor\u003e: no delivery path is configured for \u003csource\u003e, nothing was sent\". Other states return 409; other actors return 403.",
         "why": "Acknowledge a failed, unresolvable, or undeliverable action.",
         "input_mode": "json-body",
         "streaming": {
@@ -6915,7 +6915,7 @@ export const commandRegistry = [
         "path": "/pm/turns/{turn_id}/complete",
         "operation_id": "pmTurnsComplete",
         "summary": "Record a selected PM agent response",
-        "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\"; released or expired lease tokens never authorize completion. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.",
+        "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.",
         "why": "Record a selected PM agent response.",
         "input_mode": "json-body",
         "streaming": {
@@ -6930,6 +6930,8 @@ export const commandRegistry = [
             "not_found",
             "conflict",
             "turn_closed",
+            "lease_required",
+            "lease_mismatch",
             "busy",
             "unavailable"
         ],
@@ -6996,7 +6998,7 @@ export const commandRegistry = [
         "path": "/pm/turns/{turn_id}/context",
         "operation_id": "pmTurnsContext",
         "summary": "Read requesting principal context as selected PM agent",
-        "description": "Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\".",
+        "description": "Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
         "why": "Read requesting principal context as selected PM agent.",
         "input_mode": "json-body",
         "streaming": {
@@ -7011,6 +7013,8 @@ export const commandRegistry = [
             "not_found",
             "conflict",
             "turn_closed",
+            "lease_required",
+            "lease_mismatch",
             "busy",
             "unavailable"
         ],
@@ -7081,7 +7085,7 @@ export const commandRegistry = [
         "path": "/pm/turns/{turn_id}/decisions",
         "operation_id": "pmTurnsDecisionsCreate",
         "summary": "Record a selected PM agent proposal",
-        "description": "Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\".",
+        "description": "Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
         "why": "Record a selected PM agent proposal.",
         "input_mode": "json-body",
         "streaming": {
@@ -7096,6 +7100,8 @@ export const commandRegistry = [
             "not_found",
             "conflict",
             "turn_closed",
+            "lease_required",
+            "lease_mismatch",
             "busy",
             "unavailable"
         ],
@@ -7204,6 +7210,8 @@ export const commandRegistry = [
             "not_found",
             "conflict",
             "turn_closed",
+            "lease_required",
+            "lease_mismatch",
             "busy",
             "unavailable"
         ],
@@ -7213,7 +7221,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.",
+        "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.",
         "body_schema": {
             "required": [
                 {

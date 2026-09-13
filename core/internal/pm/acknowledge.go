@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -33,10 +32,16 @@ func (s *Service) AcknowledgeAction(ctx context.Context, p Principal, id string)
 		if a.Deliverable || deliveryErr == nil {
 			return Action{}, fmt.Errorf("%w: this pending action has a delivery path", ErrConflict)
 		}
-		// Preserve the reason durably so later routing changes cannot erase it.
-		if a.Receipt.Detail == "" {
-			a.Receipt.Detail = strings.TrimSuffix(deliveryErr.Error(), "; the approval is kept and the action stays pending")
+		if hasSentAttempt(a) {
+			return Action{}, fmt.Errorf("%w: an attempted delivery cannot be closed as unsent", ErrConflict)
 		}
+		var unavailable *noDeliveryPathError
+		if !errors.As(deliveryErr, &unavailable) {
+			return Action{}, deliveryErr
+		}
+		// Record the closure independently of error formatting or later routing.
+		a.ClosedWithoutDelivery = true
+		a.Receipt.Detail = fmt.Sprintf("Closed by %s: no delivery path is configured for %s, nothing was sent", p.ActorID, unavailable.source)
 	case Failed:
 	case Unknown:
 		if s.deps.Reconcile != nil {
