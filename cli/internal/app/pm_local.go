@@ -711,13 +711,6 @@ func clipReplyForTurn(text string, maxBytes int) (string, int) {
 	return truncateToMaxBytes(text, maxBytes), len(text) - minInt(maxBytes, len(text))
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func truncateToMaxBytes(text string, maxBytes int) string {
 	if maxBytes <= 0 {
 		return ""

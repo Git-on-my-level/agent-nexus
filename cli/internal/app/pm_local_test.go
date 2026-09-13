@@ -1692,18 +1692,19 @@ func (b *lockedBuffer) String() string {
 }
 
 func TestClipReplyForTurnAddsTruncationMarker(t *testing.T) {
-	text := strings.Repeat("a", 80)
-	got, dropped := clipReplyForTurn(text, 60)
+	// The limit must leave room for the marker; real limits are 16000+.
+	text := strings.Repeat("a", 400)
+	got, dropped := clipReplyForTurn(text, 256)
 	if dropped <= 0 {
 		t.Fatalf("expected dropped bytes, got %d", dropped)
 	}
-	if !strings.Contains(got, "[reply truncated by anx pm serve at 60 bytes;") || !strings.Contains(got, "bytes were dropped]") {
+	if !strings.Contains(got, "[reply truncated by anx pm serve at 256 bytes;") || !strings.Contains(got, "bytes were dropped]") {
 		t.Fatalf("missing marker: %q", got)
 	}
-	if len(got) > 60 {
+	if len(got) > 256 {
 		t.Fatalf("clipped reply exceeded limit: %d", len(got))
 	}
-	if clip, n := clipReplyForTurn("short", 60); clip != "short" || n != 0 {
+	if clip, n := clipReplyForTurn("short", 256); clip != "short" || n != 0 {
 		t.Fatalf("short text should pass through: %q %d", clip, n)
 	}
 }
@@ -1931,7 +1932,7 @@ func TestHandleClaimedTurnLeaseMismatchAlreadyCompletedDoesNotRerun(t *testing.T
 	if runs != 1 {
 		t.Fatalf("harness runs=%d", runs)
 	}
-	if !strings.Contains(stderr.String(), "turn already delivered; nothing to do") {
+	if !strings.Contains(stderr.String(), "turn turn-1 already delivered; nothing to do") {
 		t.Fatalf("logs %s", stderr.String())
 	}
 }
