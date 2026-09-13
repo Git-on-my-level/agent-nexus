@@ -160,10 +160,13 @@
   $effect(() => {
     const key = selectedKey;
     if (!ready) return;
-    const switched =
-      conversationScope !== undefined && conversationScope !== key;
+    const firstRun = conversationScope === undefined;
+    const switched = !firstRun && conversationScope !== key;
     conversationScope = key;
     historyOpen = false;
+    // A reload or deep link lands here once with an empty composer; the
+    // draft promised to the reader is in this tab's storage.
+    if (firstRun && !draft.trim()) draft = readDraft(key);
     if (switched) {
       createdConversationId = "";
       creationKey = "";

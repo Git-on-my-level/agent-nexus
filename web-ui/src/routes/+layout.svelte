@@ -2,6 +2,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { tick } from "svelte";
   import { get } from "svelte/store";
 
   import "../app.css";
@@ -645,7 +646,7 @@
       handleModEnterBlurCommit(event, { commandPaletteOpen });
     }
     if (event.key === "Escape" && accountMenuOpen) {
-      closeAccountMenu();
+      closeAccountMenu({ restoreFocus: true });
       return;
     }
     if (event.key === "Escape" && workspacePickerOpen) {
@@ -657,16 +658,25 @@
     }
   }
 
-  function closeAccountMenu() {
+  function closeAccountMenu({ restoreFocus = false } = {}) {
     accountMenuOpen = false;
     personaSubmenuOpen = false;
+    if (restoreFocus) document.querySelector(".shell-account-row")?.focus?.();
   }
 
   function toggleAccountMenu() {
     accountMenuOpen = !accountMenuOpen;
     if (!accountMenuOpen) {
       personaSubmenuOpen = false;
+      return;
     }
+    // A menu that opens without taking the keyboard is invisible to a
+    // screen reader; the first item gets focus, Escape hands it back.
+    void tick().then(() =>
+      document
+        .querySelector('#shell-account-container [role="menuitem"]')
+        ?.focus?.(),
+    );
   }
 
   function handleWindowClick(event) {

@@ -337,7 +337,7 @@
         requested = { ...requested, [key]: phase };
         if (result.decision) decisions = [...decisions, result.decision];
         moveNotice = {
-          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. Approve it in Inbox.${
+          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. It waits in Inbox under Needs you: a change at ${sourceLabel(work.source)} is only sent once someone records a yes, even the person who asked.${
             result.decision?.supersedes
               ? result.decision.supersedes_origin_kind === "pm_turn"
                 ? " This replaced the PM's earlier proposal for this task."

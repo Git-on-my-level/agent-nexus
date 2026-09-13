@@ -27,6 +27,7 @@
     workKey,
     label,
     errorMessage,
+    readErrorExplanation,
     receiptSignal,
   } from "$lib/pm/presentation.js";
   let work = $state(null),
@@ -57,14 +58,7 @@
   let refreshPending = $derived(
     ["queued", "running"].includes(work?.refresh?.state),
   );
-  let refreshError = $derived.by(() => {
-    const raw = work?.refresh?.last_error;
-    if (!raw) return "";
-    if (typeof raw === "string") return raw;
-    const message = String(raw.message || "").trim();
-    const code = String(raw.code || "").trim();
-    return message || code.replace(/_/g, " ") || "";
-  });
+  let refreshError = $derived(readErrorExplanation(work?.refresh?.last_error));
   let lastAttemptAt = $derived(work?.refresh?.last_attempt_at || "");
   let failedAttempts = $derived(Number(work?.refresh?.failures) || 0);
   /**

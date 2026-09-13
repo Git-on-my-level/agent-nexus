@@ -58,6 +58,30 @@ const READ_ERROR_LABELS = {
   not_found: "Not found at source",
 };
 
+// Why a read failed, for a task page: the label above says what, this says
+// what it means and what changes it.
+const READ_ERROR_EXPLANATIONS = {
+  policy_denied:
+    "The reader for this source has no approved version yet, so nothing is read until one is activated.",
+  isolation_unavailable:
+    "The sandbox that runs readers is not available on this host, so nothing is read.",
+  configuration: "The reader for this source is not configured.",
+  invalid_output: "The reader ran, but its output could not be understood.",
+  rate_limited:
+    "The source is rate limiting reads; the last good read is kept until it allows another.",
+  permission: "The source refused access with the credentials configured.",
+  not_found: "The source no longer has this item.",
+};
+
+export function readErrorExplanation(error) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  const code = String(error.code ?? "").trim();
+  if (READ_ERROR_EXPLANATIONS[code]) return READ_ERROR_EXPLANATIONS[code];
+  const message = String(error.message ?? "").trim();
+  return message || code.replace(/_/g, " ");
+}
+
 export function freshness(
   { observedAt, staleAfter, error, status, sourceName } = {},
   now = Date.now(),

@@ -728,8 +728,7 @@
                   class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
                 >
                   <span class="min-w-0 flex-1 truncate"
-                    >{row.source || row.kind}{#if row.requesterLabel}
-                      · from {row.requesterLabel}{/if}</span
+                    >{row.source || row.kind}{#if row.requesterLabel}{" "}· from {row.requesterLabel}{/if}</span
                   >
                   {#if row.time}
                     <time class="shrink-0 tabular-nums" datetime={row.time}

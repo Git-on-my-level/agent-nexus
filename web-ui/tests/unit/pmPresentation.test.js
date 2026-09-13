@@ -212,6 +212,23 @@ describe("phase-change decisions lead with the phase", () => {
   });
 });
 
+describe("read errors are explained in the reader's words", () => {
+  it("maps known codes to a sentence and falls back to the message", async () => {
+    const { readErrorExplanation } = await import("$lib/pm/presentation.js");
+    expect(
+      readErrorExplanation({
+        code: "policy_denied",
+        message: "Generated reader has no active version",
+      }),
+    ).toMatch(/no approved version yet/);
+    expect(readErrorExplanation({ code: "weird_code" })).toBe("weird code");
+    expect(
+      readErrorExplanation({ code: "other", message: "GitHub said 502" }),
+    ).toBe("GitHub said 502");
+    expect(readErrorExplanation("")).toBe("");
+  });
+});
+
 describe("freshness names the cause of a failed read", () => {
   it("blames the reader, not the source, for local causes", async () => {
     const { freshness } = await import("$lib/pm/presentation.js");

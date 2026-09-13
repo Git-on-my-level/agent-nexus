@@ -262,11 +262,23 @@
           oninput={handleInput}
           spellcheck="false"
           autocomplete="off"
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-controls="cmd-results"
+          aria-activedescendant={activeIndex >= 0
+            ? `cmd-option-${activeIndex}`
+            : undefined}
         />
         <kbd class="cmd-esc-hint">ESC</kbd>
       </div>
 
-      <div class="cmd-results">
+      <div
+        class="cmd-results"
+        id="cmd-results"
+        role="listbox"
+        aria-label="Results"
+      >
         {#if loading}
           <div class="cmd-status">Searching...</div>
         {:else if query.trim() && flatResults.length === 0}
@@ -279,15 +291,22 @@
 
         {#each flatResults as entry, i (resultKey(entry, i))}
           {#if entry.type === "header"}
-            <div class="cmd-group-header">{entry.label}</div>
+            <div class="cmd-group-header" role="presentation">
+              {entry.label}
+            </div>
           {:else}
-            <button
+            <!-- Keyboard handling lives on the dialog (arrows move, Enter opens);
+                 the option is a listbox row, not a second control. -->
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
+            <div
               class="cmd-result-row"
               class:cmd-result-row--active={i === activeIndex}
               data-cmd-index={i}
+              id={`cmd-option-${i}`}
+              role="option"
+              aria-selected={i === activeIndex}
               onclick={() => navigate(entry)}
               onmouseenter={() => (activeIndex = i)}
-              type="button"
             >
               <svg
                 class="cmd-result-icon"
@@ -308,7 +327,7 @@
                 <span class="cmd-result-subtitle">{resultSubtitle(entry)}</span>
               </div>
               <span class="cmd-result-badge">{typeLabels[entry.type]}</span>
-            </button>
+            </div>
           {/if}
         {/each}
       </div>

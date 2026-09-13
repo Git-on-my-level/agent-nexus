@@ -78,9 +78,6 @@
     );
   }
   let noteMissing = $derived(!answer.trim());
-  // Core derives can_answer for the current reader; an older core omits it,
-  // in which case the server is the judge and the form stays available.
-  let cannotAnswer = $derived(selected?.can_answer === false);
   let targetPhase = $derived(String(selected?.payload?.phase ?? "").trim());
   // Evidence the proposal claims for a completion: shown before approval,
   // with core's existence check when the response carries it.
@@ -103,6 +100,14 @@
   let stale = $derived(voidReason === "stale");
   let moot = $derived(voidReason === "moot");
   let gone = $derived(voidReason === "gone");
+  // "Addressed to someone else" is about the actor. Core also clears
+  // can_answer when the task is gone or the proposal is void, and those notes
+  // already explain themselves; with both ids known, compare them directly.
+  let cannotAnswer = $derived(
+    currentActorId && selected?.actor_id
+      ? selected.actor_id !== currentActorId
+      : selected?.can_answer === false && !voidReason,
+  );
   function dismissVoid(event) {
     event.preventDefault();
     if (busy || !voidReason) return;
