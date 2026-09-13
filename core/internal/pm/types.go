@@ -382,8 +382,18 @@ func (e *HumanProposalPendingError) Error() string {
 }
 func (e *HumanProposalPendingError) Unwrap() error { return ErrConflict }
 
-// ApprovalTargetError refuses a fresh approval without creating durable state.
+// ConversationOwnerNotHumanError explains a proposal refusal after the runtime
+// has resolved the conversation owner's actual principal kind.
+type ConversationOwnerNotHumanError struct{}
+
+func (e *ConversationOwnerNotHumanError) Error() string {
+	return "Proposals need a human approver; this conversation belongs to an agent principal"
+}
+func (e *ConversationOwnerNotHumanError) Unwrap() error { return ErrForbidden }
+
+// ApprovalTargetError describes proposal or approved-action source preflight failure.
 type ApprovalTargetError struct {
+	Proposal         bool    `json:"-"`
 	ApprovedRevision string  `json:"approved_revision"`
 	CurrentRevision  *string `json:"current_revision"`
 	Reason           string  `json:"reason"`
@@ -393,6 +403,9 @@ func (e *ApprovalTargetError) Error() string {
 	current := "unavailable"
 	if e.CurrentRevision != nil {
 		current = *e.CurrentRevision
+	}
+	if e.Proposal {
+		return fmt.Sprintf("Proposal target has changed (proposed at %s, source now %s). Approval refused (%s); decline it or wait for a fresh proposal.", e.ApprovedRevision, current, e.Reason)
 	}
 	return fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s). Approval refused (%s); inspect the work and create a fresh proposal if needed.", e.ApprovedRevision, current, e.Reason)
 }

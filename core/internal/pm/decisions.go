@@ -156,7 +156,7 @@ func (s *Service) action(ctx context.Context, p Principal, id, permission string
 	}
 	if err := s.authorize(ctx, p, permission, a.WorkRef); err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Action{}, actionWorkReadError(a, err)
+			return a, actionWorkReadError(a, err)
 		}
 		return Action{}, err
 	}
@@ -193,14 +193,17 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return Action{}, ErrConflict
 	}
 	a, err := s.action(ctx, p, d.ActionID, "pm.action."+d.Scope)
-	if err != nil {
+	if err != nil && a.ID == "" {
 		return Action{}, err
 	}
 	if d.ActorID != a.ActorID || d.AnsweredBy != d.ActorID || a.Instruction != d.Instruction || a.WorkRef != d.WorkRef || a.Scope != d.Scope || a.TargetRevision != d.TargetRevision || a.SourceAuthority != d.SourceAuthority || !reflect.DeepEqual(a.Payload, d.Payload) {
 		return Action{}, ErrForbidden
 	}
+	if err != nil {
+		return s.failMissingWorkBeforeSend(ctx, a, err)
+	}
 	if err := s.validateActionWork(ctx, p, a); err != nil {
-		return Action{}, err
+		return s.failMissingWorkBeforeSend(ctx, a, err)
 	}
 	if a.Status != Pending {
 		return a, nil
@@ -220,11 +223,14 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return Action{}, err
 	}
 	if err = s.authorize(ctx, approver, "pm.action."+a.Scope, a.WorkRef); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return s.failMissingWorkBeforeSend(ctx, a, actionWorkReadError(a, err))
+		}
 		return Action{}, err
 	}
 	revision, err := s.deps.CurrentRevision(ctx, approver, a.WorkRef)
 	if err != nil {
-		return Action{}, actionWorkReadError(a, err)
+		return s.failMissingWorkBeforeSend(ctx, a, actionWorkReadError(a, err))
 	}
 	if revision != a.TargetRevision {
 		// The approval remains answered, but its delivery is now terminal. Keep
@@ -297,6 +303,23 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	}
 	return a, nil
 }
+
+const missingActionWorkDetail = "The task this approval refers to no longer exists (trashed or purged); nothing was sent"
+
+// Only definitive absence may terminate an unsent pending action. Repeated
+// dispatches preserve its receipt, and uncertain handoffs keep their evidence.
+func (s *Service) failMissingWorkBeforeSend(ctx context.Context, a Action, cause error) (Action, error) {
+	var target *ApprovalTargetError
+	if errors.As(cause, &target) && target.Reason == "work_missing" && a.Status == Pending && !hasSentAttempt(a) {
+		failed, err := s.failBeforeSend(ctx, a, missingActionWorkDetail)
+		if err != nil {
+			return Action{}, err
+		}
+		return failed, cause
+	}
+	return Action{}, cause
+}
+
 func (s *Service) failBeforeSend(ctx context.Context, a Action, detail string) (Action, error) {
 	old := a.Revision
 	now := time.Now().UTC()
@@ -539,7 +562,7 @@ func hasSentAttempt(a Action) bool {
 // Replays are handled before this check. Dispatch still rechecks the revision
 // because source state can change after approval (including during this read).
 func (s *Service) validateApprovalTarget(ctx context.Context, p Principal, d Decision) error {
-	failure := &ApprovalTargetError{ApprovedRevision: d.TargetRevision, Reason: "work_read_failed"}
+	failure := &ApprovalTargetError{Proposal: true, ApprovedRevision: d.TargetRevision, Reason: "work_read_failed"}
 	if s.deps.DecisionWork == nil {
 		return failure
 	}

@@ -126,9 +126,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		if p.WorkspaceID != cfg.PM.WorkspaceID {
 			return pm.ErrForbidden
 		}
-		actual, err := findPrincipal(ctx, p.ActorID)
+		actual, err := principalLookup.findForAuthorization(ctx, p.ActorID)
 		if err != nil {
-			return pm.ErrForbidden
+			return err
 		}
 		// Decision reads/answers and source actions authorize the principal first;
 		// their domain preflight handles missing or non-live work. Preserve the
@@ -157,6 +157,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			}
 			return nil
 		case "pm.propose":
+			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindAgent) {
+				return &pm.ConversationOwnerNotHumanError{}
+			}
 			if p.Human && actual.PrincipalKind == string(auth.PrincipalKindHuman) {
 				if ref == "" {
 					return nil

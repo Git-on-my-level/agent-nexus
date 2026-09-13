@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -71,4 +73,16 @@ func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.Auth
 		}
 		cursor = next
 	}
+}
+
+// An unavailable authority reader cannot establish a permission denial.
+func (l *pmPrincipalLookup) findForAuthorization(ctx context.Context, actorID string) (auth.AuthPrincipalSummary, error) {
+	principal, err := l.find(ctx, actorID)
+	if err == nil {
+		return principal, nil
+	}
+	if errors.Is(err, pm.ErrForbidden) || errors.Is(err, auth.ErrAgentNotFound) {
+		return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+	}
+	return auth.AuthPrincipalSummary{}, fmt.Errorf("%w: principal authorization could not be read; retry the request", pm.ErrUnavailable)
 }

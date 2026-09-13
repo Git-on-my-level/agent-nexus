@@ -189,20 +189,17 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			if declined["status"] != "declined" {
 				t.Fatal(declined)
 			}
-			if authority == "nexus" {
-				// Missing work does not remove an otherwise configured executor.
-				call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 409)
-			} else {
-				closed := call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
-				if closed["closed_without_delivery"] != true || closed["acknowledged_by"] != human.ActorID || closed["deliverable"] != false || len(closed["attempts"].([]any)) != 0 {
-					t.Fatal(closed)
-				}
-				detail := closed["receipt"].(map[string]any)["detail"].(string)
-				if strings.Contains(detail, human.ActorID) || detail != "Closed without delivery: no delivery path is configured for external; nothing was sent." {
-					t.Fatal(detail)
-				}
-				call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
+			// Dispatch records missing work as an unsent failure regardless of
+			// the configured executor, so either action can now be acknowledged.
+			closed := call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
+			if closed["status"] != "acknowledged" || closed["acknowledged_by"] != human.ActorID || closed["deliverable"] != (authority == "nexus") || len(closed["attempts"].([]any)) != 1 {
+				t.Fatal(closed)
 			}
+			detail := closed["receipt"].(map[string]any)["detail"].(string)
+			if strings.Contains(detail, human.ActorID) || detail != "The task this approval refers to no longer exists (trashed or purged); nothing was sent" {
+				t.Fatal(detail)
+			}
+			call(t, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
 			var raw string
 			if err := env.workspace.DB().QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='decision' AND id=?", id).Scan(&raw); err != nil {
 				t.Fatal(err)
