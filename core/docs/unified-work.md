@@ -131,6 +131,14 @@ timeout and output bytes are enforced in Go.
 Example JIT target fields: `jit_state_root` (absolute 0700 directory),
 `jit_adapter_id`, and `jit_policy` with bounded isolation limits.
 
+### Dogfood placement
+
+`anx pm serve` and any process holding secrets in its environment must run under
+a different uid (or on a different host) from anx-core's JIT runner. Seatbelt
+cannot block numeric `KERN_PROCARGS2` reads of same-uid process environments.
+The availability probe checks only that the runner must not run as root; it does
+not verify this deployment separation.
+
 ## Conversational PM runtime
 
 The PM service uses the same SQLite and the current workspace principal.
@@ -285,7 +293,8 @@ Cursors from the previous ordering must be discarded; response shapes are unchan
 
 A stale source revision at dispatch persists a finished failed attempt and marks
 the action failed, while returning the existing 409 `source_revision_changed`.
-The receipt includes both approved and current revisions and asks for re-approval.
+The receipt includes both approved and current revisions and explains that a
+fresh proposal and approval are needed.
 The decision remains answered; repeat dispatch never revives the failed action,
 even if the source revision changes back. Propose with a fresh request key and
 approve the current revision to deliver again.
@@ -309,6 +318,19 @@ Turn proposals record their originating `turn_id`. Superseded records retain
 their own attribution; reusing identical intent retains the original proposal's
 turn. A different proposer or origin kind is different intent. Legacy decisions
 without recorded provenance omit these fields rather than inventing attribution.
+
+When a proposal replaces an awaiting decision, the create/propose response
+includes `supersedes` (the replaced decision ID), `supersedes_proposed_by`, and
+`supersedes_origin_kind`. These fields persist on the replacement for retries and
+later reads; unknown legacy attribution is omitted. Clients should tell the
+reader whose earlier proposal was replaced, including when a human drag replaces
+a PM turn proposal.
+
+A human rejection records `declined`, without creating an action. `superseded`
+is reserved for proposals replaced by another decision. Reads project legacy
+`superseded` rows without `superseded_by` as `declined` without rewriting them.
+Identical rejection retries remain idempotent for both formats; a declined
+decision cannot be approved or dispatched.
 
 Every work response exposes read-only `decision_revision`. Clients must copy it
 verbatim into proposal `target_revision`. It is the nonempty `source.revision`
@@ -349,6 +371,6 @@ revocations. No authorization result is cached.
 
 Answering or dispatching a superseded decision returns 409 `conflict` with
 `error.details.status: superseded` and `error.details.superseded_by` (the
-replacement ID, or empty when there is no replacement). This also covers a
+replacement ID). This also covers a
 supersession racing the answer CAS. An identical replay of a rejection remains
 idempotent. Clients can link the replacement directly from the conflict response.
