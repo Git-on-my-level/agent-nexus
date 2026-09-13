@@ -441,23 +441,43 @@ func (s *Store) ensureWorkMetadata(ctx context.Context, id, actor string) error 
 	_, err := s.db.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,'nexus','{"source":{"authority":"nexus"}}',0,?,?) ON CONFLICT(card_id) DO NOTHING`, id, time.Now().UTC().Format(time.RFC3339Nano), actor)
 	return err
 }
+
+// WorkAnnotationKeys returns the keys writable through local work annotations.
+func WorkAnnotationKeys() []string {
+	return []string{"project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions"}
+}
+
+// ValidateWorkAnnotations is shared by proposal validation and canonical writes.
+func ValidateWorkAnnotations(patch map[string]any) error {
+	allowed := WorkAnnotationKeys()
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, key := range allowed {
+		allowedSet[key] = true
+	}
+	invalid := []string{}
+	for key := range patch {
+		if !allowedSet[key] {
+			invalid = append(invalid, key)
+		}
+	}
+	sort.Strings(invalid)
+	if len(invalid) > 0 {
+		return workInvalid("annotation keys %s are not allowed; allowed keys: %s", strings.Join(invalid, ", "), strings.Join(allowed, ", "))
+	}
+	if len(patch) == 0 {
+		return workInvalid("annotation patch required; allowed keys: %s", strings.Join(allowed, ", "))
+	}
+	if err := validateWorkLocal(patch); err != nil {
+		return fmt.Errorf("%w; allowed keys: %s", err, strings.Join(allowed, ", "))
+	}
+	return nil
+}
+
 func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version int64, patch map[string]any) (map[string]any, error) {
 	if actor == "" {
 		return nil, workInvalid("actor required")
 	}
-	if len(patch) == 0 {
-		return nil, workInvalid("patch required")
-	}
-	allowed := map[string]bool{}
-	for _, key := range []string{"project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions"} {
-		allowed[key] = true
-	}
-	for key := range patch {
-		if !allowed[key] {
-			return nil, workInvalid("%s is source-owned; use native card APIs or authorized source action", key)
-		}
-	}
-	if err := validateWorkLocal(patch); err != nil {
+	if err := ValidateWorkAnnotations(patch); err != nil {
 		return nil, err
 	}
 	patch = workClone(patch)
@@ -939,8 +959,9 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 }
 
 // WorkDecisionRevision is the proposal and dispatch fence for a projected work
-// record. Work version changes only for canonical mutations, never observation
-// or refresh bookkeeping. Successful external reads supply the source revision.
+// record. Native fences compose metadata version and card head revision, so
+// metadata and content edits both invalidate approvals. Observation and refresh
+// bookkeeping do not. Successful external reads supply the source revision.
 func WorkDecisionRevision(w map[string]any) string {
 	source := workMap(w["source"])
 	if authority := workString(source["authority"]); authority != "" && authority != "nexus" {
@@ -949,5 +970,6 @@ func WorkDecisionRevision(w map[string]any) string {
 		}
 	}
 	version, _ := workInt(w["version"])
-	return strconv.FormatInt(version, 10)
+	head, _ := workInt(w["head_revision_number"])
+	return strconv.FormatInt(version, 10) + "." + strconv.FormatInt(head, 10)
 }

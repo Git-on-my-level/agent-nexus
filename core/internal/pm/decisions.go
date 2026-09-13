@@ -2,10 +2,14 @@ package pm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
+
+	"agent-nexus-core/internal/primitives"
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
@@ -18,8 +22,8 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 	if !validText(in.RequestKey, 256) || !validText(in.WorkRef, 512) || !validText(in.Instruction, 16000) || !validText(in.Scope, 256) || !validText(in.TargetRevision, 512) {
 		return Decision{}, ErrInvalid
 	}
-	if !validActionPayload(in.Scope, in.Payload) {
-		return Decision{}, fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
+	if err := validateAction(in.Scope, in.Instruction, in.Payload); err != nil {
+		return Decision{}, err
 	}
 	if err := s.validateResolution(ctx, p, in.Scope, in.Payload); err != nil {
 		return Decision{}, err
@@ -99,8 +103,10 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if d.Status == Superseded && d.SupersededBy != "" {
 		return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
 	}
-	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
-		return Decision{}, fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
+	if in.Approve {
+		if err := validateAction(d.Scope, d.Instruction, d.Payload); err != nil {
+			return Decision{}, err
+		}
 	}
 	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Declined)) {
 		if in.Approve {
@@ -207,8 +213,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if a.Status != Pending {
 		return a, nil
 	} // Includes unknown/sending after crash: NEVER blindly resend.
-	if !validActionPayload(a.Scope, a.Payload) {
-		return s.failBeforeSend(ctx, a, invalidActionPayloadMessage+" This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed.")
+	if err := validateAction(a.Scope, a.Instruction, a.Payload); err != nil {
+		return s.failBeforeSend(ctx, a, strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": ")+" This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed.")
 	}
 	if err = s.validateResolution(ctx, p, a.Scope, a.Payload); err != nil {
 		return s.failBeforeSend(ctx, a, err.Error())
@@ -474,6 +480,22 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 	}
 	in.Origin = c.Origin
 	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID, leaseToken)
+}
+
+func validateAction(scope, instruction string, payload *ActionPayload) error {
+	if scope == "work.annotate" {
+		var patch map[string]any
+		if err := json.Unmarshal([]byte(instruction), &patch); err != nil {
+			return fmt.Errorf("%w: work.annotate instruction must be a JSON object; allowed keys: %s", ErrInvalid, strings.Join(primitives.WorkAnnotationKeys(), ", "))
+		}
+		if err := primitives.ValidateWorkAnnotations(patch); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalid, err)
+		}
+	}
+	if !validActionPayload(scope, payload) {
+		return fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
+	}
+	return nil
 }
 
 const invalidActionPayloadMessage = "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done."

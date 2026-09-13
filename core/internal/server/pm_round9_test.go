@@ -73,7 +73,7 @@ func TestRound9NativeDispatchCanonicalVerification(t *testing.T) {
 					t.Fatal(err)
 				}
 				p := pm.Principal{WorkspaceID: "ws_main", ActorID: "actor", Human: true}
-				d, err := s.ProposeDecision(ctx, p, pm.DecisionInput{RequestKey: "r9", WorkRef: asString(work["ref"]), Scope: scope, Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}, TargetRevision: "1"})
+				d, err := s.ProposeDecision(ctx, p, pm.DecisionInput{RequestKey: "r9", WorkRef: asString(work["ref"]), Scope: scope, Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}, TargetRevision: "1.1"})
 				if err != nil {
 					t.Fatal(err)
 				}

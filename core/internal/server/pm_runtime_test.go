@@ -46,7 +46,7 @@ func TestPMRuntimeNativeDecisionAuthorizationAndReadback(t *testing.T) {
 		}
 		return out
 	}
-	d := post("/pm/decisions", map[string]any{"request_key": "decision", "work_ref": work["ref"], "instruction": `{"next_action":"Review acceptance evidence"}`, "scope": "work.annotate", "target_revision": "1"}, 201)
+	d := post("/pm/decisions", map[string]any{"request_key": "decision", "work_ref": work["ref"], "instruction": `{"next_action":"Review acceptance evidence"}`, "scope": "work.annotate", "target_revision": "1.1"}, 201)
 	answer := post("/pm/decisions/"+asString(d["id"])+"/answer", map[string]any{"revision": 1, "approve": true, "text": "Approved exact annotation"}, 200)
 	if answer["status"] != "answered" {
 		t.Fatal(answer)
@@ -299,7 +299,7 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 			}
 			revision := "r1"
 			if authority == "nexus" {
-				revision = "1"
+				revision = "1.1"
 			}
 			input := pm.DecisionInput{RequestKey: authority, WorkRef: asString(w["ref"]), Instruction: "Prose is not the target", Scope: "work.phase", TargetRevision: revision, Payload: &pm.ActionPayload{Phase: "ready"}}
 			agent := pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}
@@ -356,7 +356,7 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 				t.Fatalf("readback: %+v %v", a, err)
 			}
 			// The executor's transaction rejects a revision changed since authorization.
-			if _, err = executeWorkPhase(ctx, store, pm.Action{ActorID: p.ActorID, WorkRef: input.WorkRef, Scope: "work.phase", TargetRevision: "1", Payload: &pm.ActionPayload{Phase: "review"}}); !errors.Is(err, pm.ErrStale) {
+			if _, err = executeWorkPhase(ctx, store, pm.Action{ActorID: p.ActorID, WorkRef: input.WorkRef, Scope: "work.phase", TargetRevision: "1.1", Payload: &pm.ActionPayload{Phase: "review"}}); !errors.Is(err, pm.ErrStale) {
 				t.Fatalf("stale execute %v", err)
 			}
 			input.RequestKey = "stale"
@@ -456,7 +456,7 @@ func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
 	}
 	humanP := pm.Principal{WorkspaceID: "ws_main", ActorID: human.ActorID, Human: true}
 	agent := pm.Principal{WorkspaceID: "ws_main", ActorID: machine.ActorID}
-	input := pm.DecisionInput{RequestKey: "proposal", WorkRef: asString(work["ref"]), Scope: "work.phase", Instruction: "Move", Payload: &pm.ActionPayload{Phase: "ready"}, TargetRevision: "1"}
+	input := pm.DecisionInput{RequestKey: "proposal", WorkRef: asString(work["ref"]), Scope: "work.phase", Instruction: "Move", Payload: &pm.ActionPayload{Phase: "ready"}, TargetRevision: "1.1"}
 	for _, owner := range []pm.Principal{humanP, agent} {
 		c, err := rt.Service.CreateConversation(ctx, owner, pm.CreateConversation{RequestKey: owner.ActorID, Title: "Question"})
 		if err != nil {

@@ -202,7 +202,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `pm`
 
-- Commands: `23`
+- Commands: `24`
 - Command IDs:
   - `pm.actions.acknowledge` (`pm actions acknowledge`)
   - `pm.actions.get` (`pm actions get`)
@@ -226,6 +226,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.decisions.create` (`pm turns decisions create`)
   - `pm.turns.fail` (`pm turns fail`)
   - `pm.turns.get` (`pm turns get`)
+  - `pm.turns.heartbeat` (`pm turns heartbeat`)
   - `pm.turns.release` (`pm turns release`)
 
 ## `ref-edges`

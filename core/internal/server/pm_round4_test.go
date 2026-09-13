@@ -26,7 +26,7 @@ func TestRound4WorkDecisionRevisionAndContextPagination(t *testing.T) {
 	}
 	for i := 0; i < 60; i++ {
 		source := map[string]any{"authority": "nexus", "revision": "ignore-native-source"}
-		want := "1"
+		want := "1.1"
 		if i%3 != 0 {
 			source = map[string]any{"authority": "github", "connection_id": "fixture", "native_id": fmt.Sprint(i)}
 			if i%3 == 1 {
@@ -48,8 +48,8 @@ func TestRound4WorkDecisionRevisionAndContextPagination(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want == "1" {
-			want = "2"
+		if want == "1.1" {
+			want = "2.1"
 		}
 		revision, err = currentWorkDecisionRevision(ctx, store, ref)
 		if err != nil || revision != want || publicWork(w)["decision_revision"] != want {
@@ -175,7 +175,7 @@ func TestRound4PrincipalIdentityCacheFreshAuthority(t *testing.T) {
 
 func TestRound4RevisionIgnoresFreshnessAndInjectedProjection(t *testing.T) {
 	w := map[string]any{"source": map[string]any{"authority": "github"}, "freshness": map[string]any{"source_revision": "stale"}, "version": int64(7), "decision_revision": "forged"}
-	if publicWork(w)["decision_revision"] != "7" {
+	if publicWork(w)["decision_revision"] != "7.0" {
 		t.Fatal(publicWork(w))
 	}
 	w["source"].(map[string]any)["revision"] = " opaque revision "

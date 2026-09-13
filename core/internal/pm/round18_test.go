@@ -104,6 +104,9 @@ func TestRound18HumanPriorityScopeAndChannel(t *testing.T) {
 				ctx := context.Background()
 				input := func(key, scope string) DecisionInput {
 					in := DecisionInput{RequestKey: key, WorkRef: "work:1", Scope: scope, Instruction: key, TargetRevision: "r1"}
+					if scope == "work.annotate" {
+						in.Instruction = fmt.Sprintf(`{"next_action":%q}`, key)
+					}
 					if scope == "work.phase" {
 						in.Payload = &ActionPayload{Phase: "blocked"}
 					}
@@ -166,6 +169,9 @@ func TestRound18HumanPriorityScopeAndChannel(t *testing.T) {
 				if channel {
 					// A human using the channel can still replace their pending proposal.
 					in.RequestKey, in.Instruction = "human-replacement", "Updated request"
+					if scope == "work.annotate" {
+						in.Instruction = `{"next_action":"updated request"}`
+					}
 					var replacement Decision
 					if err := json.Unmarshal(round13Post(t, s, p, "/pm/decisions", in, 201), &replacement); err != nil {
 						t.Fatal(err)

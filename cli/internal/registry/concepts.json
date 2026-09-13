@@ -2885,7 +2885,7 @@
     },
     {
       "name": "cards",
-      "command_count": 48,
+      "command_count": 49,
       "command_ids": [
         "boards.cards.batch_add",
         "boards.cards.get",
@@ -2925,6 +2925,7 @@
         "pm.turns.decisions.create",
         "pm.turns.fail",
         "pm.turns.get",
+        "pm.turns.heartbeat",
         "pm.turns.release",
         "work.capabilities",
         "work.create",
@@ -4116,6 +4117,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsAcknowledge",
@@ -4178,6 +4180,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsGet",
@@ -4238,6 +4241,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsList",
@@ -4301,6 +4305,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsReconcile",
@@ -4416,6 +4421,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmBindingsCreate",
@@ -4475,6 +4481,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmBindingsList",
@@ -4534,6 +4541,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmContext",
@@ -4611,6 +4619,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsCreate",
@@ -4673,6 +4682,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsGet",
@@ -4733,6 +4743,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsList",
@@ -4807,6 +4818,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsMessagesCreate",
@@ -4886,6 +4898,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsAnswer",
@@ -4899,7 +4912,7 @@
           "path": "/pm/decisions",
           "operation_id": "pmDecisionsCreate",
           "summary": "Propose a scoped PM decision",
-          "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization.",
+          "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Keys and value shapes are validated before proposal insertion; invalid keys or shapes return 400 invalid_request naming the offending keys and the allowed set.",
           "why": "Propose a scoped PM decision.",
           "input_mode": "json-body",
           "streaming": {
@@ -4989,6 +5002,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsCreate",
@@ -5052,6 +5066,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsDispatch",
@@ -5114,6 +5129,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsGet",
@@ -5174,6 +5190,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsList",
@@ -5187,7 +5204,7 @@
           "path": "/pm/turns/claim",
           "operation_id": "pmTurnsClaim",
           "summary": "Claim or recover a PM turn with an exclusive runner lease",
-          "description": "New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is \"Workspace PM capacity reached (N in flight; limit M)\". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
+          "description": "New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is \"Workspace PM capacity reached (N in flight; limit M)\". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Leases last ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Runners must POST heartbeat with the token at a cadence strictly less than TTL/2. Expired leases are reclaimable with a fresh token until the turn deadline; the same open turn becomes unclaimed and waiting again, preserving its history rather than failing. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
           "why": "Claim one queued turn for the selected PM agent so two runners never answer it.",
           "input_mode": "json-body",
           "streaming": {
@@ -5211,7 +5228,7 @@
           ],
           "stability": "beta",
           "surface": "canonical",
-          "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.",
+          "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.",
           "body_schema": {
             "optional": [
               {
@@ -5242,6 +5259,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsClaim",
@@ -5325,6 +5343,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsComplete",
@@ -5412,6 +5431,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsContext",
@@ -5425,7 +5445,7 @@
           "path": "/pm/turns/{turn_id}/decisions",
           "operation_id": "pmTurnsDecisionsCreate",
           "summary": "Record a selected PM agent proposal",
-          "description": "Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
+          "description": "For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Keys and value shapes are validated before proposal insertion; invalid keys or shapes return 400 invalid_request naming the offending keys and the allowed set. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
           "why": "Record a selected PM agent proposal.",
           "input_mode": "json-body",
           "streaming": {
@@ -5524,6 +5544,7 @@
             "pm.turns.context",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsDecisionsCreate",
@@ -5600,6 +5621,7 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsFail",
@@ -5663,10 +5685,85 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.fail",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsGet",
           "ts_method": "pmTurnsGet"
+        },
+        {
+          "command_id": "pm.turns.heartbeat",
+          "cli_path": "pm turns heartbeat",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/heartbeat",
+          "operation_id": "pmTurnsHeartbeat",
+          "summary": "Renew a claimed PM turn lease",
+          "description": "Selected PM actor only. Requires the current lease_token. Extends lease_expires_at to min(now + ANX_PM_LEASE_TTL, turn deadline). ANX_PM_LEASE_TTL defaults to 60s (valid range 1s to 10m); runners must renew at a cadence strictly less than TTL/2. Missing tokens return 409 lease_required; expired, released, or foreign tokens return 409 lease_mismatch. Terminal turns return 409 turn_closed. Returns PMHeartbeatTurn without exposing the token; preserves status, claimed_at, and existing history.",
+          "why": "Keep an active runner lease alive during execution.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMHeartbeatTurn`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "lease_mismatch",
+            "lease_required",
+            "turn_closed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "lease_token",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.acknowledge",
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.bindings.list",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.claim",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create",
+            "pm.turns.fail",
+            "pm.turns.get",
+            "pm.turns.release"
+          ],
+          "go_method": "PmTurnsHeartbeat",
+          "ts_method": "pmTurnsHeartbeat"
         },
         {
           "command_id": "pm.turns.release",
@@ -5740,7 +5837,8 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.fail",
-            "pm.turns.get"
+            "pm.turns.get",
+            "pm.turns.heartbeat"
           ],
           "go_method": "PmTurnsRelease",
           "ts_method": "pmTurnsRelease"
@@ -9023,7 +9121,7 @@
     },
     {
       "name": "evidence",
-      "command_count": 32,
+      "command_count": 33,
       "command_ids": [
         "pm.actions.acknowledge",
         "pm.actions.get",
@@ -9047,6 +9145,7 @@
         "pm.turns.decisions.create",
         "pm.turns.fail",
         "pm.turns.get",
+        "pm.turns.heartbeat",
         "pm.turns.release",
         "work.capabilities",
         "work.create",
@@ -9117,6 +9216,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsAcknowledge",
@@ -9179,6 +9279,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsGet",
@@ -9239,6 +9340,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsList",
@@ -9302,6 +9404,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmActionsReconcile",
@@ -9417,6 +9520,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmBindingsCreate",
@@ -9476,6 +9580,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmBindingsList",
@@ -9535,6 +9640,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmContext",
@@ -9612,6 +9718,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsCreate",
@@ -9674,6 +9781,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsGet",
@@ -9734,6 +9842,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsList",
@@ -9808,6 +9917,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmConversationsMessagesCreate",
@@ -9887,6 +9997,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsAnswer",
@@ -9900,7 +10011,7 @@
           "path": "/pm/decisions",
           "operation_id": "pmDecisionsCreate",
           "summary": "Propose a scoped PM decision",
-          "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization.",
+          "description": "Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Keys and value shapes are validated before proposal insertion; invalid keys or shapes return 400 invalid_request naming the offending keys and the allowed set.",
           "why": "Propose a scoped PM decision.",
           "input_mode": "json-body",
           "streaming": {
@@ -9990,6 +10101,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsCreate",
@@ -10053,6 +10165,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsDispatch",
@@ -10115,6 +10228,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsGet",
@@ -10175,6 +10289,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmDecisionsList",
@@ -10188,7 +10303,7 @@
           "path": "/pm/turns/claim",
           "operation_id": "pmTurnsClaim",
           "summary": "Claim or recover a PM turn with an exclusive runner lease",
-          "description": "New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is \"Workspace PM capacity reached (N in flight; limit M)\". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
+          "description": "New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is \"Workspace PM capacity reached (N in flight; limit M)\". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Leases last ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Runners must POST heartbeat with the token at a cadence strictly less than TTL/2. Expired leases are reclaimable with a fresh token until the turn deadline; the same open turn becomes unclaimed and waiting again, preserving its history rather than failing. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
           "why": "Claim one queued turn for the selected PM agent so two runners never answer it.",
           "input_mode": "json-body",
           "streaming": {
@@ -10212,7 +10327,7 @@
           ],
           "stability": "beta",
           "surface": "canonical",
-          "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.",
+          "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.",
           "body_schema": {
             "optional": [
               {
@@ -10243,6 +10358,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsClaim",
@@ -10326,6 +10442,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsComplete",
@@ -10413,6 +10530,7 @@
             "pm.turns.decisions.create",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsContext",
@@ -10426,7 +10544,7 @@
           "path": "/pm/turns/{turn_id}/decisions",
           "operation_id": "pmTurnsDecisionsCreate",
           "summary": "Record a selected PM agent proposal",
-          "description": "Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
+          "description": "For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Keys and value shapes are validated before proposal insertion; invalid keys or shapes return 400 invalid_request naming the offending keys and the allowed set. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
           "why": "Record a selected PM agent proposal.",
           "input_mode": "json-body",
           "streaming": {
@@ -10525,6 +10643,7 @@
             "pm.turns.context",
             "pm.turns.fail",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsDecisionsCreate",
@@ -10601,6 +10720,7 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.get",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsFail",
@@ -10664,10 +10784,85 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.fail",
+            "pm.turns.heartbeat",
             "pm.turns.release"
           ],
           "go_method": "PmTurnsGet",
           "ts_method": "pmTurnsGet"
+        },
+        {
+          "command_id": "pm.turns.heartbeat",
+          "cli_path": "pm turns heartbeat",
+          "group": "pm",
+          "method": "POST",
+          "path": "/pm/turns/{turn_id}/heartbeat",
+          "operation_id": "pmTurnsHeartbeat",
+          "summary": "Renew a claimed PM turn lease",
+          "description": "Selected PM actor only. Requires the current lease_token. Extends lease_expires_at to min(now + ANX_PM_LEASE_TTL, turn deadline). ANX_PM_LEASE_TTL defaults to 60s (valid range 1s to 10m); runners must renew at a cadence strictly less than TTL/2. Missing tokens return 409 lease_required; expired, released, or foreign tokens return 409 lease_mismatch. Terminal turns return 409 turn_closed. Returns PMHeartbeatTurn without exposing the token; preserves status, claimed_at, and existing history.",
+          "why": "Keep an active runner lease alive during execution.",
+          "input_mode": "json-body",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns `PMHeartbeatTurn`.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "lease_mismatch",
+            "lease_required",
+            "turn_closed",
+            "busy",
+            "unavailable"
+          ],
+          "concepts": [
+            "cards",
+            "evidence"
+          ],
+          "stability": "beta",
+          "surface": "canonical",
+          "agent_notes": "Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.",
+          "body_schema": {
+            "required": [
+              {
+                "name": "lease_token",
+                "type": "string"
+              }
+            ]
+          },
+          "path_params": [
+            "turn_id"
+          ],
+          "adjacent_commands": [
+            "pm.actions.acknowledge",
+            "pm.actions.get",
+            "pm.actions.list",
+            "pm.actions.reconcile",
+            "pm.bindings.create",
+            "pm.bindings.list",
+            "pm.context",
+            "pm.conversations.create",
+            "pm.conversations.get",
+            "pm.conversations.list",
+            "pm.conversations.messages.create",
+            "pm.decisions.answer",
+            "pm.decisions.create",
+            "pm.decisions.dispatch",
+            "pm.decisions.get",
+            "pm.decisions.list",
+            "pm.turns.claim",
+            "pm.turns.complete",
+            "pm.turns.context",
+            "pm.turns.decisions.create",
+            "pm.turns.fail",
+            "pm.turns.get",
+            "pm.turns.release"
+          ],
+          "go_method": "PmTurnsHeartbeat",
+          "ts_method": "pmTurnsHeartbeat"
         },
         {
           "command_id": "pm.turns.release",
@@ -10741,7 +10936,8 @@
             "pm.turns.context",
             "pm.turns.decisions.create",
             "pm.turns.fail",
-            "pm.turns.get"
+            "pm.turns.get",
+            "pm.turns.heartbeat"
           ],
           "go_method": "PmTurnsRelease",
           "ts_method": "pmTurnsRelease"

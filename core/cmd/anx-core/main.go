@@ -485,6 +485,7 @@ func main() {
 			AgentActorID:   pmActorID,
 			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
 			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
+			LeaseTTL:       envDuration("ANX_PM_LEASE_TTL", time.Minute),
 			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
 			MaxConcurrent:  envInt("ANX_PM_MAX_CONCURRENT", 2),
 			MaxQueued:      envInt("ANX_PM_MAX_QUEUED", 20),

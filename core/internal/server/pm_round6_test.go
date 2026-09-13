@@ -52,7 +52,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := pm.DecisionInput{RequestKey: "r6-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{ref}}}
+	input := pm.DecisionInput{RequestKey: "r6-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1.1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{ref}}}
 	call := func(method, path, token string, in any) *httptest.ResponseRecorder {
 		if input, ok := in.(pm.DecisionInput); ok && strings.Contains(path, "/turns/") {
 			in = pm.TurnProposeInput{DecisionInput: input, LeaseToken: claimed.LeaseToken}
@@ -155,7 +155,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	}
 	// The canonical transaction independently rejects vanished evidence even when
 	// the executor is called directly (covering a race after PM's preflight).
-	_, err = executeWorkPhase(ctx, store, pm.Action{ActorID: p.ActorID, WorkRef: input.WorkRef, TargetRevision: "1", Payload: input.Payload})
+	_, err = executeWorkPhase(ctx, store, pm.Action{ActorID: p.ActorID, WorkRef: input.WorkRef, TargetRevision: "1.1", Payload: input.Payload})
 	var native *pm.NativeExecutionError
 	if !errors.As(err, &native) || native.WriteStarted || !strings.Contains(err.Error(), ref) {
 		t.Fatalf("canonical gate: %v", err)

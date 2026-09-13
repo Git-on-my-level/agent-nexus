@@ -370,7 +370,8 @@ func executeNativeAnnotation(ctx context.Context, store nativeMutationStore, a p
 			execErr = &pm.NativeExecutionError{Cause: execErr, WriteStarted: writeCompleted || errors.As(execErr, &uncertain)}
 		}
 	}()
-	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
+	metadataRevision, _, _ := strings.Cut(a.TargetRevision, ".")
+	version, err := strconv.ParseInt(metadataRevision, 10, 64)
 	if err != nil {
 		return pm.Receipt{}, fmt.Errorf("%w: invalid native target revision: %v", pm.ErrInvalid, err)
 	}
@@ -384,6 +385,9 @@ func executeNativeAnnotation(ctx context.Context, store nativeMutationStore, a p
 	}
 	if anyString(workSourceMap(w)["authority"]) != "nexus" {
 		return pm.Receipt{}, pm.ErrForbidden
+	}
+	if primitives.WorkDecisionRevision(w) != a.TargetRevision {
+		return pm.Receipt{}, pm.ErrStale
 	}
 	_, err = store.PatchWork(ctx, a.ActorID, a.WorkRef, version, patch)
 	if err != nil {
@@ -471,9 +475,13 @@ func executeWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Actio
 	if anyString(workSourceMap(w)["authority"]) != "nexus" {
 		return pm.Receipt{}, pm.ErrUnavailable
 	}
-	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
+	metadataRevision, _, _ := strings.Cut(a.TargetRevision, ".")
+	version, err := strconv.ParseInt(metadataRevision, 10, 64)
 	if err != nil {
 		return pm.Receipt{}, fmt.Errorf("%w: invalid native target revision: %v", pm.ErrInvalid, err)
+	}
+	if primitives.WorkDecisionRevision(w) != a.TargetRevision {
+		return pm.Receipt{}, pm.ErrStale
 	}
 	input := primitives.MoveBoardCardInput{ColumnKey: a.Payload.Phase, IfWorkVersion: &version}
 	if len(a.Payload.ResolutionRefs) > 0 {
