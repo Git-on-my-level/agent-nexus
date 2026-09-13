@@ -277,6 +277,8 @@ func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+					io.WriteString(w, `{"items":[],"has_more":false}`)
 				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
 					io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
 				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
@@ -300,6 +302,73 @@ func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
 				t.Fatalf("JSON remapped status: %v", payload["data"])
 			}
 		})
+	}
+}
+
+func TestPMAskReusesRecentEmptyConversation(t *testing.T) {
+	created := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
+	var mu sync.Mutex
+	creates := 0
+	messages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+			fmt.Fprintf(w, `{"items":[{"id":"conv-empty","title":"Earlier","created_at":%q}],"has_more":false}`, created)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-empty":
+			io.WriteString(w, `{"conversation":{"id":"conv-empty"},"turns":[]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+			mu.Lock()
+			creates++
+			mu.Unlock()
+			t.Errorf("created a second conversation")
+			io.WriteString(w, `{"id":"conv-new"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-empty/messages":
+			mu.Lock()
+			messages++
+			mu.Unlock()
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "ask", "Retry into the empty conversation"})
+	if !strings.Contains(text, "conversation: conv-empty") {
+		t.Fatalf("text=%s", text)
+	}
+	mu.Lock()
+	gotCreates, gotMessages := creates, messages
+	mu.Unlock()
+	if gotCreates != 0 {
+		t.Fatalf("creates=%d", gotCreates)
+	}
+	if gotMessages != 1 {
+		t.Fatalf("messages=%d", gotMessages)
+	}
+}
+
+func TestPMAskDoesNotReuseStaleOrNonEmptyConversation(t *testing.T) {
+	stale := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+			fmt.Fprintf(w, `{"items":[{"id":"conv-old","title":"Old","created_at":%q}],"has_more":false}`, stale)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+			io.WriteString(w, `{"id":"conv-new","title":"What needs my decision?"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-new/messages":
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "ask", "Need a new conversation"})
+	if !strings.Contains(text, "conversation: conv-new") {
+		t.Fatalf("text=%s", text)
 	}
 }
 
@@ -2352,5 +2421,157 @@ func TestPMServeSkipWindowDoesNotChurnClaimRelease(t *testing.T) {
 	}
 	if strings.Contains(logs, "after undeliverable terminal call") {
 		t.Fatalf("skip release used the old undeliverable reason: %s", logs)
+	}
+}
+
+func TestPMServeCapacityClaimSleepsWithoutError(t *testing.T) {
+	frozen := time.Date(2026, 9, 13, 18, 0, 0, 0, time.UTC)
+	prevNow := nowFn
+	nowFn = func() time.Time { return frozen }
+	t.Cleanup(func() { nowFn = prevNow })
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{
+			name:   "200 claimed false",
+			status: http.StatusOK,
+			body:   `{"claimed":false,"reason":"capacity","in_flight":2,"limit":2,"waiting":5}`,
+		},
+		{
+			name:   "429 busy capacity",
+			status: http.StatusTooManyRequests,
+			body:   `{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"capacity","in_flight":2,"limit":2,"waiting":5}}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/claim" {
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, tc.body)
+			}))
+			t.Cleanup(srv.Close)
+			stderr := &lockedBuffer{}
+			app := New()
+			app.Stderr = stderr
+			app.Stdout = io.Discard
+			app.Getenv = func(string) string { return "" }
+			app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			polls := 0
+			prevSleep := sleepFn
+			sleepFn = func(ctx context.Context, _ time.Duration) error {
+				if ctx != nil && ctx.Err() != nil {
+					return ctx.Err()
+				}
+				polls++
+				if polls >= 8 {
+					cancel()
+					return context.Canceled
+				}
+				return nil
+			}
+			t.Cleanup(func() { sleepFn = prevSleep })
+			_, err := app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"})
+			if err != nil {
+				t.Fatalf("capacity should not error, got %v", err)
+			}
+			logs := stderr.String()
+			if strings.Contains(logs, "claim failed") {
+				t.Fatalf("capacity logged as claim failure: %s", logs)
+			}
+			if strings.Count(logs, "No lease available: 2 of 2 runner leases are held; 5 turn(s) are waiting.") != 1 {
+				t.Fatalf("expected one capacity log per minute, got %s", logs)
+			}
+		})
+	}
+}
+
+func TestHandleClaimedTurnGiveUpWithoutSavedReplyFailsTurn(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	for i := 0; i < maxHarnessRunsPerTurn; i++ {
+		harness.app.turnMem().noteHarnessRun("turn-1")
+	}
+	settled := harness.app.handleClaimedTurn(context.Background(), nil, harness.cfg, t.TempDir(), "", []string{"/bin/true", "{prompt}"}, nil, claimedTurn(), nil)
+	if !settled {
+		t.Fatal("expected give-up to settle")
+	}
+	if len(posts.complete) != 0 {
+		t.Fatalf("complete=%v", posts.complete)
+	}
+	if len(posts.fail) != 1 || posts.fail[0] != harnessGiveUpReason {
+		t.Fatalf("fail %v want %q", posts.fail, harnessGiveUpReason)
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "failing the turn") {
+		t.Fatalf("missing technical give-up log: %s", logs)
+	}
+	if strings.Contains(logs, "stays claimable for another runner") {
+		t.Fatalf("no-reply give-up used saved-reply wording: %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnGiveUpWithSavedReplyHoldsUntilDeadline(t *testing.T) {
+	stubTerminalSleep(t)
+	completeCalls := 0
+	released := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			t.Errorf("saved reply must not fail the turn: %s", r.URL.Path)
+			http.NotFound(w, r)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			released++
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	dir := t.TempDir()
+	if err := os.WriteFile(turnReplyPath(dir, "turn-1"), []byte("Saved reply.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxHarnessRunsPerTurn; i++ {
+		app.turnMem().noteHarnessRun("turn-1")
+	}
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/true", "{prompt}"}, nil, claimedTurn(), nil) {
+		t.Fatal("expected settled after saved-reply give-up")
+	}
+	if completeCalls != 1+len(terminalRetryDelays) {
+		t.Fatalf("complete calls=%d", completeCalls)
+	}
+	if released != 1 {
+		t.Fatalf("released=%d", released)
+	}
+	if !app.turnMem().claimsHeld() {
+		t.Fatal("expected claims held until turn deadline")
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "stays claimable for another runner") {
+		t.Fatalf("missing saved-reply give-up log: %s", logs)
+	}
+	if strings.Contains(logs, "failing the turn") {
+		t.Fatalf("saved reply used fail wording: %s", logs)
 	}
 }

@@ -130,10 +130,15 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	code := strings.TrimSpace(e.Code)
 	switch commandID {
 	case "pm.conversations.message", "pm.conversations.messages.create", "pm.ask":
+		var hint string
+		var recovery map[string]any
 		if code == "busy" {
-			return enrichPMBusy(e)
+			hint, recovery = enrichPMBusy(e)
 		}
-		return "", nil
+		if commandID == "pm.ask" {
+			hint, recovery = enrichPMAskConversation(e, hint, recovery)
+		}
+		return hint, recovery
 	case "pm.turns.decisions.create":
 		if code == "human_proposal_pending" {
 			return enrichHumanProposalPending(e)
@@ -241,12 +246,21 @@ func enrichStaleSourceRevision(commandID string, e *Error) (string, map[string]a
 	again := staleProposeAgain(origin)
 	switch reason {
 	case "work_missing":
-		rec["refresh_cli"] = "anx pm actions acknowledge <id>"
+		actionID := lookupErrorDetail(e, "action_id")
+		if actionID == "" {
+			actionID = "<id>"
+		}
+		ackCLI := "anx pm actions acknowledge " + actionID
+		rec["refresh_cli"] = ackCLI
+		if actionAlreadyAcknowledged(e, commandID) {
+			rec["refresh_cli"] = "anx pm actions get " + actionID
+			return "This action is already acknowledged; nothing further is needed.", rec
+		}
 		task := "this approval"
 		if reconcile {
 			task = "this read-back"
 		}
-		return "The task " + task + " refers to no longer exists; nothing was sent. Acknowledge the failed action with `anx pm actions acknowledge <id>`.", rec
+		return "The task " + task + " refers to no longer exists; nothing was sent. Acknowledge the failed action with `" + ackCLI + "`.", rec
 	case "already_at_target":
 		what := "deliver"
 		if reconcile {
@@ -364,6 +378,40 @@ func enrichHumanProposalPending(e *Error) (string, map[string]any) {
 	return proposal + " is already waiting on this task. It must be answered or declined before the PM can propose something different; an identical proposal is accepted as the same decision.", rec
 }
 
+func enrichPMAskConversation(e *Error, hint string, recovery map[string]any) (string, map[string]any) {
+	convID := lookupErrorDetail(e, "conversation_id")
+	if convID == "" {
+		return hint, recovery
+	}
+	retry := fmt.Sprintf("Conversation %s: the message was not sent and can be retried into that conversation with `anx pm conversations message %s ...`.", convID, convID)
+	if strings.TrimSpace(hint) != "" {
+		hint = retry + " " + hint
+	} else {
+		hint = retry
+	}
+	if recovery == nil {
+		recovery = map[string]any{}
+	}
+	recovery["conversation_id"] = convID
+	if _, ok := recovery["refresh_cli"]; !ok {
+		recovery["refresh_cli"] = "anx pm conversations message " + convID
+	}
+	return hint, recovery
+}
+
+func actionAlreadyAcknowledged(e *Error, commandID string) bool {
+	if strings.EqualFold(lookupErrorDetail(e, "status"), "acknowledged") {
+		return true
+	}
+	if lookupErrorDetail(e, "acknowledged_at") != "" {
+		return true
+	}
+	if commandID != "pm.actions.reconcile" || e == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(e.Message), "already acknowledged")
+}
+
 func lookupErrorDetail(e *Error, key string) string {
 	if e == nil || strings.TrimSpace(key) == "" {
 		return ""
@@ -372,19 +420,19 @@ func lookupErrorDetail(e *Error, key string) string {
 	parsed, _ := details["parsed"].(map[string]any)
 	errObj, _ := parsed["error"].(map[string]any)
 	nested, _ := errObj["details"].(map[string]any)
-	if value := nestedString(nested, key); value != "" {
-		return value
-	}
-	if value := nestedString(errObj, key); value != "" {
-		return value
-	}
-	if parsedDetails, _ := parsed["details"].(map[string]any); parsedDetails != nil {
-		if value := nestedString(parsedDetails, key); value != "" {
+	parsedDetails, _ := parsed["details"].(map[string]any)
+	roots := []map[string]any{nested, errObj, parsedDetails, parsed}
+	for _, root := range roots {
+		if value := nestedString(root, key); value != "" {
 			return value
 		}
 	}
-	if value := nestedString(parsed, key); value != "" {
-		return value
+	for _, root := range []map[string]any{nested, errObj, parsedDetails, parsed, details} {
+		for _, child := range []string{"decision", "action"} {
+			if value := nestedString(nestedObject(root, child), key); value != "" {
+				return value
+			}
+		}
 	}
 	// FromHTTPFailure stores the HTTP status at details.status; never treat that
 	// integer as API error.details.status.
@@ -392,6 +440,14 @@ func lookupErrorDetail(e *Error, key string) string {
 		return ""
 	}
 	return nestedString(details, key)
+}
+
+func nestedObject(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	typed, _ := m[key].(map[string]any)
+	return typed
 }
 
 func nestedString(m map[string]any, key string) string {

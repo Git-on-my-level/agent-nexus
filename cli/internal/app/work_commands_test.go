@@ -519,6 +519,10 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(claimed, "turn-1") || !strings.Contains(claimed, "status=in progress") || !strings.Contains(claimed, "runner_id=runner-1") || !strings.Contains(claimed, "lease_token=tok-1") {
 		t.Errorf("claim text lost runner/lease: %s", claimed)
 	}
+	capacity := formatWorkCommandText("pm turns claim", map[string]any{"claimed": false, "reason": "capacity", "in_flight": 2, "limit": 2, "waiting": 4})
+	if capacity != "No lease available: 2 of 2 runner leases are held; 4 turn(s) are waiting." {
+		t.Errorf("capacity claim text=%s", capacity)
+	}
 	reconcile := formatWorkCommandText("pm actions reconcile", map[string]any{"id": "action-1", "status": "source_reported", "reconciliation_conflict": true, "receipt": map[string]any{"status": "source_reported", "detail": "read-back mismatch"}})
 	if !strings.Contains(reconcile, "action-1") || !strings.Contains(reconcile, "status=source_reported") || !strings.Contains(reconcile, "receipt=source_reported") || !strings.Contains(reconcile, "read-back mismatch") || !strings.Contains(reconcile, "reconciliation_conflict=true") {
 		t.Errorf("reconcile text lost fields: %s", reconcile)
@@ -766,6 +770,26 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			want:        "not in a state that can be acknowledged",
 			notWant:     "if_updated_at",
 		},
+		{
+			name:        "reconcile work missing uses action id",
+			commandPath: "/pm/actions/action-1/reconcile",
+			errorCode:   "source_revision_changed",
+			details:     `{"reason":"work_missing"}`,
+			body:        `{}`,
+			args:        []string{"pm", "actions", "reconcile", "action-1"},
+			want:        "anx pm actions acknowledge action-1",
+			notWant:     "acknowledge <id>",
+		},
+		{
+			name:        "reconcile work missing already acknowledged",
+			commandPath: "/pm/actions/action-1/reconcile",
+			errorCode:   "source_revision_changed",
+			details:     `{"reason":"work_missing","status":"acknowledged"}`,
+			body:        `{}`,
+			args:        []string{"pm", "actions", "reconcile", "action-1"},
+			want:        "This action is already acknowledged; nothing further is needed.",
+			notWant:     "actions acknowledge",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -989,6 +1013,8 @@ func TestPMAskBusyHints(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+					io.WriteString(w, `{"items":[],"has_more":false}`)
 				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
 					io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
 				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
@@ -1010,6 +1036,9 @@ func TestPMAskBusyHints(t *testing.T) {
 			}
 			if strings.Contains(hint, tc.hide) {
 				t.Fatalf("hint still has %q: %q", tc.hide, hint)
+			}
+			if !strings.Contains(hint, "Conversation conv-1") || !strings.Contains(hint, "anx pm conversations message conv-1") {
+				t.Fatalf("missing conversation retry hint: %q", hint)
 			}
 		})
 	}
@@ -1325,6 +1354,56 @@ func TestPMTurnsClaimJSONEmptyIsEnvelope(t *testing.T) {
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "turns", "claim"})
 	if !strings.Contains(text, "No claimable turn") {
 		t.Fatalf("text=%s", text)
+	}
+}
+
+func TestPMTurnsClaimCapacityShapes(t *testing.T) {
+	wantText := "No lease available: 2 of 2 runner leases are held; 3 turn(s) are waiting."
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{
+			name:   "200 claimed false",
+			status: http.StatusOK,
+			body:   `{"claimed":false,"reason":"capacity","in_flight":2,"limit":2,"waiting":3}`,
+		},
+		{
+			name:   "429 busy capacity",
+			status: http.StatusTooManyRequests,
+			body:   `{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"capacity","in_flight":2,"limit":2,"waiting":3}}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/claim" {
+					t.Errorf("request=%s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "turns", "claim"})
+			if !strings.Contains(text, wantText) {
+				t.Fatalf("text=%s", text)
+			}
+			if strings.Contains(text, "No claimable turn") {
+				t.Fatalf("capacity used empty-claim text: %s", text)
+			}
+			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "claim"}))
+			data := asMap(payload["data"])
+			if data["claimed"] != false {
+				t.Fatalf("claimed=%v payload=%v", data["claimed"], payload)
+			}
+			if anyString(data["reason"]) != "capacity" {
+				t.Fatalf("reason=%v payload=%v", data["reason"], payload)
+			}
+			if intValue(data["in_flight"]) != 2 || intValue(data["limit"]) != 2 || intValue(data["waiting"]) != 3 {
+				t.Fatalf("counts payload=%v", payload)
+			}
+		})
 	}
 }
 

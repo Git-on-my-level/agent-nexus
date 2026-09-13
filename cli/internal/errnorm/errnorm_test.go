@@ -642,6 +642,12 @@ func TestEnrichStaleSourceRevisionHints(t *testing.T) {
 		t.Fatalf("work_missing should not add propose-again advice: %q", dispatchWorkMissing.Hint)
 	}
 
+	dispatchWorkMissingID := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing","decision":{"action_id":"action-9"}}}`))
+	EnrichForCommand(dispatchWorkMissingID, "pm.decisions.dispatch")
+	if dispatchWorkMissingID.Hint != "The task this approval refers to no longer exists; nothing was sent. Acknowledge the failed action with `anx pm actions acknowledge action-9`." {
+		t.Fatalf("dispatch work_missing with action_id hint=%q", dispatchWorkMissingID.Hint)
+	}
+
 	reconcileWorkMissing := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing"}}}`))
 	EnrichForCommand(reconcileWorkMissing, "pm.actions.reconcile")
 	if !strings.Contains(reconcileWorkMissing.Hint, "this read-back refers to no longer exists") || !strings.Contains(reconcileWorkMissing.Hint, "anx pm actions acknowledge") {
@@ -649,6 +655,15 @@ func TestEnrichStaleSourceRevisionHints(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(reconcileWorkMissing.Hint), "approval") {
 		t.Fatalf("reconcile work_missing used approval language: %q", reconcileWorkMissing.Hint)
+	}
+
+	reconcileAcked := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"work_missing","status":"acknowledged","action_id":"action-acked"}}}`))
+	EnrichForCommand(reconcileAcked, "pm.actions.reconcile")
+	if reconcileAcked.Hint != "This action is already acknowledged; nothing further is needed." {
+		t.Fatalf("reconcile acknowledged work_missing hint=%q", reconcileAcked.Hint)
+	}
+	if strings.Contains(reconcileAcked.Hint, "acknowledge action-acked") {
+		t.Fatalf("acknowledged action still advised acknowledge: %q", reconcileAcked.Hint)
 	}
 
 	dispatchRevisionHuman := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"reason":"revision_changed","origin_kind":"human","proposed_by":"actor-maya"}}}`))
