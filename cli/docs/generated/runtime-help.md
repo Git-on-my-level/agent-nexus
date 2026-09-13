@@ -4497,6 +4497,10 @@ Inputs:
   - body `scope` (string)
   - body `target_revision` (string)
   - body `work_ref` (string)
+  Optional:
+  - body `payload.phase` (string)
+  - body `payload.resolution_refs` (list<string>)
+  Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4787,6 +4791,10 @@ Inputs:
   - body `scope` (string)
   - body `target_revision` (string)
   - body `work_ref` (string)
+  Optional:
+  - body `payload.phase` (string)
+  - body `payload.resolution_refs` (list<string>)
+  Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
