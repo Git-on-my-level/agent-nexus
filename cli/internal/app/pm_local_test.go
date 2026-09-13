@@ -1,12 +1,18 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-cli/internal/config"
 )
@@ -168,4 +174,307 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func TestContinuingAgentctlLaunchAndHumanFailures(t *testing.T) {
+	timeoutJSON := []byte(`{"ok":false,"schema_version":1,"error":{"code":"timeout","message":"background worker did not acknowledge durable startup before the deadline and may continue","retryable":true,"exit_code":9,"details":{"execution_id":"exec-shift-siren-during-animal-zone-opera","timeout":"30s","worker_continues":true},"next_actions":[]},"warnings":[]}`)
+	id, timeout, ok := continuingAgentctlLaunch(timeoutJSON)
+	if !ok || id != "exec-shift-siren-during-animal-zone-opera" || timeout != "30s" {
+		t.Fatalf("continuing launch %q %q %v", id, timeout, ok)
+	}
+	if _, _, ok := continuingAgentctlLaunch([]byte(`{"ok":false,"error":{"code":"crash","details":{"execution_id":"exec-x"}}}`)); ok {
+		t.Fatal("non-retryable launch treated as continuing")
+	}
+	retryOnly := []byte(`{"ok":false,"error":{"retryable":true,"details":{"execution_id":"exec-retry-only"}}}`)
+	id, _, ok = continuingAgentctlLaunch(retryOnly)
+	if !ok || id != "exec-retry-only" {
+		t.Fatalf("retryable launch %q %v", id, ok)
+	}
+	if got := humanTurnFailure("startup_timeout", "30s"); got != "The PM harness did not start within 30 seconds. Retry, or check the runner log." {
+		t.Fatalf("startup timeout %q", got)
+	}
+	if got := humanTurnFailure("await_failed", ""); !strings.Contains(got, "did not finish") || strings.Contains(got, "{") {
+		t.Fatalf("await %q", got)
+	}
+	if got := humanTurnFailure("no_assistant", ""); !strings.Contains(got, "without a reply") {
+		t.Fatalf("assistant %q", got)
+	}
+	if got := humanTurnFailure("deadline", ""); !strings.Contains(got, "deadline passed") {
+		t.Fatalf("deadline %q", got)
+	}
+	if !agentctlNotFound([]byte(`{"ok":false,"error":{"code":"not_found","message":"execution not found"}}`), fmt.Errorf("exit status 1")) {
+		t.Fatal("expected not found")
+	}
+	if agentctlExecutionVisible([]byte(`{"ok":false,"error":{"code":"not_found"}}`), fmt.Errorf("exit status 1")) {
+		t.Fatal("not found looked visible")
+	}
+	if !agentctlExecutionVisible([]byte(`{"ok":true,"id":"exec-visible"}`), nil) {
+		t.Fatal("expected visible")
+	}
+}
+
+func TestHandleClaimedTurnRecoversExit9StartupAck(t *testing.T) {
+	execID := "exec-shift-siren-during-animal-zone-opera"
+	timeoutJSON := `{"ok":false,"schema_version":1,"error":{"code":"timeout","message":"background worker did not acknowledge durable startup before the deadline and may continue","retryable":true,"exit_code":9,"details":{"execution_id":"` + execID + `","timeout":"30s","worker_continues":true},"next_actions":[]},"warnings":[]}`
+	var cmds []string
+	restore := stubAgentctl(t, func(_ context.Context, _ string, args []string, _ string, _ []string) ([]byte, error) {
+		cmds = append(cmds, strings.Join(args, " "))
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(timeoutJSON), fmt.Errorf("exit status 9")
+		case len(args) > 0 && args[0] == "await":
+			if strings.Join(args, " ") != "await "+execID+" --through-execution-deadline --ignore-attention" {
+				t.Fatalf("await argv %v", args)
+			}
+			return []byte(`{"ok":true,"id":"` + execID + `"}`), nil
+		case len(args) > 1 && args[0] == "result" && args[len(args)-1] == "--content":
+			return []byte("Approve the restock."), nil
+		case len(args) > 0 && args[0] == "result":
+			return []byte(`{"provider":"zai","model":"glm-5.3"}`), nil
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp", "-p"}, nil, claimedTurn())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts.fail) != 0 {
+		t.Fatalf("failTurn called: %v", posts.fail)
+	}
+	if len(posts.complete) != 1 || !strings.Contains(posts.complete[0], "Approve the restock.") {
+		t.Fatalf("complete %v", posts.complete)
+	}
+	if strings.Contains(strings.Join(posts.fail, ""), "{") {
+		t.Fatal("raw json reached failTurn")
+	}
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "await "+execID+" --through-execution-deadline --ignore-attention") {
+		t.Fatalf("missing await: %s", joined)
+	}
+	if strings.Contains(joined, "status ") {
+		t.Fatal("status polled on successful await")
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "completed in") || !strings.Contains(logs, "provider=zai") {
+		t.Fatalf("completion log %s", logs)
+	}
+	if !strings.Contains(logs, timeoutJSON) {
+		t.Fatal("raw agentctl json missing from runner log")
+	}
+}
+
+func TestHandleClaimedTurnPollsStatusWhenAwaitNotFound(t *testing.T) {
+	execID := "exec-late-register"
+	timeoutJSON := `{"ok":false,"error":{"code":"timeout","retryable":true,"details":{"execution_id":"` + execID + `","timeout":"30s","worker_continues":true}}}`
+	now := time.Date(2026, 9, 12, 22, 0, 0, 0, time.UTC)
+	nowFn = func() time.Time { return now }
+	sleepFn = func(_ context.Context, d time.Duration) error {
+		now = now.Add(d)
+		return nil
+	}
+	t.Cleanup(func() {
+		nowFn = time.Now
+		sleepFn = sleepCtx
+		startupAckPoll = 90 * time.Second
+	})
+	startupAckPoll = 90 * time.Second
+	statusCalls := 0
+	awaitCalls := 0
+	restore := stubAgentctl(t, func(_ context.Context, _ string, args []string, _ string, _ []string) ([]byte, error) {
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(timeoutJSON), fmt.Errorf("exit status 9")
+		case len(args) > 0 && args[0] == "await":
+			awaitCalls++
+			if awaitCalls == 1 {
+				return []byte(`{"ok":false,"error":{"code":"not_found","message":"execution not found"}}`), fmt.Errorf("exit status 1")
+			}
+			return []byte(`{"ok":true,"id":"` + execID + `"}`), nil
+		case len(args) > 0 && args[0] == "status":
+			statusCalls++
+			if statusCalls < 2 {
+				return []byte(`{"ok":false,"error":{"code":"not_found","message":"execution not found"}}`), fmt.Errorf("exit status 1")
+			}
+			return []byte(`{"ok":true,"id":"` + execID + `"}`), nil
+		case len(args) > 1 && args[0] == "result" && args[len(args)-1] == "--content":
+			return []byte("Done."), nil
+		case len(args) > 0 && args[0] == "result":
+			return []byte(`{}`), nil
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	if err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn()); err != nil {
+		t.Fatal(err)
+	}
+	if statusCalls < 2 || awaitCalls != 2 {
+		t.Fatalf("status=%d await=%d", statusCalls, awaitCalls)
+	}
+	if len(posts.fail) != 0 || len(posts.complete) != 1 {
+		t.Fatalf("posts fail=%v complete=%v", posts.fail, posts.complete)
+	}
+}
+
+func TestHandleClaimedTurnFailsPlainLanguageWhenStatusNeverAppears(t *testing.T) {
+	execID := "exec-missing"
+	timeoutJSON := `{"ok":false,"error":{"code":"timeout","retryable":true,"details":{"execution_id":"` + execID + `","timeout":"30s","worker_continues":true}}}`
+	now := time.Date(2026, 9, 12, 22, 0, 0, 0, time.UTC)
+	nowFn = func() time.Time { return now }
+	sleepFn = func(_ context.Context, d time.Duration) error {
+		now = now.Add(d)
+		return nil
+	}
+	t.Cleanup(func() {
+		nowFn = time.Now
+		sleepFn = sleepCtx
+		startupAckPoll = 90 * time.Second
+	})
+	restore := stubAgentctl(t, func(_ context.Context, _ string, args []string, _ string, _ []string) ([]byte, error) {
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(timeoutJSON), fmt.Errorf("exit status 9")
+		case len(args) > 0 && args[0] == "await", len(args) > 0 && args[0] == "status":
+			return []byte(`{"ok":false,"error":{"code":"not_found","message":"execution not found"}}`), fmt.Errorf("exit status 1")
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	err := harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn())
+	if err == nil {
+		t.Fatal("expected failure")
+	}
+	if len(posts.complete) != 0 || len(posts.fail) != 1 {
+		t.Fatalf("posts fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	reason := posts.fail[0]
+	if strings.Contains(reason, "{") || strings.Contains(reason, "execution_id") {
+		t.Fatalf("raw json in failTurn %s", reason)
+	}
+	if reason != "The PM harness did not start within 30 seconds. Retry, or check the runner log." {
+		t.Fatalf("reason %q", reason)
+	}
+}
+
+func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  func(args []string) ([]byte, error)
+		want string
+	}{
+		{
+			name: "await",
+			cmd: func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "run":
+					return []byte(`{"ok":true,"id":"exec-ok"}`), nil
+				case "await":
+					return []byte(`{"ok":false,"error":{"code":"timeout","message":"deadline"}}`), fmt.Errorf("exit status 1")
+				default:
+					return nil, fmt.Errorf("unexpected %v", args)
+				}
+			},
+			want: "The PM harness did not finish before the turn deadline. Retry, or check the runner log.",
+		},
+		{
+			name: "no assistant",
+			cmd: func(args []string) ([]byte, error) {
+				switch args[0] {
+				case "run":
+					return []byte(`{"ok":true,"id":"exec-ok"}`), nil
+				case "await":
+					return []byte(`{"ok":true}`), nil
+				case "result":
+					return []byte(""), nil
+				default:
+					return nil, fmt.Errorf("unexpected %v", args)
+				}
+			},
+			want: "The PM harness finished without a reply. Retry, or check the runner log.",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := stubAgentctl(t, func(_ context.Context, _ string, args []string, _ string, _ []string) ([]byte, error) {
+				return tc.cmd(args)
+			})
+			defer restore()
+			harness, posts := pmTurnHarness(t)
+			_ = harness.app.handleClaimedTurn(context.Background(), harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn())
+			if len(posts.fail) != 1 || posts.fail[0] != tc.want {
+				t.Fatalf("fail %v want %q", posts.fail, tc.want)
+			}
+			if strings.Contains(posts.fail[0], "{") {
+				t.Fatal("raw json leaked")
+			}
+			if !strings.Contains(harness.stderr.String(), "failed in") {
+				t.Fatalf("failure log %s", harness.stderr.String())
+			}
+		})
+	}
+}
+
+func stubAgentctl(t *testing.T, fn func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, error)) func() {
+	t.Helper()
+	prev := runCmd
+	runCmd = fn
+	return func() { runCmd = prev }
+}
+
+type pmTurnPosts struct {
+	complete []string
+	fail     []string
+}
+
+type pmTurnTest struct {
+	app    *App
+	cfg    config.Resolved
+	stderr *bytes.Buffer
+}
+
+func pmTurnHarness(t *testing.T) (pmTurnTest, *pmTurnPosts) {
+	t.Helper()
+	posts := &pmTurnPosts{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/complete"):
+			posts.complete = append(posts.complete, string(body))
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		case strings.HasSuffix(r.URL.Path, "/fail"):
+			var payload map[string]any
+			_ = json.Unmarshal(body, &payload)
+			posts.fail = append(posts.fail, anyString(payload["reason"]))
+			io.WriteString(w, `{"id":"turn-1","status":"failed"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	return pmTurnTest{app: app, cfg: config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}, stderr: stderr}, posts
+}
+
+func claimedTurn() map[string]any {
+	return map[string]any{
+		"id":          "turn-1",
+		"lease_token": "lease-1",
+		"deadline":    time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339Nano),
+		"text":        "What needs my decision?",
+	}
 }

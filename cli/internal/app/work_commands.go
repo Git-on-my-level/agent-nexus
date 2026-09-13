@@ -418,7 +418,31 @@ func formatWorkCommandText(name string, body any) string {
 }
 
 func renderWorkLine(work map[string]any) string {
-	return fmt.Sprintf("%s  %s  phase=%s source=%s freshness=%s", firstNonEmpty(anyString(work["ref"]), anyString(work["handle"]), anyString(work["id"])), anyString(work["title"]), firstNonEmpty(anyString(work["phase"]), "unknown"), firstNonEmpty(anyString(asMap(work["source"])["authority"]), "unknown"), firstNonEmpty(anyString(asMap(work["freshness"])["status"]), "unknown"))
+	line := fmt.Sprintf("%s  %s  phase=%s source=%s freshness=%s", firstNonEmpty(anyString(work["ref"]), anyString(work["handle"]), anyString(work["id"])), anyString(work["title"]), firstNonEmpty(anyString(work["phase"]), "unknown"), firstNonEmpty(anyString(asMap(work["source"])["authority"]), "unknown"), firstNonEmpty(anyString(asMap(work["freshness"])["status"]), "unknown"))
+	if errText := renderWorkLastError(work); errText != "" {
+		line += "  " + errText
+	}
+	return line
+}
+
+func renderWorkLastError(work map[string]any) string {
+	for _, src := range []map[string]any{asMap(work["freshness"]), asMap(work["refresh"])} {
+		errObj := asMap(src["last_error"])
+		code := anyString(errObj["code"])
+		msg := anyString(errObj["message"])
+		switch {
+		case code != "" && msg != "":
+			return "last_error=" + code + ": " + msg
+		case code != "":
+			return "last_error=" + code
+		case msg != "":
+			return "last_error=" + msg
+		}
+		if raw := anyString(src["last_error"]); raw != "" {
+			return "last_error=" + raw
+		}
+	}
+	return ""
 }
 
 func isWorkCommandGroup(topic string) bool {

@@ -27,6 +27,73 @@ func (r *workFixtureReader) Read(_ context.Context, target observation.Target) (
 	}
 	return observation.Report{Target: target, ReaderID: "fixture", ReaderRevision: "1", ObservedAt: time.Now().UTC(), Knowledge: "reported", Title: "unchanged", SourceRevision: "same-revision", Facts: map[string]any{"phase": "review"}, Coverage: observation.Coverage{Complete: true}, Evidence: []observation.Evidence{{Kind: "issue", Reference: "https://example.test/issue/1", Knowledge: "reported"}}}, nil
 }
+
+type typedErrorReader struct {
+	calls int
+	fail  error
+}
+
+func (r *typedErrorReader) Capabilities() observation.Capabilities {
+	return observation.Capabilities{Source: "github", ReadOne: true}
+}
+func (r *typedErrorReader) Read(_ context.Context, target observation.Target) (observation.Report, error) {
+	r.calls++
+	if r.fail != nil {
+		return observation.Report{}, r.fail
+	}
+	return observation.Report{Target: target, ReaderID: "fixture", ReaderRevision: "1", ObservedAt: time.Now().UTC(), Knowledge: "reported", Title: "good observation", SourceRevision: "rev-1", Facts: map[string]any{"phase": "review"}, Coverage: observation.Coverage{Complete: true}, Evidence: []observation.Evidence{{Kind: "issue", Reference: "https://example.test/issue/1", Knowledge: "reported"}}}, nil
+}
+
+func TestObservationRuntimePersistsTypedRefreshErrorAndLastGood(t *testing.T) {
+	h := newPrimitivesTestServer(t)
+	s := h.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	b, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Typed errors"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := s.CreateWork(ctx, "actor-1", asString(b["id"]), map[string]any{"title": "Initial", "source": map[string]any{"authority": "github", "connection_id": "fixture", "native_id": "org/repo#1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := asString(work["ref"])
+	reader := &typedErrorReader{}
+	binding := ObservationBinding{WorkRef: ref, SourceNativeID: "org/repo#1", Target: observation.Target{WorkspaceID: "ws_main", ConnectionID: "fixture", Source: "github", Kind: "issue", NativeID: "1", Repository: "org/repo"}, Reader: reader, Policy: observation.RefreshPolicy{Interval: time.Minute, StaleAfter: time.Hour, Timeout: time.Second, MaxBackoff: time.Hour}}
+	runtime, err := NewObservationRuntime(s, []ObservationBinding{binding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = runtime.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	reader.fail = &observation.ReadError{Kind: observation.ErrPolicy, Message: "generated reader has no active version"}
+	if _, err = s.RequestWorkRefresh(ctx, "actor-1", ref); err != nil {
+		t.Fatal(err)
+	}
+	if err = runtime.Tick(ctx); err == nil {
+		t.Fatal("policy denial not returned")
+	}
+	current, err := s.GetWork(ctx, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current["title"] != "good observation" {
+		t.Fatalf("lost last good observation: %#v", current)
+	}
+	refresh, _ := current["refresh"].(map[string]any)
+	fresh, _ := current["freshness"].(map[string]any)
+	refreshErr, _ := refresh["last_error"].(map[string]any)
+	freshErr, _ := fresh["last_error"].(map[string]any)
+	if asString(refreshErr["code"]) != "policy_denied" || asString(refreshErr["message"]) != "Generated reader has no active version" {
+		t.Fatalf("refresh last_error %#v", refresh["last_error"])
+	}
+	if asString(freshErr["code"]) != "policy_denied" || asString(freshErr["message"]) != "Generated reader has no active version" {
+		t.Fatalf("freshness last_error %#v", fresh["last_error"])
+	}
+	if refresh["failures"] == nil || asString(refresh["last_attempt_at"]) == "" {
+		t.Fatalf("lost failure bookkeeping: %#v", refresh)
+	}
+}
 func TestObservationRuntimePersistsUnchangedReadsAndOutage(t *testing.T) {
 	h := newPrimitivesTestServer(t)
 	s := h.primitiveStore.(*primitives.Store)

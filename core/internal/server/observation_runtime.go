@@ -376,7 +376,11 @@ func (rt *ObservationRuntime) refresh(ctx context.Context, b ObservationBinding)
 		}
 	}
 	if finished["state"] != "succeeded" {
-		finished["last_error"] = map[string]any{"code": "read_failed", "message": "Source read or observation persistence failed"}
+		persistErr := readErr
+		if result.Health.LastError != nil {
+			persistErr = result.Health.LastError
+		}
+		finished["last_error"] = observation.PersistableRefreshError(persistErr, b.Target.Source, result.Health.NextDue)
 		// A failed attempt is durable evidence too, ordered independently from
 		// source revisions. Persist it while the lease is still held so event
 		// and inbox surfaces receive the same failure as the refresh panel.

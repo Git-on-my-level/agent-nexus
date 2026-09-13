@@ -6701,7 +6701,11 @@ components:
         last_error:
           type: object
           additionalProperties: true
-          properties: *id001
+          properties:
+            code:
+              type: string
+            message:
+              type: string
       required:
       - state
     Work:
@@ -6824,6 +6828,14 @@ components:
               type: string
             stale_after_seconds:
               type: integer
+            last_error:
+              type: object
+              additionalProperties: true
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
         refresh:
           $ref: '#/components/schemas/WorkRefresh'
         latest_observation:

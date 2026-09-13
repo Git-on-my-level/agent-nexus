@@ -197,9 +197,11 @@ func (r *Runtime) collect(ctx context.Context, entry Registration) RuntimeResult
 		if typed.RetryAfter > delay {
 			delay = typed.RetryAfter
 		}
-		finish = map[string]any{"state": "failed", "failures": failures, "last_error": map[string]any{"code": string(typed.Kind), "message": typed.Message}, "next_due_at": time.Now().UTC().Add(delay + jitter(delay/10)).Format(time.RFC3339Nano)}
+		nextDue := time.Now().UTC().Add(delay + jitter(delay/10))
+		lastError := PersistableRefreshError(typed, entry.Target.Source, nextDue)
+		finish = map[string]any{"state": "failed", "failures": failures, "last_error": lastError, "next_due_at": nextDue.Format(time.RFC3339Nano)}
 		attempted := time.Now().UTC()
-		errorReport := map[string]any{"idempotency_key": digest([]byte(entry.CardRef + lease)), "reader_id": "collector:" + entry.Target.ConnectionID, "reader_revision": ReaderRevision, "observed_at": attempted.Format(time.RFC3339Nano), "status": "error", "facts": map[string]any{}, "evidence": []any{}, "error": map[string]any{"code": string(typed.Kind), "message": typed.Message}, "stale_after_seconds": int64(entry.Policy.StaleAfter / time.Second)}
+		errorReport := map[string]any{"idempotency_key": digest([]byte(entry.CardRef + lease)), "reader_id": "collector:" + entry.Target.ConnectionID, "reader_revision": ReaderRevision, "observed_at": attempted.Format(time.RFC3339Nano), "status": "error", "facts": map[string]any{}, "evidence": []any{}, "error": lastError, "stale_after_seconds": int64(entry.Policy.StaleAfter / time.Second)}
 		_, _ = r.callbacks.Submit(finishCtx, r.actorID, entry.CardRef, errorReport)
 		out.Error = typed
 	}
