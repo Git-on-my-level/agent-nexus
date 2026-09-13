@@ -48,11 +48,15 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, turn.ID, p.WorkspaceID, p.ActorID, conv.ID, body); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.Service.ClaimTurn(ctx, pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}, pm.ClaimInput{RunnerID: "r6"}); err != nil {
+	claimed, err := rt.Service.ClaimTurn(ctx, pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}, pm.ClaimInput{RunnerID: "r6"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	input := pm.DecisionInput{RequestKey: "r6-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{ref}}}
 	call := func(method, path, token string, in any) *httptest.ResponseRecorder {
+		if input, ok := in.(pm.DecisionInput); ok && strings.Contains(path, "/turns/") {
+			in = pm.TurnProposeInput{DecisionInput: input, LeaseToken: claimed.LeaseToken}
+		}
 		var body []byte
 		if in != nil {
 			body, _ = json.Marshal(in)

@@ -166,11 +166,11 @@ func TestRound4DecisionProvenancePersistsAcrossSupersessionAndReads(t *testing.T
 	in.RequestKey = "pm"
 	agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
 	claimTestTurn(t, s, ctx, agent, turn.ID)
-	proposed, err := s.ProposeForTurn(ctx, agent, turn.ID, in)
+	proposed, err := s.ProposeForTurn(ctx, agent, turn.ID, in, testTurnLease(t, s, ctx, turn.ID))
 	if err != nil || proposed.ID == human.ID || proposed.ProposedBy != agent.ActorID || proposed.OriginKind != "pm_turn" || proposed.TurnID != turn.ID || proposed.ActorID != p.ActorID {
 		t.Fatalf("%+v %v", proposed, err)
 	}
-	replay, err := s.ProposeForTurn(ctx, agent, turn.ID, in)
+	replay, err := s.ProposeForTurn(ctx, agent, turn.ID, in, testTurnLease(t, s, ctx, turn.ID))
 	if err != nil || replay.ID != proposed.ID || replay.TurnID != turn.ID {
 		t.Fatalf("%+v %v", replay, err)
 	}

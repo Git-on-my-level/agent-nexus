@@ -6623,10 +6623,6 @@ export const commandRegistry = [
                     ]
                 },
                 {
-                    "name": "payload.resolution",
-                    "type": "list\u003cobject\u003e"
-                },
-                {
                     "name": "payload.resolution_refs",
                     "type": "list\u003cstring\u003e"
                 }
@@ -6919,7 +6915,7 @@ export const commandRegistry = [
         "path": "/pm/turns/{turn_id}/complete",
         "operation_id": "pmTurnsComplete",
         "summary": "Record a selected PM agent response",
-        "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\"; released or expired lease tokens never authorize completion. Identical terminal completion replays also refuse a cleared lease.",
+        "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\"; released or expired lease tokens never authorize completion. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.",
         "why": "Record a selected PM agent response.",
         "input_mode": "json-body",
         "streaming": {
@@ -6947,6 +6943,10 @@ export const commandRegistry = [
         "body_schema": {
             "required": [
                 {
+                    "name": "lease_token",
+                    "type": "string"
+                },
+                {
                     "name": "text",
                     "type": "string"
                 }
@@ -6955,10 +6955,6 @@ export const commandRegistry = [
                 {
                     "name": "evidence_refs",
                     "type": "list\u003cstring\u003e"
-                },
-                {
-                    "name": "lease_token",
-                    "type": "string"
                 }
             ]
         },
@@ -6996,13 +6992,13 @@ export const commandRegistry = [
         "command_id": "pm.turns.context",
         "cli_path": "pm turns context",
         "group": "pm",
-        "method": "GET",
+        "method": "POST",
         "path": "/pm/turns/{turn_id}/context",
         "operation_id": "pmTurnsContext",
         "summary": "Read requesting principal context as selected PM agent",
-        "description": "Requires an active lease. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\".",
+        "description": "Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. An unclaimed open turn returns 409 conflict with message \"this turn is not claimed; claim it first\".",
         "why": "Read requesting principal context as selected PM agent.",
-        "input_mode": "none",
+        "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
@@ -7025,6 +7021,28 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "canonical",
         "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "lease_token",
+                    "type": "string"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "cursor",
+                    "type": "string"
+                },
+                {
+                    "name": "limit",
+                    "type": "integer"
+                },
+                {
+                    "name": "query",
+                    "type": "string"
+                }
+            ]
+        },
         "path_params": [
             "turn_id"
         ],
@@ -7063,7 +7081,7 @@ export const commandRegistry = [
         "path": "/pm/turns/{turn_id}/decisions",
         "operation_id": "pmTurnsDecisionsCreate",
         "summary": "Record a selected PM agent proposal",
-        "description": "Requires an active lease. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\".",
+        "description": "Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\".",
         "why": "Record a selected PM agent proposal.",
         "input_mode": "json-body",
         "streaming": {
@@ -7095,6 +7113,10 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
+                    "name": "lease_token",
+                    "type": "string"
+                },
+                {
                     "name": "request_key",
                     "type": "string"
                 },
@@ -7123,10 +7145,6 @@ export const commandRegistry = [
                         "ready",
                         "review"
                     ]
-                },
-                {
-                    "name": "payload.resolution",
-                    "type": "list\u003cobject\u003e"
                 },
                 {
                     "name": "payload.resolution_refs",
@@ -7195,17 +7213,15 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.",
+        "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message \"this turn is not claimed; claim it first\", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.",
         "body_schema": {
             "required": [
                 {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
                     "name": "lease_token",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
                     "type": "string"
                 }
             ]

@@ -218,7 +218,7 @@ func TestAgentProposalHumanDiscoveryAndAgentReceiptDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	claimTestTurn(t, s, ctx, agent, turn.ID)
-	d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: "agent-proposal", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"}, testTurnLease(t, s, ctx, turn.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestFailTurnRecordsReasonAndFreesSession(t *testing.T) {
 		t.Fatalf("fail %+v %v", failed, err)
 	}
 	replay, err := s.FailTurn(ctx, agent, claimed.ID, FailInput{Reason: "harness timeout", LeaseToken: claimed.LeaseToken})
-	if !errors.Is(err, ErrConflict) || replay.ID != "" {
+	if err != nil || replay.ID != failed.ID || replay.Revision != failed.Revision {
 		t.Fatalf("fail replay %v", err)
 	}
 	if _, err = s.PostMessage(ctx, p, c.ID, MessageInput{RequestKey: "next", Text: "Retry"}); err != nil {

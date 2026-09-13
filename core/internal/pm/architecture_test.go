@@ -76,8 +76,8 @@ func TestPMIdentityFailsClosed(t *testing.T) {
 		actor := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
 		calls := []func() error{
 			func() error { _, e := s.ClaimTurn(ctx, actor, ClaimInput{}); return e },
-			func() error { _, e := s.GetTurnContext(ctx, actor, turn.ID, "", 10); return e },
-			func() error { _, e := s.ProposeForTurn(ctx, actor, turn.ID, DecisionInput{}); return e },
+			func() error { _, e := s.GetTurnContext(ctx, actor, turn.ID, "", 10, ""); return e },
+			func() error { _, e := s.ProposeForTurn(ctx, actor, turn.ID, DecisionInput{}, ""); return e },
 			func() error { _, e := s.CompleteTurn(ctx, actor, turn.ID, "reply", nil); return e },
 			func() error { _, e := s.FailTurn(ctx, actor, turn.ID, FailInput{Reason: "failed"}); return e },
 		}
@@ -108,7 +108,7 @@ func TestTurnProposalDedupeAndLink(t *testing.T) {
 			t.Fatal(err)
 		}
 		claimTestTurn(t, s, ctx, agent, turn.ID)
-		d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}})
+		d, err := s.ProposeForTurn(ctx, agent, turn.ID, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}}, testTurnLease(t, s, ctx, turn.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -295,7 +295,7 @@ func TestConcurrentTurnProposalsReuseExactPendingTarget(t *testing.T) {
 	results := make(chan result, 2)
 	for i, svc := range []*Service{s, second} {
 		go func(i int, svc *Service) {
-			d, err := svc.ProposeForTurn(ctx, agent, ids[i], DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Same target", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}})
+			d, err := svc.ProposeForTurn(ctx, agent, ids[i], DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Same target", TargetRevision: "r1", Payload: &ActionPayload{Phase: "ready"}}, testTurnLease(t, svc, ctx, ids[i]))
 			results <- result{d, err}
 		}(i, svc)
 	}

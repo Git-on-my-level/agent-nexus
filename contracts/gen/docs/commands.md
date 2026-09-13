@@ -1566,10 +1566,10 @@ Generated from `contracts/anx-openapi.yaml`.
 ## `pm.turns.context`
 
 - CLI path: `pm turns context`
-- HTTP: `GET /pm/turns/{turn_id}/context`
+- HTTP: `POST /pm/turns/{turn_id}/context`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `none`
+- Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
@@ -1600,7 +1600,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
-- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
+- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
 
 ## `pm.turns.get`
 

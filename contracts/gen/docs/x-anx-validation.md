@@ -252,7 +252,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `pm.decisions.list` `GET /pm/decisions`
 - `pm.turns.claim` `POST /pm/turns/claim`
 - `pm.turns.complete` `POST /pm/turns/{turn_id}/complete`
-- `pm.turns.context` `GET /pm/turns/{turn_id}/context`
+- `pm.turns.context` `POST /pm/turns/{turn_id}/context`
 - `pm.turns.decisions.create` `POST /pm/turns/{turn_id}/decisions`
 - `pm.turns.fail` `POST /pm/turns/{turn_id}/fail`
 - `pm.turns.get` `GET /pm/turns/{turn_id}`

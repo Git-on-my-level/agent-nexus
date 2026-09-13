@@ -9,9 +9,9 @@ import (
 )
 
 func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
-	return s.proposeDecision(ctx, p, in, "", p.ActorID)
+	return s.proposeDecision(ctx, p, in, "", p.ActorID, "")
 }
-func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID, proposedBy string) (Decision, error) {
+func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput, turnID, proposedBy, leaseToken string) (Decision, error) {
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
@@ -36,7 +36,7 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 	} else if in.Origin != nil {
 		d.OriginKind = "channel"
 	}
-	d, inserted, err := s.store.proposeDecision(ctx, d, turnID)
+	d, inserted, err := s.store.proposeDecision(ctx, d, turnID, leaseToken)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -352,10 +352,10 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 
 // GetTurnContext lets the selected PM bridge actor query evidence on behalf of
 // the request's actor, with current permissions, never ambient PM privileges.
-func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query string, limit int) (ContextPage, error) {
-	return s.GetTurnContextPage(ctx, p, turnID, query, "", limit)
+func (s *Service) GetTurnContext(ctx context.Context, p Principal, turnID, query string, limit int, leaseToken string) (ContextPage, error) {
+	return s.GetTurnContextPage(ctx, p, turnID, query, "", limit, leaseToken)
 }
-func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, query, cursor string, limit int) (ContextPage, error) {
+func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, query, cursor string, limit int, leaseToken string) (ContextPage, error) {
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return ContextPage{}, err
 	}
@@ -369,7 +369,7 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 	if err := s.requireOpenTurn(ctx, t); err != nil {
 		return ContextPage{}, err
 	}
-	if err := requireLease(t); err != nil {
+	if err := leaseGuard(t, leaseToken); err != nil {
 		return ContextPage{}, err
 	}
 	var c Conversation
@@ -381,7 +381,7 @@ func (s *Service) GetTurnContextPage(ctx context.Context, p Principal, turnID, q
 
 // ProposeForTurn records a proposal under the requesting actor so that it is
 // visible in that actor's decision list. It confers no approval authority.
-func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string, in DecisionInput) (Decision, error) {
+func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string, in DecisionInput, leaseToken string) (Decision, error) {
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return Decision{}, err
 	}
@@ -395,7 +395,7 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 	if err := s.requireOpenTurn(ctx, t); err != nil {
 		return Decision{}, err
 	}
-	if err := requireLease(t); err != nil {
+	if err := leaseGuard(t, leaseToken); err != nil {
 		return Decision{}, err
 	}
 	var c Conversation
@@ -406,7 +406,7 @@ func (s *Service) ProposeForTurn(ctx context.Context, p Principal, turnID string
 		return Decision{}, ErrForbidden
 	}
 	in.Origin = c.Origin
-	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID)
+	return s.proposeDecision(ctx, Principal{WorkspaceID: c.WorkspaceID, ActorID: c.ActorID, Human: true}, in, turnID, p.ActorID, leaseToken)
 }
 
 // Prose never supplies mutation parameters, including for legacy decisions.

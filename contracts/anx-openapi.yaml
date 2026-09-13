@@ -933,7 +933,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
+      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.
       parameters:
       - name: turn_id
         in: path
@@ -1007,9 +1007,9 @@ paths:
         '409':
           description: No active lease or turn is closed; expired turns report failure_kind expired and the deadline.
   /pm/turns/{turn_id}/context:
-    get:
+    post:
       operationId: pmTurnsContext
-      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first".
+      description: Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first".
       summary: Read requesting principal context as selected PM agent
       tags:
       - pm
@@ -1017,7 +1017,7 @@ paths:
       x-anx-command-id: pm.turns.context
       x-anx-cli-path: pm turns context
       x-anx-why: Read requesting principal context as selected PM agent.
-      x-anx-input-mode: none
+      x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
       x-anx-output-envelope: Returns `PMContextResponse`.
@@ -1043,24 +1043,12 @@ paths:
         required: true
         schema:
           type: string
-      - name: work_ref
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: query
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 50
-          default: 20
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMTurnContextRequest'
       responses:
         '200':
           description: Read requesting principal context as selected PM agent
@@ -1071,7 +1059,7 @@ paths:
   /pm/turns/{turn_id}/decisions:
     post:
       operationId: pmTurnsDecisionsCreate
-      description: Requires an active lease. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first".
+      description: Requires the current active lease token in the request body. Missing, expired, or stale tokens return 409 conflict. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first".
       summary: Record a selected PM agent proposal
       tags:
       - pm
@@ -1110,7 +1098,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PMDecisionCreateRequest'
+              $ref: '#/components/schemas/PMTurnProposeRequest'
       responses:
         '201':
           description: Record a selected PM agent proposal
@@ -1121,7 +1109,7 @@ paths:
   /pm/turns/{turn_id}/complete:
     post:
       operationId: pmTurnsComplete
-      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first"; released or expired lease tokens never authorize completion. Identical terminal completion replays also refuse a cleared lease.
+      description: Requires an active lease. An unclaimed open turn returns 409 conflict with message "this turn is not claimed; claim it first"; released or expired lease tokens never authorize completion. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.
       summary: Record a selected PM agent response
       tags:
       - pm
@@ -6616,7 +6604,7 @@ components:
           type: string
         target_revision:
           type: string
-          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version, which changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
         can_answer:
           type: boolean
           description: Derived for the current reader; true only for the awaiting decision owner with human approval authority.
@@ -6704,7 +6692,7 @@ components:
           type: string
         target_revision:
           type: string
-          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version, which changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
         authorization_basis:
           type: string
         status:
@@ -6840,10 +6828,39 @@ components:
                 superseded_by:
                   type: string
                   description: Replacement decision ID for a superseded answer or dispatch conflict; empty if no replacement exists.
+    PMActionRequestPayload:
+      type: object
+      additionalProperties: false
+      description: Mutation inputs only. payload.resolution is read-only; send payload.resolution_refs.
+      properties:
+        phase:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        resolution_refs:
+          type: array
+          items:
+            type: string
+    PMTurnContextRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token]
+      properties:
+        lease_token:
+          type: string
+          minLength: 1
+        query:
+          type: string
+        cursor:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
     PMDecisionCreateRequest:
       description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
       type: object
-      additionalProperties: true
+      additionalProperties: false
       properties:
         request_key:
           type: string
@@ -6852,13 +6869,41 @@ components:
         instruction:
           type: string
         payload:
-          $ref: '#/components/schemas/PMActionPayload'
+          $ref: '#/components/schemas/PMActionRequestPayload'
         scope:
           type: string
         target_revision:
           type: string
-          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version, which changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
       required:
+      - request_key
+      - work_ref
+      - instruction
+      - scope
+      - target_revision
+    PMTurnProposeRequest:
+      description: Selected PM agents must supply the current lease token; stale tokens return 409. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
+      type: object
+      additionalProperties: false
+      properties:
+        lease_token:
+          type: string
+          minLength: 1
+        request_key:
+          type: string
+        work_ref:
+          type: string
+        instruction:
+          type: string
+        payload:
+          $ref: '#/components/schemas/PMActionRequestPayload'
+        scope:
+          type: string
+        target_revision:
+          type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses the decimal Nexus work version, which changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+      required:
+      - lease_token
       - request_key
       - work_ref
       - instruction
@@ -6879,6 +6924,7 @@ components:
       - approve
       - text
     PMCompleteRequest:
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content or token returns 409.
       type: object
       additionalProperties: true
       properties:
@@ -6891,6 +6937,7 @@ components:
         lease_token:
           type: string
       required:
+      - lease_token
       - text
     PMClaimRequest:
       type: object
@@ -6912,6 +6959,7 @@ components:
           type: string
           minLength: 1
     PMFailRequest:
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content or token returns 409.
       type: object
       additionalProperties: true
       properties:
@@ -6920,6 +6968,7 @@ components:
         lease_token:
           type: string
       required:
+      - lease_token
       - reason
     PMEmptyRequest:
       type: object
@@ -7147,7 +7196,7 @@ components:
         decision_revision:
           type: string
           readOnly: true
-          description: Revision fence to copy into PM proposal target_revision. Uses nonempty source.revision for external authority; otherwise the decimal Nexus work version. Recomputed on every work response.
+          description: Revision fence to copy into PM proposal target_revision. Uses nonempty source.revision for external authority; otherwise the decimal Nexus work version. The version changes only for canonical mutations (phase, fields, annotations, resolution), never refresh attempts, failures, or freshness bookkeeping. Successful external observations with a new source.revision change the fence. Recomputed on every work response.
         project_ref: &id002
           type: string
         priority: &id003
