@@ -84,6 +84,9 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if err != nil {
 		return d, err
 	}
+	if d.Status == Superseded && d.SupersededBy != "" {
+		return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
+	}
 	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
 		return Decision{}, ErrInvalid
 	}
@@ -96,6 +99,9 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 		return s.decisionForReader(ctx, p, d), nil
 	}
 	if d.Revision != in.Revision || d.Status != AwaitingAnswer {
+		if d.Status == Superseded {
+			return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
+		}
 		return Decision{}, ErrConflict
 	}
 	if !validText(in.Text, 16000) {
@@ -158,6 +164,9 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if err != nil {
 		return Action{}, err
 	}
+	if d.Status == Superseded {
+		return Action{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
+	}
 	if d.ActionID == "" || d.Status != Answered {
 		return Action{}, ErrConflict
 	}
@@ -172,7 +181,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return a, nil
 	} // Includes unknown/sending after crash: NEVER blindly resend.
 	if !validActionPayload(a.Scope, a.Payload) {
-		return Action{}, ErrInvalid
+		return s.failBeforeSend(ctx, a, "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done; re-approve with a valid payload")
 	}
 	if err = s.checkDelivery(ctx, a); err != nil {
 		return Action{}, err
@@ -193,13 +202,8 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		// The approval remains answered, but its delivery is now terminal. Keep
 		// the failed preflight as durable evidence so clients do not offer retry
 		// against the same stale authorization. No source handoff was made.
-		old := a.Revision
-		now := time.Now().UTC()
-		a.Status = Failed
-		a.Receipt = Receipt{Status: Failed, Detail: fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s); re-approve to deliver", a.TargetRevision, revision)}
-		a.Revision++
-		a.Attempts = append(a.Attempts, Attempt{StartedAt: now, FinishedAt: &now, Status: Failed, Receipt: a.Receipt})
-		if err = s.store.cas(context.WithoutCancel(ctx), "action", a.ID, old, a); err != nil {
+		a, err = s.failBeforeSend(ctx, a, fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s); re-approve to deliver", a.TargetRevision, revision))
+		if err != nil {
 			return Action{}, err
 		}
 		return a, ErrStale
@@ -215,12 +219,36 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	bounded, cancel := context.WithTimeout(ctx, s.cfg.TurnTimeout)
 	defer cancel()
 	receipt, execErr := s.deps.Execute(bounded, a)
-	if errors.Is(execErr, ErrStale) {
+	var nativeErr *NativeExecutionError
+	native := errors.As(execErr, &nativeErr)
+	verifiedReadBack := false
+	if native {
+		receipt = Receipt{Status: Failed, Detail: nativeErr.Error()}
+		if !nativeErr.WriteStarted {
+			a.Attempts[len(a.Attempts)-1].SentAt = nil
+		} else {
+			readCtx, readCancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.TurnTimeout)
+			receipt = Receipt{Status: Unknown, Detail: "Nexus write outcome could not be read back: " + nativeErr.Error()}
+			if s.deps.Reconcile != nil {
+				read, readErr := s.deps.Reconcile(readCtx, a)
+				if readErr == nil && validateReceipt(read, true) == nil {
+					receipt = read
+					verifiedReadBack = true
+					if receipt.Status == Failed {
+						receipt.Detail = nativeErr.Error() + "; " + receipt.Detail
+					}
+				} else if readErr != nil {
+					receipt.Detail += "; " + readErr.Error()
+				}
+			}
+			readCancel()
+		}
+	} else if errors.Is(execErr, ErrStale) {
 		receipt = Receipt{Status: Failed, Detail: ErrStale.Error()}
 	} else if execErr != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source handoff outcome is unknown; reconcile before any retry"}
 	}
-	if err = validateReceipt(receipt, false); err != nil {
+	if err = validateReceipt(receipt, verifiedReadBack); err != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source returned an invalid receipt; reconciliation required"}
 	}
 	old = a.Revision
@@ -239,6 +267,19 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	}
 	return a, nil
 }
+func (s *Service) failBeforeSend(ctx context.Context, a Action, detail string) (Action, error) {
+	old := a.Revision
+	now := time.Now().UTC()
+	a.Status = Failed
+	a.Receipt = Receipt{Status: Failed, Detail: detail}
+	a.Revision++
+	a.Attempts = append(a.Attempts, Attempt{StartedAt: now, FinishedAt: &now, Status: Failed, Receipt: a.Receipt})
+	if err := s.store.cas(context.WithoutCancel(ctx), "action", a.ID, old, a); err != nil {
+		return Action{}, err
+	}
+	return a, nil
+}
+
 func validateReceipt(r Receipt, reconcile bool) error {
 	switch r.Status {
 	case Unknown, Failed:

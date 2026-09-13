@@ -251,6 +251,12 @@ paths:
           maximum: 50
           default: 20
       responses:
+        '400':
+          description: 'Invalid context request. Cursor errors distinguish cursor is not valid for a work-scoped context from cursor is malformed or from another scope.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
         '200':
           description: Read bounded authorized PM context
           content:
@@ -468,6 +474,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PMDecisionAnswerRequest'
       responses:
+        '409':
+          description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
         '200':
           description: Answer and authorize a scoped decision
           content:
@@ -515,6 +527,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PMEmptyRequest'
       responses:
+        '409':
+          description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
         '200':
           description: Hand off an authorized source action
           content:
@@ -6513,7 +6531,7 @@ components:
                 type: string
                 format: date-time
                 readOnly: true
-                description: Core entered the executor handoff boundary; this is not proof of source delivery. Absent for preflight failures and legacy attempts.
+                description: Core entered the executor handoff boundary; this is not proof of source delivery. Absent for preflight failures, confirmed native failures before commit, and legacy attempts. Native commit uncertainty is read back before choosing unknown; confirmed local failures include their cause in receipt.detail.
               finished_at:
                 type: string
               status:
@@ -6581,6 +6599,12 @@ components:
                 existing_decision_id:
                   type: string
                   description: Existing proposal for a conflicting request key.
+                status:
+                  type: string
+                  description: Current decision status for a superseded answer or dispatch conflict.
+                superseded_by:
+                  type: string
+                  description: Replacement decision ID for a superseded answer or dispatch conflict; empty if no replacement exists.
     PMDecisionCreateRequest:
       description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
       type: object

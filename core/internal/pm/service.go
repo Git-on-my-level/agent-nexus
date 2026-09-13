@@ -145,7 +145,13 @@ func (s *Service) QueryContextPage(ctx context.Context, p Principal, workRef, qu
 	if err := s.authorize(ctx, p, "pm.read", workRef); err != nil {
 		return ContextPage{}, err
 	}
-	if limit < 1 || limit > 50 || len(query) > 2000 || len(cursor) > 2000 {
+	if workRef != "" && cursor != "" {
+		return ContextPage{}, ErrContextWorkCursor
+	}
+	if len(cursor) > 2000 {
+		return ContextPage{}, ErrContextCursor
+	}
+	if limit < 1 || limit > 50 || len(query) > 2000 {
 		return ContextPage{}, ErrInvalid
 	}
 	var page ContextPage

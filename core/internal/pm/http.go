@@ -231,6 +231,10 @@ func writeError(w http.ResponseWriter, err error) {
 	if errors.As(err, &conflict) {
 		body["details"] = map[string]string{"existing_decision_id": conflict.ExistingDecisionID}
 	}
+	var superseded *SupersededDecisionError
+	if errors.As(err, &superseded) {
+		body["details"] = map[string]string{"status": string(Superseded), "superseded_by": superseded.SupersededBy}
+	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": body})
 }
 

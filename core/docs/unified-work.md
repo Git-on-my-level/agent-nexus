@@ -319,13 +319,24 @@ a known external revision remains the fence independently of local version chang
 
 PM context uses canonical work cursors: send the returned `next_cursor` as
 `cursor` with the same query, and keep `limit` within 1..50. A work-specific
-context is one item and rejects cursors. Invalid cursors return 400.
+context is one item and rejects cursors with 400 and "cursor is not valid for a
+work-scoped context". Malformed cursors (including oversized cursors) return 400
+and "cursor is malformed or from another scope".
 
 Pending actions and failed actions with no sent attempt return 400
 `invalid_request`: "Nothing has been delivered yet, so there is nothing to read back."
 New action attempts record `sent_at` at entry to the executor handoff boundary,
 before invoking it; crash uncertainty is conservatively treated as a possible
-send. Preflight failures omit `sent_at`. Legacy failed attempts without a handoff
+send. Preflight failures omit `sent_at`. Native validation and store failures
+before commit are terminal `failed` receipts with the original cause, and core
+clears the provisional `sent_at`. Native stores explicitly mark commit errors
+and post-commit errors as uncertain; dispatch reads canonical state with a fresh,
+bounded context before selecting `verified`, `failed` (fields do not match), or
+`unknown` (read-back unavailable). Explicit reconciliation also returns `failed`
+when canonical native fields do not match, so previously unknown native attempts
+can leave Watching on read-back. Historical attempt markers are retained.
+Only external executor errors use "Source
+handoff outcome is unknown". Legacy failed attempts without a handoff
 marker cannot establish delivery; other legacy delivery states still permit
 read-back. A sent failure can be reconciled but never changes from `failed` to
 `unknown`; inconclusive receipts remain visible with `reconciliation_conflict`.
@@ -335,3 +346,9 @@ bounded to 256 entries. Every cache hit reloads current principal authority and
 wake routing from auth storage. A revoked/mismatched principal invalidates the
 cached identity immediately on the next check, including external database
 revocations. No authorization result is cached.
+
+Answering or dispatching a superseded decision returns 409 `conflict` with
+`error.details.status: superseded` and `error.details.superseded_by` (the
+replacement ID, or empty when there is no replacement). This also covers a
+supersession racing the answer CAS. An identical replay of a rejection remains
+idempotent. Clients can link the replacement directly from the conflict response.

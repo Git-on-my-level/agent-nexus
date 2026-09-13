@@ -33,6 +33,24 @@ func (e *DecisionConflict) Error() string {
 }
 func (e *DecisionConflict) Unwrap() error { return ErrConflict }
 
+// NativeExecutionError distinguishes a confirmed local rejection from commit
+// uncertainty. Only trusted native executors may assert this boundary.
+type NativeExecutionError struct {
+	Cause        error
+	WriteStarted bool
+}
+
+func (e *NativeExecutionError) Error() string { return e.Cause.Error() }
+func (e *NativeExecutionError) Unwrap() error { return e.Cause }
+
+type SupersededDecisionError struct{ SupersededBy string }
+
+func (e *SupersededDecisionError) Error() string { return "PM decision has been superseded" }
+func (e *SupersededDecisionError) Unwrap() error { return ErrConflict }
+
+var ErrContextWorkCursor = fmt.Errorf("%w: cursor is not valid for a work-scoped context", ErrInvalid)
+var ErrContextCursor = fmt.Errorf("%w: cursor is malformed or from another scope", ErrInvalid)
+
 type Status string
 
 const (

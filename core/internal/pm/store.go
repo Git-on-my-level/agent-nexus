@@ -160,6 +160,11 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 		return err
 	}
 	if n != 1 {
+		var raw []byte
+		var current Decision
+		if err := tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND id=?`, d.ID).Scan(&raw); err == nil && json.Unmarshal(raw, &current) == nil && current.Status == Superseded {
+			return &SupersededDecisionError{SupersededBy: current.SupersededBy}
+		}
 		return ErrConflict
 	}
 	if a != nil {
