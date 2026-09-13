@@ -486,7 +486,7 @@ func validateAction(scope, instruction string, payload *ActionPayload) error {
 	if scope == "work.annotate" {
 		var patch map[string]any
 		if err := json.Unmarshal([]byte(instruction), &patch); err != nil {
-			return fmt.Errorf("%w: work.annotate instruction must be a JSON object; allowed keys: %s", ErrInvalid, strings.Join(primitives.WorkAnnotationKeys(), ", "))
+			return fmt.Errorf("%w: work.annotate instruction must be a nonempty JSON object", ErrInvalid)
 		}
 		if err := primitives.ValidateWorkAnnotations(patch); err != nil {
 			return fmt.Errorf("%w: %s", ErrInvalid, err)
