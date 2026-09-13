@@ -310,11 +310,40 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 		t.Fatalf("generic conflict hint should mention if_updated_at before command enrichment: %q", revision.Hint)
 	}
 	EnrichForCommand(revision, "pm.decisions.answer")
-	if !strings.Contains(revision.Hint, "pm decisions get") || !strings.Contains(revision.Hint, "revision") {
-		t.Fatalf("expected PM revision hint, got %q", revision.Hint)
+	if !strings.Contains(revision.Hint, "pm decisions get") || !strings.Contains(revision.Hint, "status") {
+		t.Fatalf("expected PM status-check hint, got %q", revision.Hint)
+	}
+	if strings.Contains(revision.Hint, "retry using its current") {
+		t.Fatalf("answer conflict still told the caller to retry with revision: %q", revision.Hint)
 	}
 	if strings.Contains(revision.Hint, "if_updated_at") {
 		t.Fatalf("PM conflict hint still used card/board language: %q", revision.Hint)
+	}
+
+	dispatch := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
+	EnrichForCommand(dispatch, "pm.decisions.dispatch")
+	if !strings.Contains(dispatch.Hint, "status") || strings.Contains(dispatch.Hint, "retry using its current") {
+		t.Fatalf("expected dispatch to check status before retry, got %q", dispatch.Hint)
+	}
+
+	superseded := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict","details":{"superseded_by":"decision-2","status":"superseded"}}}`))
+	EnrichForCommand(superseded, "pm.decisions.answer")
+	if !strings.Contains(superseded.Hint, "replaced") || !strings.Contains(superseded.Hint, "decision-2") {
+		t.Fatalf("expected superseded replacement id, got %q", superseded.Hint)
+	}
+	if strings.Contains(superseded.Hint, "retry using its current") {
+		t.Fatalf("superseded hint still offered a retry: %q", superseded.Hint)
+	}
+	supersededDetails, _ := superseded.Details.(map[string]any)
+	supersededRec, _ := supersededDetails["anx_cli_recovery"].(map[string]any)
+	if supersededRec["superseded_by"] != "decision-2" || supersededRec["status"] != "superseded" {
+		t.Fatalf("recovery missing superseded fields: %#v", supersededRec)
+	}
+
+	dispatchSuperseded := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict","details":{"superseded_by":"decision-9","status":"superseded"}}}`))
+	EnrichForCommand(dispatchSuperseded, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchSuperseded.Hint, "decision-9") || strings.Contains(dispatchSuperseded.Hint, "retry using its current") {
+		t.Fatalf("expected dispatch superseded hint, got %q", dispatchSuperseded.Hint)
 	}
 
 	stale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed"}}`))
@@ -338,5 +367,43 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 	EnrichForCommand(card, "cards.patch")
 	if !strings.Contains(card.Hint, "if_updated_at") {
 		t.Fatalf("non-PM commands must keep card hints, got %q", card.Hint)
+	}
+}
+
+func TestEnrichForCommandPMConversationBusy(t *testing.T) {
+	t.Parallel()
+
+	generic := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	if !strings.Contains(strings.ToLower(generic.Hint), "command help") {
+		t.Fatalf("busy without a command should keep the generic hint, got %q", generic.Hint)
+	}
+
+	err := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	EnrichForCommand(err, "pm.conversations.messages.create")
+	if !strings.Contains(err.Hint, "queued or being answered") || !strings.Contains(err.Hint, "pm conversations get") {
+		t.Fatalf("expected conversation busy hint, got %q", err.Hint)
+	}
+	if strings.Contains(strings.ToLower(err.Hint), "command help") {
+		t.Fatalf("busy hint still generic: %q", err.Hint)
+	}
+	details, _ := err.Details.(map[string]any)
+	if got, _ := details["hint"].(string); got != err.Hint {
+		t.Fatalf("details.hint should match: details=%q hint=%q", got, err.Hint)
+	}
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
+	if rec["kind"] != "busy" {
+		t.Fatalf("unexpected recovery: %#v", rec)
+	}
+
+	alias := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	EnrichForCommand(alias, "pm.conversations.message")
+	if !strings.Contains(alias.Hint, "queued or being answered") {
+		t.Fatalf("CLI path command id should also enrich busy, got %q", alias.Hint)
+	}
+
+	other := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	EnrichForCommand(other, "pm.decisions.answer")
+	if strings.Contains(other.Hint, "queued or being answered") {
+		t.Fatalf("non-message PM commands must not get the conversation busy hint, got %q", other.Hint)
 	}
 }

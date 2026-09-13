@@ -410,7 +410,10 @@ func formatWorkCommandText(name string, body any) string {
 		return strings.Join(appendPaginationLines(lines, root), "\n")
 	}
 	if name == "pm turns get" {
-		return fmt.Sprintf("%s  status=%s  deadline=%s  failure=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["deadline"]), anyString(root["failure"]))
+		return formatPMTurnGetText(root)
+	}
+	if name == "pm decisions dispatch" {
+		return formatPMDispatchText(root)
 	}
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])
@@ -430,6 +433,44 @@ func formatWorkCommandText(name string, body any) string {
 		return strings.Join(lines, "\n")
 	}
 	return formatPrettyBody(body)
+}
+
+func formatPMTurnGetText(root map[string]any) string {
+	status := firstNonEmpty(anyString(root["status"]), "unknown")
+	if status == "sending" {
+		if asBool(root["claimed"]) {
+			status = "in progress"
+		} else {
+			status = "queued"
+		}
+	}
+	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), status)
+	if claimedAt := anyString(root["claimed_at"]); claimedAt != "" {
+		line += "  claimed_at=" + claimedAt
+	}
+	return line + fmt.Sprintf("  deadline=%s  failure=%s", anyString(root["deadline"]), anyString(root["failure"]))
+}
+
+func formatPMDispatchText(root map[string]any) string {
+	receipt := asMap(root["receipt"])
+	status := firstNonEmpty(anyString(root["status"]), "unknown")
+	line := fmt.Sprintf("%s  status=%s  receipt=%s", anyString(root["id"]), status, firstNonEmpty(anyString(receipt["status"]), "unknown"))
+	if detail := anyString(receipt["detail"]); detail != "" {
+		line += "  " + detail
+	}
+	if pmDispatchNothingSent(status) {
+		line += "  nothing was sent"
+	}
+	return line
+}
+
+func pmDispatchNothingSent(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "delivered", "acknowledged", "source_reported", "verified":
+		return true
+	default:
+		return false
+	}
 }
 
 func renderWorkLine(work map[string]any) string {

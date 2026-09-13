@@ -385,6 +385,18 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(turn, "turn-1") || !strings.Contains(turn, "status=failed") || !strings.Contains(turn, "deadline=2026-09-08T22:00:00Z") || !strings.Contains(turn, "failure=deadline passed") {
 		t.Errorf("lost turn fields: %s", turn)
 	}
+	queued := formatWorkCommandText("pm turns get", map[string]any{"id": "turn-2", "status": "sending", "claimed": false, "deadline": "2026-09-08T22:00:00Z"})
+	if !strings.Contains(queued, "status=queued") || strings.Contains(queued, "status=sending") || strings.Contains(queued, "claimed_at=") {
+		t.Errorf("unclaimed sending turn should render as queued: %s", queued)
+	}
+	inProgress := formatWorkCommandText("pm turns get", map[string]any{"id": "turn-3", "status": "sending", "claimed": true, "claimed_at": "2026-09-08T21:00:00Z", "deadline": "2026-09-08T22:00:00Z"})
+	if !strings.Contains(inProgress, "status=in progress") || !strings.Contains(inProgress, "claimed_at=2026-09-08T21:00:00Z") || strings.Contains(inProgress, "status=sending") {
+		t.Errorf("claimed sending turn should render as in progress: %s", inProgress)
+	}
+	dispatch := formatWorkCommandText("pm decisions dispatch", map[string]any{"id": "action-1", "status": "failed", "receipt": map[string]any{"status": "failed", "detail": "unavailable"}})
+	if !strings.Contains(dispatch, "action-1") || !strings.Contains(dispatch, "status=failed") || !strings.Contains(dispatch, "receipt=failed") || !strings.Contains(dispatch, "unavailable") || !strings.Contains(dispatch, "nothing was sent") {
+		t.Errorf("dispatch text lost receipt outcome: %s", dispatch)
+	}
 }
 
 func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
@@ -417,8 +429,37 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			errorCode:   "conflict",
 			body:        `{"revision":1,"approve":true,"text":"ok"}`,
 			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
-			want:        "pm decisions get",
-			notWant:     "if_updated_at",
+			want:        "status",
+			notWant:     "retry using its current",
+		},
+		{
+			name:        "answer superseded conflict",
+			commandPath: "/pm/decisions/decision-1/answer",
+			errorCode:   "conflict",
+			details:     `{"superseded_by":"decision-2","status":"superseded"}`,
+			body:        `{"revision":1,"approve":true,"text":"ok"}`,
+			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
+			want:        "decision-2",
+			notWant:     "retry using its current",
+		},
+		{
+			name:        "dispatch superseded conflict",
+			commandPath: "/pm/decisions/decision-1/dispatch",
+			errorCode:   "conflict",
+			details:     `{"superseded_by":"decision-8","status":"superseded"}`,
+			body:        `{}`,
+			args:        []string{"pm", "decisions", "dispatch", "decision-1"},
+			want:        "decision-8",
+			notWant:     "retry using its current",
+		},
+		{
+			name:        "dispatch status conflict",
+			commandPath: "/pm/decisions/decision-1/dispatch",
+			errorCode:   "conflict",
+			body:        `{}`,
+			args:        []string{"pm", "decisions", "dispatch", "decision-1"},
+			want:        "status",
+			notWant:     "retry using its current",
 		},
 		{
 			name:        "create request-key conflict",
@@ -465,8 +506,119 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			if strings.Contains(hint, tc.notWant) {
 				t.Errorf("hint still uses %q: %q", tc.notWant, hint)
 			}
-			if tc.details != "" && !strings.Contains(hint, "decision-9") {
+			if strings.Contains(tc.details, "existing_decision_id") && !strings.Contains(hint, "decision-9") {
 				t.Errorf("hint did not name existing_decision_id: %q", hint)
+			}
+			if strings.Contains(hint, "if_updated_at") {
+				t.Errorf("PM hint still used card/board language: %q", hint)
+			}
+		})
+	}
+}
+
+func TestPMConversationMessageBusyHint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/conversations/conv-1/messages" {
+			t.Errorf("path=%s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		io.WriteString(w, `{"error":{"code":"busy","message":"PM execution capacity reached"}}`)
+	}))
+	defer server.Close()
+	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{"request_key":"k","text":"hello"}`), []string{"--json", "--base-url", server.URL, "pm", "conversations", "message", "conv-1", "--from-file", "-"}))
+	hint := fmt.Sprint(asMap(payload["error"])["hint"])
+	if !strings.Contains(hint, "queued or being answered") || !strings.Contains(hint, "pm conversations get") {
+		t.Fatalf("expected conversation busy hint, got %q payload=%v", hint, payload)
+	}
+	if strings.Contains(strings.ToLower(hint), "command help") {
+		t.Fatalf("busy hint still generic: %q", hint)
+	}
+}
+
+func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		want       []string
+	}{
+		{
+			name: "already failed",
+			body: `{"id":"action-1","status":"failed","receipt":{"status":"failed","detail":"unavailable"}}`,
+			want: []string{"action-1", "status=failed", "receipt=failed", "unavailable", "nothing was sent"},
+		},
+		{
+			name: "already delivered",
+			body: `{"id":"action-2","status":"delivered","receipt":{"status":"delivered","detail":"accepted"}}`,
+			want: []string{"action-2", "status=delivered", "receipt=delivered", "accepted", "nothing was sent"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/pm/decisions/decision-1/dispatch" {
+					t.Errorf("request=%s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "decisions", "dispatch", "decision-1"})
+			if strings.Contains(text, `"id"`) || strings.Contains(text, `"receipt"`) {
+				t.Fatalf("text mode still printed JSON: %s", text)
+			}
+			for _, needle := range tc.want {
+				if !strings.Contains(text, needle) {
+					t.Fatalf("missing %q in %s", needle, text)
+				}
+			}
+			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "decisions", "dispatch", "decision-1"}))
+			var want any
+			_ = json.Unmarshal([]byte(tc.body), &want)
+			got, _ := json.Marshal(payload["data"])
+			encodedWant, _ := json.Marshal(want)
+			if string(got) != string(encodedWant) {
+				t.Fatalf("JSON output changed: %s want %s", got, encodedWant)
+			}
+		})
+	}
+}
+
+func TestPMTurnsGetTextRendersQueuedAndInProgress(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		want, hide []string
+	}{
+		{
+			name: "unclaimed sending",
+			body: `{"id":"turn-1","status":"sending","claimed":false,"deadline":"2026-09-08T22:00:00Z"}`,
+			want: []string{"turn-1", "status=queued", "deadline=2026-09-08T22:00:00Z"},
+			hide: []string{"status=sending", "claimed_at="},
+		},
+		{
+			name: "claimed sending",
+			body: `{"id":"turn-2","status":"sending","claimed":true,"claimed_at":"2026-09-08T21:00:00Z","deadline":"2026-09-08T22:00:00Z"}`,
+			want: []string{"turn-2", "status=in progress", "claimed_at=2026-09-08T21:00:00Z"},
+			hide: []string{"status=sending"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/pm/turns/turn-1" {
+					t.Errorf("request=%s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "turns", "get", "turn-1"})
+			for _, needle := range tc.want {
+				if !strings.Contains(text, needle) {
+					t.Fatalf("missing %q in %s", needle, text)
+				}
+			}
+			for _, needle := range tc.hide {
+				if strings.Contains(text, needle) {
+					t.Fatalf("unexpected %q in %s", needle, text)
+				}
 			}
 		})
 	}

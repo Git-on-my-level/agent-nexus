@@ -41,10 +41,10 @@ func TestRenderErrorPMConflictUsesRevisionHint(t *testing.T) {
 		t.Fatalf("expected exit 1, got %d", exit)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "Hint:") || !strings.Contains(out, "pm decisions get") || !strings.Contains(out, "revision") {
-		t.Fatalf("expected PM revision hint, got %q", out)
+	if !strings.Contains(out, "Hint:") || !strings.Contains(out, "pm decisions get") || !strings.Contains(out, "status") {
+		t.Fatalf("expected PM status-check hint, got %q", out)
 	}
-	if strings.Contains(out, "if_updated_at") {
-		t.Fatalf("PM 409 still mentioned if_updated_at: %q", out)
+	if strings.Contains(out, "if_updated_at") || strings.Contains(out, "retry using its current") {
+		t.Fatalf("PM 409 still offered a revision retry: %q", out)
 	}
 }
