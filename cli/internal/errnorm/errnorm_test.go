@@ -301,3 +301,42 @@ func TestNormalizeAppliesMetadataDefaults(t *testing.T) {
 		t.Fatal("expected non-empty hint")
 	}
 }
+
+func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
+	t.Parallel()
+
+	revision := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
+	if !strings.Contains(revision.Hint, "if_updated_at") {
+		t.Fatalf("generic conflict hint should mention if_updated_at before command enrichment: %q", revision.Hint)
+	}
+	EnrichForCommand(revision, "pm.decisions.answer")
+	if !strings.Contains(revision.Hint, "pm decisions get") || !strings.Contains(revision.Hint, "revision") {
+		t.Fatalf("expected PM revision hint, got %q", revision.Hint)
+	}
+	if strings.Contains(revision.Hint, "if_updated_at") {
+		t.Fatalf("PM conflict hint still used card/board language: %q", revision.Hint)
+	}
+
+	stale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed"}}`))
+	EnrichForCommand(stale, "pm.actions.reconcile")
+	if !strings.Contains(stale.Hint, "stale") || !strings.Contains(strings.ToLower(stale.Hint), "propose") {
+		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
+	}
+
+	existing := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict","details":{"existing_decision_id":"decision-9"}}}`))
+	EnrichForCommand(existing, "pm.decisions.create")
+	if !strings.Contains(existing.Hint, "error.details.existing_decision_id") || !strings.Contains(existing.Hint, "decision-9") {
+		t.Fatalf("expected request-key conflict to name existing_decision_id, got %q", existing.Hint)
+	}
+	details, _ := existing.Details.(map[string]any)
+	rec, _ := details["anx_cli_recovery"].(map[string]any)
+	if rec["existing_decision_id"] != "decision-9" {
+		t.Fatalf("recovery missing existing_decision_id: %#v", rec)
+	}
+
+	card := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"card has been updated; refresh and retry"}}`))
+	EnrichForCommand(card, "cards.patch")
+	if !strings.Contains(card.Hint, "if_updated_at") {
+		t.Fatalf("non-PM commands must keep card hints, got %q", card.Hint)
+	}
+}

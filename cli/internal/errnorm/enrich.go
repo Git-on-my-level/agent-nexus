@@ -82,6 +82,111 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	}
 }
 
+// EnrichForCommand replaces generic recovery text with command-specific guidance.
+// FromHTTPFailure does not know the CLI command; call this once the command id is known.
+func EnrichForCommand(e *Error, commandID string) {
+	if e == nil {
+		return
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return
+	}
+	hint, recovery := enrichPMCommandError(commandID, e)
+	if hint == "" && recovery == nil {
+		return
+	}
+	if hint != "" {
+		e.Hint = hint
+	}
+	details, ok := e.Details.(map[string]any)
+	if !ok || details == nil {
+		details = map[string]any{}
+		e.Details = details
+	}
+	if recovery != nil {
+		mergeRecovery(details, recovery)
+	}
+	if strings.TrimSpace(e.Hint) != "" {
+		details["hint"] = strings.TrimSpace(e.Hint)
+	}
+}
+
+func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
+	switch commandID {
+	case "pm.decisions.answer", "pm.decisions.create", "pm.actions.reconcile":
+	default:
+		return "", nil
+	}
+	code := strings.TrimSpace(e.Code)
+	existingID := lookupExistingDecisionID(e)
+	switch code {
+	case "source_revision_changed":
+		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
+			map[string]any{
+				"kind":        "stale_source_revision",
+				"refresh_cli": "anx pm decisions get <id>",
+			}
+	case "conflict":
+		if existingID != "" {
+			return fmt.Sprintf("This request key already names an existing decision. `error.details.existing_decision_id` is %s; inspect it with `anx pm decisions get %s` instead of creating a duplicate.", existingID, existingID),
+				map[string]any{
+					"kind":                 "resource_exists",
+					"resource":             "decision",
+					"existing_decision_id": existingID,
+					"refresh_cli":          "anx pm decisions get " + existingID,
+				}
+		}
+		return "Re-read the decision with `anx pm decisions get <id>` and retry using its current `revision`.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "revision",
+				"refresh_cli": "anx pm decisions get <id>",
+			}
+	default:
+		return "", nil
+	}
+}
+
+func lookupExistingDecisionID(e *Error) string {
+	if e == nil {
+		return ""
+	}
+	details, _ := e.Details.(map[string]any)
+	if details == nil {
+		return ""
+	}
+	if id := nestedString(details, "existing_decision_id"); id != "" {
+		return id
+	}
+	parsed, _ := details["parsed"].(map[string]any)
+	if id := nestedString(parsed, "existing_decision_id"); id != "" {
+		return id
+	}
+	errObj, _ := parsed["error"].(map[string]any)
+	if id := nestedString(errObj, "existing_decision_id"); id != "" {
+		return id
+	}
+	nested, _ := errObj["details"].(map[string]any)
+	return nestedString(nested, "existing_decision_id")
+}
+
+func nestedString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch typed := v.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
 func mergeRecovery(details map[string]any, rec map[string]any) {
 	if len(rec) == 0 {
 		return

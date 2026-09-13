@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -429,15 +430,27 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 }
 
 func (a *App) completeTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken, text string, maxBytes int) error {
-	if len(text) > maxBytes {
-		text = text[:maxBytes]
-	}
+	text = truncateToMaxBytes(text, maxBytes)
 	_, err := a.invokeRawJSON(ctx, cfg, "pm turns complete", "POST", "/pm/turns/"+url.PathEscape(turnID)+"/complete", map[string]any{
 		"text":          text,
 		"evidence_refs": extractEvidenceRefs(text),
 		"lease_token":   leaseToken,
 	})
 	return err
+}
+
+func truncateToMaxBytes(text string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	n := maxBytes
+	for n > 0 && !utf8.ValidString(text[:n]) {
+		n--
+	}
+	return text[:n]
 }
 
 func (a *App) failTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken, reason string) error {

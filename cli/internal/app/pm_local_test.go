@@ -481,3 +481,23 @@ func claimedTurn() map[string]any {
 		"text":        "What needs my decision?",
 	}
 }
+
+func TestTruncateToMaxBytesKeepsUTF8RuneBoundaries(t *testing.T) {
+	multi := "héllo世界" // é is 2 bytes; 世 and 界 are 3 bytes each
+	if got := truncateToMaxBytes(multi, len(multi)); got != multi {
+		t.Fatalf("full budget: got %q", got)
+	}
+	if got := truncateToMaxBytes("é", 1); got != "" {
+		t.Fatalf("cut mid-rune should be empty, got %q bytes=%v", got, []byte(got))
+	}
+	world := "世界"
+	if got := truncateToMaxBytes(world, 3); got != "世" {
+		t.Fatalf("first CJK rune: got %q", got)
+	}
+	if got := truncateToMaxBytes(world, 4); got != "世" {
+		t.Fatalf("mid second rune must not split UTF-8, got %q bytes=%v", got, []byte(got))
+	}
+	if got := truncateToMaxBytes("abc", 2); got != "ab" {
+		t.Fatalf("ascii: got %q", got)
+	}
+}
