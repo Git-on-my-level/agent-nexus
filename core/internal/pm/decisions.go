@@ -178,7 +178,7 @@ func (s *Service) ListActions(ctx context.Context, p Principal) ([]Action, error
 	}
 	return out, nil
 }
-func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) (Action, error) {
+func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) (result Action, err error) {
 	if !p.Human {
 		return Action{}, ErrForbidden
 	}
@@ -186,6 +186,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if err != nil {
 		return Action{}, err
 	}
+	defer func() { err = decisionTargetError(err, d) }()
 	if d.Status == Superseded {
 		return Action{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
 	}
@@ -240,7 +241,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		if err != nil {
 			return Action{}, err
 		}
-		return a, ErrStale
+		return a, &ApprovalTargetError{ApprovedRevision: a.TargetRevision, CurrentRevision: &revision, Reason: "revision_changed"}
 	}
 	old := a.Revision
 	a.Status = Sending
@@ -350,8 +351,28 @@ func validateReceipt(r Receipt, reconcile bool) error {
 	}
 	return nil
 }
-func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (Action, error) {
+func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (result Action, err error) {
 	a, err := s.action(ctx, p, id, "pm.read")
+	defer func() {
+		if !errors.Is(err, ErrStale) {
+			return
+		}
+		var d Decision
+		if readErr := s.store.get(ctx, "decision", a.DecisionID, &d); readErr != nil {
+			err = readErr
+			return
+		}
+		err = decisionTargetError(err, d)
+		var target *ApprovalTargetError
+		if errors.As(err, &target) {
+			switch target.Reason {
+			case "work_missing":
+				target.message = "Nothing was delivered for this approval: the task it refers to no longer exists, so there is nothing to read back."
+			case "work_read_failed":
+				target.message = "Could not read back this approval: the task it refers to could not be read. Retry reconciliation."
+			}
+		}
+	}()
 	if err != nil {
 		return a, err
 	}
@@ -562,7 +583,7 @@ func hasSentAttempt(a Action) bool {
 // Replays are handled before this check. Dispatch still rechecks the revision
 // because source state can change after approval (including during this read).
 func (s *Service) validateApprovalTarget(ctx context.Context, p Principal, d Decision) error {
-	failure := &ApprovalTargetError{Proposal: true, ApprovedRevision: d.TargetRevision, Reason: "work_read_failed"}
+	failure := &ApprovalTargetError{Proposal: true, OriginKind: d.OriginKind, ProposedBy: d.ProposedBy, ApprovedRevision: d.TargetRevision, Reason: "work_read_failed"}
 	if s.deps.DecisionWork == nil {
 		return failure
 	}
@@ -607,4 +628,19 @@ func actionWorkReadError(a Action, err error) error {
 		reason = "work_missing"
 	}
 	return &ApprovalTargetError{ApprovedRevision: a.TargetRevision, Reason: reason}
+}
+
+// Enrich every stale return, including executor errors, from durable proposal
+// provenance. Copy typed errors so dependency-owned errors are never mutated.
+func decisionTargetError(err error, d Decision) error {
+	if !errors.Is(err, ErrStale) {
+		return err
+	}
+	target := ApprovalTargetError{ApprovedRevision: d.TargetRevision, Reason: "revision_changed", message: err.Error()}
+	var existing *ApprovalTargetError
+	if errors.As(err, &existing) {
+		target = *existing
+	}
+	target.OriginKind, target.ProposedBy = d.OriginKind, d.ProposedBy
+	return &target
 }
