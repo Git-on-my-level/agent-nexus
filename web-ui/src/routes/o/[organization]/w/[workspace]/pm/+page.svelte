@@ -268,7 +268,9 @@
       olderLoaded = false;
       anchored = false;
     }
-    error = "";
+    // A quiet poll refreshes turns; it must not erase an error the reader
+    // has not yet seen (a "busy" refusal, for one).
+    if (!quiet) error = "";
     try {
       if (id) {
         const result = await coreClient.getPmConversation(id, { limit: 100 });

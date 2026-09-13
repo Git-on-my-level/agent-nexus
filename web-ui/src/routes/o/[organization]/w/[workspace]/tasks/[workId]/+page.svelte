@@ -686,7 +686,7 @@
           {/if}
         </section>
         <section>
-          <h2 class="ui-label">Decisions</h2>
+          <h2 class="ui-label">Inbox</h2>
           <a
             class="mt-2 inline-block text-accent-text hover:underline"
             href={workspaceHref(

@@ -310,6 +310,9 @@
                 : "Approved. Delivery is in progress.";
           } catch (err) {
             actionError = errorMessage(err);
+            // Core records why (stale revision, no path); show that record,
+            // not the pre-dispatch snapshot with a live Deliver button.
+            await refreshReceipt();
           }
         }
       }
@@ -528,10 +531,7 @@
     {/each}
     {#if truncated}
       <span class="ml-2 text-micro text-fg-subtle"
-        >Not everything is loaded; older items are in <a
-          class="ui-prose-link"
-          href={workspaceHref("/tasks")}>Tasks</a
-        >.</span
+        >Not everything is loaded; the counts are lower bounds.</span
       >
     {/if}
   </nav>

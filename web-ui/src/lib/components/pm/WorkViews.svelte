@@ -176,7 +176,7 @@
             >{group.items.length}</span
           >
         </div>
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-2" role="list">
           {#each group.items as work (workKey(work))}
             {@const key = workKey(work)}
             {@const decisionId = requestedDecisions[key]}

@@ -46,17 +46,32 @@ export function safeSourceHref(value) {
  * than answering the reader's question: when did we last look, and can we
  * still reach the thing we looked at.
  */
+// Not every failed read is unreachability; a reader that is not ready or a
+// credential problem is local, and the badge should not blame the source.
+const READ_ERROR_LABELS = {
+  policy_denied: "Reader not ready",
+  isolation_unavailable: "Reader not ready",
+  configuration: "Reader not configured",
+  invalid_output: "Reader output invalid",
+  rate_limited: "Rate limited",
+  permission: "Access denied",
+  not_found: "Not found at source",
+};
+
 export function freshness(
   { observedAt, staleAfter, error, status, sourceName } = {},
   now = Date.now(),
 ) {
   const named = String(sourceName ?? "").trim();
-  if (error || status === "error")
-    return {
-      key: "error",
-      label: named ? `Can't reach ${named}` : "Can't reach source",
-      tone: "warn",
-    };
+  if (error || status === "error") {
+    const code = String(error?.code ?? "").toLowerCase();
+    const label = READ_ERROR_LABELS[code]
+      ? READ_ERROR_LABELS[code]
+      : named
+        ? `Can't reach ${named}`
+        : "Can't reach source";
+    return { key: "error", label, tone: "warn" };
+  }
   const observed = Date.parse(observedAt);
   if (!Number.isFinite(observed) || observed > now + 60_000)
     return { key: "unknown", label: "Never checked", tone: "neutral" };

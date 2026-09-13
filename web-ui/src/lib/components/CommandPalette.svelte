@@ -51,8 +51,18 @@
       .filter((i) => i !== -1),
   );
 
+  // The element that opened the palette gets focus back when it closes, so
+  // Escape does not strand the keyboard on <body>.
+  let opener = null;
+  let wasOpen = false;
   $effect(() => {
     if (open && inputEl) {
+      if (!wasOpen) {
+        const active = document.activeElement;
+        opener =
+          active instanceof HTMLElement && active !== inputEl ? active : null;
+      }
+      wasOpen = true;
       inputEl.focus();
     }
   });
@@ -64,6 +74,12 @@
       loading = false;
       activeIndex = -1;
       if (debounceTimer) clearTimeout(debounceTimer);
+      if (wasOpen) {
+        wasOpen = false;
+        const target = opener;
+        opener = null;
+        if (target?.isConnected) target.focus();
+      }
     }
   });
 

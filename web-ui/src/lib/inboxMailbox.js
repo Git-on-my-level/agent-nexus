@@ -194,11 +194,16 @@ export function buildInboxRows({
   }
   for (const raw of inboxItems) {
     const item = enrichInboxItem(raw);
+    const subjectRef = String(item.subject_ref ?? "").trim();
+    const subjectTitle = taskTitles.get(subjectRef);
     rows.push({
       id: `inbox:${item.id}`,
       kind: "inbox",
       title: item.title || item.summary || "Inbox item",
-      source: getInboxSubjectLabel(item) || "",
+      // Name the subject when we know it; a raw ref is a last resort.
+      source: subjectTitle
+        ? `Task: ${subjectTitle}`
+        : getInboxSubjectLabel(item) || "",
       ref: item.subject_ref || "",
       time: item.source_event_time || item.created_at || item.responded_at,
       status: item.status || (item.responded_at ? "completed" : "open"),

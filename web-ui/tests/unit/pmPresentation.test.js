@@ -187,3 +187,18 @@ describe("structured decisions read as sentences", () => {
     });
   });
 });
+
+describe("freshness names the cause of a failed read", () => {
+  it("blames the reader, not the source, for local causes", async () => {
+    const { freshness } = await import("$lib/pm/presentation.js");
+    expect(
+      freshness({ error: { code: "policy_denied" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Reader not ready" });
+    expect(
+      freshness({ error: { code: "rate_limited" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Rate limited" });
+    expect(
+      freshness({ error: { code: "unavailable" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Can't reach GitHub" });
+  });
+});
