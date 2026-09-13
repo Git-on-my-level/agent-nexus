@@ -272,22 +272,32 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 		return reconcileSourceRead(ctx, store, cfg.Observation, a)
 	}
+	deps.ResolveResolution = func(ctx context.Context, p pm.Principal, ref string) (pm.ResolutionRef, error) {
+		if p.WorkspaceID != cfg.PM.WorkspaceID {
+			return pm.ResolutionRef{}, pm.ErrForbidden
+		}
+		resolved, err := store.ResolveResolutionRef(ctx, ref)
+		return pm.ResolutionRef{Ref: resolved.Ref, Kind: resolved.Kind, TitleOrSummary: resolved.TitleOrSummary, Exists: resolved.Exists}, err
+	}
 	service, err := pm.NewService(ps, cfg.PM, deps)
 	if err != nil {
 		return nil, err
 	}
 	handler := pm.Handler{Service: service, Authenticate: func(r *http.Request) (pm.Principal, error) {
-		token, err := parseBearerToken(r.Header.Get("Authorization"))
-		if err != nil {
-			return pm.Principal{}, pm.ErrForbidden
-		}
-		p, err := authStore.AuthenticateAccessToken(r.Context(), token)
-		if err != nil {
+		p, ok := cachedAuthenticatedPrincipal(r)
+		if !ok {
 			return pm.Principal{}, pm.ErrForbidden
 		}
 		return pm.Principal{WorkspaceID: cfg.PM.WorkspaceID, ActorID: p.ActorID, Human: p.PrincipalKind == string(auth.PrincipalKindHuman)}, nil
 	}}
-	runtime := &PMRuntime{Handler: handler, Service: service, cfg: cfg}
+	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if _, ok := authenticatePrincipalFromHeader(w, r, handlerOptions{authStore: authStore}, true); !ok {
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+	runtime := &PMRuntime{Handler: authenticated, Service: service, cfg: cfg}
 	if len(cfg.TelegramWebhookSecret) >= 32 && cfg.TelegramBotID != "" {
 		runtime.Ingress.TelegramSecret = cfg.TelegramWebhookSecret
 		runtime.Ingress.TelegramBotID = cfg.TelegramBotID

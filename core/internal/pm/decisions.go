@@ -18,6 +18,9 @@ func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionI
 	if !validText(in.RequestKey, 256) || !validText(in.WorkRef, 512) || !validText(in.Instruction, 16000) || !validText(in.Scope, 256) || !validText(in.TargetRevision, 512) {
 		return Decision{}, ErrInvalid
 	}
+	if err := s.validateResolution(ctx, p, in.Scope, in.Payload); err != nil {
+		return Decision{}, err
+	}
 	// Public callers cannot inject an origin to redirect an approval notification.
 	if in.Origin != nil {
 		binding, err := s.ResolveBinding(ctx, *in.Origin)
@@ -183,6 +186,9 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	if !validActionPayload(a.Scope, a.Payload) {
 		return s.failBeforeSend(ctx, a, "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done; re-approve with a valid payload")
 	}
+	if err = s.validateResolution(ctx, p, a.Scope, a.Payload); err != nil {
+		return s.failBeforeSend(ctx, a, err.Error())
+	}
 	if err = s.checkDelivery(ctx, a); err != nil {
 		return Action{}, err
 	}
@@ -305,7 +311,7 @@ func (s *Service) ReconcileAction(ctx context.Context, p Principal, id string) (
 	if a.Status == Pending || (a.Status == Failed && !hasSentAttempt(a)) {
 		return Action{}, ErrNothingDelivered
 	}
-	if a.Status == Verified {
+	if a.Status == Verified || a.AcknowledgedAt != nil {
 		return a, nil
 	}
 	if s.deps.Reconcile == nil {

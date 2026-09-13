@@ -202,8 +202,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `pm`
 
-- Commands: `21`
+- Commands: `22`
 - Command IDs:
+  - `pm.actions.acknowledge` (`pm actions acknowledge`)
   - `pm.actions.get` (`pm actions get`)
   - `pm.actions.list` (`pm actions list`)
   - `pm.actions.reconcile` (`pm actions reconcile`)

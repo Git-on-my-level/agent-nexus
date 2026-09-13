@@ -527,6 +527,11 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 }
 
 func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, blob.StagedWrite, error) {
+	if prep.ColumnKey == "done" {
+		if err := validateResolutionRefs(ctx, tx, prep.ResolutionRefs); err != nil {
+			return boardRow, boardCardRow{}, nil, err
+		}
+	}
 	cardID := prep.CardID
 	columnKey := prep.ColumnKey
 	sourceThreadID := prep.SourceThreadID
@@ -1842,6 +1847,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 			}
 			return BoardCardMutationResult{}, invalidBoardRequest("done column requires resolution_refs")
 		}
+		if err := validateResolutionRefs(ctx, tx, refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
+		}
 		if !containsTypedRefPrefix(refs, "artifact") && !containsTypedRefPrefix(refs, "event") {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
@@ -2130,6 +2139,18 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, err
+	}
+
+	if columnKey == "done" {
+		var refs []string
+		if err := json.Unmarshal([]byte(nextResolutionRefsJSON), &refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
+		}
+		if err := validateResolutionRefs(ctx, tx, refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
+		}
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)

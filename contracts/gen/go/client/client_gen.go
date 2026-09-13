@@ -1366,6 +1366,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
+		CommandID:  "pm.actions.acknowledge",
+		CLIPath:    "pm actions acknowledge",
+		Group:      "pm",
+		Method:     "POST",
+		Path:       "/pm/actions/{action_id}/acknowledge",
+		PathParams: []string{"action_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+	},
+	{
 		CommandID:  "pm.actions.get",
 		CLIPath:    "pm actions get",
 		Group:      "pm",
@@ -1375,7 +1387,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.actions.list",
@@ -1386,7 +1398,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.actions.reconcile",
@@ -1398,7 +1410,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.bindings.create",
@@ -1409,7 +1421,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.bindings.list",
@@ -1420,7 +1432,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.context",
@@ -1431,7 +1443,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.conversations.create",
@@ -1442,7 +1454,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.conversations.get",
@@ -1454,7 +1466,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.conversations.list",
@@ -1465,7 +1477,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.conversations.messages.create",
@@ -1477,7 +1489,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.decisions.answer",
@@ -1489,7 +1501,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.decisions.create",
@@ -1500,7 +1512,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.decisions.dispatch",
@@ -1512,7 +1524,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.decisions.get",
@@ -1524,7 +1536,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.decisions.list",
@@ -1535,7 +1547,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID: "pm.turns.claim",
@@ -1546,7 +1558,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:  []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.turns.complete",
@@ -1558,7 +1570,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.turns.context",
@@ -1570,7 +1582,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.decisions.create", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.turns.decisions.create",
@@ -1582,7 +1594,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.fail", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.fail", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.turns.fail",
@@ -1594,7 +1606,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.get"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.get"},
 	},
 	{
 		CommandID:  "pm.turns.get",
@@ -1606,7 +1618,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail"},
+		Adjacent:   []string{"pm.actions.acknowledge", "pm.actions.get", "pm.actions.list", "pm.actions.reconcile", "pm.bindings.create", "pm.bindings.list", "pm.context", "pm.conversations.create", "pm.conversations.get", "pm.conversations.list", "pm.conversations.messages.create", "pm.decisions.answer", "pm.decisions.create", "pm.decisions.dispatch", "pm.decisions.get", "pm.decisions.list", "pm.turns.claim", "pm.turns.complete", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.fail"},
 	},
 	{
 		CommandID: "ref_edges.list",
@@ -2533,6 +2545,10 @@ func (c *Client) OpsHealth(ctx context.Context, opts RequestOptions) (*http.Resp
 
 func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
+}
+
+func (c *Client) PmActionsAcknowledge(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "pm.actions.acknowledge", pathParams, opts)
 }
 
 func (c *Client) PmActionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

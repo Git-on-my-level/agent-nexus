@@ -5774,20 +5774,23 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "opsUsageSummary"
   },
   {
-    "command_id": "pm.actions.get",
-    "cli_path": "pm actions get",
+    "command_id": "pm.actions.acknowledge",
+    "cli_path": "pm actions acknowledge",
     "group": "pm",
-    "method": "GET",
-    "path": "/pm/actions/{action_id}",
-    "operation_id": "pmActionsGet",
-    "summary": "Read an action and its receipts",
-    "why": "Read an action and its receipts.",
-    "input_mode": "none",
+    "method": "POST",
+    "path": "/pm/actions/{action_id}/acknowledge",
+    "operation_id": "pmActionsAcknowledge",
+    "summary": "Acknowledge a failed or unresolvable action",
+    "description": "Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.",
+    "why": "Acknowledge a failed or unresolvable action.",
+    "input_mode": "json-body",
     "streaming": {
       "mode": "none"
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -5807,6 +5810,68 @@ export const commandRegistry: CommandSpec[] = [
       "action_id"
     ],
     "adjacent_commands": [
+      "pm.actions.get",
+      "pm.actions.list",
+      "pm.actions.reconcile",
+      "pm.bindings.create",
+      "pm.bindings.list",
+      "pm.context",
+      "pm.conversations.create",
+      "pm.conversations.get",
+      "pm.conversations.list",
+      "pm.conversations.messages.create",
+      "pm.decisions.answer",
+      "pm.decisions.create",
+      "pm.decisions.dispatch",
+      "pm.decisions.get",
+      "pm.decisions.list",
+      "pm.turns.claim",
+      "pm.turns.complete",
+      "pm.turns.context",
+      "pm.turns.decisions.create",
+      "pm.turns.fail",
+      "pm.turns.get"
+    ],
+    "go_method": "PmActionsAcknowledge",
+    "ts_method": "pmActionsAcknowledge"
+  },
+  {
+    "command_id": "pm.actions.get",
+    "cli_path": "pm actions get",
+    "group": "pm",
+    "method": "GET",
+    "path": "/pm/actions/{action_id}",
+    "operation_id": "pmActionsGet",
+    "summary": "Read an action and its receipts",
+    "why": "Read an action and its receipts.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `PMAction`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_request",
+      "forbidden",
+      "not_found",
+      "conflict",
+      "source_revision_changed",
+      "busy",
+      "unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
+    "path_params": [
+      "action_id"
+    ],
+    "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.list",
       "pm.actions.reconcile",
       "pm.bindings.create",
@@ -5847,6 +5912,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMActionListResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -5863,6 +5930,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.reconcile",
       "pm.bindings.create",
@@ -5902,6 +5970,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -5921,6 +5991,7 @@ export const commandRegistry: CommandSpec[] = [
       "action_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.bindings.create",
@@ -5960,6 +6031,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMBinding`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6032,6 +6105,7 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6071,6 +6145,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMBindingListResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6087,6 +6163,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.",
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6126,6 +6203,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMContextResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6142,6 +6221,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6181,6 +6261,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversation`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6215,6 +6297,7 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6254,6 +6337,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversationDetailResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6273,6 +6358,7 @@ export const commandRegistry: CommandSpec[] = [
       "conversation_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6313,6 +6399,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMConversationListResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6329,6 +6417,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6368,6 +6457,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6399,6 +6490,7 @@ export const commandRegistry: CommandSpec[] = [
       "conversation_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6438,6 +6530,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6473,6 +6567,7 @@ export const commandRegistry: CommandSpec[] = [
       "decision_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6512,6 +6607,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6564,12 +6661,17 @@ export const commandRegistry: CommandSpec[] = [
           ]
         },
         {
+          "name": "payload.resolution",
+          "type": "list\u003cobject\u003e"
+        },
+        {
           "name": "payload.resolution_refs",
           "type": "list\u003cstring\u003e"
         }
       ]
     },
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6609,6 +6711,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6628,6 +6732,7 @@ export const commandRegistry: CommandSpec[] = [
       "decision_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6667,6 +6772,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6686,6 +6793,7 @@ export const commandRegistry: CommandSpec[] = [
       "decision_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6726,6 +6834,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecisionListResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6742,6 +6852,7 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6781,6 +6892,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMClaimedTurn`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6805,6 +6918,7 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6844,6 +6958,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6881,6 +6997,7 @@ export const commandRegistry: CommandSpec[] = [
       "turn_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6920,6 +7037,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMContextResponse`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -6939,6 +7058,7 @@ export const commandRegistry: CommandSpec[] = [
       "turn_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -6978,6 +7098,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -7030,6 +7152,10 @@ export const commandRegistry: CommandSpec[] = [
           ]
         },
         {
+          "name": "payload.resolution",
+          "type": "list\u003cobject\u003e"
+        },
+        {
           "name": "payload.resolution_refs",
           "type": "list\u003cstring\u003e"
         }
@@ -7039,6 +7165,7 @@ export const commandRegistry: CommandSpec[] = [
       "turn_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -7078,6 +7205,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -7111,6 +7240,7 @@ export const commandRegistry: CommandSpec[] = [
       "turn_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -7150,6 +7280,8 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMTurn`.",
     "error_codes": [
+      "auth_required",
+      "invalid_token",
       "invalid_request",
       "forbidden",
       "not_found",
@@ -7169,6 +7301,7 @@ export const commandRegistry: CommandSpec[] = [
       "turn_id"
     ],
     "adjacent_commands": [
+      "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
@@ -9417,6 +9550,10 @@ export class AnxClient {
 
   opsUsageSummary(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("ops.usage.summary", {}, options);
+  }
+
+  pmActionsAcknowledge(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("pm.actions.acknowledge", pathParams, options);
   }
 
   pmActionsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

@@ -49,6 +49,12 @@ func TestRound5NativeFailures(t *testing.T) {
 				want = "source-owned"
 			}
 			d, err := rt.Service.ProposeDecision(ctx, p, in)
+			if kind == "invalid_resolution" {
+				if !errors.Is(err, pm.ErrInvalid) || !strings.Contains(err.Error(), "card:this-ref-does-not-exist") {
+					t.Fatal(err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

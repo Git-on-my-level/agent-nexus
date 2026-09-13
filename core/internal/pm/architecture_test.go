@@ -46,6 +46,12 @@ func TestPhaseApprovalRequiresStructuredTarget(t *testing.T) {
 		s, _, p, _ := fixture(t)
 		ctx := context.Background()
 		d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move to ready", TargetRevision: "r1", Payload: payload})
+		if payload != nil && payload.Phase == "done" {
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatal(err)
+			}
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,9 +159,21 @@ func TestUnpaginatedListsCrossMultiplePages(t *testing.T) {
 	if e != nil || len(as) != 405 {
 		t.Fatalf("actions %d %v", len(as), e)
 	}
-	bs, e := s.BindingPage(ctx, p)
-	if e != nil || len(bs.Items) != 405 {
-		t.Fatalf("bindings %d %v", len(bs.Items), e)
+	bindings := 0
+	cursor := ""
+	for {
+		bs, err := s.BindingPage(ctx, p, 200, cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bindings += len(bs.Items)
+		if !bs.HasMore {
+			break
+		}
+		cursor = bs.NextCursor
+	}
+	if bindings != 405 {
+		t.Fatalf("bindings %d", bindings)
 	}
 	other := Principal{WorkspaceID: p.WorkspaceID, ActorID: "second-human", Human: true}
 	page, e := s.DecisionPage(ctx, other, 200, "")

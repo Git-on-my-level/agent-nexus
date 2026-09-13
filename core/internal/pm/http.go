@@ -27,7 +27,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := h.Authenticate(r)
 	if err != nil {
-		writeError(w, ErrForbidden)
+		writeAuthenticationError(w, r)
 		return
 	}
 	if err = h.Service.authorize(r.Context(), p, "pm.access", ""); err != nil {
@@ -115,8 +115,18 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err = decode(&in); err == nil {
 			out, err = s.ReconcileAction(ctx, p, path[1])
 		}
+	case len(path) == 3 && path[0] == "actions" && path[2] == "acknowledge" && r.Method == http.MethodPost:
+		var in struct{}
+		if err = decode(&in); err == nil {
+			out, err = s.AcknowledgeAction(ctx, p, path[1])
+		}
 	case len(path) == 1 && path[0] == "bindings" && r.Method == http.MethodGet:
-		out, err = s.BindingPage(ctx, p)
+		var limit int
+		var cursor string
+		limit, cursor, err = pageParams(r)
+		if err == nil {
+			out, err = s.BindingPage(ctx, p, limit, cursor)
+		}
 	case len(path) == 1 && path[0] == "bindings" && r.Method == http.MethodPost:
 		var in Binding
 		if err = decode(&in); err == nil {
@@ -171,6 +181,14 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// All turn-bearing endpoints share the same public projection, including
 	// idempotent message replays. Only the runner claim returns credentials.
 	switch value := out.(type) {
+	case Decision:
+		out = s.decisionResponse(ctx, p, value)
+	case Page[Decision]:
+		items := make([]any, 0, len(value.Items))
+		for _, d := range value.Items {
+			items = append(items, s.decisionResponse(ctx, p, d))
+		}
+		out = Page[any]{Items: items, HasMore: value.HasMore, NextCursor: value.NextCursor}
 	case Turn:
 		out = turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
 	case ConversationDetail:
@@ -257,4 +275,15 @@ func turnResponse(t Turn, includeLease bool) any {
 		out.LeaseExpiresAt = &t.LeaseExpiresAt
 	}
 	return out
+}
+
+// Runtime wiring uses core's authentication writer. Keep standalone handlers
+// compatible with that same auth error envelope.
+func writeAuthenticationError(w http.ResponseWriter, r *http.Request) {
+	code, message, hint := "invalid_token", "token is invalid, expired, or revoked", "Refresh or rotate credentials, then retry."
+	if strings.TrimSpace(r.Header.Get("Authorization")) == "" {
+		code, message, hint = "auth_required", "authorization header is required", "Attach a valid Bearer token and retry."
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": code, "message": message, "recoverable": true, "hint": hint}})
 }
