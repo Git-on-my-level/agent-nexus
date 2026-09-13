@@ -163,3 +163,27 @@ describe("PM evidence presentation", () => {
     expect(decisionPayload({})).toBe("");
   });
 });
+
+describe("structured decisions read as sentences", () => {
+  it("lists labelled fields and leads with the next action", async () => {
+    const { decisionFields, decisionSummary } =
+      await import("$lib/pm/presentation.js");
+    const item = {
+      instruction: JSON.stringify({
+        next_action: "A/B the alert ducking curve",
+        next_actor: "audio lead",
+        blockers: ["booth booked", "VO absent"],
+      }),
+      scope: "work.annotate",
+    };
+    expect(decisionFields(item)).toEqual([
+      { label: "Next action", value: "A/B the alert ducking curve" },
+      { label: "Next actor", value: "audio lead" },
+      { label: "Blockers", value: "booth booked; VO absent" },
+    ]);
+    expect(decisionSummary(item, "Balance hub ambience")).toEqual({
+      title: "Balance hub ambience",
+      ask: "Sets next action to “A/B the alert ducking curve”",
+    });
+  });
+});

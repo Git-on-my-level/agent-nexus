@@ -3,6 +3,7 @@
   import ReceiptSignal from "./ReceiptSignal.svelte";
   import {
     decisionConsequence,
+    decisionFields,
     decisionPayload,
     decisionSummary,
     isNexusOwned,
@@ -38,6 +39,14 @@
       : sentenceCase(stripDecisionPrefix(selected?.instruction)),
   );
   let consequence = $derived(decisionConsequence(selected, work));
+  let fields = $derived(decisionFields(selected));
+  // Core's read-back names the phase by key; the reader knows it by label.
+  function readableDetail(text) {
+    return String(text ?? "").replace(
+      /\bphase: ([a-z_]+)\b/g,
+      (match, key) => `phase: ${label(key)}`,
+    );
+  }
   let noteMissing = $derived(!answer.trim());
   // Core derives can_answer for the current reader; an older core omits it,
   // in which case the server is the judge and the form stays available.
@@ -83,14 +92,16 @@
         >
           {proposal}
         </p>
-      {:else if decisionPayload(selected)}
-        <details class="mt-2 text-micro text-fg-muted" open>
-          <summary class="cursor-pointer">Proposed payload</summary>
-          <pre
-            class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
-              selected,
-            )}</pre>
-        </details>
+      {:else if fields.length}
+        <p class="ui-label mt-4">The PM proposes</p>
+        <dl class="space-y-1 text-meta">
+          {#each fields as row (row.label)}
+            <div class="flex gap-2">
+              <dt class="shrink-0 text-fg-muted">{row.label}</dt>
+              <dd class="min-w-0 break-words text-fg">{row.value}</dd>
+            </div>
+          {/each}
+        </dl>
       {/if}
       <details class="mt-3 text-micro text-fg-muted">
         <summary class="cursor-pointer">Technical details</summary>
@@ -118,6 +129,12 @@
             <dd class="break-all font-mono text-fg">{selected.id}</dd>
           </div>
         </dl>
+        {#if decisionPayload(selected)}
+          <pre
+            class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-3 font-mono">{decisionPayload(
+              selected,
+            )}</pre>
+        {/if}
       </details>
     </header>
     {#if selected.status === "awaiting_answer" && cannotAnswer}
@@ -209,7 +226,7 @@
         {/if}
         {#if action.receipt?.detail}
           <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg">
-            {action.receipt.detail}
+            {readableDetail(action.receipt.detail)}
           </p>
         {/if}
         {#if safeSourceHref(action.receipt?.url)}

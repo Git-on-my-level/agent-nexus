@@ -332,13 +332,74 @@ function firstSentence(text) {
  * asked (the first sentence of the proposal). Structured JSON instructions
  * fall back to the existing summary-field logic.
  */
+const FIELD_LABELS = {
+  next_action: "Next action",
+  next_actor: "Next actor",
+  owner: "Owner",
+  accountable_owner: "Accountable owner",
+  acceptance_criteria: "Acceptance criteria",
+  due_at: "Due",
+  priority: "Priority",
+  summary: "Summary",
+  title: "Title",
+  question: "Question",
+  reason: "Reason",
+  message: "Message",
+  action: "Action",
+  instruction: "Instruction",
+  blockers: "Blockers",
+  phase: "Phase",
+};
+
+function fieldLabel(key) {
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  return sentenceCase(String(key).replace(/[_-]+/g, " "));
+}
+
+/**
+ * A structured instruction as readable rows: {label, value} for every scalar
+ * or list field, in a stable order (known fields first). Empty for prose.
+ */
+export function decisionFields(item) {
+  const structured = parseStructuredInstruction(item?.instruction);
+  if (!structured || Array.isArray(structured)) return [];
+  const known = Object.keys(FIELD_LABELS).filter((key) => key in structured);
+  const rest = Object.keys(structured).filter((key) => !(key in FIELD_LABELS));
+  const rows = [];
+  for (const key of [...known, ...rest]) {
+    const value = structured[key];
+    if (value == null || value === "") continue;
+    if (Array.isArray(value)) {
+      const items = value
+        .map((entry) => String(entry ?? "").trim())
+        .filter(Boolean);
+      if (items.length)
+        rows.push({ label: fieldLabel(key), value: items.join("; ") });
+    } else if (typeof value !== "object") {
+      rows.push({ label: fieldLabel(key), value: String(value) });
+    }
+  }
+  return rows;
+}
+
 export function decisionSummary(item, taskTitle = "") {
   const structured = parseStructuredInstruction(item?.instruction);
   if (structured) {
-    return {
-      title: sentenceCase(decisionTitleRaw(item, taskTitle)),
-      ask: "",
-    };
+    const fields = decisionFields(item);
+    const lead = fields.find((row) =>
+      ["Next action", "Summary", "Question", "Action", "Instruction"].includes(
+        row.label,
+      ),
+    );
+    const ask = lead
+      ? sentenceCase(
+          lead.label === "Next action"
+            ? `Sets next action to “${lead.value}”`
+            : lead.value,
+        )
+      : "";
+    const title = String(taskTitle ?? "").trim() || ask || "Proposed decision";
+    return { title, ask: title === ask ? "" : ask };
   }
   const body = stripDecisionPrefix(item?.instruction);
   const ask = sentenceCase(firstSentence(body));
