@@ -105,14 +105,8 @@ export function documentSearchPickerSubtitle(document) {
   if (summary) {
     parts.push(summary);
   }
-  const publicRef =
-    String(document.ref ?? "").trim() ||
-    (resourceRouteSegment(document, "document")
-      ? `document:${resourceRouteSegment(document, "document")}`
-      : "");
-  if (publicRef) {
-    parts.push(publicRef);
-  }
+  // The row's title already names the document; its ref is an identifier
+  // for machines, not a subtitle for readers.
   return parts.join(" · ");
 }
 

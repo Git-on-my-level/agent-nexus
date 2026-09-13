@@ -1088,6 +1088,12 @@
   }
 </script>
 
+<svelte:head
+  ><title
+    >{document?.title ? `${document.title} · Docs` : "Docs"} · Agent Nexus</title
+  ></svelte:head
+>
+
 {#if loading}
   <nav
     class="mb-2 flex min-w-0 items-center gap-1.5 text-micro text-fg-muted"

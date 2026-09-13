@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
+  import { formatTimestamp } from "$lib/formatDate";
   import { initializeAuthSession } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -74,18 +75,35 @@
         : Array.isArray(result?.items)
           ? result.items
           : [];
-      evidenceSuggestions = items
+      const mapped = items
         .map((artifact) => ({
           ref: artifact.ref || (artifact.id ? `artifact:${artifact.id}` : ""),
-          title:
+          id: String(artifact.id ?? ""),
+          name:
             artifact.title ||
             artifact.summary ||
             artifact.name ||
             artifact.filename ||
             [artifact.kind, artifact.media_type].filter(Boolean).join(" · ") ||
             "",
+          when: artifact.created_at ? formatTimestamp(artifact.created_at) : "",
         }))
         .filter((entry) => entry.ref);
+      // Three "Vertical Slice Brief" rows are not a choice; say when each was
+      // made, and add the id's head when even that repeats.
+      const seen = new Map();
+      for (const entry of mapped)
+        seen.set(entry.name, (seen.get(entry.name) || 0) + 1);
+      evidenceSuggestions = mapped.map((entry) => ({
+        ref: entry.ref,
+        title: [
+          entry.name,
+          entry.when,
+          seen.get(entry.name) > 1 && entry.id ? entry.id.slice(0, 8) : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      }));
     } catch {
       evidenceSuggestions = [];
     }
@@ -344,9 +362,19 @@
         };
         return;
       }
-      moveError = errorMessage(err);
+      moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
+  }
+  // Core's validation names the field; the reader needs the fix.
+  function readableMoveError(err) {
+    const raw = errorMessage(err);
+    const missing = raw.match(/missing or trashed resolution ref "([^"]+)"/i);
+    if (missing)
+      return `Nothing exists at ${missing[1]}. Evidence must be an existing artifact or event: pick one from the list, or paste the ref of the file or event that proves completion.`;
+    if (/must include artifact: or event:/i.test(raw))
+      return "Evidence must be an artifact or an event ref (artifact:… or event:…); a task ref is not proof.";
+    return raw;
   }
   // Core answers a replayed request key with the decision it already holds.
   function existingDecisionId(err) {

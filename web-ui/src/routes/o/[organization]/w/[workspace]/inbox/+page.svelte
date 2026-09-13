@@ -576,15 +576,29 @@
     return observed ? formatTimestamp(observed) : "never";
   }
 
+  // A receipt that is still moving (pending, sending, unknown) is refreshed
+  // on its own; nothing else on the page changes without the reader.
+  const RECEIPT_IN_FLIGHT = new Set(["pending_delivery", "sending", "unknown"]);
+  function refreshIfInFlight() {
+    if (busy || !action || !RECEIPT_IN_FLIGHT.has(String(action.status)))
+      return;
+    void refreshReceipt();
+  }
   onMount(() => {
     void load();
     const timer = setInterval(() => {
       now = Date.now();
-    }, 30_000);
+      refreshIfInFlight();
+    }, 15_000);
+    const onVisible = () => {
+      if (!document.hidden) refreshIfInFlight();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       requestId++;
       selectionRequest++;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   });
 </script>

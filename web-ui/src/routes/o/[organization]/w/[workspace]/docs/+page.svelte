@@ -111,9 +111,15 @@
   let createOpen = $state(false);
   let creating = $state(false);
   let createError = $state("");
-  let searchQuery = $state("");
+  // The search lives in the URL (?q=) so a result page can be shared and
+  // the back button restores it; the input holds the draft until submit.
+  let searchQueryTrimmed = $derived(
+    String($page.url.searchParams.get("q") ?? "").trim(),
+  );
   let searchDraft = $state("");
-  let searchQueryTrimmed = $derived(String(searchQuery ?? "").trim());
+  $effect(() => {
+    searchDraft = searchQueryTrimmed;
+  });
 
   let draft = $state({
     title: "",
@@ -128,6 +134,7 @@
   $effect(() => {
     workspaceSlug;
     scopedThreadId;
+    searchQueryTrimmed;
     if (scopedThreadId && createOpen) {
       createOpen = false;
       createError = "";
@@ -466,8 +473,16 @@
     class="flex max-w-md gap-2"
     onsubmit={(event) => {
       event.preventDefault();
-      searchQuery = String(searchDraft ?? "").trim();
-      void loadDocuments();
+      const q = String(searchDraft ?? "").trim();
+      const params = new URLSearchParams($page.url.search);
+      if (q) params.set("q", q);
+      else params.delete("q");
+      const search = params.toString();
+      void goto(workspaceHref(`/docs${search ? `?${search}` : ""}`), {
+        replaceState: true,
+        keepFocus: true,
+        noScroll: true,
+      });
     }}
   >
     <label class="sr-only" for="docs-search">Search documents</label>

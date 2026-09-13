@@ -133,7 +133,7 @@ describe("searchHelpers", () => {
   });
 
   describe("documentSearchPickerSubtitle", () => {
-    it("joins state, summary, and public ref", () => {
+    it("joins state and summary, never the raw ref", () => {
       expect(
         documentSearchPickerSubtitle({
           state: "active",
@@ -141,7 +141,7 @@ describe("searchHelpers", () => {
           ref: "document:hello",
           thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
         }),
-      ).toBe("active · Hello · document:hello");
+      ).toBe("active · Hello");
     });
 
     it("omits empty parts", () => {

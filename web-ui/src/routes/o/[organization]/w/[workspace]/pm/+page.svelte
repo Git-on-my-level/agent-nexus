@@ -80,6 +80,28 @@
     turns.flatMap((turn) => candidateDecisionIdsFromTurn(turn)),
   );
   let waiting = $derived(hasPendingTurn(turns, now));
+  // "Your draft stays in the composer" holds across navigation too: the
+  // draft is kept per conversation for this tab until it is sent.
+  function draftStorageKey(scope) {
+    return `anx.pm.draft:${$page.params.workspace}:${String(scope ?? "").split("\n")[0] || "new"}`;
+  }
+  function readDraft(scope) {
+    try {
+      return sessionStorage.getItem(draftStorageKey(scope)) || "";
+    } catch {
+      return "";
+    }
+  }
+  $effect(() => {
+    const key = draftStorageKey(conversationScope);
+    const text = draft;
+    try {
+      if (text.trim()) sessionStorage.setItem(key, text);
+      else sessionStorage.removeItem(key);
+    } catch {
+      // Storage may be unavailable; the draft still lives in the composer.
+    }
+  });
   let sessionExpired = $state(false);
   function signInAgain() {
     restartSession({
@@ -147,7 +169,7 @@
       creationKey = "";
       requestKey = "";
       requestText = "";
-      draft = "";
+      draft = readDraft(key);
       anchored = false;
     }
     void loadConversation(key.split("\n")[0]);

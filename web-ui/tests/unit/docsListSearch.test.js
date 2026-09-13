@@ -36,6 +36,10 @@ const pageStore = vi.hoisted(() => {
         },
       });
     },
+    // The page reads the search from the URL, so a goto must land there.
+    navigate(href) {
+      this.set({ ...value, url: new URL(href, "http://localhost") });
+    },
   };
 });
 
@@ -49,7 +53,10 @@ const coreClientMock = vi.hoisted(() => ({
 }));
 
 vi.mock("$app/navigation", () => ({
-  goto: vi.fn(),
+  goto: vi.fn((href) => {
+    pageStore.navigate(String(href));
+    return Promise.resolve();
+  }),
   invalidate: vi.fn(),
   invalidateAll: vi.fn(),
   beforeNavigate: vi.fn(),
