@@ -100,6 +100,15 @@ func TestDecisionAnswerRevisionAndUnknownDelivery(t *testing.T) {
 	if _, err = s.DispatchDecision(ctx, p, d.ID); !errors.Is(err, ErrStale) {
 		t.Fatalf("stale approval %v", err)
 	}
+	// A stale approval is terminal; a fresh proposal and approval are required.
+	d, err = s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "d2", WorkRef: "work:1", Instruction: "Assign owner", Scope: "assignment", TargetRevision: "r1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err = s.AnswerDecision(ctx, p, d.ID, AnswerInput{Revision: 1, Approve: true, Text: "Yes"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	s.deps.CurrentRevision = func(context.Context, Principal, string) (string, error) { return "r1", nil }
 	calls := 0
 	s.deps.Execute = func(context.Context, Action) (Receipt, error) { calls++; return Receipt{}, errors.New("lost response") }

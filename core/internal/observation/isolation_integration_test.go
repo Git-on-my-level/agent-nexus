@@ -16,7 +16,11 @@ import (
 
 func isolationRunnerOrSkip(t *testing.T) isolatedExecutor {
 	t.Helper()
-	runner := NewIsolatedRunner()
+	return requireIsolationRunner(t, NewIsolatedRunner())
+}
+
+func requireIsolationRunner(t *testing.T, runner isolatedExecutor) isolatedExecutor {
+	t.Helper()
 	if err := runner.Available(); err != nil {
 		if os.Getenv("ANX_OBSERVATION_ISOLATION_TEST") == "1" {
 			t.Fatal(err)
@@ -85,24 +89,31 @@ func requireIsolationError(t *testing.T, err error) {
 }
 
 func TestSeatbeltProfileIsDenyDefault(t *testing.T) {
-	profile := seatbeltProfile("/tmp/reader", "/tmp/scratch")
-	for _, needle := range []string{"(deny default)", "(deny network*)", "(deny process-fork)", "(allow process-exec*", `(literal "/tmp/reader")`, `(subpath "/tmp/scratch")`} {
+	profile := seatbeltProfile("/private/tmp/reader", "/private/tmp/scratch")
+	t.Logf("Final Seatbelt profile (fixture paths):\n%s", profile)
+	for _, needle := range []string{"(deny default)", "(deny network*)", "(deny process-fork)", "(allow process-exec*", `(literal "/private/tmp/reader")`, `(subpath "/private/tmp/scratch")`} {
 		if !strings.Contains(profile, needle) {
 			t.Fatalf("profile missing %q:\n%s", needle, profile)
 		}
 	}
 
-	for _, name := range []string{"hw.ncpu", "hw.pagesize", "kern.osrelease", "kern.version", "hw.memsize", "sysctl.proc_translated", "hw.optional.armv8_1_atomics", "hw.optional.armv8_crc32", "hw.optional.armv8_2_sha512", "hw.optional.armv8_2_sha3", "hw.optional.arm.FEAT_DIT"} {
-		if !strings.Contains(profile, `(allow sysctl-read (sysctl-name "`+name+`"))`) {
-			t.Fatalf("missing named sysctl %s", name)
+	for _, rule := range []string{
+		`(allow file-read* (literal "/"))`,
+		`(allow file-read-metadata (literal "/private/tmp"))`,
+		`(allow sysctl-read)`,
+		`(deny sysctl-read (sysctl-name "kern.procargs2"))`,
+		`(deny sysctl-read (sysctl-name-prefix "kern.proc"))`,
+	} {
+		if !strings.Contains(profile, rule) {
+			t.Fatalf("missing runtime rule %s", rule)
 		}
 	}
-	for _, broad := range []string{"(allow sysctl-read)", "(sysctl-name-prefix", "kern.procargs2", "kern.proc.", "(allow file-read*)", "(allow file-map-executable)", "(allow mach-lookup)", "(allow mach-priv-host-port)", "(allow ipc-posix-shm)"} {
+	for _, broad := range []string{"(allow file-read*)", "(allow file-map-executable)", "(allow mach-lookup)", "(allow mach-priv-host-port)", "(allow ipc-posix-shm)"} {
 		if strings.Contains(profile, broad) {
 			t.Fatalf("ambient permission %s", broad)
 		}
 	}
-	for _, path := range []string{"/Users", "/Volumes", "/Applications", "/opt", "/private/etc", "/private/var", "/Library", "/tmp"} {
+	for _, path := range []string{"/", "/Users", "/Volumes", "/Applications", "/opt", "/private/etc", "/private/var", "/Library", "/tmp", "/private/tmp"} {
 		if strings.Contains(profile, `(subpath "`+path+`")`) {
 			t.Fatalf("broad read root %s", path)
 		}
@@ -506,10 +517,7 @@ func (r jitBoundTestReader) Read(ctx context.Context, target Target) (Report, er
 // A harmless fixture outside every allowlisted root must be unreadable, even
 // under /private/tmp which was exposed by the old file-read* plus denylist.
 func TestSeatbeltDeniesUnlistedReadAndAllowsScratch(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is macOS-only")
-	}
-	runner := isolationRunnerOrSkip(t)
+	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	dir := isolationWorkDir(t)
 	secret := filepath.Join(dir, "outside-reader")
 	if err := os.WriteFile(secret, []byte("harmless denial fixture"), 0600); err != nil {
@@ -536,10 +544,7 @@ int main(void) {
 
 // Use only a controlled same-uid fixture process, with a synthetic environment.
 func TestSeatbeltSysctlAllowlistAndProcessArgumentsDenied(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is macOS-only")
-	}
-	runner := isolationRunnerOrSkip(t)
+	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	child := exec.Command("/bin/sleep", "30")
 	child.Env = []string{"ANX_SYNTHETIC_FIXTURE=not-a-secret"}
 	if err := child.Start(); err != nil {
@@ -561,6 +566,8 @@ int main(int argc, char **argv) {
  // Prove the controlled process is readable without the profile.
  if(argc>1) return result==0 ? 0 : 10;
  if(result==0 || (errno!=EPERM && errno!=EACCES)) return 11;
+ int hw[2]={CTL_HW,HW_PAGESIZE}; n=sizeof(buf);
+ if(sysctl(hw,2,buf,&n,NULL,0)!=0) return 12;
  const char *names[]={"hw.ncpu","hw.pagesize","kern.osrelease","kern.version","hw.memsize"};
  for(int i=0;i<5;i++) {n=sizeof(buf);if(sysctlbyname(names[i],buf,&n,NULL,0)!=0) return 20+i;}
  puts("{}");return 0;
@@ -576,11 +583,8 @@ int main(int argc, char **argv) {
 	}
 }
 
-func TestSeatbeltGoRuntimeWithNamedSysctls(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is macOS-only")
-	}
-	runner := isolationRunnerOrSkip(t)
+func TestSeatbeltGoRuntimeWithNumericSysctls(t *testing.T) {
+	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	dir := isolationWorkDir(t)
 	source := filepath.Join(dir, "runtime-probe.go")
 	if err := os.WriteFile(source, []byte(`package main
@@ -600,5 +604,41 @@ func main(){
 	}
 	if _, err := runner.Run(context.Background(), binary, []byte("{}"), isolationTestPolicy().Limits); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSeatbeltProfileSignalsOnlySelf(t *testing.T) {
+	profile := seatbeltProfile("/private/tmp/reader", "/private/tmp/scratch")
+	var signals []string
+	for _, line := range strings.Split(profile, "\n") {
+		if strings.Contains(line, "(allow signal") {
+			signals = append(signals, line)
+		}
+	}
+	if len(signals) != 1 || signals[0] != "(allow signal (target self))" {
+		t.Fatalf("unsafe signal grants: %v", signals)
+	}
+}
+
+// Exercise the actual testing fatal/skip paths without invoking sandbox-exec.
+func TestSeatbeltUnavailableQualificationGate(t *testing.T) {
+	if os.Getenv("ANX_SEATBELT_GATE_CHILD") == "1" {
+		requireIsolationRunner(t, &SeatbeltRunner{})
+		t.Fatal("unavailable runner returned")
+	}
+	for _, required := range []string{"", "1"} {
+		t.Run("required="+required, func(t *testing.T) {
+			t.Setenv("ANX_SEATBELT_GATE_CHILD", "1")
+			t.Setenv("ANX_OBSERVATION_ISOLATION_TEST", required)
+			cmd := exec.Command(os.Args[0], "-test.run=^TestSeatbeltUnavailableQualificationGate$", "-test.v")
+			out, err := cmd.CombinedOutput()
+			if required == "1" {
+				if err == nil || !strings.Contains(string(out), "--- FAIL:") {
+					t.Fatalf("qualification must fail: %v %s", err, out)
+				}
+			} else if err != nil || !strings.Contains(string(out), "--- SKIP:") {
+				t.Fatalf("optional qualification must skip: %v %s", err, out)
+			}
+		})
 	}
 }

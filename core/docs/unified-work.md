@@ -100,11 +100,12 @@ profile: process-exec of the artifact, scratch writes, `(deny network*)`,
 the artifact and scratch), keychains and `/private/etc`. Hosts without an
 enforced runner fail closed. A managed directory is not a sandbox.
 
-Sysctl reads use exact names only: hw.ncpu, hw.pagesize, kern.osrelease,
-kern.version, hw.memsize, sysctl.proc_translated, hw.optional.armv8_1_atomics,
-hw.optional.armv8_crc32, hw.optional.armv8_2_sha512, hw.optional.armv8_2_sha3,
-and hw.optional.arm.FEAT_DIT. These cover Go runtime sizing and CPU detection
-plus system metadata. No prefix grant or kern.procargs2 access is permitted.
+macOS 26 dyld requires a literal `/` read grant; other ancestors retain only
+metadata access. Artifact, scratch, and dyld subtree grants remain bounded.
+Signals are limited to `(target self)`. Sysctl reads require a broad allow:
+Go reads `CTL_HW/HW_PAGESIZE` by numeric MIB, which an exact `sysctl-name`
+allowlist does not satisfy on this OS. Explicit denies for `kern.procargs2`
+and the `kern.proc` name prefix protect process arguments and environment.
 The profile and controlled process-argument denial/Go runtime probes live in
 `internal/observation/isolation_integration_test.go`. Require
 `ANX_OBSERVATION_ISOLATION_TEST=1` for host qualification; unavailable enforcement
@@ -257,7 +258,20 @@ the deadline. Retry, or check that a runner is attached."
 Claim allocates new work; it never reoffers an active lease, even to the same
 runner. No capacity or no free work returns the existing 204 response. Capacity
 counting and allocation share one SQLite transaction. Unpaginated service reads
-walk all batches internally; existing HTTP cursor contracts remain unchanged.
+walk all batches internally. PM decision/action/conversation pages return newest
+`created_at` first, with descending internal rowid as the tiebreaker. New actions
+record creation time at approval; legacy actions use their decision creation time.
+Work lists return newest `updated_at` first, then descending card id. Opaque
+cursors retain both ordering values, so newer inserts and changes ahead of the
+cursor appear on a fresh first page without shifting the older continuation.
+Cursors from the previous ordering must be discarded; response shapes are unchanged.
+
+A stale source revision at dispatch persists a finished failed attempt and marks
+the action failed, while returning the existing 409 `source_revision_changed`.
+The receipt includes both approved and current revisions and asks for re-approval.
+The decision remains answered; repeat dispatch never revives the failed action,
+even if the source revision changes back. Propose with a fresh request key and
+approve the current revision to deliver again.
 
 Reconciliation preserves read-back receipts even when they cannot advance the
 action's monotonic status. `reconciliation_conflict: true` marks that mismatch;

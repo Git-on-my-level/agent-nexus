@@ -36,18 +36,15 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		return out, ErrInvalid
 	}
 	scope := stableID(kind, p.WorkspaceID, p.ActorID)
-	var after int64
+	// Cursor values are carried forward, never re-read from a mutable/deleted row.
+	var before struct {
+		Scope   string `json:"scope"`
+		Created string `json:"created"`
+		Row     int64  `json:"row"`
+	}
 	if cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(cursor)
-		if err != nil {
-			return out, ErrInvalid
-		}
-		parts := strings.Split(string(raw), ":")
-		if len(parts) != 2 || parts[0] != scope {
-			return out, ErrInvalid
-		}
-		after, err = strconv.ParseInt(parts[1], 10, 64)
-		if err != nil || after < 0 {
+		if err != nil || json.Unmarshal(raw, &before) != nil || before.Scope != scope || before.Row < 1 {
 			return out, ErrInvalid
 		}
 	}
@@ -55,20 +52,32 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 	if kind == "decision" || kind == "action" {
 		owner = ""
 	}
-	rows, err := s.store.db.QueryContext(ctx, `SELECT rowid,body FROM pm_records WHERE kind=? AND workspace_id=? AND (?='' OR actor_id=?) AND rowid>? ORDER BY rowid LIMIT ?`, kind, p.WorkspaceID, owner, owner, after, limit+1)
+	// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
+	// ordering (including whole seconds) without SQLite's millisecond rounding.
+	// Legacy actions had no creation timestamp; use their decision's timestamp.
+	rows, err := s.store.db.QueryContext(ctx, `WITH records AS (
+ SELECT r.rowid AS record_rowid, r.body,
+ rtrim(COALESCE(json_extract(r.body,'$.created_at'),
+   (SELECT json_extract(d.body,'$.created_at') FROM pm_records d
+    WHERE r.kind='action' AND d.kind='decision' AND d.id=r.parent_id AND d.workspace_id=r.workspace_id), ''), 'Z') AS created
+ FROM pm_records r WHERE r.kind=? AND r.workspace_id=? AND (?='' OR r.actor_id=?))
+ SELECT record_rowid,created,body FROM records
+ WHERE (?=0 OR created<? OR (created=? AND record_rowid<?))
+ ORDER BY created DESC,record_rowid DESC LIMIT ?`, kind, p.WorkspaceID, owner, owner, before.Row, before.Created, before.Created, before.Row, limit+1)
 	if err != nil {
 		return out, err
 	}
 	// Close SQL rows before permission callbacks, which may query the same DB.
 	type record struct {
-		row   int64
-		value T
+		row     int64
+		created string
+		value   T
 	}
 	records := make([]record, 0, limit+1)
 	for rows.Next() {
 		var v record
 		var b []byte
-		if err = rows.Scan(&v.row, &b); err != nil {
+		if err = rows.Scan(&v.row, &v.created, &b); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -91,10 +100,14 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		if allowed(v.value) {
 			out.Items = append(out.Items, v.value)
 		}
-		after = v.row
+		before.Scope, before.Created, before.Row = scope, v.created, v.row
 	}
 	if out.HasMore {
-		out.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(scope + ":" + strconv.FormatInt(after, 10)))
+		raw, err := json.Marshal(before)
+		if err != nil {
+			return out, err
+		}
+		out.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return out, nil
 }

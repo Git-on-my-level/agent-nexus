@@ -130,7 +130,7 @@ func seatbeltProfile(artifact, scratch string) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n")
 	b.WriteString("(allow process-exec* (literal \"" + artifact + "\"))\n")
-	b.WriteString("(allow signal)\n")
+	b.WriteString("(allow signal (target self))\n")
 	// System libraries and the shared cache, including current Cryptex layouts.
 	libraries := []string{"/usr/lib", "/System/Library/dyld",
 		"/System/Volumes/Preboot/Cryptexes/OS/usr/lib",
@@ -143,8 +143,10 @@ func seatbeltProfile(artifact, scratch string) string {
 	}
 	b.WriteString("(allow file-read* " + filters + ")\n")
 	b.WriteString("(allow file-map-executable " + filters + ")\n")
-	// Lookup metadata on ancestors does not grant directory/content reads.
-	seen := map[string]bool{}
+	// macOS 26 dyld needs a literal root content read to start a process.
+	// This is not a subpath grant; other ancestors need only lookup metadata.
+	b.WriteString("(allow file-read* (literal \"/\"))\n")
+	seen := map[string]bool{"/": true}
 	paths := append(append([]string{}, libraries...), artifact)
 	if scratch != "" {
 		paths = append(paths, scratch)
@@ -160,19 +162,12 @@ func seatbeltProfile(artifact, scratch string) string {
 			}
 		}
 	}
-	// Exact sysctl names only: Go runtime sizing needs hw.ncpu/hw.pagesize;
-	// dyld/system metadata uses kern.osrelease, kern.version, hw.memsize.
-	// Go internal/cpu on arm64 probes the five named ARM feature flags below;
-	// x86 checks sysctl.proc_translated for Rosetta (current-process metadata).
-	// Never grant kern.procargs2, kern.proc.*, or a sysctl-name-prefix: those
-	// can disclose other same-uid processes' arguments and environment.
-	for _, name := range []string{
-		"hw.ncpu", "hw.pagesize", "kern.osrelease", "kern.version", "hw.memsize", "sysctl.proc_translated",
-		"hw.optional.armv8_1_atomics", "hw.optional.armv8_crc32",
-		"hw.optional.armv8_2_sha512", "hw.optional.armv8_2_sha3", "hw.optional.arm.FEAT_DIT",
-	} {
-		b.WriteString("(allow sysctl-read (sysctl-name \"" + name + "\"))\n")
-	}
+	// Go's Darwin runtime reads CTL_HW/HW_PAGESIZE via numeric MIB, which
+	// a sysctl-name allowlist does not satisfy on macOS 26. Permit runtime
+	// sysctl reads, but explicitly deny process metadata/argv/environment.
+	b.WriteString("(allow sysctl-read)\n")
+	b.WriteString("(deny sysctl-read (sysctl-name \"kern.procargs2\"))\n")
+	b.WriteString("(deny sysctl-read (sysctl-name-prefix \"kern.proc\"))\n")
 	b.WriteString("(allow file-read* (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\"))\n")
 	b.WriteString("(allow file-ioctl (literal \"/dev/null\"))\n")
 	if scratch != "" {

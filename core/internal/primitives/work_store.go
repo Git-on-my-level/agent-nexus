@@ -364,22 +364,38 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 	if f.Limit < 1 || f.Limit > 200 {
 		return page, workInvalid("limit must be 1..200")
 	}
-	after := ""
+	var before struct {
+		UpdatedAt time.Time `json:"updated_at"`
+		ID        string    `json:"id"`
+	}
 	if f.Cursor != "" {
-		b, e := base64.RawURLEncoding.DecodeString(f.Cursor)
-		if e != nil || len(b) == 0 {
+		b, err := base64.RawURLEncoding.DecodeString(f.Cursor)
+		if err != nil || json.Unmarshal(b, &before) != nil || before.ID == "" || before.UpdatedAt.IsZero() {
 			return page, ErrInvalidCursor
 		}
-		after = string(b)
 	}
 	cards, err := s.ListCards(ctx, CardListFilter{})
 	if err != nil {
 		return page, err
 	}
-	sort.Slice(cards, func(i, j int) bool { return workString(cards[i]["id"]) < workString(cards[j]["id"]) })
+	updated := make(map[string]time.Time, len(cards))
+	for _, card := range cards {
+		at, err := workTimestamp(card["updated_at"])
+		if err != nil {
+			return page, err
+		}
+		updated[workString(card["id"])] = at
+	}
+	sort.Slice(cards, func(i, j int) bool {
+		left, right := workString(cards[i]["id"]), workString(cards[j]["id"])
+		if updated[left].Equal(updated[right]) {
+			return left > right
+		}
+		return updated[left].After(updated[right])
+	})
 	for _, card := range cards {
 		id := workString(card["id"])
-		if id <= after {
+		if before.ID != "" && (updated[id].After(before.UpdatedAt) || (updated[id].Equal(before.UpdatedAt) && id >= before.ID)) {
 			continue
 		}
 		w, err := s.GetWork(ctx, id)
@@ -405,7 +421,13 @@ func (s *Store) ListWork(ctx context.Context, f WorkListFilter) (WorkPage, error
 			continue
 		}
 		if len(page.Work) == f.Limit {
-			page.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(workString(page.Work[len(page.Work)-1]["id"])))
+			last := workString(page.Work[len(page.Work)-1]["id"])
+			before.ID, before.UpdatedAt = last, updated[last]
+			raw, err := json.Marshal(before)
+			if err != nil {
+				return page, err
+			}
+			page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 			break
 		}
 		page.Work = append(page.Work, w)

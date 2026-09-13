@@ -5788,6 +5788,7 @@ export const commandRegistry = [
         "path": "/pm/actions",
         "operation_id": "pmActionsList",
         "summary": "List action receipts and attempts",
+        "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Legacy actions without created_at use their decision creation time.",
         "why": "List action receipts and attempts.",
         "input_mode": "none",
         "streaming": {
@@ -6253,6 +6254,7 @@ export const commandRegistry = [
         "path": "/pm/conversations",
         "operation_id": "pmConversationsList",
         "summary": "List PM conversations",
+        "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.",
         "why": "List PM conversations.",
         "input_mode": "none",
         "streaming": {
@@ -6665,6 +6667,7 @@ export const commandRegistry = [
         "path": "/pm/decisions",
         "operation_id": "pmDecisionsList",
         "summary": "List durable PM decisions",
+        "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages.",
         "why": "List durable PM decisions.",
         "input_mode": "none",
         "streaming": {
@@ -8452,6 +8455,7 @@ export const commandRegistry = [
         "path": "/work",
         "operation_id": "workList",
         "summary": "List heterogeneous commitments",
+        "description": "Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.",
         "why": "List heterogeneous commitments.",
         "input_mode": "none",
         "streaming": {
