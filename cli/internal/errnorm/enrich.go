@@ -158,11 +158,7 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 		return "", nil
 	case "source_revision_changed":
 		if commandID == "pm.decisions.answer" {
-			return "The task changed after this proposal, so approving it would have failed at delivery. Decline it with `anx pm decisions answer --decline`, or ask for a fresh proposal (`anx pm turns propose` from the PM, or a board move for a human).",
-				map[string]any{
-					"kind":        "stale_source_revision",
-					"refresh_cli": "anx pm decisions get <id>",
-				}
+			return enrichDecisionAnswerStale(lookupErrorDetail(e, "reason"))
 		}
 		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
 			map[string]any{
@@ -206,6 +202,27 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 			}
 	default:
 		return "", nil
+	}
+}
+
+func enrichDecisionAnswerStale(reason string) (string, map[string]any) {
+	decline := "Decline it with `anx pm decisions answer <id> --from-file -` (set `approve` to false)"
+	rec := map[string]any{
+		"kind":        "stale_source_revision",
+		"refresh_cli": "anx pm decisions get <id>",
+	}
+	if reason != "" {
+		rec["reason"] = reason
+	}
+	switch reason {
+	case "already_at_target":
+		return "The task is already where this proposal asks, so there is nothing to approve. " + decline + ".", rec
+	case "work_missing":
+		return "The task no longer exists, so this proposal cannot be approved. " + decline + ".", rec
+	case "revision_changed":
+		return "The task changed after this proposal, so approving it would have failed at delivery. " + decline + ", or ask for a fresh proposal (`anx pm turns propose` from the PM, or a board move for a human).", rec
+	default:
+		return "This proposal is no longer valid to approve. " + decline + ", or re-read it with `anx pm decisions get <id>`.", rec
 	}
 }
 

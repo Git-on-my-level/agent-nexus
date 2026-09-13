@@ -531,6 +531,9 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 		map[string]any{"id": "d-there", "work_ref": "card:y", "status": "awaiting_answer", "already_at_target": true, "target_current": true, "instruction": "Move to done"},
 		map[string]any{"id": "d-gone", "work_ref": "card:z", "status": "awaiting_answer", "work_missing": true, "target_current": false, "instruction": "Annotate"},
 		map[string]any{"id": "d-ok", "work_ref": "card:w", "status": "awaiting_answer", "target_current": true, "instruction": "Review"},
+		map[string]any{"id": "d-other", "work_ref": "card:v", "status": "awaiting_answer", "can_answer": false, "target_current": true, "instruction": "Wait"},
+		map[string]any{"id": "d-answered", "work_ref": "card:a", "status": "answered", "work_missing": true, "instruction": "Gone"},
+		map[string]any{"id": "d-declined", "work_ref": "card:b", "status": "declined", "target_current": false, "instruction": "Old"},
 	}})
 	if !strings.Contains(list, "d-stale  card:x  status=awaiting_answer  stale since proposal  Move to review") {
 		t.Fatalf("list missed stale flag: %s", list)
@@ -543,6 +546,15 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	}
 	if strings.Contains(list, "d-ok  card:w  status=awaiting_answer  stale") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  already there") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  task missing") {
 		t.Fatalf("current decision grew a freshness flag: %s", list)
+	}
+	if !strings.Contains(list, "d-other  card:v  status=awaiting_answer  waiting on someone else  Wait") {
+		t.Fatalf("list missed waiting-on-someone-else: %s", list)
+	}
+	if strings.Contains(list, "d-answered") && strings.Contains(list, "d-answered  card:a  status=answered  task missing") {
+		t.Fatalf("terminal answered row still stamped freshness: %s", list)
+	}
+	if strings.Contains(list, "d-declined  card:b  status=declined  stale since proposal") {
+		t.Fatalf("terminal declined row still stamped freshness: %s", list)
 	}
 	staleGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-stale", "work_ref": "card:x", "status": "awaiting_answer", "target_current": false})
 	if !strings.HasPrefix(staleGet, "stale since proposal\n") || !strings.Contains(staleGet, `"id"`) {
@@ -557,8 +569,16 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 		t.Fatalf("get missed task-missing line: %s", missingGet)
 	}
 	currentGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-ok", "status": "awaiting_answer", "target_current": true})
-	if strings.Contains(currentGet, "stale since proposal") || strings.Contains(currentGet, "already there") || strings.Contains(currentGet, "task missing") {
+	if strings.Contains(currentGet, "stale since proposal") || strings.Contains(currentGet, "already there") || strings.Contains(currentGet, "task missing") || strings.Contains(currentGet, "waiting on someone else") {
 		t.Fatalf("current get grew a flag: %s", currentGet)
+	}
+	waitingGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-other", "status": "awaiting_answer", "can_answer": false, "target_current": true})
+	if !strings.HasPrefix(waitingGet, "waiting on someone else\n") {
+		t.Fatalf("get missed waiting-on-someone-else: %s", waitingGet)
+	}
+	answeredGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-answered", "status": "answered", "work_missing": true, "target_current": false})
+	if strings.Contains(answeredGet, "task missing") || strings.Contains(answeredGet, "stale since proposal") || strings.Contains(answeredGet, "waiting on someone else") {
+		t.Fatalf("terminal get still stamped flags: %s", answeredGet)
 	}
 }
 
@@ -652,10 +672,31 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			name:        "answer stale target",
 			commandPath: "/pm/decisions/decision-1/answer",
 			errorCode:   "source_revision_changed",
+			details:     `{"reason":"revision_changed"}`,
 			body:        `{"revision":1,"approve":true,"text":"ok"}`,
 			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
 			want:        "task changed after this proposal",
-			notWant:     "if_updated_at",
+			notWant:     "--decline",
+		},
+		{
+			name:        "answer already at target",
+			commandPath: "/pm/decisions/decision-1/answer",
+			errorCode:   "source_revision_changed",
+			details:     `{"reason":"already_at_target"}`,
+			body:        `{"revision":1,"approve":true,"text":"ok"}`,
+			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
+			want:        "already where this proposal asks",
+			notWant:     "task changed after this proposal",
+		},
+		{
+			name:        "answer work missing",
+			commandPath: "/pm/decisions/decision-1/answer",
+			errorCode:   "source_revision_changed",
+			details:     `{"reason":"work_missing"}`,
+			body:        `{"revision":1,"approve":true,"text":"ok"}`,
+			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
+			want:        "task no longer exists",
+			notWant:     "task changed after this proposal",
 		},
 		{
 			name:        "acknowledge status conflict",
@@ -1198,6 +1239,31 @@ func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPMTurnsClaimJSONEmptyIsEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/claim" {
+			t.Errorf("request=%s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "claim"}))
+	data := asMap(payload["data"])
+	if data["claimed"] != false {
+		t.Fatalf("claimed=%v payload=%v", data["claimed"], payload)
+	}
+	if anyString(data["reason"]) != "nothing to claim" {
+		t.Fatalf("reason=%v payload=%v", data["reason"], payload)
+	}
+	if _, ok := data["body"]; ok {
+		t.Fatalf("empty body leaked into envelope: %v", payload)
+	}
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "turns", "claim"})
+	if !strings.Contains(text, "No claimable turn") {
+		t.Fatalf("text=%s", text)
 	}
 }
 

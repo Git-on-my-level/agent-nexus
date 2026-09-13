@@ -352,18 +352,33 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
 	}
 
-	answerStale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"target is not current"}}`))
+	answerStale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"target is not current","details":{"reason":"revision_changed"}}}`))
 	EnrichForCommand(answerStale, "pm.decisions.answer")
 	if !strings.Contains(answerStale.Hint, "task changed after this proposal") || !strings.Contains(answerStale.Hint, "failed at delivery") {
 		t.Fatalf("expected stale-approve delivery hint, got %q", answerStale.Hint)
 	}
-	if !strings.Contains(answerStale.Hint, "pm decisions answer --decline") || !strings.Contains(answerStale.Hint, "pm turns propose") || !strings.Contains(answerStale.Hint, "board move") {
+	if !strings.Contains(answerStale.Hint, "pm decisions answer <id> --from-file -") || !strings.Contains(answerStale.Hint, "pm turns propose") || !strings.Contains(answerStale.Hint, "board move") {
 		t.Fatalf("expected decline or fresh-proposal recovery, got %q", answerStale.Hint)
+	}
+	if strings.Contains(answerStale.Hint, "--decline") {
+		t.Fatalf("hint still names --decline: %q", answerStale.Hint)
 	}
 	answerDetails, _ := answerStale.Details.(map[string]any)
 	answerRec, _ := answerDetails["anx_cli_recovery"].(map[string]any)
-	if answerRec["kind"] != "stale_source_revision" {
+	if answerRec["kind"] != "stale_source_revision" || answerRec["reason"] != "revision_changed" {
 		t.Fatalf("answer recovery=%#v", answerRec)
+	}
+
+	answerMoot := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"Approved source revision has changed (approved at 0, source now 0)","details":{"reason":"already_at_target"}}}`))
+	EnrichForCommand(answerMoot, "pm.decisions.answer")
+	if !strings.Contains(answerMoot.Hint, "already where this proposal asks") || strings.Contains(answerMoot.Hint, "task changed") {
+		t.Fatalf("expected already-at-target hint, got %q", answerMoot.Hint)
+	}
+
+	answerGone := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"work missing","details":{"reason":"work_missing"}}}`))
+	EnrichForCommand(answerGone, "pm.decisions.answer")
+	if !strings.Contains(answerGone.Hint, "task no longer exists") || strings.Contains(answerGone.Hint, "task changed") {
+		t.Fatalf("expected work-missing hint, got %q", answerGone.Hint)
 	}
 
 	ack := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
