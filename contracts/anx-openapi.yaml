@@ -658,6 +658,7 @@ paths:
   /pm/actions/{action_id}/reconcile:
     post:
       operationId: pmActionsReconcile
+      description: Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Failed actions without a sent attempt remain unreconcilable, including after acknowledgement.
       summary: Read back an action outcome without resending
       tags:
       - pm
@@ -740,7 +741,7 @@ paths:
       x-anx-stability: beta
       x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
         source reports, and independent verification. Unknown sends must not be blindly retried.
-      description: Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.
+      description: Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.
       parameters:
       - name: action_id
         in: path
@@ -852,7 +853,8 @@ paths:
   /pm/turns/claim:
     post:
       operationId: pmTurnsClaim
-      summary: Claim the next queued PM turn with an exclusive runner lease
+      summary: Claim or recover a PM turn with an exclusive runner lease
+      description: Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.
       tags:
       - pm
       x-anx-surface: canonical
@@ -878,7 +880,7 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no claimable turn.
-        Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are
+        Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are
         expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn
         timeout. Channel-origin turns use this same claim/complete/fail pipeline.
       requestBody:
@@ -944,6 +946,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMTurn'
+  /pm/turns/{turn_id}/release:
+    post:
+      operationId: pmTurnsRelease
+      summary: Release a claimed PM turn back to the queue
+      description: The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 403; no active lease returns 409. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.release
+      x-anx-cli-path: pm turns release
+      x-anx-why: Return interrupted work to the queue for another claim.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - turn_closed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMReleaseRequest'
+      responses:
+        '200':
+          description: Release a claimed PM turn back to the queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+        '403':
+          description: Caller is not the selected PM actor or runner_id and lease_token do not match the lease.
+        '409':
+          description: No active lease or turn is closed; expired turns report failure_kind expired and the deadline.
   /pm/turns/{turn_id}/context:
     get:
       operationId: pmTurnsContext
@@ -6461,6 +6516,10 @@ components:
             type: string
         failure:
           type: string
+        failure_kind:
+          type: string
+          readOnly: true
+          description: Machine-readable failure reason; expired means the turn deadline elapsed. Absent for failures without a classified reason. Also returned in error.details for turn_closed 409 responses; expiry messages say expired at followed by the RFC3339 deadline.
         claimed:
           type: boolean
           readOnly: true
@@ -6801,6 +6860,19 @@ components:
       properties:
         runner_id:
           type: string
+          description: Stable identity for one serial worker; defaults to the authenticated actor ID when omitted. Reuse on restart to recover its existing lease.
+    PMReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [runner_id, lease_token]
+      properties:
+        runner_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        lease_token:
+          type: string
+          minLength: 1
     PMFailRequest:
       type: object
       additionalProperties: true

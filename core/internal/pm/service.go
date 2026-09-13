@@ -346,6 +346,43 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	}
 	return t, nil
 }
+
+// ReleaseTurn relinquishes an active lease without terminating the turn.
+func (s *Service) ReleaseTurn(ctx context.Context, p Principal, turnID string, in ReleaseInput) (Turn, error) {
+	var t Turn
+	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
+		return Turn{}, err
+	}
+	if p.WorkspaceID != t.WorkspaceID || t.AgentActorID == "" || p.ActorID != t.AgentActorID {
+		return Turn{}, ErrForbidden
+	}
+	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
+		return Turn{}, err
+	}
+	if err := s.requireOpenTurn(ctx, t); err != nil {
+		return Turn{}, err
+	}
+	runner := strings.TrimSpace(in.RunnerID)
+	if !validText(runner, 256) || strings.TrimSpace(in.LeaseToken) == "" {
+		return Turn{}, ErrInvalid
+	}
+	if !leaseHeld(t, time.Now().UTC()) {
+		return Turn{}, ErrConflict
+	}
+	if runner != t.LeaseOwner || in.LeaseToken != t.LeaseToken {
+		return Turn{}, ErrForbidden
+	}
+	old := t.Revision
+	t.Status = Sending
+	t.LeaseToken, t.LeaseOwner = "", ""
+	t.LeaseExpiresAt = time.Time{}
+	t.Revision++
+	if err := s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
+		return Turn{}, err
+	}
+	return t, nil
+}
+
 func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Turn, error) {
 	if err := s.authorize(ctx, p, "pm.respond", ""); err != nil {
 		return Turn{}, err
@@ -366,8 +403,16 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 
 const turnDeadlineFailure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."
 
+// Classify legacy deadline failures as well as newly persisted failure kinds.
+func turnFailureKind(t Turn) string {
+	if t.FailureKind == "" && t.Status == Failed && t.Failure == turnDeadlineFailure {
+		return "expired"
+	}
+	return t.FailureKind
+}
+
 func closedTurnError(t Turn) error {
-	return &TurnClosedError{TurnID: t.ID, Deadline: t.Deadline, Status: t.Status, expired: t.Status == Failed && t.Failure == turnDeadlineFailure}
+	return &TurnClosedError{TurnID: t.ID, Deadline: t.Deadline, Status: t.Status, FailureKind: turnFailureKind(t)}
 }
 
 // Persist expiry before reporting it, so the error describes durable state.
@@ -382,6 +427,7 @@ func (s *Service) requireOpenTurn(ctx context.Context, t Turn) error {
 		old := t.Revision
 		t.Status = Failed
 		t.Failure = turnDeadlineFailure
+		t.FailureKind = "expired"
 		t.LeaseToken = ""
 		t.LeaseOwner = ""
 		t.LeaseExpiresAt = time.Time{}
@@ -415,6 +461,7 @@ func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
 		old := t.Revision
 		t.Status = Failed
 		t.Failure = turnDeadlineFailure
+		t.FailureKind = "expired"
 		t.LeaseToken = ""
 		t.LeaseOwner = ""
 		t.LeaseExpiresAt = time.Time{}

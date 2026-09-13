@@ -96,7 +96,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `47`
+- Commands: `48`
 - Command IDs:
   - `boards.cards.batch_add`
   - `boards.cards.get`
@@ -136,6 +136,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.decisions.create`
   - `pm.turns.fail`
   - `pm.turns.get`
+  - `pm.turns.release`
   - `work.capabilities`
   - `work.create`
   - `work.get`
@@ -207,7 +208,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `31`
+- Commands: `32`
 - Command IDs:
   - `pm.actions.acknowledge`
   - `pm.actions.get`
@@ -231,6 +232,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.decisions.create`
   - `pm.turns.fail`
   - `pm.turns.get`
+  - `pm.turns.release`
   - `work.capabilities`
   - `work.create`
   - `work.get`

@@ -304,9 +304,8 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 	return d, inserted, tx.Commit()
 }
 
-// claimTurn counts active leases and allocates one new lease under a single
-// SQLite write lock. Claim is allocation, not replay: handing the same lease
-// to another worker of the same runner would execute the turn concurrently.
+// claimTurn recovers an owned lease before allocating under a SQLite write lock.
+// A runner identity must be used by only one serial worker at a time.
 func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now time.Time, capacity int, ttl time.Duration, maxOutput int) (Turn, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -333,6 +332,9 @@ func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now t
 		}
 		if leaseHeld(*t, now) {
 			held++
+			if t.AgentActorID == p.ActorID && t.LeaseOwner == runner {
+				return *t, tx.Commit()
+			}
 			continue
 		}
 		if candidate == nil && t.AgentActorID == p.ActorID {

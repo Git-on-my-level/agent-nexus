@@ -215,7 +215,7 @@
     },
     {
       "name": "pm",
-      "command_count": 22,
+      "command_count": 23,
       "command_ids": [
         "pm.actions.acknowledge",
         "pm.actions.get",
@@ -238,7 +238,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ]
     },
     {
@@ -283,7 +284,7 @@
       ]
     }
   ],
-  "command_count": 161,
+  "command_count": 162,
   "commands": [
     {
       "command_id": "actors.create",
@@ -6016,7 +6017,7 @@
       "path": "/pm/actions/{action_id}/acknowledge",
       "operation_id": "pmActionsAcknowledge",
       "summary": "Acknowledge a failed or unresolvable action",
-      "description": "Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.",
+      "description": "Only the decision actor may acknowledge a failed action, or an unknown action whose current read-back cannot advance. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged without changing receipts or attempts. Other states return 409; other actors return 403.",
       "why": "Acknowledge a failed or unresolvable action.",
       "input_mode": "json-body",
       "streaming": {
@@ -6065,7 +6066,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmActionsAcknowledge",
       "ts_method": "pmActionsAcknowledge"
@@ -6126,7 +6128,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmActionsGet",
       "ts_method": "pmActionsGet"
@@ -6185,7 +6188,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmActionsList",
       "ts_method": "pmActionsList"
@@ -6198,6 +6202,7 @@
       "path": "/pm/actions/{action_id}/reconcile",
       "operation_id": "pmActionsReconcile",
       "summary": "Read back an action outcome without resending",
+      "description": "Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Failed actions without a sent attempt remain unreconcilable, including after acknowledgement.",
       "why": "Read back an action outcome without resending.",
       "input_mode": "json-body",
       "streaming": {
@@ -6246,7 +6251,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmActionsReconcile",
       "ts_method": "pmActionsReconcile"
@@ -6360,7 +6366,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmBindingsCreate",
       "ts_method": "pmBindingsCreate"
@@ -6418,7 +6425,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmBindingsList",
       "ts_method": "pmBindingsList"
@@ -6476,7 +6484,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmContext",
       "ts_method": "pmContext"
@@ -6552,7 +6561,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmConversationsCreate",
       "ts_method": "pmConversationsCreate"
@@ -6613,7 +6623,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmConversationsGet",
       "ts_method": "pmConversationsGet"
@@ -6672,7 +6683,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmConversationsList",
       "ts_method": "pmConversationsList"
@@ -6745,7 +6757,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmConversationsMessagesCreate",
       "ts_method": "pmConversationsMessagesCreate"
@@ -6822,7 +6835,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmDecisionsAnswer",
       "ts_method": "pmDecisionsAnswer"
@@ -6926,7 +6940,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmDecisionsCreate",
       "ts_method": "pmDecisionsCreate"
@@ -6987,7 +7002,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmDecisionsDispatch",
       "ts_method": "pmDecisionsDispatch"
@@ -7048,7 +7064,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmDecisionsGet",
       "ts_method": "pmDecisionsGet"
@@ -7107,7 +7124,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmDecisionsList",
       "ts_method": "pmDecisionsList"
@@ -7119,7 +7137,8 @@
       "method": "POST",
       "path": "/pm/turns/claim",
       "operation_id": "pmTurnsClaim",
-      "summary": "Claim the next queued PM turn with an exclusive runner lease",
+      "summary": "Claim or recover a PM turn with an exclusive runner lease",
+      "description": "Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Expired leases are reclaimable with a fresh token until the turn deadline. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
       "why": "Claim one queued turn for the selected PM agent so two runners never answer it.",
       "input_mode": "json-body",
       "streaming": {
@@ -7143,7 +7162,7 @@
       ],
       "stability": "beta",
       "surface": "canonical",
-      "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims allocate fresh leases; a held lease is never replayed. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.",
+      "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no claimable turn. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.",
       "body_schema": {
         "optional": [
           {
@@ -7173,7 +7192,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsClaim",
       "ts_method": "pmTurnsClaim"
@@ -7252,7 +7272,8 @@
         "pm.turns.context",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsComplete",
       "ts_method": "pmTurnsComplete"
@@ -7313,7 +7334,8 @@
         "pm.turns.complete",
         "pm.turns.decisions.create",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsContext",
       "ts_method": "pmTurnsContext"
@@ -7420,7 +7442,8 @@
         "pm.turns.complete",
         "pm.turns.context",
         "pm.turns.fail",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsDecisionsCreate",
       "ts_method": "pmTurnsDecisionsCreate"
@@ -7495,7 +7518,8 @@
         "pm.turns.complete",
         "pm.turns.context",
         "pm.turns.decisions.create",
-        "pm.turns.get"
+        "pm.turns.get",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsFail",
       "ts_method": "pmTurnsFail"
@@ -7556,10 +7580,86 @@
         "pm.turns.complete",
         "pm.turns.context",
         "pm.turns.decisions.create",
-        "pm.turns.fail"
+        "pm.turns.fail",
+        "pm.turns.release"
       ],
       "go_method": "PmTurnsGet",
       "ts_method": "pmTurnsGet"
+    },
+    {
+      "command_id": "pm.turns.release",
+      "cli_path": "pm turns release",
+      "group": "pm",
+      "method": "POST",
+      "path": "/pm/turns/{turn_id}/release",
+      "operation_id": "pmTurnsRelease",
+      "summary": "Release a claimed PM turn back to the queue",
+      "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 403; no active lease returns 409. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
+      "why": "Return interrupted work to the queue for another claim.",
+      "input_mode": "json-body",
+      "streaming": {
+        "mode": "none"
+      },
+      "output_envelope": "Returns `PMTurn`.",
+      "error_codes": [
+        "auth_required",
+        "invalid_token",
+        "invalid_request",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "turn_closed",
+        "busy",
+        "unavailable"
+      ],
+      "concepts": [
+        "cards",
+        "evidence"
+      ],
+      "stability": "beta",
+      "surface": "canonical",
+      "agent_notes": "Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.",
+      "body_schema": {
+        "required": [
+          {
+            "name": "lease_token",
+            "type": "string"
+          },
+          {
+            "name": "runner_id",
+            "type": "string"
+          }
+        ]
+      },
+      "path_params": [
+        "turn_id"
+      ],
+      "adjacent_commands": [
+        "pm.actions.acknowledge",
+        "pm.actions.get",
+        "pm.actions.list",
+        "pm.actions.reconcile",
+        "pm.bindings.create",
+        "pm.bindings.list",
+        "pm.context",
+        "pm.conversations.create",
+        "pm.conversations.get",
+        "pm.conversations.list",
+        "pm.conversations.messages.create",
+        "pm.decisions.answer",
+        "pm.decisions.create",
+        "pm.decisions.dispatch",
+        "pm.decisions.get",
+        "pm.decisions.list",
+        "pm.turns.claim",
+        "pm.turns.complete",
+        "pm.turns.context",
+        "pm.turns.decisions.create",
+        "pm.turns.fail",
+        "pm.turns.get"
+      ],
+      "go_method": "PmTurnsRelease",
+      "ts_method": "pmTurnsRelease"
     },
     {
       "command_id": "ref_edges.list",

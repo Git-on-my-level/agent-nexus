@@ -158,13 +158,20 @@ model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages
 queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
 runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
 `POST /pm/turns/{id}/fail` require that lease token when a lease is held.
+`POST /pm/turns/{id}/release` requires the selected PM actor plus the current
+`runner_id` and `lease_token`. It clears an unexpired lease and returns the turn
+to the queue as `sending`, `claimed: false`, retaining `claimed_at`. A different
+runner or wrong token returns 403; no active lease returns 409. Runners should
+stop local execution, then release on SIGINT/SIGTERM with a bounded shutdown
+request independent of the canceled run context. An abrupt kill cannot release;
+a restart with the same runner ID recovers its existing lease and token.
 Every HTTP turn representation includes read-only `claimed`, derived from the
 current unexpired lease, plus `claimed_at` when the latest claim time is known.
 That timestamp survives completion and expiry; older records omit it. Public
 turns (including history, single-turn reads, and message replays) omit lease
 credentials. Only the authenticated claim response returns the lease token,
 owner, and expiry needed by the runner protocol.
-`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/complete/fail to that actor;
+`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/release/complete/fail to that actor;
 `make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
 
 The optional existing-bridge path is separate. `ANX_PM_BRIDGE_ENABLED` defaults
@@ -279,10 +286,18 @@ The existing five-second PM maintenance tick also expires them without any runne
 channel sender, or read. The required `deadline` is an RFC3339 timestamp. Expired
 turns become failed, lose their lease, and report: "The PM did not answer before
 the deadline. Retry, or check that a runner is attached."
+They also expose `failure_kind: "expired"`, including legacy deadline failures.
+A 409 `turn_closed` error includes `error.details.failure_kind: "expired"` and
+says "expired at <deadline>" with the RFC3339 deadline. Ordinary terminal failures
+remain distinct and do not acquire an expiry reason just because time has passed.
 
-Claim allocates new work; it never reoffers an active lease, even to the same
-runner. No capacity or no free work returns the existing 204 response. Capacity
-counting and allocation share one SQLite transaction. Unpaginated service reads
+Claim first recovers an unexpired lease for the same PM actor and `runner_id`,
+even at capacity. Recovery preserves the token, lease expiry, `claimed_at`, and
+revision. Each runner ID must identify one serial worker; concurrent workers
+must use different IDs. Other runners cannot steal an unexpired lease. After
+lease expiry, a fresh claim rotates the token until the turn deadline. No owned
+lease and no capacity or free work returns 204. Recovery, capacity counting, and
+allocation share one SQLite transaction. Unpaginated service reads
 walk all batches internally. PM decision/action/conversation pages return newest
 `created_at` first, with descending internal rowid as the tiebreaker. New actions
 record creation time at approval; legacy actions use their decision creation time.
@@ -303,6 +318,16 @@ Reconciliation preserves read-back receipts even when they cannot advance the
 action's monotonic status. `reconciliation_conflict: true` marks that mismatch;
 clients should display the receipt detail rather than infer success from status
 alone. This does not authorize a blind retry.
+
+Human acknowledgement records `acknowledged_by` and `acknowledged_at` and sets
+visible status `acknowledged` without changing the receipt or attempts. It moves
+the row out of Needs you but does not freeze source reconciliation. Later
+read-back can advance an unknown receipt to `verified` or `failed`, updating the
+action normally while retaining both acknowledgement fields and attempt history.
+An inconclusive read can refresh receipt detail while keeping the row acknowledged.
+Failed actions with no sent attempt still return `invalid_request` on reconcile,
+including after acknowledgement. Clients must use acknowledgement metadata to
+keep handled rows out of Needs you even if subsequent source status is `failed`.
 
 `make contract-gen` and `make contract-check` regenerate all consumer mirrors. UI phase drags
 and CLI PM proposals must send the structured payload; legacy prose-only pending

@@ -66,9 +66,9 @@ func TestRound6Acknowledgement(t *testing.T) {
 			if replay := call(); replay.Body.String() != rr.Body.String() {
 				t.Fatalf("non-idempotent replay: %s", replay.Body)
 			}
-			// Explicit read-back cannot erase human handling or overwrite its evidence.
+			// Read-back can refresh evidence without erasing human handling.
 			again, err := s.ReconcileAction(ctx, p, a.ID)
-			if err != nil || !reflect.DeepEqual(got, again) {
+			if err != nil || again.Status != Acknowledged || again.AcknowledgedBy != got.AcknowledgedBy || !again.AcknowledgedAt.Equal(*got.AcknowledgedAt) || again.Receipt.Detail != "inconclusive" {
 				t.Fatalf("reconcile after ack: %+v %v", again, err)
 			}
 			if err = st.get(ctx, "action", a.ID, &again); err != nil || again.AcknowledgedAt == nil || !reflect.DeepEqual(again.Attempts, a.Attempts) {

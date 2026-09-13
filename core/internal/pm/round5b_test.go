@@ -89,7 +89,7 @@ func TestHTTPTurnClosedLifecycle(t *testing.T) {
 					if w.Code != 409 || out.Error.Code != "turn_closed" || out.Error.Details.TurnID != turn.ID || !out.Error.Details.Deadline.Equal(turn.Deadline) || out.Error.Details.Status != wantStatus {
 						t.Fatalf("closed: %d %s", w.Code, w.Body.String())
 					}
-					if strings.HasPrefix(state, "expired-") && out.Error.Message != "This turn passed its deadline and was failed; nothing can be proposed or read for it. Ask again to start a new turn." {
+					if strings.HasPrefix(state, "expired-") && (out.Error.Details.FailureKind != "expired" || !strings.Contains(out.Error.Message, "expired at "+turn.Deadline.Format(time.RFC3339Nano))) {
 						t.Fatalf("message: %q", out.Error.Message)
 					}
 				}
