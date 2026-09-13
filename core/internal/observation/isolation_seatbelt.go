@@ -80,8 +80,8 @@ func (r *SeatbeltRunner) probe() error {
 	if runtime.GOOS != "darwin" || r.sandbox == "" || r.sh == "" {
 		return failure(ErrIsolation, "generated executable readers require macOS sandbox-exec; no host-execution fallback")
 	}
-	if os.Geteuid() == 0 {
-		return failure(ErrIsolation, "generated readers require a dedicated unprivileged runner account")
+	if err := seatbeltRunnerIdentity(os.Geteuid()); err != nil {
+		return err
 	}
 	truePath, err := filepath.EvalSymlinks("/usr/bin/true")
 	if err != nil || !filepath.IsAbs(truePath) {
@@ -102,6 +102,13 @@ func (r *SeatbeltRunner) probe() error {
 	allow.Env = []string{"PATH=/", "LANG=C"}
 	if err := allow.Run(); err != nil || allowCtx.Err() != nil {
 		return failure(ErrIsolation, "sandbox-exec cannot exec a deny-default probe")
+	}
+	return nil
+}
+
+func seatbeltRunnerIdentity(euid int) error {
+	if euid == 0 {
+		return failure(ErrIsolation, "generated readers must not run as root")
 	}
 	return nil
 }

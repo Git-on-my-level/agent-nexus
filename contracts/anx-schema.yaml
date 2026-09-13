@@ -830,7 +830,7 @@ conversational_pm:
   decision_provenance: [proposed_by, origin_kind, turn_id]
   decision_origin_kind: [human, pm_turn, channel]
   phase_action_target: payload.phase
-  decision_status: [awaiting_answer, answered, superseded]
+  decision_status: [awaiting_answer, answered, declined, superseded]
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
@@ -847,6 +847,8 @@ conversational_pm:
     - Failed action status never regresses to unknown during read-back.
     - attempts.sent_at records entry into executor handoff, not confirmed delivery; preflight failures and confirmed native failures before commit omit it; native commit uncertainty is resolved by canonical read-back when possible.
     - New decisions record proposed_by and origin_kind; PM turn proposals also record turn_id. Supersession preserves each record's proposer.
+    - Rejected decisions are declined; legacy superseded records without superseded_by are read as declined. Superseded is reserved for replacements.
+    - Replacement proposals persist supersedes with the replaced decision ID and supersedes_proposed_by / supersedes_origin_kind when known; create/propose responses, replays and reads expose this attribution.
     - Human approval and scope-specific authority are required for downstream actions.
     - Answer and durable delivery intent are atomic; an answer is not an applied outcome.
     - Revalidate source revision before dispatch; source tools must enforce the same precondition.

@@ -93,7 +93,7 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
 		return Decision{}, ErrInvalid
 	}
-	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Superseded)) {
+	if d.Revision == in.Revision+1 && d.AnsweredBy == p.ActorID && d.Answer == in.Text && ((in.Approve && d.Status == Answered) || (!in.Approve && d.Status == Declined)) {
 		if in.Approve {
 			if err = s.authorize(ctx, p, "pm.action."+d.Scope, d.WorkRef); err != nil {
 				return Decision{}, err
@@ -113,7 +113,7 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	d.Answer = in.Text
 	d.AnsweredBy = p.ActorID
 	d.Revision++
-	d.Status = Superseded
+	d.Status = Declined
 	var a *Action
 	if in.Approve {
 		if err = s.authorize(ctx, p, "pm.action."+d.Scope, d.WorkRef); err != nil {
@@ -208,7 +208,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		// The approval remains answered, but its delivery is now terminal. Keep
 		// the failed preflight as durable evidence so clients do not offer retry
 		// against the same stale authorization. No source handoff was made.
-		a, err = s.failBeforeSend(ctx, a, fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s); re-approve to deliver", a.TargetRevision, revision))
+		a, err = s.failBeforeSend(ctx, a, fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s). This approval will not be sent; a fresh proposal and approval are needed.", a.TargetRevision, revision))
 		if err != nil {
 			return Action{}, err
 		}
@@ -411,6 +411,11 @@ func validActionPayload(scope string, p *ActionPayload) bool {
 
 // Reading decisions is workspace-visible; answering never inherits that scope.
 func (s *Service) decisionForReader(ctx context.Context, p Principal, d Decision) Decision {
+	// Older rejections used superseded without a replacement. Project them as
+	// declined without rewriting the durable answer or its revision.
+	if d.Status == Superseded && d.SupersededBy == "" {
+		d.Status = Declined
+	}
 	d.CanAnswer = p.Human && d.ActorID == p.ActorID && d.Status == AwaitingAnswer && s.authorize(ctx, p, "pm.approve", d.WorkRef) == nil
 	return d
 }

@@ -73,6 +73,7 @@ type Status string
 const (
 	AwaitingAnswer Status = "awaiting_answer"
 	Answered       Status = "answered"
+	Declined       Status = "declined"
 	Pending        Status = "pending_delivery"
 	Sending        Status = "sending"
 	Delivered      Status = "delivered"
@@ -182,27 +183,30 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
-	ProposedBy       string         `json:"proposed_by,omitempty"`
-	OriginKind       string         `json:"origin_kind,omitempty"`
-	TurnID           string         `json:"turn_id,omitempty"`
-	SupersededBy     string         `json:"superseded_by,omitempty"`
-	SupersededReason string         `json:"superseded_reason,omitempty"`
-	CanAnswer        bool           `json:"can_answer"`
-	Payload          *ActionPayload `json:"payload,omitempty"`
-	ID               string         `json:"id"`
-	WorkspaceID      string         `json:"workspace_id"`
-	ActorID          string         `json:"actor_id"`
-	WorkRef          string         `json:"work_ref"`
-	Instruction      string         `json:"instruction"`
-	Scope            string         `json:"scope"`
-	TargetRevision   string         `json:"target_revision"`
-	Status           Status         `json:"status"`
-	Revision         int            `json:"revision"`
-	Answer           string         `json:"answer,omitempty"`
-	AnsweredBy       string         `json:"answered_by,omitempty"`
-	ActionID         string         `json:"action_id,omitempty"`
-	Origin           *Origin        `json:"origin,omitempty"`
-	CreatedAt        time.Time      `json:"created_at"`
+	ProposedBy           string         `json:"proposed_by,omitempty"`
+	OriginKind           string         `json:"origin_kind,omitempty"`
+	TurnID               string         `json:"turn_id,omitempty"`
+	SupersededBy         string         `json:"superseded_by,omitempty"`
+	SupersededReason     string         `json:"superseded_reason,omitempty"`
+	Supersedes           string         `json:"supersedes,omitempty"`
+	SupersedesProposedBy string         `json:"supersedes_proposed_by,omitempty"`
+	SupersedesOriginKind string         `json:"supersedes_origin_kind,omitempty"`
+	CanAnswer            bool           `json:"can_answer"`
+	Payload              *ActionPayload `json:"payload,omitempty"`
+	ID                   string         `json:"id"`
+	WorkspaceID          string         `json:"workspace_id"`
+	ActorID              string         `json:"actor_id"`
+	WorkRef              string         `json:"work_ref"`
+	Instruction          string         `json:"instruction"`
+	Scope                string         `json:"scope"`
+	TargetRevision       string         `json:"target_revision"`
+	Status               Status         `json:"status"`
+	Revision             int            `json:"revision"`
+	Answer               string         `json:"answer,omitempty"`
+	AnsweredBy           string         `json:"answered_by,omitempty"`
+	ActionID             string         `json:"action_id,omitempty"`
+	Origin               *Origin        `json:"origin,omitempty"`
+	CreatedAt            time.Time      `json:"created_at"`
 }
 type AnswerInput struct {
 	Revision int    `json:"revision"`

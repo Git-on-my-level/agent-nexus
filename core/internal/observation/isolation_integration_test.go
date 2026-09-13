@@ -88,6 +88,19 @@ func requireIsolationError(t *testing.T, err error) {
 	}
 }
 
+func TestSeatbeltRunnerIdentityMustNotRunAsRoot(t *testing.T) {
+	var rootError *ReadError
+	if err := seatbeltRunnerIdentity(0); !errors.As(err, &rootError) || rootError.Kind != ErrIsolation || rootError.Message != "generated readers must not run as root" {
+		t.Fatalf("root probe error: %v", err)
+	}
+	// A nonzero euid passes this check; it does not prove a dedicated account.
+	for _, euid := range []int{1, 501} {
+		if err := seatbeltRunnerIdentity(euid); err != nil {
+			t.Fatalf("non-root euid %d: %v", euid, err)
+		}
+	}
+}
+
 func TestSeatbeltProfileIsDenyDefault(t *testing.T) {
 	profile := seatbeltProfile("/private/tmp/reader", "/private/tmp/scratch")
 	t.Logf("Final Seatbelt profile (fixture paths):\n%s", profile)
@@ -543,7 +556,7 @@ int main(void) {
 }
 
 // Use only a controlled same-uid fixture process, with a synthetic environment.
-func TestSeatbeltSysctlAllowlistAndProcessArgumentsDenied(t *testing.T) {
+func TestSeatbeltSysctlAllowsRuntimeReadsAndDeniesProcessArgumentsByName(t *testing.T) {
 	runner := requireIsolationRunner(t, NewSeatbeltRunner())
 	child := exec.Command("/bin/sleep", "30")
 	child.Env = []string{"ANX_SYNTHETIC_FIXTURE=not-a-secret"}

@@ -6554,6 +6554,19 @@ components:
           description: Replacement decision ID when a changed proposal supersedes this awaiting decision.
         superseded_reason:
           type: string
+        supersedes:
+          type: string
+          readOnly: true
+          description: ID of the awaiting decision replaced by this proposal. Persisted on the replacement and returned on create/propose, replay, and reads; absent when nothing was replaced.
+        supersedes_proposed_by:
+          type: string
+          readOnly: true
+          description: Proposing actor ID recorded on the replaced decision; absent when no decision was replaced or its legacy provenance is unknown.
+        supersedes_origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Origin kind recorded on the replaced decision; absent when no decision was replaced or its legacy provenance is unknown.
         answered_by:
           type: string
         action_id:
@@ -6563,7 +6576,9 @@ components:
           enum:
           - awaiting_answer
           - answered
+          - declined
           - superseded
+          description: Declined means the human rejected the proposal; superseded is reserved for replacement. Legacy superseded decisions without superseded_by are returned as declined.
         revision:
           type: integer
         origin:

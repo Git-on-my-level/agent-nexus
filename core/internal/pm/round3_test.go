@@ -198,7 +198,7 @@ func TestStaleApprovalPersistsFailedAttempt(t *testing.T) {
 	if err := st.get(ctx, "action", d.ActionID, &failed); err != nil {
 		t.Fatal(err)
 	}
-	detail := "Approved source revision has changed (approved at r1, source now r2); re-approve to deliver"
+	detail := "Approved source revision has changed (approved at r1, source now r2). This approval will not be sent; a fresh proposal and approval are needed."
 	if failed.Status != Failed || failed.Revision != pending.Revision+1 || len(failed.Attempts) != 1 || failed.Receipt.Status != Failed || failed.Receipt.Detail != detail {
 		t.Fatalf("stale not recorded: %+v", failed)
 	}

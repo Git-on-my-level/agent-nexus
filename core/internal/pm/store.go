@@ -162,7 +162,7 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int)
 	if n != 1 {
 		var raw []byte
 		var current Decision
-		if err := tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND id=?`, d.ID).Scan(&raw); err == nil && json.Unmarshal(raw, &current) == nil && current.Status == Superseded {
+		if err := tx.QueryRowContext(ctx, `SELECT body FROM pm_records WHERE kind='decision' AND id=?`, d.ID).Scan(&raw); err == nil && json.Unmarshal(raw, &current) == nil && current.Status == Superseded && current.SupersededBy != "" {
 			return &SupersededDecisionError{SupersededBy: current.SupersededBy}
 		}
 		return ErrConflict
@@ -242,6 +242,9 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 				d = prior
 				reuse = true
 			} else {
+				d.Supersedes = prior.ID
+				d.SupersedesProposedBy = prior.ProposedBy
+				d.SupersedesOriginKind = prior.OriginKind
 				prior.Status = Superseded
 				prior.SupersededBy = d.ID
 				prior.SupersededReason = "Replaced by a proposal with changed payload, instruction, target revision, or origin"
