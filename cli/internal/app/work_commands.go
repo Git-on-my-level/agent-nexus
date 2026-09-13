@@ -422,7 +422,23 @@ func formatWorkCommandText(name string, body any) string {
 		}
 		return strings.Join(appendPaginationLines(lines, root), "\n")
 	}
-	if name == "pm decisions list" || name == "pm actions list" || name == "pm conversations list" {
+	if name == "pm conversations list" {
+		rows, _ := root["items"].([]any)
+		lines := []string{fmt.Sprintf("conversations: %d", len(rows))}
+		for _, row := range rows {
+			item := asMap(row)
+			line := fmt.Sprintf("%s  %s", anyString(item["id"]), anyString(item["work_ref"]))
+			if status := conversationListStatus(item); status != "" {
+				line += "  status=" + status
+			}
+			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"])); title != "" {
+				line += "  " + strings.Join(strings.Fields(title), " ")
+			}
+			lines = append(lines, line)
+		}
+		return strings.Join(appendPaginationLines(lines, root), "\n")
+	}
+	if name == "pm decisions list" || name == "pm actions list" {
 		rows, _ := root["items"].([]any)
 		lines := []string{fmt.Sprintf("%s: %d", strings.TrimPrefix(strings.TrimSuffix(name, " list"), "pm "), len(rows))}
 		for _, row := range rows {
@@ -489,6 +505,32 @@ func renderPMTurnStatus(turn map[string]any) string {
 		return "in progress"
 	}
 	return "queued"
+}
+
+func conversationListStatus(item map[string]any) string {
+	if turn := conversationLatestTurn(item); len(turn) > 0 {
+		if status := renderPMTurnStatus(turn); status != "" && status != "unknown" {
+			return status
+		}
+	}
+	status := anyString(item["status"])
+	if status == "" || status == "unknown" {
+		return ""
+	}
+	return renderPMTurnStatus(item)
+}
+
+func conversationLatestTurn(item map[string]any) map[string]any {
+	for _, key := range []string{"latest_turn", "last_turn", "turn"} {
+		if turn := asMap(item[key]); len(turn) > 0 {
+			return turn
+		}
+	}
+	turns := asSlice(item["turns"])
+	if len(turns) == 0 {
+		return nil
+	}
+	return asMap(turns[len(turns)-1])
 }
 
 func formatPMActionReconcileText(root map[string]any) string {

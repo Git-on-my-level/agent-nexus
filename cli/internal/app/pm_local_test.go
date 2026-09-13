@@ -978,8 +978,11 @@ func TestClaimErrorRetryable(t *testing.T) {
 }
 
 func TestHarnessCmdFailureDistinguishesStartExitAndDeadline(t *testing.T) {
-	if got := harnessCmdFailure(context.DeadlineExceeded); got != humanTurnFailure("deadline", "") {
+	if got := harnessCmdFailure(context.DeadlineExceeded); got != humanTurnFailure("await_failed", "") {
 		t.Fatalf("deadline %q", got)
+	}
+	if got := harnessCmdFailure(os.ErrDeadlineExceeded); got != humanTurnFailure("await_failed", "") {
+		t.Fatalf("wait delay %q", got)
 	}
 	cmd := exec.Command("/bin/sh", "-c", "exit 7")
 	err := cmd.Run()
@@ -1034,10 +1037,50 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 		if !settled {
 			t.Fatal("expected deadline failure")
 		}
-		if len(posts.fail) != 1 || posts.fail[0] != humanTurnFailure("deadline", "") {
+		if len(posts.fail) != 1 || posts.fail[0] != humanTurnFailure("await_failed", "") {
 			t.Fatalf("fail %v", posts.fail)
 		}
 	})
+}
+
+func TestHandleClaimedTurnDirectRunnerCompletesWhenGrandchildHoldsStdout(t *testing.T) {
+	prevDelay := harnessWaitDelay
+	harnessWaitDelay = 400 * time.Millisecond
+	t.Cleanup(func() { harnessWaitDelay = prevDelay })
+	harness, posts := pmTurnHarness(t)
+	harness.cfg.Timeout = 20 * time.Second
+	started := time.Now()
+	settled := harness.app.handleClaimedTurn(context.Background(), nil, harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "(sleep 20 &); printf '%s\\n' 'Launch is ready'; exit 0", "{prompt}"}, nil, claimedTurn(), nil)
+	elapsed := time.Since(started)
+	if !settled {
+		t.Fatal("expected completed turn")
+	}
+	if elapsed > 8*time.Second {
+		t.Fatalf("grandchild holding stdout blocked Wait for %s", elapsed)
+	}
+	if len(posts.fail) != 0 {
+		t.Fatalf("fail %v", posts.fail)
+	}
+	if len(posts.complete) != 1 || !strings.Contains(posts.complete[0], "Launch is ready") {
+		t.Fatalf("complete %v", posts.complete)
+	}
+}
+
+func TestHandleClaimedTurnDirectRunnerNeverExitsMapsDeadline(t *testing.T) {
+	harness, posts := pmTurnHarness(t)
+	harness.cfg.Timeout = 20 * time.Second
+	turn := claimedTurn()
+	turn["deadline"] = time.Now().Add(2 * time.Second).UTC().Format(time.RFC3339Nano)
+	settled := harness.app.handleClaimedTurn(context.Background(), nil, harness.cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "sleep 60", "{prompt}"}, nil, turn, nil)
+	if !settled {
+		t.Fatal("expected deadline failure")
+	}
+	if len(posts.fail) != 1 || posts.fail[0] != humanTurnFailure("await_failed", "") {
+		t.Fatalf("fail %v", posts.fail)
+	}
+	if strings.Contains(strings.Join(posts.fail, "\n"), "before the harness started") {
+		t.Fatalf("wall timeout mapped to start failure: %v", posts.fail)
+	}
 }
 
 func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {

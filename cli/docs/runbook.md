@@ -488,7 +488,10 @@ profiles), not to the child harness. After a successful claim the runner also
 sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
 `anx pm turns context` send it when `--lease-token` is omitted, so the harness
 does not have to copy the token into `--from-file`. Ctrl-C / SIGTERM kills the
-direct harness process group (SIGTERM, then SIGKILL after a short grace). An
+direct harness process group (SIGTERM, then SIGKILL after a short grace). A
+harness's detached children (those that have left that process group) survive a
+successful run; only Ctrl-C / SIGTERM of `pm serve` cleans up an in-flight
+group — find leftovers with `ps -o pid,pgid,command`. An
 `agentctl` background execution outlives the runner; the log prints its
 execution id so you can `agentctl cancel <id>`.
 

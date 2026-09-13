@@ -404,8 +404,41 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 	if strings.Contains(lease.Hint, "if_updated_at") {
 		t.Fatalf("PM lease conflict still used card language: %q", lease.Hint)
 	}
-	if !strings.Contains(lease.Hint, "re-read it and retry") {
-		t.Fatalf("PM lease conflict should keep the generic hint, got %q", lease.Hint)
+	if !strings.Contains(lease.Hint, "--lease-token") || !strings.Contains(lease.Hint, "ANX_PM_LEASE_TOKEN") {
+		t.Fatalf("PM lease conflict should name the lease token, got %q", lease.Hint)
+	}
+	if strings.Contains(lease.Hint, "re-read it and retry") {
+		t.Fatalf("PM lease conflict still used the revision hint, got %q", lease.Hint)
+	}
+}
+
+func TestEnrichLeaseTokenErrors(t *testing.T) {
+	t.Parallel()
+
+	required := FromHTTPFailure(409, []byte(`{"error":{"code":"lease_required","message":"lease token is required"}}`))
+	if !strings.Contains(required.Hint, "--lease-token") || !strings.Contains(required.Hint, "ANX_PM_LEASE_TOKEN") {
+		t.Fatalf("lease_required hint=%q", required.Hint)
+	}
+	if strings.Contains(required.Hint, "re-read it and retry") {
+		t.Fatalf("lease_required still used revision hint: %q", required.Hint)
+	}
+
+	mismatch := FromHTTPFailure(409, []byte(`{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`))
+	if !strings.Contains(mismatch.Hint, "released or re-claimed") || !strings.Contains(mismatch.Hint, "claim") {
+		t.Fatalf("lease_mismatch hint=%q", mismatch.Hint)
+	}
+	if !strings.Contains(mismatch.Hint, "--lease-token") || !strings.Contains(mismatch.Hint, "ANX_PM_LEASE_TOKEN") {
+		t.Fatalf("lease_mismatch should still name the token flag: %q", mismatch.Hint)
+	}
+
+	conflictLease := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"lease token does not match the current lease"}}`))
+	if !strings.Contains(conflictLease.Hint, "released or re-claimed") {
+		t.Fatalf("conflict lease message hint=%q", conflictLease.Hint)
+	}
+
+	revision := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
+	if !strings.Contains(revision.Hint, "re-read it and retry") {
+		t.Fatalf("generic PM conflict should keep revision hint, got %q", revision.Hint)
 	}
 }
 
