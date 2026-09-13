@@ -38,10 +38,13 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "work_ref", "decision:"} {
+	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "work_ref", "decision:", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
+	}
+	if strings.Contains(prompt, "is reused") {
+		t.Fatal("prompt still claims same work_ref/scope reuse without identical content")
 	}
 }
 
