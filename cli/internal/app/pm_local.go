@@ -45,7 +45,7 @@ func init() {
 				{Name: "--runner <argv>", Description: "Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker."},
 				{Name: "--work-dir <dir>", Description: "Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used."},
 				{Name: "--poll-interval <duration>", Description: "Sleep between empty claims and after a released turn (default 2s)."},
-				{Name: "--max-concurrent <n>", Description: "In-process cap on turns this runner executes at once (default 1). Core also bounds workspace sending turns."},
+				{Name: "--max-concurrent <n>", Description: "In-process cap on turns this runner executes at once (default 1). Each worker claims with a distinct runner id (<id>-<slot>). Core also bounds workspace sending turns."},
 			},
 		},
 		localHelperTopic{
@@ -87,6 +87,8 @@ var (
 	runCmd                 = runHarnessCmd
 	nowFn                  = time.Now
 	sleepFn                = sleepCtx
+	heartbeatRetryStart    = 2 * time.Second
+	heartbeatRetryCap      = 8 * time.Second
 	startupAckPoll         = 90 * time.Second
 	pmServeShutdownGrace   = 5 * time.Second
 	harnessKillGrace       = 2 * time.Second
@@ -108,15 +110,13 @@ const (
 	maxHarnessRunsPerTurn           = 3
 	maxDeliveryAttempts             = 3
 	maxUndeliverableCauseBytes      = 180
-	leaseLossSkipAfter              = 2
-	leaseLossSkipStart              = 30 * time.Second
-	leaseLossSkipCap                = 5 * time.Minute
 	claimCapacityLogInterval        = time.Minute
 	emptyAskConversationReuseWindow = 5 * time.Minute
+	emptyAskConversationScanLimit   = 5
 	defaultLeaseHeartbeatInterval   = 20 * time.Second
 	minLeaseHeartbeatInterval       = 10 * time.Millisecond
 	harnessGiveUpReason             = "The PM could not produce a deliverable reply after several attempts."
-	undeliverableReplyReasonPrefix  = "The PM produced a reply but it could not be delivered: "
+	undeliverableReplyReason        = "The PM produced a reply but it could not be delivered. Ask again, or check that a runner is attached."
 )
 
 type pmTurnMemory struct {
@@ -126,12 +126,8 @@ type pmTurnMemory struct {
 }
 
 type pmTurnMemEntry struct {
-	losses           int
 	harnessRuns      int
 	deliveryAttempts int
-	skipUntil        time.Time
-	skipBackoff      time.Duration
-	skipLogged       bool
 	givenUp          bool
 	giveUpLogged     bool
 }
@@ -211,30 +207,6 @@ func (m *pmTurnMemory) canRunHarness(id string) bool {
 	return e.harnessRuns < maxHarnessRunsPerTurn && !e.givenUp
 }
 
-func (m *pmTurnMemory) noteLoss(id string) {
-	if m == nil || id == "" {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	e := m.entry(id)
-	e.losses++
-	if e.losses < leaseLossSkipAfter {
-		return
-	}
-	if e.skipBackoff <= 0 {
-		e.skipBackoff = leaseLossSkipStart
-	} else if nowFn().After(e.skipUntil) || e.skipUntil.IsZero() {
-		next := e.skipBackoff * 2
-		if next > leaseLossSkipCap {
-			next = leaseLossSkipCap
-		}
-		e.skipBackoff = next
-	}
-	e.skipUntil = nowFn().Add(e.skipBackoff)
-	e.skipLogged = false
-}
-
 func (m *pmTurnMemory) markGivenUp(id string) {
 	if m == nil || id == "" {
 		return
@@ -245,40 +217,14 @@ func (m *pmTurnMemory) markGivenUp(id string) {
 	e.givenUp = true
 }
 
-func (m *pmTurnMemory) claimDefer(id string) (skip bool, givenUp bool, until time.Time) {
-	if m == nil || id == "" {
-		return false, false, time.Time{}
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	e := m.byID[id]
-	if e == nil {
-		return false, false, time.Time{}
-	}
-	if e.givenUp {
-		return true, true, time.Time{}
-	}
-	if !e.skipUntil.IsZero() && nowFn().Before(e.skipUntil) {
-		return true, false, e.skipUntil
-	}
-	return false, false, time.Time{}
-}
-
-func (m *pmTurnMemory) consumeSkipLog(id string) bool {
+func (m *pmTurnMemory) isGivenUp(id string) bool {
 	if m == nil || id == "" {
 		return false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e := m.byID[id]
-	if e == nil || e.skipLogged || e.givenUp {
-		return false
-	}
-	if e.skipUntil.IsZero() || !nowFn().Before(e.skipUntil) {
-		return false
-	}
-	e.skipLogged = true
-	return true
+	return e != nil && e.givenUp
 }
 
 func (m *pmTurnMemory) consumeGiveUpLog(id string) bool {
@@ -293,22 +239,6 @@ func (m *pmTurnMemory) consumeGiveUpLog(id string) bool {
 	}
 	e.giveUpLogged = true
 	return true
-}
-
-func (m *pmTurnMemory) shouldPollPause(id string) bool {
-	if m == nil || id == "" {
-		return false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	e := m.byID[id]
-	if e == nil {
-		return false
-	}
-	if e.givenUp || e.losses > 0 {
-		return true
-	}
-	return !e.skipUntil.IsZero() && nowFn().Before(e.skipUntil)
 }
 
 func (m *pmTurnMemory) noteDeliveryAttempt(id string) int {
@@ -512,39 +442,50 @@ func (a *App) recentEmptyAskConversation(ctx context.Context, cfg config.Resolve
 		return ""
 	}
 	items := asSlice(commandResultBody(listed)["items"])
-	if len(items) == 0 {
-		return ""
+	if len(items) > emptyAskConversationScanLimit {
+		items = items[:emptyAskConversationScanLimit]
 	}
-	item := asMap(items[0])
-	id := anyString(item["id"])
-	if id == "" {
-		return ""
+	for _, raw := range items {
+		item := asMap(raw)
+		id := anyString(item["id"])
+		if id == "" {
+			continue
+		}
+		created, ok := parseRFC3339Timestamp(anyString(item["created_at"]))
+		if !ok || nowFn().Sub(created) > emptyAskConversationReuseWindow || nowFn().Sub(created) < 0 {
+			continue
+		}
+		if len(conversationLatestTurn(item)) > 0 {
+			continue
+		}
+		gotTitle := strings.TrimSpace(anyString(item["title"]))
+		gotWork := strings.TrimSpace(anyString(item["work_ref"]))
+		if gotTitle != "" && gotTitle != strings.TrimSpace(title) {
+			continue
+		}
+		if gotWork != "" && gotWork != strings.TrimSpace(workRef) {
+			continue
+		}
+		got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
+		if err != nil {
+			continue
+		}
+		detail := commandResultBody(got)
+		if len(asSlice(detail["turns"])) > 0 || len(conversationLatestTurn(detail)) > 0 {
+			continue
+		}
+		conv := asMap(detail["conversation"])
+		gotTitle = firstNonEmpty(anyString(conv["title"]), anyString(item["title"]))
+		gotWork = firstNonEmpty(anyString(conv["work_ref"]), anyString(item["work_ref"]))
+		if strings.TrimSpace(gotTitle) != strings.TrimSpace(title) {
+			continue
+		}
+		if strings.TrimSpace(gotWork) != strings.TrimSpace(workRef) {
+			continue
+		}
+		return id
 	}
-	created, ok := parseRFC3339Timestamp(anyString(item["created_at"]))
-	if !ok || nowFn().Sub(created) > emptyAskConversationReuseWindow || nowFn().Sub(created) < 0 {
-		return ""
-	}
-	if len(conversationLatestTurn(item)) > 0 {
-		return ""
-	}
-	got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
-	if err != nil {
-		return ""
-	}
-	detail := commandResultBody(got)
-	if len(asSlice(detail["turns"])) > 0 || len(conversationLatestTurn(detail)) > 0 {
-		return ""
-	}
-	conv := asMap(detail["conversation"])
-	gotTitle := firstNonEmpty(anyString(conv["title"]), anyString(item["title"]))
-	gotWork := firstNonEmpty(anyString(conv["work_ref"]), anyString(item["work_ref"]))
-	if strings.TrimSpace(gotTitle) != strings.TrimSpace(title) {
-		return ""
-	}
-	if strings.TrimSpace(gotWork) != strings.TrimSpace(workRef) {
-		return ""
-	}
-	return id
+	return ""
 }
 
 func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -609,25 +550,38 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		harnessLogWriter = a.Stderr
 		defer func() { harnessLogWriter = prev }()
 	}
-	a.pmLog("pm serve: agent=%s runner_id=%s work_dir=%s max_concurrent=%d\n", cfg.Agent, runnerID, absDir, maxConcurrent)
+	workerIDs := make([]string, maxConcurrent)
+	for i := 0; i < maxConcurrent; i++ {
+		workerIDs[i] = pmServeWorkerRunnerID(runnerID, i+1)
+	}
+	a.pmLog("pm serve: agent=%s runner_id=%s worker_ids=%s work_dir=%s max_concurrent=%d\n", cfg.Agent, runnerID, strings.Join(workerIDs, ","), absDir, maxConcurrent)
 	serveCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	harnessRoot, stopHarness := context.WithCancel(context.Background())
 	defer stopHarness()
 	type heldTurn struct {
-		id   string
-		turn map[string]any
+		id       string
+		runnerID string
+		turn     map[string]any
 	}
 	var (
 		mu                 sync.Mutex
-		active             int
 		inFlight           sync.WaitGroup
 		held               = map[string]heldTurn{}
+		usedSlots          = make([]bool, maxConcurrent)
 		forbiddenStreak    int
 		nonRetryableStreak int
 		backoff            = claimBackoffStart
 		lastCapacityLog    time.Time
 	)
+	pickSlot := func() int {
+		for i, used := range usedSlots {
+			if !used {
+				return i + 1
+			}
+		}
+		return 0
+	}
 	shutdown := func() (*commandResult, error) {
 		stopHarness()
 		drained := make(chan struct{})
@@ -655,7 +609,8 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			if item.turn != nil {
 				lease = anyString(item.turn["lease_token"])
 			}
-			if err := a.releaseTurn(releaseCtx, cfg, runnerID, item.id, lease); err != nil {
+			id := firstNonEmpty(item.runnerID, runnerID)
+			if err := a.releaseTurn(releaseCtx, cfg, id, item.id, lease); err != nil {
 				a.pmLog("pm serve: release %s failed: %v\n", item.id, err)
 				continue
 			}
@@ -674,15 +629,16 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 		default:
 		}
 		mu.Lock()
-		busy := active
+		slot := pickSlot()
 		mu.Unlock()
-		if busy >= maxConcurrent {
+		if slot == 0 {
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
 			}
 			continue
 		}
-		claimed, claimErr := a.invokeRawJSON(serveCtx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
+		slotID := workerIDs[slot-1]
+		claimed, claimErr := a.invokeRawJSON(serveCtx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": slotID})
 		if cap, ok := parsePMClaimCapacity(claimed, claimErr); ok {
 			forbiddenStreak = 0
 			nonRetryableStreak = 0
@@ -763,20 +719,12 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			continue
 		}
 		turn := commandResultBody(claimed)
+		if anyString(turn["lease_owner"]) == "" {
+			turn["lease_owner"] = slotID
+		}
 		turnID := anyString(turn["id"])
-		if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip {
-			if givenUp {
-				a.giveUpOnTurn(serveCtx, serveCtx, cfg, absDir, turn, nowFn())
-				if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
-					return shutdown()
-				}
-				continue
-			}
-			reason := "skip window after repeated lease loss"
-			if a.turnMem().consumeSkipLog(turnID) {
-				a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
-			}
-			a.releaseTurnBestEffort(serveCtx, cfg, turn, absDir, reason)
+		if a.turnMem().isGivenUp(turnID) {
+			a.giveUpOnTurn(serveCtx, serveCtx, cfg, absDir, turn, nowFn())
 			if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 				return shutdown()
 			}
@@ -790,22 +738,18 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			}
 			continue
 		}
-		held[turnID] = heldTurn{id: turnID, turn: turn}
-		active++
+		usedSlots[slot-1] = true
+		held[turnID] = heldTurn{id: turnID, runnerID: slotID, turn: turn}
 		mu.Unlock()
-		a.pmLog("pm serve: claimed turn %s\n", turnID)
+		a.pmLog("pm serve: claimed turn %s runner_id=%s\n", turnID, slotID)
 		runTurn := func() {
-			defer func() {
-				mu.Lock()
-				active--
-				mu.Unlock()
-			}()
 			settled := a.handleClaimedTurn(ctx, serveCtx, cfg, absDir, agentctl, argv, env, turn, harnessRoot)
+			mu.Lock()
 			if settled {
-				mu.Lock()
 				delete(held, turnID)
-				mu.Unlock()
+				usedSlots[slot-1] = false
 			}
+			mu.Unlock()
 		}
 		inFlight.Add(1)
 		if maxConcurrent == 1 {
@@ -820,7 +764,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 			case <-serveCtx.Done():
 				return shutdown()
 			}
-			if a.turnMem().shouldPollPause(turnID) {
+			if a.turnMem().isGivenUp(turnID) {
 				if sleepErr := sleepFn(serveCtx, interval); sleepErr != nil {
 					return shutdown()
 				}
@@ -1184,7 +1128,6 @@ func (a *App) settleFailedTurn(ctx, shutdownCtx context.Context, cfg config.Reso
 		return settled
 	}
 	a.pmLog("pm serve: turn %s fail request failed after %d attempts: %v; releasing lease\n", turnID, attempts, err)
-	a.turnMem().noteLoss(turnID)
 	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	return true
 }
@@ -1327,14 +1270,12 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	a.pmLog("pm serve: turn %s lease lost (%v); reading turn\n", turnID, lost)
 	got, err := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil)
 	if err != nil {
-		a.turnMem().noteLoss(turnID)
 		a.pmLog("pm serve: turn %s get after lease loss failed: %v; releasing lease\n", turnID, err)
 		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease loss recovery failed")
 		return true, false
 	}
 	current := commandResultBody(got)
 	if current == nil {
-		a.turnMem().noteLoss(turnID)
 		a.pmLog("pm serve: turn %s get after lease loss returned no object; releasing lease\n", turnID)
 		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "lease loss recovery failed")
 		return true, false
@@ -1349,16 +1290,8 @@ func (a *App) recoverLostLease(ctx, shutdownCtx context.Context, cfg config.Reso
 	if shuttingDown(shutdownCtx) {
 		return false, false
 	}
-	a.turnMem().noteLoss(turnID)
-	if skip, givenUp, until := a.turnMem().claimDefer(turnID); skip || givenUp || !a.turnMem().canRunHarness(turnID) {
-		if givenUp || !a.turnMem().canRunHarness(turnID) {
-			return a.giveUpOnTurn(ctx, shutdownCtx, cfg, workDir, turn, nowFn()), false
-		}
-		if a.turnMem().consumeSkipLog(turnID) {
-			a.pmLog("pm serve: skipping turn %s until %s after lease loss\n", turnID, until.UTC().Format(time.RFC3339))
-		}
-		a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "skip window after repeated lease loss")
-		return true, false
+	if a.turnMem().isGivenUp(turnID) || !a.turnMem().canRunHarness(turnID) {
+		return a.giveUpOnTurn(ctx, shutdownCtx, cfg, workDir, turn, nowFn()), false
 	}
 	runnerID := runnerIDFromTurn(turn, workDir)
 	claimed, claimErr := a.invokeRawJSON(ctx, cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": runnerID})
@@ -1442,7 +1375,17 @@ func (a *App) handleFailedComplete(ctx, shutdownCtx context.Context, cfg config.
 		return a.failUndeliverableReply(ctx, shutdownCtx, cfg, workDir, turn, err), false
 	}
 	if terminalLeaseLost(err) {
-		return a.recoverLostLease(ctx, shutdownCtx, cfg, workDir, turn, err)
+		got, getErr := a.invokeRawJSON(ctx, cfg, "pm turns get", "GET", "/pm/turns/"+url.PathEscape(turnID), nil)
+		if getErr == nil {
+			current := commandResultBody(got)
+			if current != nil && turnIsTerminal(current) {
+				removeTurnReply(workDir, turnID)
+				a.turnMem().observeTerminal(turnID)
+				a.pmLog("pm serve: turn %s already %s; nothing to do\n", turnID, firstNonEmpty(anyString(current["status"]), "unknown"))
+				return true, false
+			}
+		}
+		return true, false
 	}
 	a.finishUndeliveredComplete(ctx, cfg, workDir, turn)
 	return true, false
@@ -1451,13 +1394,15 @@ func (a *App) handleFailedComplete(ctx, shutdownCtx context.Context, cfg config.
 func (a *App) failUndeliverableReply(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir string, turn map[string]any, completeErr error) bool {
 	turnID := anyString(turn["id"])
 	leaseToken := anyString(turn["lease_token"])
-	reason := undeliverableReplyReason(completeErr)
+	if cause := shortCompleteCause(completeErr); cause != "" {
+		a.pmLog("pm serve: turn %s undeliverable: %s\n", turnID, cause)
+	}
 	a.pmLog("pm serve: turn %s giving up after %d undeliverable complete attempts; failing the turn\n", turnID, maxDeliveryAttempts)
-	_, failErr := a.failTurnUntil(ctx, shutdownCtx, cfg, turnID, leaseToken, reason, parseTurnDeadline(turn))
+	_, failErr := a.failTurnUntil(ctx, shutdownCtx, cfg, turnID, leaseToken, undeliverableReplyReason, parseTurnDeadline(turn))
 	removeTurnReply(workDir, turnID)
 	if failErr == nil {
 		a.turnMem().observeTerminal(turnID)
-		a.pmLog("pm serve: turn %s failed: %s\n", turnID, reason)
+		a.pmLog("pm serve: turn %s failed: %s\n", turnID, undeliverableReplyReason)
 		return true
 	}
 	if shuttingDown(shutdownCtx) || errors.Is(failErr, context.Canceled) {
@@ -1472,14 +1417,6 @@ func (a *App) failUndeliverableReply(ctx, shutdownCtx context.Context, cfg confi
 	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	a.turnMem().observeTerminal(turnID)
 	return true
-}
-
-func undeliverableReplyReason(err error) string {
-	cause := shortCompleteCause(err)
-	if cause == "" {
-		cause = "complete failed"
-	}
-	return undeliverableReplyReasonPrefix + cause + "."
 }
 
 func shortCompleteCause(err error) string {
@@ -1504,7 +1441,6 @@ func shortCompleteCause(err error) string {
 
 func (a *App) finishUndeliveredComplete(ctx context.Context, cfg config.Resolved, workDir string, turn map[string]any) {
 	turnID := anyString(turn["id"])
-	a.turnMem().noteLoss(turnID)
 	a.releaseTurnBestEffort(ctx, cfg, turn, workDir, "undeliverable terminal call")
 	path := turnReplyPath(workDir, turnID)
 	if abs, absErr := filepath.Abs(path); absErr == nil {
@@ -1550,6 +1486,7 @@ func (a *App) watchTurnLease(runCtx context.Context, cancel context.CancelFunc, 
 		return lost
 	}
 	interval := leaseHeartbeatInterval(turn)
+	retry := heartbeatRetryStart
 	go func() {
 		timer := time.NewTimer(interval)
 		defer timer.Stop()
@@ -1573,6 +1510,14 @@ func (a *App) watchTurnLease(runCtx context.Context, cancel context.CancelFunc, 
 				}
 				if next > 0 {
 					interval = next
+					retry = heartbeatRetryStart
+				} else {
+					interval = retry
+					nextRetry := retry * 2
+					if nextRetry > heartbeatRetryCap {
+						nextRetry = heartbeatRetryCap
+					}
+					retry = nextRetry
 				}
 				timer.Reset(interval)
 			}
@@ -1607,7 +1552,7 @@ func (a *App) heartbeatTurn(ctx context.Context, cfg config.Resolved, turnID, le
 			return false, false, clampLeaseHeartbeatInterval(remain / 2)
 		}
 	}
-	return false, false, 0
+	return false, false, defaultLeaseHeartbeatInterval
 }
 
 func (a *App) handleHeartbeatLeaseLoss(ctx, shutdownCtx context.Context, cfg config.Resolved, workDir string, turn map[string]any) (bool, bool) {
@@ -2312,6 +2257,10 @@ func (a *App) logRunnerStderr(turnID string, stderr []byte) {
 		return
 	}
 	a.pmLog("pm serve: turn %s runner stderr: %s\n", turnID, strings.TrimSpace(string(stderr)))
+}
+
+func pmServeWorkerRunnerID(base string, slot int) string {
+	return strings.TrimSpace(base) + "-" + strconv.Itoa(slot)
 }
 
 func loadOrCreateRunnerID(dir string) (string, error) {
