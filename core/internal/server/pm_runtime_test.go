@@ -157,7 +157,8 @@ func TestPMRuntimeSourceWriteStaysUnavailable(t *testing.T) {
 		}
 		return out
 	}
-	d := post("/pm/decisions", map[string]any{"request_key": "github-write", "work_ref": work["ref"], "instruction": "close", "scope": "github", "target_revision": "abc"}, 201)
+	// Approval is fenced on the work's current revision; an invented one is refused.
+	d := post("/pm/decisions", map[string]any{"request_key": "github-write", "work_ref": work["ref"], "instruction": "close", "scope": "github", "target_revision": asString(work["decision_revision"])}, 201)
 	answer := post("/pm/decisions/"+asString(d["id"])+"/answer", map[string]any{"revision": 1, "approve": true, "text": "Approved exact source write"}, 200)
 	if answer["status"] != "answered" {
 		t.Fatal(answer)
@@ -364,12 +365,17 @@ func TestPMPhaseCanonicalMutationAndSourceRequest(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = rt.Service.AnswerDecision(ctx, p, stale.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"})
-			if err != nil {
-				t.Fatal(err)
+			// A knowingly stale approval is refused before any action exists;
+			// declining it is still allowed.
+			var target *pm.ApprovalTargetError
+			if _, err = rt.Service.AnswerDecision(ctx, p, stale.ID, pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.As(err, &target) || !errors.Is(err, pm.ErrStale) || target.Reason != "revision_changed" {
+				t.Fatalf("stale approve %v", err)
 			}
-			if _, err = rt.Service.DispatchDecision(ctx, p, stale.ID); !errors.Is(err, pm.ErrStale) {
-				t.Fatalf("stale dispatch %v", err)
+			if _, err = rt.Service.DispatchDecision(ctx, p, stale.ID); err == nil {
+				t.Fatal("dispatch of an unanswered stale proposal succeeded")
+			}
+			if declined, err := rt.Service.AnswerDecision(ctx, p, stale.ID, pm.AnswerInput{Revision: 1, Approve: false, Text: "no"}); err != nil || declined.Status == pm.Answered {
+				t.Fatalf("stale decline %+v %v", declined, err)
 			}
 		})
 	}
