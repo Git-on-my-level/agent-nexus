@@ -4066,7 +4066,7 @@
           "path": "/pm/actions/{action_id}/acknowledge",
           "operation_id": "pmActionsAcknowledge",
           "summary": "Acknowledge a failed, unresolvable, or undeliverable action",
-          "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to \"Closed by \u003cactor\u003e: no delivery path is configured for \u003csource\u003e, nothing was sent\". Other states return 409; other actors return 403.",
+          "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to \"Closed without delivery: no delivery path is configured for \u003csource\u003e; nothing was sent.\". Other states return 409; other actors return 403.",
           "why": "Acknowledge a failed, unresolvable, or undeliverable action.",
           "input_mode": "json-body",
           "streaming": {
@@ -5251,7 +5251,7 @@
           "path": "/pm/turns/{turn_id}/complete",
           "operation_id": "pmTurnsComplete",
           "summary": "Record a selected PM agent response",
-          "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.",
+          "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.",
           "why": "Record a selected PM agent response.",
           "input_mode": "json-body",
           "streaming": {
@@ -5557,7 +5557,7 @@
           ],
           "stability": "beta",
           "surface": "canonical",
-          "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.",
+          "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.",
           "body_schema": {
             "required": [
               {
@@ -5671,7 +5671,7 @@
           "path": "/pm/turns/{turn_id}/release",
           "operation_id": "pmTurnsRelease",
           "summary": "Release a claimed PM turn back to the queue",
-          "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 403; no active lease returns 409. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
+          "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
           "why": "Return interrupted work to the queue for another claim.",
           "input_mode": "json-body",
           "streaming": {
@@ -5685,6 +5685,8 @@
             "forbidden",
             "not_found",
             "conflict",
+            "lease_mismatch",
+            "turn_not_claimed",
             "turn_closed",
             "busy",
             "unavailable"
@@ -9060,7 +9062,7 @@
           "path": "/pm/actions/{action_id}/acknowledge",
           "operation_id": "pmActionsAcknowledge",
           "summary": "Acknowledge a failed, unresolvable, or undeliverable action",
-          "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to \"Closed by \u003cactor\u003e: no delivery path is configured for \u003csource\u003e, nothing was sent\". Other states return 409; other actors return 403.",
+          "description": "Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to \"Closed without delivery: no delivery path is configured for \u003csource\u003e; nothing was sent.\". Other states return 409; other actors return 403.",
           "why": "Acknowledge a failed, unresolvable, or undeliverable action.",
           "input_mode": "json-body",
           "streaming": {
@@ -10245,7 +10247,7 @@
           "path": "/pm/turns/{turn_id}/complete",
           "operation_id": "pmTurnsComplete",
           "summary": "Record a selected PM agent response",
-          "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content or token returns 409.",
+          "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.",
           "why": "Record a selected PM agent response.",
           "input_mode": "json-body",
           "streaming": {
@@ -10551,7 +10553,7 @@
           ],
           "stability": "beta",
           "surface": "canonical",
-          "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason or token returns 409.",
+          "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.",
           "body_schema": {
             "required": [
               {
@@ -10665,7 +10667,7 @@
           "path": "/pm/turns/{turn_id}/release",
           "operation_id": "pmTurnsRelease",
           "summary": "Release a claimed PM turn back to the queue",
-          "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 403; no active lease returns 409. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
+          "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
           "why": "Return interrupted work to the queue for another claim.",
           "input_mode": "json-body",
           "streaming": {
@@ -10679,6 +10681,8 @@
             "forbidden",
             "not_found",
             "conflict",
+            "lease_mismatch",
+            "turn_not_claimed",
             "turn_closed",
             "busy",
             "unavailable"

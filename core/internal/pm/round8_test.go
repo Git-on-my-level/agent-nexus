@@ -124,8 +124,8 @@ func TestRound8LeaseHTTP(t *testing.T) {
 	request("claim", `{"runner_id":"runner-b"}`, 204)
 	release := turn.ID + "/release"
 	body := fmt.Sprintf(`{"runner_id":"runner-a","lease_token":%q}`, claimed.LeaseToken)
-	request(release, fmt.Sprintf(`{"runner_id":"runner-b","lease_token":%q}`, claimed.LeaseToken), 403)
-	request(release, `{"runner_id":"runner-a","lease_token":"wrong"}`, 403)
+	request(release, fmt.Sprintf(`{"runner_id":"runner-b","lease_token":%q}`, claimed.LeaseToken), 409)
+	request(release, `{"runner_id":"runner-a","lease_token":"wrong"}`, 409)
 	request(release, `{"runner_id":"runner-a"}`, 400)
 	caller = human
 	request(release, body, 403)
@@ -157,7 +157,7 @@ func TestRound8LeaseHTTP(t *testing.T) {
 	if next.ID != claimed.ID || next.LeaseToken == claimed.LeaseToken {
 		t.Fatalf("reclaim: %+v", next)
 	}
-	request(release, body, 403)
+	request(release, body, 409)
 	// A lease can expire before the turn deadline, allowing a fresh owner/token.
 	next.LeaseExpiresAt = time.Now().UTC().Add(-time.Second)
 	next.Revision++

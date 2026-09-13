@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -243,7 +242,7 @@ func TestRound11DecisionAvailabilityIsLive(t *testing.T) {
 	actionID := answered["action_id"].(string)
 	round11Request(t, h, "POST", "/pm/decisions/"+id+"/dispatch", struct{}{}, 503)
 	closed := round11Request(t, h, "POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
-	want := fmt.Sprintf("Closed by %s: no delivery path is configured for GitHub, nothing was sent", p.ActorID)
+	want := "Closed without delivery: no delivery path is configured for GitHub; nothing was sent."
 	if closed["closed_without_delivery"] != true || closed["receipt"].(map[string]any)["detail"] != want {
 		t.Fatal(closed)
 	}
@@ -302,18 +301,22 @@ func TestRound11GeneratedLeaseErrors(t *testing.T) {
 		found := 0
 		for _, command := range registry.Commands {
 			switch command.ID {
-			case "pm.turns.complete", "pm.turns.fail", "pm.turns.context", "pm.turns.decisions.create":
+			case "pm.turns.complete", "pm.turns.fail", "pm.turns.context", "pm.turns.decisions.create", "pm.turns.release":
 				found++
 				codes := map[string]bool{}
 				for _, code := range command.Errors {
 					codes[code] = true
 				}
-				if !codes["lease_required"] || !codes["lease_mismatch"] || !codes["turn_closed"] {
+				required := "lease_required"
+				if command.ID == "pm.turns.release" {
+					required = "turn_not_claimed"
+				}
+				if !codes[required] || !codes["lease_mismatch"] || !codes["turn_closed"] {
 					t.Fatalf("%s %+v", file, command)
 				}
 			}
 		}
-		if found != 4 {
+		if found != 5 {
 			t.Fatalf("%s: matched %d commands", file, found)
 		}
 	}

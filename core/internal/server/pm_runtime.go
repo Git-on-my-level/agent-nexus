@@ -132,7 +132,14 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 		if ref != "" && permission != "pm.respond" {
 			if _, err := store.GetWork(ctx, ref); err != nil {
-				return pm.ErrNotFound
+				if !errors.Is(err, primitives.ErrNotFound) {
+					return err
+				}
+				// Durable PM records outlive work. Reading and human handling
+				// remain authorized; proposals and source mutations need work.
+				if permission != "pm.read" && permission != "pm.approve" {
+					return pm.ErrNotFound
+				}
 			}
 		}
 		switch permission {
@@ -221,6 +228,16 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	deps.CurrentRevision = func(ctx context.Context, p pm.Principal, ref string) (string, error) {
 		return currentWorkDecisionRevision(ctx, store, ref)
 	}
+	deps.DecisionWork = func(ctx context.Context, p pm.Principal, ref string) (pm.DecisionWork, error) {
+		w, err := store.GetWork(ctx, ref)
+		if errors.Is(err, primitives.ErrNotFound) {
+			return pm.DecisionWork{}, pm.ErrNotFound
+		}
+		if err != nil {
+			return pm.DecisionWork{}, err
+		}
+		return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: anyString(w["phase"])}, nil
+	}
 
 	// The registry is the single source of configured native execution paths.
 	nativeExecutors := map[string]func(context.Context, pm.Action) (pm.Receipt, error){
@@ -231,6 +248,9 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	}
 	deps.DeliveryPath = func(ctx context.Context, a pm.Action) (string, error) {
 		w, err := store.GetWork(ctx, a.WorkRef)
+		if errors.Is(err, primitives.ErrNotFound) {
+			return "none", pm.NoDeliveryPath("the missing work item")
+		}
 		if err != nil {
 			return "none", err
 		}

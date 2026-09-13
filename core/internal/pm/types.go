@@ -17,6 +17,7 @@ var (
 	ErrConflict         = errors.New("PM revision or state conflict")
 	ErrLeaseRequired    = fmt.Errorf("%w: this turn's current lease token is required", ErrConflict)
 	ErrLeaseMismatch    = fmt.Errorf("%w: the lease was released or re-claimed; claim the turn again", ErrConflict)
+	ErrTurnNotClaimed   = fmt.Errorf("%w: this turn is not claimed (already released or lease expired); no release is needed", ErrConflict)
 	ErrNotFound         = errors.New("PM record not found")
 	ErrTurnClosed       = errors.New("PM turn is closed")
 	ErrStale            = errors.New("approved source revision has changed")
@@ -26,6 +27,14 @@ var (
 	ErrBusy             = errors.New("PM execution capacity reached")
 	ErrEmpty            = errors.New("no claimable PM turn")
 )
+
+// Preserve the lease error code without suggesting a retry of terminal work.
+type terminalLeaseMismatchError struct{ status Status }
+
+func (e *terminalLeaseMismatchError) Error() string {
+	return fmt.Sprintf("This turn is already %s; the replay lease token does not match. No retry is needed.", e.status)
+}
+func (e *terminalLeaseMismatchError) Unwrap() error { return ErrLeaseMismatch }
 
 // BusyError describes the admission constraint observed under the store lock.
 type BusyError struct {
@@ -220,6 +229,9 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
+	WorkMissing            bool           `json:"-"` // Current work projection; never persisted.
+	TargetCurrent          bool           `json:"-"`
+	AlreadyAtTarget        bool           `json:"-"`
 	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
 	ProposedBy             string         `json:"proposed_by,omitempty"`
 	OriginKind             string         `json:"origin_kind,omitempty"`
@@ -334,6 +346,8 @@ type DispatchRequest struct {
 // Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
+	// DecisionWork reads one current snapshot; ErrNotFound means missing work.
+	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
 	Authorize         func(context.Context, Principal, string, string) error
 	EnsureThread      func(context.Context, Principal, string, string) (string, error)
@@ -347,4 +361,9 @@ type Dependencies struct {
 	CheckDelivery func(context.Context, Action) error
 	Execute       func(context.Context, Action) (Receipt, error)
 	Reconcile     func(context.Context, Action) (Receipt, error)
+}
+
+type DecisionWork struct {
+	Revision string
+	Phase    string
 }

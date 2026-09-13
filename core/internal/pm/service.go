@@ -383,10 +383,10 @@ func (s *Service) ReleaseTurn(ctx context.Context, p Principal, turnID string, i
 		return Turn{}, ErrInvalid
 	}
 	if !leaseHeld(t, time.Now().UTC()) {
-		return Turn{}, ErrConflict
+		return Turn{}, ErrTurnNotClaimed
 	}
 	if runner != t.LeaseOwner || in.LeaseToken != t.LeaseToken {
-		return Turn{}, ErrForbidden
+		return Turn{}, ErrLeaseMismatch
 	}
 	old := t.Revision
 	t.Status = Sending
@@ -545,7 +545,7 @@ func leaseTokenHash(token string) string {
 }
 func terminalLeaseGuard(t Turn, token string) error {
 	if token == "" || t.TerminalLeaseHash == "" || leaseTokenHash(token) != t.TerminalLeaseHash {
-		return ErrConflict
+		return &terminalLeaseMismatchError{status: t.Status}
 	}
 	return nil
 }
