@@ -539,7 +539,10 @@ test("answer and failed delivery remain separately inspectable", async ({
   await page
     .getByRole("button", { name: "Deliver approved instruction" })
     .click();
-  await expect(page.getByText("Failed", { exact: true })).toBeVisible();
+  // The receipt shows on the row badge and in the pane; assert the pane.
+  await expect(
+    page.getByLabel("Selected inbox item").getByText("Failed", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("Approved for the sample note only", { exact: true }),
   ).toBeVisible();
