@@ -45,7 +45,7 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
+	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
@@ -76,34 +76,148 @@ func TestExtractProviderModelAndAssistantText(t *testing.T) {
 	if !strings.Contains(text, "emergency-restock") {
 		t.Fatalf("assistant text %q", text)
 	}
-	refs := extractEvidenceRefs(text + " decision:pm_abc123")
-	if len(refs) != 2 {
-		t.Fatalf("refs %v", refs)
-	}
-	decisionRefs := extractEvidenceRefs("Proposed decision:dec-42 awaiting your answer")
-	if len(decisionRefs) != 1 || decisionRefs[0] != "decision:dec-42" {
-		t.Fatalf("decision refs %v", decisionRefs)
+}
+
+func TestExtractEvidenceRefsIgnoresProseAndParsesDeliberateSources(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		text string
+		raw  string
+		want []string
+		body string
+	}{
+		{
+			name: "prose-only mention ignored",
+			text: "Proposed decision:pm_placeholder awaiting your answer. See card:emergency-restock.",
+		},
+		{
+			name: "block parsed",
+			text: "Proposed decision:pm_placeholder.\n\n---evidence---\ndecision:pm_abc123\nartifact:art_xyz\n",
+			want: []string{"decision:pm_abc123", "artifact:art_xyz"},
+			body: "Proposed decision:pm_placeholder.",
+		},
+		{
+			name: "malformed lines ignored",
+			text: "Ready.\n---evidence---\nnot a ref\ndecision:\n:missing\ndecision:pm_ok extra\nevent:evt_1\n",
+			want: []string{"event:evt_1"},
+			body: "Ready.",
+		},
+		{
+			name: "trailing punctuation stripped on block lines",
+			text: "Done.\n---evidence---\ndecision:pm_turn_9f3acc1cccd.\ncard:foo.bar.\n",
+			want: []string{"decision:pm_turn_9f3acc1cccd", "card:foo.bar"},
+			body: "Done.",
+		},
+		{
+			name: "json evidence_refs array",
+			raw:  `{"messages":[{"role":"assistant","text":"See decision:pm_placeholder","evidence_refs":["decision:pm_abc123","artifact:art_xyz"]}]}`,
+			text: "See decision:pm_placeholder",
+			want: []string{"decision:pm_abc123", "artifact:art_xyz"},
+			body: "See decision:pm_placeholder",
+		},
+		{
+			name: "json top-level evidence_refs with malformed ignored",
+			raw:  `{"evidence_refs":["decision:pm_ok","nope",123,""],"text":"hello"}`,
+			text: "hello",
+			want: []string{"decision:pm_ok"},
+			body: "hello",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := tc.raw
+			if raw == "" {
+				raw = tc.text
+			}
+			gotBody, refs := collectDeliberateEvidenceRefs(tc.text, raw)
+			if tc.body != "" && gotBody != tc.body {
+				t.Fatalf("body %q want %q", gotBody, tc.body)
+			}
+			if strings.Join(refs, "|") != strings.Join(tc.want, "|") {
+				t.Fatalf("refs %v want %v", refs, tc.want)
+			}
+		})
 	}
 }
 
-func TestExtractEvidenceRefsStripsTrailingPunctuation(t *testing.T) {
-	text := `Canonical ref decision:pm_turn_9f3acc1cccd. Then card:emergency-restock, topic:ops-1; work:item-2: next. artifact:blob-9) document:guide-1] and 'card:foo.bar'.`
-	refs := extractEvidenceRefs(text)
-	want := []string{
-		"decision:pm_turn_9f3acc1cccd",
-		"card:emergency-restock",
-		"topic:ops-1",
-		"work:item-2",
-		"artifact:blob-9",
-		"document:guide-1",
-		"card:foo.bar",
+func TestCompleteTurnDropsUnresolvableEvidenceRefs(t *testing.T) {
+	var completeBody map[string]any
+	var gets []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			gets = append(gets, r.URL.Path)
+		}
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			body, _ := io.ReadAll(r.Body)
+			if err := json.Unmarshal(body, &completeBody); err != nil {
+				t.Errorf("complete body: %v", err)
+			}
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/decisions/decision:pm_ok":
+			io.WriteString(w, `{"id":"pm_ok"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/work/card:ok":
+			io.WriteString(w, `{"work":{"ref":"card:ok"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/artifacts/artifact:art_ok":
+			io.WriteString(w, `{"id":"art_ok"}`)
+		case r.Method == http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+			io.WriteString(w, `{"error":{"code":"not_found","message":"PM record not found"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+
+	text := "Mention decision:pm_placeholder and card:ghost.\n\n---evidence---\ndecision:pm_ok\ndecision:pm_missing\ncard:ok\ntopic:ops-1\nartifact:art_ok\n"
+	if err := app.completeTurn(context.Background(), cfg, "turn-1", "lease-1", text, nil, 16000); err != nil {
+		t.Fatalf("completeTurn: %v", err)
 	}
-	if strings.Join(refs, "|") != strings.Join(want, "|") {
-		t.Fatalf("refs %v want %v", refs, want)
+	if anyString(completeBody["text"]) != "Mention decision:pm_placeholder and card:ghost." {
+		t.Fatalf("stored text %v", completeBody["text"])
 	}
-	dotted := extractEvidenceRefs("See card:foo.bar.")
-	if len(dotted) != 1 || dotted[0] != "card:foo.bar" {
-		t.Fatalf("internal dot stripped: %v", dotted)
+	refs, _ := completeBody["evidence_refs"].([]any)
+	joined := fmt.Sprint(refs)
+	if !strings.Contains(joined, "decision:pm_ok") || !strings.Contains(joined, "card:ok") || !strings.Contains(joined, "artifact:art_ok") {
+		t.Fatalf("kept refs %v", refs)
+	}
+	if strings.Contains(joined, "decision:pm_missing") || strings.Contains(joined, "topic:ops-1") || strings.Contains(joined, "pm_placeholder") || strings.Contains(joined, "card:ghost") {
+		t.Fatalf("dropped refs leaked: %v", refs)
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "pm serve: dropping evidence ref decision:pm_missing:") || !strings.Contains(logs, "pm serve: dropping evidence ref topic:ops-1: unsupported evidence kind") {
+		t.Fatalf("drop log %q", logs)
+	}
+	getJoined := strings.Join(gets, "\n")
+	if !strings.Contains(getJoined, "/pm/decisions/decision:pm_ok") || !strings.Contains(getJoined, "/pm/decisions/decision:pm_missing") || !strings.Contains(getJoined, "/work/card:ok") || !strings.Contains(getJoined, "/artifacts/artifact:art_ok") {
+		t.Fatalf("lookups %v", gets)
+	}
+	if strings.Contains(getJoined, "/topics/") {
+		t.Fatalf("unsupported kind was looked up: %v", gets)
+	}
+
+	stderr.Reset()
+	completeBody = nil
+	gets = nil
+	raw := []byte(`{"messages":[{"role":"assistant","text":"JSON reply mentioning decision:pm_placeholder","evidence_refs":["decision:pm_ok","decision:pm_missing"]}]}`)
+	extracted := assistantTextFromRunnerOutput(raw)
+	if err := app.completeTurn(context.Background(), cfg, "turn-1", "lease-1", extracted, raw, 16000); err != nil {
+		t.Fatalf("json completeTurn: %v", err)
+	}
+	refs, _ = completeBody["evidence_refs"].([]any)
+	if fmt.Sprint(refs) != "[decision:pm_ok]" {
+		t.Fatalf("json kept refs %v", refs)
+	}
+	if !strings.Contains(stderr.String(), "pm serve: dropping evidence ref decision:pm_missing:") {
+		t.Fatalf("json drop log %q", stderr.String())
 	}
 }
 

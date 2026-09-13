@@ -526,6 +526,40 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if strings.Contains(reconcile, `"id"`) {
 		t.Errorf("reconcile still dumped JSON: %s", reconcile)
 	}
+	list := formatWorkCommandText("pm decisions list", map[string]any{"items": []any{
+		map[string]any{"id": "d-stale", "work_ref": "card:x", "status": "awaiting_answer", "target_current": false, "instruction": "Move to review"},
+		map[string]any{"id": "d-there", "work_ref": "card:y", "status": "awaiting_answer", "already_at_target": true, "target_current": true, "instruction": "Move to done"},
+		map[string]any{"id": "d-gone", "work_ref": "card:z", "status": "awaiting_answer", "work_missing": true, "target_current": false, "instruction": "Annotate"},
+		map[string]any{"id": "d-ok", "work_ref": "card:w", "status": "awaiting_answer", "target_current": true, "instruction": "Review"},
+	}})
+	if !strings.Contains(list, "d-stale  card:x  status=awaiting_answer  stale since proposal  Move to review") {
+		t.Fatalf("list missed stale flag: %s", list)
+	}
+	if !strings.Contains(list, "d-there  card:y  status=awaiting_answer  already there  Move to done") {
+		t.Fatalf("list missed already-there flag: %s", list)
+	}
+	if !strings.Contains(list, "d-gone  card:z  status=awaiting_answer  task missing  Annotate") {
+		t.Fatalf("list missed missing-task flag: %s", list)
+	}
+	if strings.Contains(list, "d-ok  card:w  status=awaiting_answer  stale") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  already there") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  task missing") {
+		t.Fatalf("current decision grew a freshness flag: %s", list)
+	}
+	staleGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-stale", "work_ref": "card:x", "status": "awaiting_answer", "target_current": false})
+	if !strings.HasPrefix(staleGet, "stale since proposal\n") || !strings.Contains(staleGet, `"id"`) {
+		t.Fatalf("get missed stale flag line: %s", staleGet)
+	}
+	thereGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-there", "already_at_target": true, "target_current": true})
+	if !strings.HasPrefix(thereGet, "already there\n") {
+		t.Fatalf("get missed already-there line: %s", thereGet)
+	}
+	missingGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-gone", "work_missing": true, "target_current": false, "already_at_target": false})
+	if !strings.HasPrefix(missingGet, "task missing\n") {
+		t.Fatalf("get missed task-missing line: %s", missingGet)
+	}
+	currentGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-ok", "status": "awaiting_answer", "target_current": true})
+	if strings.Contains(currentGet, "stale since proposal") || strings.Contains(currentGet, "already there") || strings.Contains(currentGet, "task missing") {
+		t.Fatalf("current get grew a flag: %s", currentGet)
+	}
 }
 
 func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
@@ -612,6 +646,15 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			body:        `{}`,
 			args:        []string{"pm", "actions", "reconcile", "action-1"},
 			want:        "propose",
+			notWant:     "if_updated_at",
+		},
+		{
+			name:        "answer stale target",
+			commandPath: "/pm/decisions/decision-1/answer",
+			errorCode:   "source_revision_changed",
+			body:        `{"revision":1,"approve":true,"text":"ok"}`,
+			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
+			want:        "task changed after this proposal",
 			notWant:     "if_updated_at",
 		},
 		{

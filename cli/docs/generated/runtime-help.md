@@ -8061,7 +8061,7 @@ Local Help: pm serve
   - `anx --agent pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'`
 
 Flags:
-  --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path.
+  --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path. Evidence refs are taken only from a trailing ---evidence--- block or a JSON evidence_refs array, not from prose.
   --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used.
   --poll-interval <duration>   Sleep between empty claims (default 2s).
   --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Core also bounds workspace sending turns.

@@ -499,17 +499,21 @@ is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
 profiles), not to the child harness. After a successful claim the runner also
 sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
 `anx pm turns context` send it when `--lease-token` is omitted, so the harness
-does not have to copy the token into `--from-file`. Ctrl-C / SIGTERM kills the
-direct harness process group (SIGTERM, then SIGKILL after a short grace). A
-harness's detached children (those that have left that process group) survive a
-successful run; only Ctrl-C / SIGTERM of `pm serve` cleans up an in-flight
-group — find leftovers with `ps -o pid,pgid,command`. An
-`agentctl` background execution outlives the runner; the log prints its
-execution id so you can `agentctl cancel <id>`.
+does not have to copy the token into `--from-file`. The lease token is in the
+runner process environment: any same-uid process can read it. A stolen token
+only lets its holder complete, fail, or release that one turn until the
+deadline. Ctrl-C / SIGTERM kills the direct harness process group (SIGTERM,
+then SIGKILL after a short grace). A harness's detached children (those that
+have left that process group) survive a successful run; only Ctrl-C /
+SIGTERM of `pm serve` cleans up an in-flight group — find leftovers with
+`ps -o pid,pgid,command`. An `agentctl` background execution outlives the
+runner; the log prints its execution id so you can `agentctl cancel <id>`.
 
 Seatbelt on this OS cannot hide another same-uid process's environment, so
 run the harness as a different uid or on a different host from core's JIT
-generated-reader process. Example, separate uid:
+generated-reader process. The runner's `ANX_PM_LEASE_TOKEN` is in that same
+unprotected environment; a stolen token is limited to complete/fail/release
+of that one turn until the deadline. Example, separate uid:
 
 ```sh
 sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
@@ -544,8 +548,11 @@ omp may silently substitute models; every omp run must show
 (`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models never go through
 omp. The prompt stays small: the PM loads tracker context through
 `anx work list|get` and `anx pm context`, never from a stuffed dump. Proposed
-decisions must bind `work_ref` to a task and name each id as `decision:<id>`
-so the runner records evidence refs the web page can link.
+decisions must bind `work_ref` to a task. To attach evidence, the harness must
+end its answer with a `---evidence---` block (one typed ref per line) or a JSON
+`evidence_refs` array; mentions in prose are not recorded. `pm serve` verifies
+each attached ref against core and drops unresolvable ones instead of failing
+the turn.
 
 Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
 2 minutes). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
