@@ -368,7 +368,11 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 		t.Fatalf("expected terminal move without evidence ErrInvalidBoardRequest, got %v", err)
 	}
 
-	evidenceRefs := []string{"event:card-completion-1"}
+	evidence, err := store.AppendEvent(ctx, "actor-3", map[string]any{"type": "completion_evidence", "refs": []string{}, "summary": "Card completion checked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRefs := []string{"event:" + evidence["id"].(string)}
 	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
 		_, err = store.AddBoardCard(ctx, "actor-3", boardID, primitives.AddBoardCardInput{
 			ParentThreadID:   cardThreadB,
@@ -414,7 +418,7 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	if movedDone.Card["column_key"] != "done" || res != "done" {
 		t.Fatalf("unexpected terminal move result: %#v", movedDone.Card)
 	}
-	if got := movedDone.Card["resolution_refs"]; !reflect.DeepEqual(got, []any{"event:card-completion-1"}) && !reflect.DeepEqual(got, []string{"event:card-completion-1"}) {
+	if got := movedDone.Card["resolution_refs"]; !reflect.DeepEqual(got, []any{evidenceRefs[0]}) && !reflect.DeepEqual(got, evidenceRefs) {
 		t.Fatalf("unexpected resolution refs after done move: %#v", got)
 	}
 	afterDoneBoardUpdatedAt := movedDone.Board["updated_at"].(string)

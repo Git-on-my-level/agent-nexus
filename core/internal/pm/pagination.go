@@ -49,7 +49,7 @@ func recordPage[T any](ctx context.Context, s *Service, p Principal, kind string
 		}
 	}
 	owner := p.ActorID
-	if kind == "decision" || kind == "action" {
+	if kind == "decision" || kind == "action" || kind == "binding" {
 		owner = ""
 	}
 	// Go stores UTC RFC3339Nano. Removing Z preserves exact fractional-second
@@ -128,15 +128,11 @@ func (s *Service) ActionPage(ctx context.Context, p Principal, limit int, cursor
 	}
 	return page, err
 }
-func (s *Service) BindingPage(ctx context.Context, p Principal) (Page[Binding], error) {
+func (s *Service) BindingPage(ctx context.Context, p Principal, limit int, cursor string) (Page[Binding], error) {
 	if err := s.authorize(ctx, p, "pm.bind", ""); err != nil {
 		return Page[Binding]{}, err
 	}
-	items, err := listRecords[Binding](ctx, s.store, "binding", p.WorkspaceID, "", "")
-	if err != nil {
-		return Page[Binding]{}, err
-	}
-	return Page[Binding]{Items: items}, nil
+	return recordPage(ctx, s, p, "binding", limit, cursor, func(Binding) bool { return true })
 }
 
 // ConversationHistory reads newest history by default, in chronological display

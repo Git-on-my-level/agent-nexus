@@ -274,7 +274,7 @@ func TestBindingPageListsExactIdentities(t *testing.T) {
 	s, _, p, _ := fixture(t)
 	o := Origin{Transport: "telegram", TenantID: "bot", ChannelID: "chat", ExternalUserID: "42"}
 	bind(t, s, p, o, true)
-	page, err := s.BindingPage(context.Background(), p)
+	page, err := s.BindingPage(context.Background(), p, 50, "")
 	if err != nil || len(page.Items) != 1 || page.Items[0].Origin != o {
 		t.Fatalf("%+v %v", page, err)
 	}

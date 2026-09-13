@@ -210,6 +210,8 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
+	AcknowledgedBy         string         `json:"acknowledged_by,omitempty"`
+	AcknowledgedAt         *time.Time     `json:"acknowledged_at,omitempty"`
 	CreatedAt              *time.Time     `json:"created_at,omitempty"`
 	Deliverable            bool           `json:"deliverable"`
 	ReconciliationConflict bool           `json:"reconciliation_conflict"`
@@ -284,13 +286,14 @@ type DispatchRequest struct {
 // there, before recording any attempt. Errors after Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
-	Authorize       func(context.Context, Principal, string, string) error
-	EnsureThread    func(context.Context, Principal, string, string) (string, error)
-	ReadContext     func(context.Context, Principal, string, string, int) (ContextPage, error)
-	ReadContextPage func(context.Context, Principal, string, string, string, int) (ContextPage, error)
-	Dispatch        func(context.Context, DispatchRequest) error
-	CurrentRevision func(context.Context, Principal, string) (string, error)
-	CheckDelivery   func(context.Context, Action) error
-	Execute         func(context.Context, Action) (Receipt, error)
-	Reconcile       func(context.Context, Action) (Receipt, error)
+	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
+	Authorize         func(context.Context, Principal, string, string) error
+	EnsureThread      func(context.Context, Principal, string, string) (string, error)
+	ReadContext       func(context.Context, Principal, string, string, int) (ContextPage, error)
+	ReadContextPage   func(context.Context, Principal, string, string, string, int) (ContextPage, error)
+	Dispatch          func(context.Context, DispatchRequest) error
+	CurrentRevision   func(context.Context, Principal, string) (string, error)
+	CheckDelivery     func(context.Context, Action) error
+	Execute           func(context.Context, Action) (Receipt, error)
+	Reconcile         func(context.Context, Action) (Receipt, error)
 }

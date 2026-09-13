@@ -814,7 +814,7 @@ work_tracking:
     - refresh.last_error and freshness.last_error share {code, message}; code is the collector kind, not a generic read_failed.
     - Replay keys bind content; conflicting reuse is rejected.
     - Source sequence wins over observer clocks; older observations remain in history.
-    - Native completion uses the existing card evidence gate.
+    - Native completion requires existing non-trashed workspace resolution refs, checked in the canonical write transaction.
     - Source completion is an attributed claim, not independent acceptance verification.
     - Queued refresh is not a successful read.
 
@@ -825,6 +825,8 @@ conversational_pm:
   decision_read_scope: workspace
   decision_answer_scope: actor_id
   decision_dispatch_scope: actor_id
+  action_acknowledgement_scope: actor_id
+  action_acknowledgement_fields: [acknowledged_by, acknowledged_at]
   decision_provenance: [proposed_by, origin_kind, turn_id]
   decision_origin_kind: [human, pm_turn, channel]
   phase_action_target: payload.phase
@@ -832,6 +834,9 @@ conversational_pm:
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
+    - Done proposals validate every resolution ref; decision payload.resolution is read-only and derived at response time.
+    - Human acknowledgement handles failed or unresolvable unknown actions without modifying receipt history; it is not proof of delivery.
+    - PM authentication failures use the core 401 auth error contract; authorization failures remain 403.
     - PM turn response operations require the configured PM actor; an empty identity fails closed.
     - Identical turn proposals reuse the awaiting decision for workspace, actor, work_ref, scope, target revision, payload and instruction; changed intent supersedes it atomically with superseded_by and superseded_reason.
     - Reusing a request key with a changed target revision conflicts with existing_decision_id in error details; source revisions are opaque and cannot be ordered.

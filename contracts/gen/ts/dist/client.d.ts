@@ -162,6 +162,7 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
+    pmActionsAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsList(options?: RequestOptions): Promise<InvokeResult>;
     pmActionsReconcile(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

@@ -32,7 +32,7 @@ func TestHTTPRejectsActorInjectionAndCannotApproveByDiscussion(t *testing.T) {
 	h.Authenticate = func(*http.Request) (Principal, error) { return Principal{}, ErrForbidden }
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/pm/conversations", nil))
-	if w.Code != 403 {
+	if w.Code != 401 {
 		t.Fatalf("unauthenticated %d", w.Code)
 	}
 }
