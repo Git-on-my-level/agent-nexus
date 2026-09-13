@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -51,7 +52,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm actions acknowledge":   {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
-	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
+	"pm turns context":         {path: "/pm/turns/{id}/context", method: "POST", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
 	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
 	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
@@ -63,6 +64,7 @@ var workCommands = map[string]workCommandSpec{
 type parsedWorkCommand struct {
 	spec               workCommandSpec
 	name, id, fromFile string
+	leaseToken         string
 	query              url.Values
 }
 
@@ -97,7 +99,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
-	var id, fromFile trackedString
+	var id, fromFile, leaseToken trackedString
 	var limit trackedInt
 
 	values := map[string]*trackedString{}
@@ -106,6 +108,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	if spec.body {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
+	}
+	if workCommandUsesLeaseToken(out.name) {
+		fs.Var(&leaseToken, "lease-token", "Active PM lease token")
 	}
 	for _, key := range spec.filters {
 		if key == "limit" {
@@ -166,6 +171,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		}
 	}
 	out.fromFile = strings.TrimSpace(fromFile.value)
+	out.leaseToken = strings.TrimSpace(leaseToken.value)
 	if spec.body && out.fromFile == "" {
 		return out, errnorm.Usage("invalid_request", "--from-file <path|-> is required for anx "+out.name)
 	}
@@ -217,10 +223,17 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	} else if parsed.spec.method == "POST" {
 		body = map[string]any{}
 	}
+	if object, ok := body.(map[string]any); ok {
+		if parsed.name == "pm turns context" {
+			applyPMTurnContextBody(a, parsed, object)
+		} else if parsed.name == "pm turns propose" {
+			applyPMLeaseToken(a, parsed, object)
+		}
+	}
 	method := parsed.spec.method
 	path := strings.ReplaceAll(parsed.spec.path, "{id}", url.PathEscape(parsed.id))
 	query := parsed.query
-	if parsed.name == "work context" {
+	if parsed.name == "work context" || parsed.name == "pm turns context" {
 		query = nil
 	}
 	if len(query) > 0 {
@@ -303,9 +316,15 @@ func workHelpText(topic string) (string, bool) {
 		if spec.body {
 			b.WriteString(" --from-file <path|->")
 		}
+		if workCommandUsesLeaseToken(topic) {
+			b.WriteString(" [--lease-token <token>]")
+		}
 		b.WriteString("\n")
 		for _, f := range spec.filters {
 			fmt.Fprintf(&b, "  --%s <value>\n", f)
+		}
+		if workCommandUsesLeaseToken(topic) {
+			b.WriteString("  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)\n")
 		}
 		if spec.body {
 			b.WriteString("\nJSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.\n")
@@ -626,6 +645,44 @@ func appendPaginationLines(lines []string, root map[string]any) []string {
 		lines = append(lines, "next_cursor: "+cursor)
 	}
 	return lines
+}
+
+func workCommandUsesLeaseToken(name string) bool {
+	return name == "pm turns context" || name == "pm turns propose"
+}
+
+func (a *App) pmLeaseToken(flagValue, bodyValue string) string {
+	env := ""
+	if a != nil && a.Getenv != nil {
+		env = a.Getenv("ANX_PM_LEASE_TOKEN")
+	}
+	return firstNonEmpty(strings.TrimSpace(flagValue), strings.TrimSpace(env), strings.TrimSpace(bodyValue))
+}
+
+func applyPMLeaseToken(a *App, parsed parsedWorkCommand, object map[string]any) {
+	if object == nil {
+		return
+	}
+	token := a.pmLeaseToken(parsed.leaseToken, anyString(object["lease_token"]))
+	if token != "" {
+		object["lease_token"] = token
+	}
+}
+
+func applyPMTurnContextBody(a *App, parsed parsedWorkCommand, object map[string]any) {
+	applyPMLeaseToken(a, parsed, object)
+	if q := parsed.query.Get("query"); q != "" {
+		object["query"] = q
+	}
+	if c := parsed.query.Get("cursor"); c != "" {
+		object["cursor"] = c
+	}
+	if l := parsed.query.Get("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err == nil {
+			object["limit"] = n
+		}
+	}
 }
 
 func isWorkCommandGroup(topic string) bool {

@@ -172,7 +172,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth whoami` to refresh credentials, then retry."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, select a profile with --agent or ANX_AGENT (or `anx auth default <name>` when multiple profiles exist), then run `anx doctor` if connectivity is uncertain."},
-	"conflict":                      {Recoverable: true, Hint: "Reload current state and retry with a fresh `if_updated_at` value."},
+	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
 	"draft_not_found":               {Recoverable: true, Hint: "Run `anx draft list` to discover valid draft ids."},
 	"draft_validation_failed":       {Recoverable: true, Hint: "Fix the validation errors in the payload, then run `anx draft create` again."},

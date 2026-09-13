@@ -6,12 +6,14 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,7 +45,7 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "work_ref", "decision:", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
+	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
@@ -522,6 +524,212 @@ func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
 	}
 }
 
+func TestRunCmdKillsGrandchildOnCancel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("process-group kill")
+	}
+	dir := t.TempDir()
+	pidFile := dir + "/grandchild.pid"
+	script := `#!/bin/sh
+/bin/sleep 120 &
+echo $! > "$1"
+wait
+`
+	prevGrace := harnessKillGrace
+	harnessKillGrace = 50 * time.Millisecond
+	t.Cleanup(func() { harnessKillGrace = prevGrace })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		_, _, err := runCmd(ctx, "/bin/sh", []string{"-c", script, "sh", pidFile}, dir, nil)
+		errCh <- err
+	}()
+	var gpid int
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, err := os.ReadFile(pidFile)
+		if err == nil {
+			n, convErr := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if convErr == nil && n > 0 {
+				if killErr := syscall.Kill(n, 0); killErr == nil {
+					gpid = n
+					break
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if gpid == 0 {
+		cancel()
+		<-errCh
+		t.Fatal("grandchild did not start")
+	}
+	cancel()
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("runCmd err=%v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("runCmd did not return after cancel")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(gpid, 0); err != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("grandchild pid %d still running", gpid)
+}
+
+func TestHandleClaimedTurnKillsGrandchildOnShutdown(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := dir + "/grandchild.pid"
+	script := "/bin/sleep 120 & echo $! > '" + pidFile + "'; wait"
+	prevGrace := harnessKillGrace
+	harnessKillGrace = 50 * time.Millisecond
+	t.Cleanup(func() { harnessKillGrace = prevGrace })
+	harness, posts := pmTurnHarness(t)
+	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	harnessRoot, stopHarness := context.WithCancel(context.Background())
+	done := make(chan bool, 1)
+	go func() {
+		done <- harness.app.handleClaimedTurn(context.Background(), shutdownCtx, harness.cfg, dir, "", []string{"/bin/sh", "-c", script, "{prompt}"}, nil, claimedTurn(), harnessRoot)
+	}()
+	var gpid int
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, err := os.ReadFile(pidFile)
+		if err == nil {
+			n, convErr := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if convErr == nil && n > 0 {
+				if killErr := syscall.Kill(n, 0); killErr == nil {
+					gpid = n
+					break
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if gpid == 0 {
+		cancelShutdown()
+		stopHarness()
+		<-done
+		t.Fatal("grandchild did not start")
+	}
+	cancelShutdown()
+	stopHarness()
+	select {
+	case settled := <-done:
+		if settled {
+			t.Fatal("shutdown should not settle the turn")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClaimedTurn did not return")
+	}
+	if len(posts.fail) != 0 || len(posts.complete) != 0 {
+		t.Fatalf("posted fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(gpid, 0); err != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("grandchild pid %d still running", gpid)
+}
+
+func TestHandleClaimedTurnPassesLeaseTokenEnv(t *testing.T) {
+	var gotEnv []string
+	restore := stubAgentctl(t, func(_ context.Context, _ string, args []string, _ string, env []string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "run" {
+			gotEnv = append([]string{}, env...)
+		}
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(`{"ok":true,"id":"exec-ok"}`), nil
+		case len(args) > 0 && args[0] == "await":
+			return []byte(`{"ok":true}`), nil
+		case len(args) > 1 && args[0] == "result" && args[len(args)-1] == "--content":
+			return []byte("Approve the restock."), nil
+		case len(args) > 0 && args[0] == "result":
+			return []byte(`{}`), nil
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	if !harness.app.handleClaimedTurn(context.Background(), nil, harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, []string{"PATH=/bin"}, claimedTurn(), nil) {
+		t.Fatal("expected turn to complete")
+	}
+	if len(posts.fail) != 0 {
+		t.Fatalf("fail %v", posts.fail)
+	}
+	if envValue(gotEnv, "ANX_PM_LEASE_TOKEN") != "lease-1" {
+		t.Fatalf("ANX_PM_LEASE_TOKEN=%q env=%v", envValue(gotEnv, "ANX_PM_LEASE_TOKEN"), gotEnv)
+	}
+}
+
+func TestHandleClaimedTurnAgentctlShutdownLogsCancelHint(t *testing.T) {
+	execID := "exec-outlives-runner"
+	started := make(chan struct{})
+	restore := stubAgentctl(t, func(ctx context.Context, _ string, args []string, _ string, _ []string) ([]byte, error) {
+		switch {
+		case len(args) > 0 && args[0] == "run":
+			return []byte(`{"ok":true,"id":"` + execID + `"}`), nil
+		case len(args) > 0 && args[0] == "await":
+			select {
+			case <-started:
+			default:
+				close(started)
+			}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		default:
+			t.Fatalf("unexpected agentctl %v", args)
+			return nil, nil
+		}
+	})
+	defer restore()
+	harness, posts := pmTurnHarness(t)
+	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	harnessRoot, stopHarness := context.WithCancel(context.Background())
+	done := make(chan bool, 1)
+	go func() {
+		done <- harness.app.handleClaimedTurn(context.Background(), shutdownCtx, harness.cfg, t.TempDir(), "agentctl", []string{"omp"}, nil, claimedTurn(), harnessRoot)
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("await did not start")
+	}
+	cancelShutdown()
+	stopHarness()
+	select {
+	case settled := <-done:
+		if settled {
+			t.Fatal("shutdown should not settle the turn")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handleClaimedTurn did not return")
+	}
+	if len(posts.fail) != 0 || len(posts.complete) != 0 {
+		t.Fatalf("posted fail=%v complete=%v", posts.fail, posts.complete)
+	}
+	logs := harness.stderr.String()
+	if !strings.Contains(logs, "background execution "+execID+" outlives this runner") {
+		t.Fatalf("missing outlives log: %s", logs)
+	}
+	if !strings.Contains(logs, "agentctl cancel "+execID) {
+		t.Fatalf("missing cancel hint: %s", logs)
+	}
+}
+
 func TestRunCmdSeparatesStdoutAndStderr(t *testing.T) {
 	stdout, stderr, err := runCmd(context.Background(), "/bin/sh", []string{"-c", "printf '%s\\n' stdout-line; printf '%s\\n' stderr-line >&2"}, "", nil)
 	if err != nil {
@@ -832,7 +1040,7 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 	})
 }
 
-func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
+func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 	var claims int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/pm/turns/claim" {
@@ -843,7 +1051,59 @@ func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
 		claims++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		io.WriteString(w, `{"error":{"code":"permission_denied","message":"PM permission denied"}}`)
+		io.WriteString(w, `{"error":{"code":"forbidden","message":"PM permission denied"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	sleepFn = func(context.Context, time.Duration) error { return nil }
+	t.Cleanup(func() { sleepFn = sleepCtx })
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "maya"}
+	_, err := app.runPMServe(context.Background(), []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, cfg)
+	if err == nil || !strings.Contains(err.Error(), "Claim failed with a forbidden error 3 times. Exiting.") {
+		t.Fatalf("err=%v", err)
+	}
+	if claims != 3 {
+		t.Fatalf("claims=%d", claims)
+	}
+	logs := stderr.String()
+	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this profile is maya"
+	if !strings.Contains(logs, wantWhy) {
+		t.Fatalf("missing first forbidden explanation: %s", logs)
+	}
+	if strings.Count(logs, wantWhy) != 1 {
+		t.Fatalf("expected the forbidden explanation once, got %s", logs)
+	}
+	if !strings.Contains(logs, "claim failed (forbidden); retrying in 1s, 1 of 3") {
+		t.Fatalf("missing first backoff log: %s", logs)
+	}
+	if strings.Count(logs, "claim failed (forbidden); retrying in") != 2 {
+		t.Fatalf("expected a backoff log for each retry, got %s", logs)
+	}
+	if strings.Contains(logs, "1 of 10") || strings.Contains(logs, "non-retryable error 10") {
+		t.Fatalf("forbidden claims used the long budget: %s", logs)
+	}
+	if !strings.Contains(logs, "Claim failed with a forbidden error 3 times. Exiting.") {
+		t.Fatalf("missing final exit sentence: %s", logs)
+	}
+}
+
+func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
+	var claims int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/turns/claim" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		claims++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"error":{"code":"auth_required","message":"missing bearer"}}`)
 	}))
 	t.Cleanup(srv.Close)
 	sleepFn = func(context.Context, time.Duration) error { return nil }
@@ -863,13 +1123,13 @@ func TestPMServeBacksOffAndExitsOnNonRetryableClaim(t *testing.T) {
 		t.Fatalf("claims=%d", claims)
 	}
 	logs := stderr.String()
-	if !strings.Contains(logs, "claim failed (permission denied); retrying in 1s, 1 of 10") {
+	if strings.Contains(logs, "claim forbidden:") {
+		t.Fatalf("401 used the forbidden path: %s", logs)
+	}
+	if !strings.Contains(logs, "claim failed (auth required); retrying in 1s, 1 of 10") {
 		t.Fatalf("missing first backoff log: %s", logs)
 	}
-	if !strings.Contains(logs, "retrying in 8s, 4 of 10") && !strings.Contains(logs, "retrying in 8s, 3 of 10") {
-		t.Fatalf("missing later backoff log: %s", logs)
-	}
-	if strings.Count(logs, "claim failed (permission denied); retrying in") != 9 {
+	if strings.Count(logs, "claim failed (auth required); retrying in") != 9 {
 		t.Fatalf("expected a backoff log for each retry, got %s", logs)
 	}
 	if !strings.Contains(logs, "Claim failed with a non-retryable error 10 times. Exiting.") {

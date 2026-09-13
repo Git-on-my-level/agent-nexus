@@ -324,18 +324,86 @@ func TestPMContextPaginationCarriesOpaqueCursor(t *testing.T) {
 	}
 }
 
-func TestPMTurnsContextPaginationCarriesOpaqueCursor(t *testing.T) {
+func TestPMTurnsContextPostsLeaseTokenAndFilters(t *testing.T) {
+	var gotMethod, gotPath, gotQuery, gotBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/pm/turns/turn-1/context" || r.URL.Query().Get("cursor") != "turn+page" {
-			t.Errorf("request=%s", r.URL)
-		}
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"items":[],"has_more":true,"next_cursor":"next-turn"}`)
 	}))
 	defer server.Close()
-	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "context", "turn-1", "--cursor", "turn+page"}))
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{
+		"ANX_ACCESS_TOKEN":   "fixture",
+		"ANX_PM_LEASE_TOKEN": "lease-from-env",
+	}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "context", "turn-1", "--cursor", "turn+page", "--query", "evidence", "--limit", "5"}))
 	if asMap(payload["data"])["next_cursor"] != "next-turn" {
 		t.Errorf("cursor lost: %v", payload)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/pm/turns/turn-1/context" || gotQuery != "" {
+		t.Fatalf("request=%s %s?%s", gotMethod, gotPath, gotQuery)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(gotBody), &body); err != nil {
+		t.Fatalf("body=%s err=%v", gotBody, err)
+	}
+	if body["lease_token"] != "lease-from-env" || body["cursor"] != "turn+page" || body["query"] != "evidence" {
+		t.Fatalf("body=%v", body)
+	}
+	if fmt.Sprint(body["limit"]) != "5" {
+		t.Fatalf("limit=%v", body["limit"])
+	}
+}
+
+func TestPMTurnsContextLeaseTokenFlagOverridesEnv(t *testing.T) {
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"items":[]}`)
+	}))
+	defer server.Close()
+	assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{
+		"ANX_ACCESS_TOKEN":   "fixture",
+		"ANX_PM_LEASE_TOKEN": "lease-from-env",
+	}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "context", "turn-1", "--lease-token", "lease-from-flag"}))
+	var body map[string]any
+	if err := json.Unmarshal([]byte(gotBody), &body); err != nil {
+		t.Fatalf("body=%s err=%v", gotBody, err)
+	}
+	if body["lease_token"] != "lease-from-flag" {
+		t.Fatalf("body=%v", body)
+	}
+}
+
+func TestPMTurnsProposeInjectsLeaseTokenFromEnv(t *testing.T) {
+	var gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/turn-1/decisions" {
+			t.Errorf("request=%s %s", r.Method, r.URL.Path)
+		}
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"decision-1","status":"awaiting_answer"}`)
+	}))
+	defer server.Close()
+	fromFile := `{"request_key":"k","work_ref":"card:launch","instruction":"Review","scope":"review","target_revision":"abc"}`
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{
+		"ANX_ACCESS_TOKEN":   "fixture",
+		"ANX_PM_LEASE_TOKEN": "lease-from-env",
+	}, strings.NewReader(fromFile), []string{"--json", "--base-url", server.URL, "pm", "turns", "propose", "turn-1", "--from-file", "-"}))
+	if asMap(payload["data"])["id"] != "decision-1" {
+		t.Fatalf("payload=%v", payload)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(gotBody), &body); err != nil {
+		t.Fatalf("body=%s err=%v", gotBody, err)
+	}
+	if body["lease_token"] != "lease-from-env" || body["work_ref"] != "card:launch" {
+		t.Fatalf("body=%v", body)
 	}
 }
 
@@ -344,6 +412,22 @@ func TestPMContextHelpDocumentsCursor(t *testing.T) {
 	raw := fmt.Sprint(payload["data"])
 	if !strings.Contains(raw, "--cursor") {
 		t.Errorf("pm context help missing --cursor: %s", raw)
+	}
+}
+
+func TestPMTurnsContextHelpDocumentsLeaseToken(t *testing.T) {
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "context"}))
+	raw := fmt.Sprint(payload["data"])
+	if !strings.Contains(raw, "--lease-token") || !strings.Contains(raw, "ANX_PM_LEASE_TOKEN") {
+		t.Errorf("pm turns context help missing lease token: %s", raw)
+	}
+}
+
+func TestPMTurnsProposeHelpDocumentsLeaseToken(t *testing.T) {
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "propose"}))
+	raw := fmt.Sprint(payload["data"])
+	if !strings.Contains(raw, "--lease-token") || !strings.Contains(raw, "ANX_PM_LEASE_TOKEN") {
+		t.Errorf("pm turns propose help missing lease token: %s", raw)
 	}
 }
 
@@ -555,7 +639,7 @@ func TestPMReconcileNothingDeliveredHint(t *testing.T) {
 	defer server.Close()
 	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{}`), []string{"--json", "--base-url", server.URL, "pm", "actions", "reconcile", "action-1"}))
 	hint := fmt.Sprint(asMap(payload["error"])["hint"])
-	if hint != "nothing has been delivered yet; deliver first or acknowledge the failure" {
+	if !strings.Contains(hint, "already acknowledged") || strings.Contains(hint, "deliver first or acknowledge") {
 		t.Fatalf("hint=%q payload=%v", hint, payload)
 	}
 	if strings.Contains(strings.ToLower(hint), "required fields") {

@@ -484,7 +484,13 @@ The harness child receives the **full parent environment**, then `HOME` is
 reset to the login account home from passwd (`user.Current().HomeDir`). That
 is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
 `HOME=.tmp/anx-dev-profile-homes/pm` applies to the `anx` process (CLI
-profiles), not to the child harness.
+profiles), not to the child harness. After a successful claim the runner also
+sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
+`anx pm turns context` send it when `--lease-token` is omitted, so the harness
+does not have to copy the token into `--from-file`. Ctrl-C / SIGTERM kills the
+direct harness process group (SIGTERM, then SIGKILL after a short grace). An
+`agentctl` background execution outlives the runner; the log prints its
+execution id so you can `agentctl cancel <id>`.
 
 Seatbelt on this OS cannot hide another same-uid process's environment, so
 run the harness as a different uid or on a different host from core's JIT

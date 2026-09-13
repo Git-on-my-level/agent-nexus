@@ -306,8 +306,8 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 	t.Parallel()
 
 	revision := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
-	if !strings.Contains(revision.Hint, "if_updated_at") {
-		t.Fatalf("generic conflict hint should mention if_updated_at before command enrichment: %q", revision.Hint)
+	if !strings.Contains(revision.Hint, "re-read it and retry") || strings.Contains(revision.Hint, "if_updated_at") {
+		t.Fatalf("generic conflict hint should be command-neutral: %q", revision.Hint)
 	}
 	EnrichForCommand(revision, "pm.decisions.answer")
 	if !strings.Contains(revision.Hint, "pm decisions get") || !strings.Contains(revision.Hint, "status") {
@@ -377,6 +377,36 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 	if !strings.Contains(card.Hint, "if_updated_at") {
 		t.Fatalf("non-PM commands must keep card hints, got %q", card.Hint)
 	}
+
+	genericCard := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"state conflict"}}`))
+	if strings.Contains(genericCard.Hint, "if_updated_at") {
+		t.Fatalf("generic conflict should not mention if_updated_at: %q", genericCard.Hint)
+	}
+	EnrichForCommand(genericCard, "cards.patch")
+	if !strings.Contains(genericCard.Hint, "if_updated_at") {
+		t.Fatalf("card commands should keep if_updated_at wording, got %q", genericCard.Hint)
+	}
+
+	genericBoard := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"state conflict"}}`))
+	EnrichForCommand(genericBoard, "boards.patch")
+	if !strings.Contains(genericBoard.Hint, "if_board_updated_at") {
+		t.Fatalf("board commands should keep board token wording, got %q", genericBoard.Hint)
+	}
+
+	genericDoc := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"state conflict"}}`))
+	EnrichForCommand(genericDoc, "docs.revisions.create")
+	if !strings.Contains(genericDoc.Hint, "if_document_updated_at") {
+		t.Fatalf("document commands should keep document token wording, got %q", genericDoc.Hint)
+	}
+
+	lease := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"this turn is not claimed; claim it first"}}`))
+	EnrichForCommand(lease, "pm.turns.claim")
+	if strings.Contains(lease.Hint, "if_updated_at") {
+		t.Fatalf("PM lease conflict still used card language: %q", lease.Hint)
+	}
+	if !strings.Contains(lease.Hint, "re-read it and retry") {
+		t.Fatalf("PM lease conflict should keep the generic hint, got %q", lease.Hint)
+	}
 }
 
 func TestEnrichForCommandPMBusyReasons(t *testing.T) {
@@ -439,7 +469,7 @@ func TestEnrichForCommandPMReconcileNothingDelivered(t *testing.T) {
 	t.Parallel()
 	err := FromHTTPFailure(400, []byte(`{"error":{"code":"invalid_request","message":"invalid PM request: Nothing has been delivered yet, so there is nothing to read back"}}`))
 	EnrichForCommand(err, "pm.actions.reconcile")
-	if err.Hint != "nothing has been delivered yet; deliver first or acknowledge the failure" {
+	if !strings.Contains(err.Hint, "already acknowledged") || strings.Contains(err.Hint, "deliver first or acknowledge") {
 		t.Fatalf("hint=%q", err.Hint)
 	}
 }

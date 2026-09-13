@@ -94,6 +94,9 @@ func EnrichForCommand(e *Error, commandID string) {
 	}
 	hint, recovery := enrichPMCommandError(commandID, e)
 	if hint == "" && recovery == nil {
+		hint, recovery = enrichConcurrencyCommandError(commandID, e)
+	}
+	if hint == "" && recovery == nil {
 		return
 	}
 	if hint != "" {
@@ -137,7 +140,7 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	switch code {
 	case "invalid_request":
 		if commandID == "pm.actions.reconcile" && strings.Contains(strings.ToLower(strings.TrimSpace(e.Message)), "nothing has been delivered yet") {
-			return "nothing has been delivered yet; deliver first or acknowledge the failure",
+			return "This action is already acknowledged or was never delivered, so there is nothing to read back. Inspect it with `anx pm actions get <id>`.",
 				map[string]any{
 					"kind":        "nothing_delivered",
 					"refresh_cli": "anx pm actions get <id>",
@@ -184,6 +187,44 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 				"kind":        "stale_concurrency_token",
 				"field":       "revision",
 				"refresh_cli": "anx pm decisions get <id>",
+			}
+	default:
+		return "", nil
+	}
+}
+
+func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[string]any) {
+	if e == nil || strings.TrimSpace(e.Code) != "conflict" {
+		return "", nil
+	}
+	details, _ := e.Details.(map[string]any)
+	if rec, _ := details["anx_cli_recovery"].(map[string]any); rec != nil {
+		switch rec["kind"] {
+		case "stale_concurrency_token", "resource_exists":
+			return "", nil
+		}
+	}
+	switch {
+	case strings.HasPrefix(commandID, "cards."):
+		return "Reload current state and retry with a fresh `if_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_updated_at",
+				"refresh_cli": "anx cards get <card-ref-or-handle> --json",
+			}
+	case strings.HasPrefix(commandID, "boards."):
+		return "Reload current state and retry with a fresh `if_board_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_board_updated_at",
+				"refresh_cli": "anx boards get <board-ref-or-handle> --json",
+			}
+	case strings.HasPrefix(commandID, "docs."):
+		return "Reload current state and retry with a fresh `if_document_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_document_updated_at",
+				"refresh_cli": "anx docs get <doc-ref-or-handle> --json",
 			}
 	default:
 		return "", nil

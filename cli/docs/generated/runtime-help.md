@@ -4762,10 +4762,11 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Read context as the requesting actor; only the selected PM agent may call this.
 
-Usage: anx pm turns context <ref> (or --turn-id <ref>)
+Usage: anx pm turns context <ref> (or --turn-id <ref>) [--lease-token <token>]
   --query <value>
   --limit <value>
   --cursor <value>
+  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4881,7 +4882,8 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
 Selected PM agent proposes an instruction for the requesting actor, never approval.
 
-Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|->
+Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|-> [--lease-token <token>]
+  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
 
 JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
 
