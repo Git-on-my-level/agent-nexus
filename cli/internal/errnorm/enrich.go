@@ -160,14 +160,7 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 		if commandID == "pm.decisions.answer" {
 			return enrichDecisionAnswerStale(lookupErrorDetail(e, "reason"))
 		}
-		if commandID == "pm.decisions.dispatch" {
-			return enrichDecisionDispatchStale(e)
-		}
-		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
-			map[string]any{
-				"kind":        "stale_source_revision",
-				"refresh_cli": "anx pm decisions get <id>",
-			}
+		return enrichStaleSourceRevision(commandID, e)
 	case "conflict":
 		if existingID != "" {
 			return fmt.Sprintf("This request key already names an existing decision. `error.details.existing_decision_id` is %s; inspect it with `anx pm decisions get %s` instead of creating a duplicate.", existingID, existingID),
@@ -208,12 +201,16 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	}
 }
 
-func enrichDecisionDispatchStale(e *Error) (string, map[string]any) {
+func enrichStaleSourceRevision(commandID string, e *Error) (string, map[string]any) {
+	reason := lookupErrorDetail(e, "reason")
 	origin := strings.ToLower(strings.TrimSpace(lookupErrorDetail(e, "origin_kind")))
 	proposedBy := lookupErrorDetail(e, "proposed_by")
 	rec := map[string]any{
 		"kind":        "stale_source_revision",
 		"refresh_cli": "anx pm decisions get <id>",
+	}
+	if reason != "" {
+		rec["reason"] = reason
 	}
 	if origin != "" {
 		rec["origin_kind"] = origin
@@ -221,11 +218,42 @@ func enrichDecisionDispatchStale(e *Error) (string, map[string]any) {
 	if proposedBy != "" {
 		rec["proposed_by"] = proposedBy
 	}
-	again := "The PM must propose the decision again"
-	if origin == "human" {
-		again = "Propose it again from the board (or `anx pm decisions create`)"
+	reconcile := commandID == "pm.actions.reconcile"
+	noun := "approval"
+	retry := "the previous answer"
+	if reconcile {
+		noun = "read-back"
+		retry = "this read-back"
 	}
-	return "This approval is stale because the source revision changed. " + again + "; do not retry the previous answer.", rec
+	again := staleProposeAgain(origin)
+	switch reason {
+	case "work_missing":
+		rec["refresh_cli"] = "anx pm actions acknowledge <id>"
+		task := "this approval"
+		if reconcile {
+			task = "this read-back"
+		}
+		return "The task " + task + " refers to no longer exists; nothing was sent. Acknowledge the failed action with `anx pm actions acknowledge <id>`.", rec
+	case "already_at_target":
+		what := "deliver"
+		if reconcile {
+			what = "read back"
+		}
+		return "The task is already where this proposal asks, so there is nothing to " + what + ".", rec
+	default:
+		return "This " + noun + " is stale because the source revision changed. " + again + "; do not retry " + retry + ".", rec
+	}
+}
+
+func staleProposeAgain(originKind string) string {
+	switch originKind {
+	case "human":
+		return "Propose it again from the board (or `anx pm decisions create`)"
+	case "pm_turn":
+		return "The PM must propose the decision again"
+	default:
+		return "Propose the decision again"
+	}
 }
 
 func enrichDecisionAnswerStale(reason string) (string, map[string]any) {
