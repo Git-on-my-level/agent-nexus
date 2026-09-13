@@ -530,6 +530,7 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 		map[string]any{"id": "d-stale", "work_ref": "card:x", "status": "awaiting_answer", "target_current": false, "instruction": "Move to review"},
 		map[string]any{"id": "d-there", "work_ref": "card:y", "status": "awaiting_answer", "already_at_target": true, "target_current": true, "instruction": "Move to done"},
 		map[string]any{"id": "d-gone", "work_ref": "card:z", "status": "awaiting_answer", "work_missing": true, "target_current": false, "instruction": "Annotate"},
+		map[string]any{"id": "d-gone-wait", "work_ref": "card:z2", "status": "awaiting_answer", "can_answer": false, "work_missing": true, "target_current": false, "instruction": "Also gone"},
 		map[string]any{"id": "d-ok", "work_ref": "card:w", "status": "awaiting_answer", "target_current": true, "instruction": "Review"},
 		map[string]any{"id": "d-other", "work_ref": "card:v", "status": "awaiting_answer", "can_answer": false, "target_current": true, "instruction": "Wait"},
 		map[string]any{"id": "d-answered", "work_ref": "card:a", "status": "answered", "work_missing": true, "instruction": "Gone"},
@@ -543,6 +544,12 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	}
 	if !strings.Contains(list, "d-gone  card:z  status=awaiting_answer  task missing  Annotate") {
 		t.Fatalf("list missed missing-task flag: %s", list)
+	}
+	if !strings.Contains(list, "d-gone-wait  card:z2  status=awaiting_answer  task missing  Also gone") {
+		t.Fatalf("list missed missing-task flag on can_answer=false: %s", list)
+	}
+	if strings.Contains(list, "d-gone-wait  card:z2  status=awaiting_answer  waiting on someone else") {
+		t.Fatalf("void decision still said waiting on someone else: %s", list)
 	}
 	if strings.Contains(list, "d-ok  card:w  status=awaiting_answer  stale") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  already there") || strings.Contains(list, "d-ok  card:w  status=awaiting_answer  task missing") {
 		t.Fatalf("current decision grew a freshness flag: %s", list)
@@ -567,6 +574,18 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	missingGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-gone", "work_missing": true, "target_current": false, "already_at_target": false})
 	if !strings.HasPrefix(missingGet, "task missing\n") {
 		t.Fatalf("get missed task-missing line: %s", missingGet)
+	}
+	missingWaitGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-gone-wait", "status": "awaiting_answer", "can_answer": false, "work_missing": true, "target_current": false})
+	if !strings.Contains(missingWaitGet, "task missing") || strings.Contains(missingWaitGet, "waiting on someone else") {
+		t.Fatalf("void get still said waiting on someone else: %s", missingWaitGet)
+	}
+	thereWaitGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-there-wait", "status": "awaiting_answer", "can_answer": false, "already_at_target": true, "target_current": true})
+	if !strings.Contains(thereWaitGet, "already there") || strings.Contains(thereWaitGet, "waiting on someone else") {
+		t.Fatalf("already-there get still said waiting on someone else: %s", thereWaitGet)
+	}
+	staleWaitGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-stale-wait", "status": "awaiting_answer", "can_answer": false, "target_current": false})
+	if !strings.Contains(staleWaitGet, "stale since proposal") || strings.Contains(staleWaitGet, "waiting on someone else") {
+		t.Fatalf("stale get still said waiting on someone else: %s", staleWaitGet)
 	}
 	currentGet := formatWorkCommandText("pm decisions get", map[string]any{"id": "d-ok", "status": "awaiting_answer", "target_current": true})
 	if strings.Contains(currentGet, "stale since proposal") || strings.Contains(currentGet, "already there") || strings.Contains(currentGet, "task missing") || strings.Contains(currentGet, "waiting on someone else") {
@@ -658,6 +677,26 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			args:        []string{"pm", "decisions", "create", "--from-file", "-"},
 			want:        "error.details.existing_decision_id",
 			notWant:     "if_updated_at",
+		},
+		{
+			name:        "dispatch stale human origin",
+			commandPath: "/pm/decisions/decision-1/dispatch",
+			errorCode:   "source_revision_changed",
+			details:     `{"origin_kind":"human","proposed_by":"actor-maya"}`,
+			body:        `{}`,
+			args:        []string{"pm", "decisions", "dispatch", "decision-1"},
+			want:        "from the board",
+			notWant:     "The PM must propose",
+		},
+		{
+			name:        "dispatch stale pm_turn origin",
+			commandPath: "/pm/decisions/decision-1/dispatch",
+			errorCode:   "source_revision_changed",
+			details:     `{"origin_kind":"pm_turn","proposed_by":"actor-gds-pm"}`,
+			body:        `{}`,
+			args:        []string{"pm", "decisions", "dispatch", "decision-1"},
+			want:        "The PM must propose",
+			notWant:     "from the board",
 		},
 		{
 			name:        "reconcile stale source",
