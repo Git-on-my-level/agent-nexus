@@ -22,6 +22,7 @@
     busy = false,
     busyWith = "",
     actionError = "",
+    actorLabel = (id) => id,
     answer = $bindable(""),
     choice = $bindable(""),
     onAnswer,
@@ -122,8 +123,8 @@
     {#if selected.status === "awaiting_answer" && cannotAnswer}
       <section class="border-t border-line-subtle pt-4">
         <p class="text-meta text-fg">
-          This decision is addressed to {selected.actor_id || "another person"}.
-          Only they can answer it.
+          This decision is addressed to {actorLabel(selected.actor_id) ||
+            "another person"}. Only they can answer it.
         </p>
       </section>
     {:else if selected.status === "awaiting_answer"}
@@ -172,7 +173,7 @@
         </p>
         {#if selected.answered_by}
           <p class="mt-2 text-micro text-fg-subtle">
-            By {selected.answered_by}
+            By {actorLabel(selected.answered_by)}
           </p>
         {/if}
       </section>
