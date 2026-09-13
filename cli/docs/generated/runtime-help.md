@@ -4128,7 +4128,7 @@ Generated Help: pm actions acknowledge
 - HTTP: `POST /pm/actions/{action_id}/acknowledge`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Acknowledge a failed or unresolvable action.
+- Why: Acknowledge a failed, unresolvable, or undeliverable action.
 - Output: Returns `PMAction`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
@@ -4784,7 +4784,7 @@ Generated Help: pm turns fail
 - Output: Returns `PMTurn`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. When a lease is held, lease_token must match.
+- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Unclaimed open turns return 409 conflict with message "this turn is not claimed; claim it first", including when a stale token is supplied. Identical terminal failure replays also refuse a cleared lease.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns get`, `pm turns release`
 
 Inputs:
