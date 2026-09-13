@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"agent-nexus-cli/internal/registry"
 )
@@ -550,7 +551,87 @@ func TestPMConversationMessageBusyHint(t *testing.T) {
 	}
 }
 
+func TestPMAskBusyHint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+			io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
+			w.WriteHeader(http.StatusTooManyRequests)
+			io.WriteString(w, `{"error":{"code":"busy","message":"PM execution capacity reached"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
+	if fmt.Sprint(payload["command_id"]) != "pm.ask" {
+		t.Fatalf("command_id=%v payload=%v", payload["command_id"], payload)
+	}
+	hint := fmt.Sprint(asMap(payload["error"])["hint"])
+	if !strings.Contains(hint, "queued or being answered") || !strings.Contains(hint, "pm conversations get") {
+		t.Fatalf("expected conversation busy hint for pm ask, got %q payload=%v", hint, payload)
+	}
+	if strings.Contains(strings.ToLower(hint), "command help") {
+		t.Fatalf("pm ask busy hint still generic: %q", hint)
+	}
+}
+
+func TestPMDispatchSendNoteDistinguishesFirstSendFromReplay(t *testing.T) {
+	started := time.Date(2026, 9, 13, 10, 0, 0, 0, time.UTC)
+	delivered := map[string]any{
+		"id":     "action-1",
+		"status": "delivered",
+		"receipt": map[string]any{
+			"status": "delivered",
+			"detail": "accepted",
+		},
+		"attempts": []any{
+			map[string]any{"sent_at": "2026-09-13T10:00:00Z", "status": "delivered"},
+		},
+	}
+	if got := pmDispatchSendNote(delivered, started, ""); got != "delivered" {
+		t.Fatalf("first delivery note=%q", got)
+	}
+	if got := pmDispatchSendNote(delivered, started.Add(time.Second), ""); got != "already delivered" {
+		t.Fatalf("replay note=%q", got)
+	}
+
+	reported := map[string]any{
+		"id":     "action-2",
+		"status": "source_reported",
+		"attempts": []any{
+			map[string]any{"sent_at": "2026-09-08T21:00:00Z", "status": "source_reported"},
+		},
+	}
+	got := pmDispatchSendNote(reported, started, "pending_delivery")
+	if !strings.Contains(got, "reported by source, not yet verified") || !strings.Contains(got, "anx pm actions reconcile action-2") {
+		t.Fatalf("pending-advance source_reported note=%q", got)
+	}
+	if strings.Contains(got, "already delivered") {
+		t.Fatalf("pending-advance still said already delivered: %q", got)
+	}
+
+	preflight := map[string]any{
+		"id":     "action-3",
+		"status": "failed",
+		"receipt": map[string]any{
+			"status": "failed",
+			"detail": "unavailable",
+		},
+		"attempts": []any{
+			map[string]any{"started_at": "2026-09-13T10:00:00Z", "status": "failed"},
+		},
+	}
+	if got := pmDispatchSendNote(preflight, started, "pending_delivery"); got != "nothing was sent" {
+		t.Fatalf("preflight note=%q", got)
+	}
+}
+
 func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
+	firstSentAt := time.Now().UTC().Add(time.Minute).Format(time.RFC3339)
 	for _, tc := range []struct {
 		name, body string
 		want, hide []string
@@ -566,6 +647,18 @@ func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
 			body: `{"id":"action-1b","status":"failed","receipt":{"status":"failed","detail":"preflight"},"attempts":[{"started_at":"2026-09-08T21:00:00Z","status":"failed"}]}`,
 			want: []string{"nothing was sent"},
 			hide: []string{"already delivered", "already verified"},
+		},
+		{
+			name: "first delivery",
+			body: fmt.Sprintf(`{"id":"action-new","status":"delivered","receipt":{"status":"delivered","detail":"accepted"},"attempts":[{"sent_at":%q,"status":"delivered"}]}`, firstSentAt),
+			want: []string{"action-new", "status=delivered", "receipt=delivered", "accepted", "delivered"},
+			hide: []string{"already delivered", "already verified", "nothing was sent"},
+		},
+		{
+			name: "first source_reported",
+			body: fmt.Sprintf(`{"id":"action-src","status":"source_reported","receipt":{"status":"source_reported","detail":"source accepted"},"attempts":[{"sent_at":%q,"status":"source_reported"}]}`, firstSentAt),
+			want: []string{"action-src", "reported by source, not yet verified", "anx pm actions reconcile action-src"},
+			hide: []string{"already delivered", "nothing was sent"},
 		},
 		{
 			name: "already delivered",

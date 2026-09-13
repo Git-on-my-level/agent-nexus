@@ -115,7 +115,7 @@ func EnrichForCommand(e *Error, commandID string) {
 func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	code := strings.TrimSpace(e.Code)
 	switch commandID {
-	case "pm.conversations.message", "pm.conversations.messages.create":
+	case "pm.conversations.message", "pm.conversations.messages.create", "pm.ask":
 		if code == "busy" {
 			return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
 				map[string]any{

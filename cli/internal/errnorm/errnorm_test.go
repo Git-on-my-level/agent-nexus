@@ -410,6 +410,15 @@ func TestEnrichForCommandPMConversationBusy(t *testing.T) {
 		t.Fatalf("CLI path command id should also enrich busy, got %q", alias.Hint)
 	}
 
+	ask := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
+	EnrichForCommand(ask, "pm.ask")
+	if !strings.Contains(ask.Hint, "queued or being answered") || !strings.Contains(ask.Hint, "pm conversations get") {
+		t.Fatalf("pm.ask should use the conversation busy hint, got %q", ask.Hint)
+	}
+	if strings.Contains(strings.ToLower(ask.Hint), "command help") {
+		t.Fatalf("pm.ask busy hint still generic: %q", ask.Hint)
+	}
+
 	other := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
 	EnrichForCommand(other, "pm.decisions.answer")
 	if strings.Contains(other.Hint, "queued or being answered") {
