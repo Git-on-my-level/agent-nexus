@@ -32,6 +32,7 @@
     onAnswer,
     onDeliver,
     onReconcile,
+    onAcknowledge,
     onRefreshReceipt,
   } = $props();
 
@@ -302,6 +303,19 @@
           onretry={onRefreshReceipt}
           class="mt-2"
         />
+      {/if}
+      {#if ["failed", "unknown"].includes(action?.status) && isApprover}
+        <div class="mt-3">
+          <button
+            class="ui-btn-secondary"
+            type="button"
+            onclick={onAcknowledge}
+            disabled={busy}
+            >{busy && busyWith === "acknowledge"
+              ? "Acknowledging…"
+              : "Acknowledge and clear from Needs you"}</button
+          >
+        </div>
       {/if}
       {#if action?.status === "failed" && !handedOff}
         <p class="mt-2 text-meta text-fg">

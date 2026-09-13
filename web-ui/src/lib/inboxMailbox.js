@@ -25,7 +25,6 @@ const WATCHING_DECISION_STATUSES = new Set([
   "pending_delivery",
   "delivered",
   "sending",
-  "acknowledged",
   "applied",
   "source_reported",
   "reported",

@@ -378,6 +378,23 @@
     }
   }
 
+  async function acknowledge() {
+    if (!action || busy) return;
+    busy = true;
+    busyWith = "acknowledge";
+    actionError = "";
+    try {
+      const result = await coreClient.acknowledgePmAction(action.id);
+      actions = actions.map((item) => (item.id === result.id ? result : item));
+      notice = "Acknowledged. It now sits under Handled.";
+    } catch (err) {
+      actionError = errorMessage(err);
+    } finally {
+      busy = false;
+      busyWith = "";
+    }
+  }
+
   async function reconcile() {
     if (!action || busy) return;
     busy = true;
@@ -705,6 +722,7 @@
             onAnswer={recordAnswer}
             onDeliver={deliver}
             onReconcile={reconcile}
+            onAcknowledge={acknowledge}
             onRefreshReceipt={refreshReceipt}
           />
         {:else if selected?.kind === "task"}

@@ -383,6 +383,11 @@ const adapterCommandTable = [
     "pm.actions.reconcile",
     (id) => pb(pathParams({ action_id: id }), {}),
   ],
+  [
+    "acknowledgePmAction",
+    "pm.actions.acknowledge",
+    (id) => pb(pathParams({ action_id: id }), {}),
+  ],
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],
   ["createActor", "actors.create", (payload) => ({ options: b(payload) })],
