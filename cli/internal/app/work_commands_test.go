@@ -431,6 +431,16 @@ func TestPMTurnsProposeHelpDocumentsLeaseToken(t *testing.T) {
 	}
 }
 
+func TestPMTurnsClaimHelpDocumentsRunnerIDAndFromFile(t *testing.T) {
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "claim"}))
+	raw := fmt.Sprint(payload["data"])
+	for _, needle := range []string{"--runner-id", "--from-file", "actor id"} {
+		if !strings.Contains(raw, needle) {
+			t.Errorf("pm turns claim help missing %q: %s", needle, raw)
+		}
+	}
+}
+
 func TestWorkRejectsNonObjectSuccessResponse(t *testing.T) {
 	for _, body := range []string{`<html>proxy login</html>`, `null`, `[]`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) }))
@@ -465,11 +475,12 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 		map[string]any{"id": "conv-progress", "work_ref": "card:z", "latest_turn": map[string]any{"status": "sending", "claimed": true}},
 		map[string]any{"id": "conv-done", "turns": []any{map[string]any{"status": "failed"}, map[string]any{"status": "delivered"}}},
 		map[string]any{"id": "conv-failed", "last_turn": map[string]any{"status": "failed"}},
+		map[string]any{"id": "conv-expired", "last_turn": map[string]any{"status": "failed", "failure_kind": "expired"}},
 	}})
-	if !strings.Contains(conversations, "conversations: 5") || !strings.Contains(conversations, "conv-bare  card:x  Bare") || strings.Contains(conversations, "status=unknown") {
+	if !strings.Contains(conversations, "conversations: 6") || !strings.Contains(conversations, "conv-bare  card:x  Bare") || strings.Contains(conversations, "status=unknown") {
 		t.Fatalf("bare conversation still printed unknown status: %s", conversations)
 	}
-	if !strings.Contains(conversations, "conv-queued  card:y  status=queued") || !strings.Contains(conversations, "conv-progress  card:z  status=in progress") || !strings.Contains(conversations, "conv-done    status=delivered") || !strings.Contains(conversations, "conv-failed    status=failed") {
+	if !strings.Contains(conversations, "conv-queued  card:y  status=queued") || !strings.Contains(conversations, "conv-progress  card:z  status=in progress") || !strings.Contains(conversations, "conv-done    status=delivered") || !strings.Contains(conversations, "conv-failed    status=failed") || !strings.Contains(conversations, "conv-expired    status=expired") {
 		t.Fatalf("conversation list missed latest-turn status: %s", conversations)
 	}
 	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
@@ -499,6 +510,14 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	ack := formatWorkCommandText("pm actions acknowledge", map[string]any{"id": "action-1", "status": "acknowledged", "acknowledged_at": "2026-09-13T02:00:00Z"})
 	if ack != "action-1  status=acknowledged  acknowledged_at=2026-09-13T02:00:00Z" {
 		t.Errorf("acknowledge text lost id/status/timestamp: %s", ack)
+	}
+	closed := formatWorkCommandText("pm actions acknowledge", map[string]any{"id": "action-2", "status": "acknowledged", "closed_without_delivery": true, "acknowledged_at": "2026-09-13T02:00:00Z"})
+	if closed != "action-2  status=closed, nothing delivered  acknowledged_at=2026-09-13T02:00:00Z" {
+		t.Errorf("close-without-delivery still printed acknowledged: %s", closed)
+	}
+	claimed := formatWorkCommandText("pm turns claim", map[string]any{"id": "turn-1", "status": "sending", "claimed": true, "lease_owner": "runner-1", "lease_token": "tok-1"})
+	if !strings.Contains(claimed, "turn-1") || !strings.Contains(claimed, "status=in progress") || !strings.Contains(claimed, "runner_id=runner-1") || !strings.Contains(claimed, "lease_token=tok-1") {
+		t.Errorf("claim text lost runner/lease: %s", claimed)
 	}
 	reconcile := formatWorkCommandText("pm actions reconcile", map[string]any{"id": "action-1", "status": "source_reported", "reconciliation_conflict": true, "receipt": map[string]any{"status": "source_reported", "detail": "read-back mismatch"}})
 	if !strings.Contains(reconcile, "action-1") || !strings.Contains(reconcile, "status=source_reported") || !strings.Contains(reconcile, "receipt=source_reported") || !strings.Contains(reconcile, "read-back mismatch") || !strings.Contains(reconcile, "reconciliation_conflict=true") {
@@ -686,6 +705,36 @@ func TestPMTurnLeaseHints(t *testing.T) {
 			args:    []string{"pm", "turns", "complete", "turn-1", "--from-file", "-"},
 			body:    `{"text":"done","lease_token":"stale"}`,
 			want:    "released or re-claimed",
+			notWant: "re-read it and retry",
+		},
+		{
+			name:    "complete delivered replay",
+			path:    "/pm/turns/turn-1/complete",
+			code:    "lease_mismatch",
+			message: "the turn is already delivered and no retry is needed",
+			args:    []string{"pm", "turns", "complete", "turn-1", "--from-file", "-"},
+			body:    `{"text":"done","lease_token":"stale"}`,
+			want:    "already delivered and no retry is needed",
+			notWant: "claim the turn again",
+		},
+		{
+			name:    "release mismatched token",
+			path:    "/pm/turns/turn-1/release",
+			code:    "lease_mismatch",
+			message: "the lease was released or re-claimed; claim the turn again",
+			args:    []string{"pm", "turns", "release", "turn-1", "--from-file", "-"},
+			body:    `{"runner_id":"runner-1","lease_token":"stale"}`,
+			want:    "does not match the current lease",
+			notWant: "re-read it and retry",
+		},
+		{
+			name:    "double release",
+			path:    "/pm/turns/turn-1/release",
+			code:    "turn_not_claimed",
+			message: "this turn is not claimed",
+			args:    []string{"pm", "turns", "release", "turn-1", "--from-file", "-"},
+			body:    `{"runner_id":"runner-1","lease_token":"abc"}`,
+			want:    "not claimed; there is nothing to release",
 			notWant: "re-read it and retry",
 		},
 	}
@@ -1027,5 +1076,125 @@ func TestPMTurnsGetTextRendersQueuedAndInProgress(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPMAcknowledgeClosedWithoutDeliveryText(t *testing.T) {
+	body := `{"id":"action-2","status":"acknowledged","closed_without_delivery":true,"acknowledged_at":"2026-09-13T02:00:00Z"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/actions/action-2/acknowledge" {
+			t.Errorf("path=%s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, body)
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "actions", "acknowledge", "action-2"})
+	if !strings.Contains(text, "status=closed, nothing delivered") {
+		t.Fatalf("close-without-delivery text=%s", text)
+	}
+	if strings.Contains(text, "status=acknowledged") {
+		t.Fatalf("still printed acknowledged: %s", text)
+	}
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "actions", "acknowledge", "action-2"}))
+	if asMap(payload["data"])["closed_without_delivery"] != true {
+		t.Fatalf("JSON dropped closed_without_delivery: %v", payload)
+	}
+}
+
+func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		stdin  string
+		agent  bool
+		wantID string
+	}{
+		{name: "default actor id", agent: true, wantID: "actor-pm"},
+		{name: "flag overlay", args: []string{"--runner-id", "runner-flag"}, agent: true, wantID: "runner-flag"},
+		{name: "from-file", args: []string{"--from-file", "-"}, stdin: `{"runner_id":"runner-file"}`, wantID: "runner-file"},
+		{name: "flag overlays from-file", args: []string{"--runner-id", "runner-flag", "--from-file", "-"}, stdin: `{"runner_id":"runner-file"}`, wantID: "runner-flag"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotBody string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/pm/turns/claim" {
+					t.Errorf("request=%s %s", r.Method, r.URL.Path)
+				}
+				raw, _ := io.ReadAll(r.Body)
+				gotBody = string(raw)
+				w.Header().Set("Content-Type", "application/json")
+				io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_owner":"runner-1","lease_token":"tok-1"}`)
+			}))
+			defer server.Close()
+			home := t.TempDir()
+			args := []string{"--base-url", server.URL}
+			env := map[string]string{"ANX_ACCESS_TOKEN": "fixture"}
+			if tc.agent {
+				writeAgentProfile(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				env = map[string]string{}
+				args = []string{"--agent", "pm", "--base-url", server.URL}
+			}
+			args = append(args, "pm", "turns", "claim")
+			args = append(args, tc.args...)
+			var stdin io.Reader
+			if tc.stdin != "" {
+				stdin = strings.NewReader(tc.stdin)
+			}
+			text := runCLIForTest(t, home, env, stdin, args)
+			var body map[string]any
+			if err := json.Unmarshal([]byte(gotBody), &body); err != nil {
+				t.Fatalf("claim body=%s err=%v", gotBody, err)
+			}
+			if body["runner_id"] != tc.wantID {
+				t.Fatalf("runner_id=%v want %s body=%s", body["runner_id"], tc.wantID, gotBody)
+			}
+			for _, needle := range []string{"turn-1", "status=in progress", "runner_id=runner-1", "lease_token=tok-1"} {
+				if !strings.Contains(text, needle) {
+					t.Fatalf("missing %q in %s", needle, text)
+				}
+			}
+		})
+	}
+}
+
+func TestPMConversationsListTextFetchesLatestTurn(t *testing.T) {
+	gets := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+			io.WriteString(w, `{"items":[{"id":"conv-queued","work_ref":"card:x","title":"Queued"},{"id":"conv-done","title":"Done"},{"id":"conv-expired","title":"Expired"}],"has_more":false}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-queued":
+			gets++
+			if r.URL.Query().Get("limit") != "1" {
+				t.Errorf("queued get query=%s", r.URL.RawQuery)
+			}
+			io.WriteString(w, `{"conversation":{"id":"conv-queued"},"turns":[{"id":"turn-q","status":"sending","claimed":false}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-done":
+			gets++
+			io.WriteString(w, `{"conversation":{"id":"conv-done"},"turns":[{"id":"turn-d","status":"delivered"}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-expired":
+			gets++
+			io.WriteString(w, `{"conversation":{"id":"conv-expired"},"turns":[{"id":"turn-e","status":"failed","failure_kind":"expired"}]}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.RequestURI())
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "conversations", "list"})
+	if gets != 3 {
+		t.Fatalf("fetched %d conversation details, want 3; text=%s", gets, text)
+	}
+	for _, needle := range []string{"conv-queued  card:x  status=queued  Queued", "conv-done    status=delivered  Done", "conv-expired    status=expired  Expired"} {
+		if !strings.Contains(text, needle) {
+			t.Fatalf("missing %q in %s", needle, text)
+		}
+	}
+	gets = 0
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "conversations", "list"}))
+	if gets != 0 {
+		t.Fatalf("JSON list fetched conversation details: %d payload=%v", gets, payload)
 	}
 }

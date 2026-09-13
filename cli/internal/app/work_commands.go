@@ -21,6 +21,7 @@ import (
 type workCommandSpec struct {
 	path, method, idFlag, summary string
 	body                          bool
+	optionalBody                  bool
 	filters                       []string
 }
 
@@ -53,7 +54,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm actions acknowledge":   {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
 	"pm turns context":         {path: "/pm/turns/{id}/context", method: "POST", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
-	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
+	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", optionalBody: true, summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
 	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
 	"pm turns complete":        {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
@@ -65,6 +66,7 @@ type parsedWorkCommand struct {
 	spec               workCommandSpec
 	name, id, fromFile string
 	leaseToken         string
+	runnerID           string
 	query              url.Values
 }
 
@@ -99,18 +101,21 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
-	var id, fromFile, leaseToken trackedString
+	var id, fromFile, leaseToken, runnerID trackedString
 	var limit trackedInt
 
 	values := map[string]*trackedString{}
 	if spec.idFlag != "" {
 		fs.Var(&id, spec.idFlag, "Public ref, handle or id")
 	}
-	if spec.body {
+	if spec.body || spec.optionalBody {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
 	}
 	if workCommandUsesLeaseToken(out.name) {
 		fs.Var(&leaseToken, "lease-token", "Active PM lease token")
+	}
+	if workCommandUsesRunnerID(out.name) {
+		fs.Var(&runnerID, "runner-id", "Runner identity; defaults to the authenticated actor id")
 	}
 	for _, key := range spec.filters {
 		if key == "limit" {
@@ -172,6 +177,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.fromFile = strings.TrimSpace(fromFile.value)
 	out.leaseToken = strings.TrimSpace(leaseToken.value)
+	out.runnerID = strings.TrimSpace(runnerID.value)
 	if spec.body && out.fromFile == "" {
 		return out, errnorm.Usage("invalid_request", "--from-file <path|-> is required for anx "+out.name)
 	}
@@ -204,7 +210,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		return nil, parsed.name, err
 	}
 	var body any
-	if parsed.spec.body {
+	if parsed.spec.body || (parsed.spec.optionalBody && parsed.fromFile != "") {
 		raw, readErr := a.readBodyInput(parsed.fromFile)
 		if readErr != nil {
 			return nil, parsed.name, readErr
@@ -224,9 +230,12 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		body = map[string]any{}
 	}
 	if object, ok := body.(map[string]any); ok {
-		if parsed.name == "pm turns context" {
+		switch parsed.name {
+		case "pm turns claim":
+			applyPMTurnClaimBody(parsed, cfg, object)
+		case "pm turns context":
 			applyPMTurnContextBody(a, parsed, object)
-		} else if parsed.name == "pm turns propose" {
+		case "pm turns propose":
 			applyPMLeaseToken(a, parsed, object)
 		}
 	}
@@ -256,6 +265,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	}
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
+	}
+	if parsed.name == "pm conversations list" && !cfg.JSON {
+		a.enrichConversationListTurns(ctx, cfg, result)
 	}
 	if parsed.name == "work context" {
 		observationPath := path + "/observations"
@@ -316,6 +328,12 @@ func workHelpText(topic string) (string, bool) {
 		if spec.body {
 			b.WriteString(" --from-file <path|->")
 		}
+		if spec.optionalBody {
+			b.WriteString(" [--from-file <path|->]")
+		}
+		if workCommandUsesRunnerID(topic) {
+			b.WriteString(" [--runner-id <id>]")
+		}
 		if workCommandUsesLeaseToken(topic) {
 			b.WriteString(" [--lease-token <token>]")
 		}
@@ -323,10 +341,13 @@ func workHelpText(topic string) (string, bool) {
 		for _, f := range spec.filters {
 			fmt.Fprintf(&b, "  --%s <value>\n", f)
 		}
+		if workCommandUsesRunnerID(topic) {
+			b.WriteString("  --runner-id <id> (defaults to the authenticated actor id; claims are idempotent for the same runner_id)\n")
+		}
 		if workCommandUsesLeaseToken(topic) {
 			b.WriteString("  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)\n")
 		}
-		if spec.body {
+		if spec.body || spec.optionalBody {
 			b.WriteString("\nJSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.\n")
 		}
 		if topic == "work observations submit" {
@@ -458,11 +479,14 @@ func formatWorkCommandText(name string, body any) string {
 	if name == "pm turns get" {
 		return formatPMTurnGetText(root)
 	}
+	if name == "pm turns claim" {
+		return formatPMTurnClaimText(root)
+	}
 	if name == "pm decisions dispatch" {
 		return formatPMDispatchText(root, time.Time{}, "")
 	}
 	if name == "pm actions acknowledge" {
-		return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["acknowledged_at"]))
+		return formatPMActionAcknowledgeText(root)
 	}
 	if name == "pm actions reconcile" {
 		return formatPMActionReconcileText(root)
@@ -496,7 +520,29 @@ func formatPMTurnGetText(root map[string]any) string {
 	return line + fmt.Sprintf("  deadline=%s  failure=%s", anyString(root["deadline"]), anyString(root["failure"]))
 }
 
+func formatPMTurnClaimText(root map[string]any) string {
+	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), renderPMTurnStatus(root))
+	if runner := firstNonEmpty(anyString(root["lease_owner"]), anyString(root["runner_id"])); runner != "" {
+		line += "  runner_id=" + runner
+	}
+	if token := anyString(root["lease_token"]); token != "" {
+		line += "  lease_token=" + token
+	}
+	return line
+}
+
+func formatPMActionAcknowledgeText(root map[string]any) string {
+	status := firstNonEmpty(anyString(root["status"]), "unknown")
+	if asBool(root["closed_without_delivery"]) {
+		status = "closed, nothing delivered"
+	}
+	return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), status, anyString(root["acknowledged_at"]))
+}
+
 func renderPMTurnStatus(turn map[string]any) string {
+	if strings.EqualFold(anyString(turn["failure_kind"]), "expired") {
+		return "expired"
+	}
 	status := firstNonEmpty(anyString(turn["status"]), "unknown")
 	if status != "sending" {
 		return status
@@ -691,6 +737,43 @@ func appendPaginationLines(lines []string, root map[string]any) []string {
 
 func workCommandUsesLeaseToken(name string) bool {
 	return name == "pm turns context" || name == "pm turns propose"
+}
+
+func workCommandUsesRunnerID(name string) bool {
+	return name == "pm turns claim"
+}
+
+func applyPMTurnClaimBody(parsed parsedWorkCommand, cfg config.Resolved, object map[string]any) {
+	if object == nil {
+		return
+	}
+	runner := firstNonEmpty(parsed.runnerID, anyString(object["runner_id"]), strings.TrimSpace(cfg.ActorID))
+	if runner != "" {
+		object["runner_id"] = runner
+	}
+}
+
+func (a *App) enrichConversationListTurns(ctx context.Context, cfg config.Resolved, result *commandResult) {
+	body := commandResultBody(result)
+	rows, _ := body["items"].([]any)
+	for i, row := range rows {
+		item := asMap(row)
+		if len(conversationLatestTurn(item)) > 0 {
+			continue
+		}
+		id := anyString(item["id"])
+		if id == "" {
+			continue
+		}
+		got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
+		if err != nil {
+			continue
+		}
+		if turn := conversationLatestTurn(commandResultBody(got)); len(turn) > 0 {
+			item["latest_turn"] = turn
+			rows[i] = item
+		}
+	}
 }
 
 func (a *App) pmLeaseToken(flagValue, bodyValue string) string {
