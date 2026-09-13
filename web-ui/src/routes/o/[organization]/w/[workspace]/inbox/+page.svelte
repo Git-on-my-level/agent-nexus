@@ -52,6 +52,7 @@
   let selectionRequest = 0;
   let ready = $state(false);
   let truncated = $state(false);
+  let receiptsUnavailable = $state(false);
   let now = $state(Date.now());
 
   let workspaceHref = $derived(
@@ -64,6 +65,7 @@
     buildInboxRows({
       decisions,
       actions,
+      receiptsUnavailable,
       work,
       inboxItems,
       updates,
@@ -230,9 +232,17 @@
       );
       if (results[1].status === "fulfilled") {
         actions = results[1].value.items || [];
+        receiptsUnavailable = false;
+      } else {
+        // Without receipts, an answered decision cannot be classified; say
+        // so rather than quietly filing everything under Watching.
+        receiptsUnavailable = true;
+        error = error || errorMessage(results[1].reason);
       }
       if (results[2].status === "fulfilled") {
         work = results[2].value.work || [];
+      } else {
+        error = error || errorMessage(results[2].reason);
       }
       const openItems =
         results[3].status === "fulfilled" ? results[3].value.items || [] : [];

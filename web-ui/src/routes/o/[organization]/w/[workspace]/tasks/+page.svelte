@@ -39,6 +39,8 @@
   let shortcutsOpen = $state(false);
   let moveError = $state("");
   let moveNotice = $state(null);
+  // A pending "done" move waiting for its evidence ref.
+  let evidenceFor = $state(null);
   let requestId = 0;
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
@@ -181,21 +183,17 @@
     try {
       let resolutionRefs = [];
       if (isNexusOwned(work) && phase === "done") {
-        // Done is a completion; core requires evidence that exists. Ask for
-        // it here rather than failing with the API's vocabulary afterwards.
-        const ref = window.prompt(
-          `Marking “${work.title}” done needs evidence. Enter the ref of the artifact or event that proves it (for example artifact:… or event:…).`,
-          "",
-        );
-        if (ref === null) return;
-        const trimmed = String(ref).trim();
-        if (!trimmed) {
-          moveNotice = {
-            text: "Done needs evidence. Add the artifact or event that proves completion, or ask the PM to propose it with evidence.",
-          };
+        // Done is a completion; core requires evidence that exists. Collect
+        // it inline (no prompt(): embedded browsers and phones lack it).
+        if (!evidenceFor || evidenceFor.key !== key) {
+          evidenceFor = { key, work, phase, ref: "" };
+          moveNotice = null;
           return;
         }
+        const trimmed = String(evidenceFor.ref ?? "").trim();
+        if (!trimmed) return;
         resolutionRefs = [trimmed];
+        evidenceFor = null;
       }
       const result = await applyTaskPhaseMove(coreClient, work, phase, {
         resolutionRefs,
@@ -564,6 +562,39 @@
     </div>
   </details>
 
+  {#if evidenceFor}
+    <form
+      class="flex flex-wrap items-end gap-2 rounded-md bg-bg-soft px-3 py-2 text-meta"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void moveTask(evidenceFor.work, evidenceFor.phase);
+      }}
+    >
+      <label class="min-w-0 flex-1 text-micro text-fg-muted"
+        >Marking “{evidenceFor.work.title}” done needs evidence. Ref of the
+        artifact or event that proves it<input
+          class="ui-input mt-1"
+          bind:value={evidenceFor.ref}
+          placeholder="artifact:… or event:…"
+        /></label
+      >
+      <button
+        class="ui-btn-primary"
+        type="submit"
+        disabled={!evidenceFor.ref?.trim()}>Mark done</button
+      >
+      <a
+        class="ui-prose-link text-micro"
+        href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
+        >Ask the PM instead</a
+      >
+      <button
+        class="ui-prose-link text-micro"
+        type="button"
+        onclick={() => (evidenceFor = null)}>Cancel</button
+      >
+    </form>
+  {/if}
   {#if moveNotice}
     <p
       class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg"

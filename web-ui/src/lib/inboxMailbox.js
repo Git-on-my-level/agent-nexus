@@ -36,11 +36,18 @@ const WATCHING_DECISION_STATUSES = new Set([
  * answered, then its action's receipt status. A verified read-back is done; a
  * failed delivery needs the reader again.
  */
-export function decisionRowStatus(decision, actions = []) {
+export function decisionRowStatus(
+  decision,
+  actions = [],
+  { receiptsUnavailable = false } = {},
+) {
   const own = String(decision?.status ?? "");
   // A decline used to be stored as superseded with no replacement.
   if (own === "superseded" && !decision?.superseded_by) return "declined";
   if (own !== "answered") return own;
+  // Receipts could not be loaded: the delivery state is unknown to us, and
+  // an unknown delivery belongs in front of the reader, not under Watching.
+  if (receiptsUnavailable) return "receipt_unavailable";
   const action = actions.find(
     (item) =>
       item &&
@@ -88,7 +95,8 @@ export function classifyInboxRow(row, now = Date.now()) {
     if (row.status === "awaiting_answer")
       return row.item?.can_answer === false ? "watching" : "needs-you";
     // A failed delivery is the reader's problem again, not a thing to watch.
-    if (row.status === "failed") return "needs-you";
+    if (row.status === "failed" || row.status === "receipt_unavailable")
+      return "needs-you";
     if (WATCHING_DECISION_STATUSES.has(row.status)) return "watching";
     return "handled";
   }
@@ -140,6 +148,8 @@ export function inboxRowBadge(row, now = Date.now()) {
       return { label: "Replaced", tone: "neutral" };
     if (row.status === "declined")
       return { label: "Declined", tone: "neutral" };
+    if (row.status === "receipt_unavailable")
+      return { label: "Delivery state unknown", tone: "warn" };
     return receiptSignal(row.status);
   }
   if (row.kind === "update") {
@@ -156,6 +166,7 @@ export function inboxRowBadge(row, now = Date.now()) {
 export function buildInboxRows({
   decisions = [],
   actions = [],
+  receiptsUnavailable = false,
   work = [],
   inboxItems = [],
   updates = [],
@@ -182,7 +193,7 @@ export function buildInboxRows({
       source: summary.ask || "Decision",
       ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
-      status: decisionRowStatus(item, actions),
+      status: decisionRowStatus(item, actions, { receiptsUnavailable }),
       phase: item.status,
       item,
     });

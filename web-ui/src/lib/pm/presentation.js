@@ -487,7 +487,9 @@ export function decisionConsequence(item, work = null) {
   const phase = String(item?.payload?.phase ?? "").trim();
   if (scope === "work.phase") {
     const target = phase ? ` to ${label(phase)}` : "";
-    if (owned || !source || source === "Nexus")
+    if (!work)
+      return `Approving authorizes this change${target}. If the task lives in another tracker, it is requested there rather than applied here.`;
+    if (owned || source === "Nexus")
       return phase
         ? `Approving moves this task${target} in Nexus.`
         : "This proposal names no target phase, so it cannot be applied. Decline it and ask the PM to propose again.";

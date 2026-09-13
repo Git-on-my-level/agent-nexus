@@ -155,14 +155,18 @@
       {/if}
       {#if stale}
         <p
+          id="decision-stale-note"
           class="mt-3 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
         >
           This proposal is older than the task: it was made against an earlier
-          revision, so approving it would fail. Ask the PM to propose again.
+          revision, so approving it would fail. {proposer === "You proposed"
+            ? "Propose it again from the board or the CLI."
+            : "Ask the PM to propose again."}
         </p>
       {/if}
       {#if missingEvidence}
         <p
+          id="decision-evidence-note"
           class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         >
           Some of the evidence named here does not exist, so this cannot be
@@ -266,6 +270,11 @@
               unappliable ||
               stale ||
               missingEvidence}
+            aria-describedby={stale
+              ? "decision-stale-note"
+              : missingEvidence
+                ? "decision-evidence-note"
+                : undefined}
             >{busy && choice === "approve" ? "Approving…" : "Approve"}</button
           >
           <button
@@ -411,7 +420,10 @@
         <p class="mt-2 text-meta text-fg-muted">
           {selected.status === "awaiting_answer"
             ? "Nothing happens until you decide."
-            : "No delivery receipt yet."}
+            : selected.status === "declined" ||
+                (selected.status === "superseded" && !selected.superseded_by)
+              ? "Declined; nothing will be delivered."
+              : "No delivery receipt yet."}
         </p>
       {/if}
     </section>

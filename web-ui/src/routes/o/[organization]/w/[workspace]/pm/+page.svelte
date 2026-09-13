@@ -432,9 +432,8 @@
   // that did not resolve stays as written.
   function answerBody(response, proposed) {
     const answerable = new Set(proposed);
-    return linkifyDecisionIds(response, (id) =>
-      answerable.has(id) ? decisionInboxHref(id) : "",
-    );
+    void answerable;
+    return linkifyDecisionIds(response, (id) => decisionInboxHref(id));
   }
   const prompts = [
     "What needs my decision?",
@@ -458,7 +457,10 @@
         return;
       // Nothing changes on its own once every turn is answered or failed;
       // only a pending turn earns a poll.
-      if (!force && !waiting) return;
+      // A conversation is shared with the CLI and channels: poll fast while a
+      // turn is pending, slowly (every sixth tick) when nothing is.
+      idleTicks = waiting ? 0 : idleTicks + 1;
+      if (!force && !waiting && idleTicks % 6 !== 0) return;
       if (sessionExpired) return;
       pollInFlight = true;
       void loadConversation(selectedId, true).finally(() => {
@@ -469,6 +471,7 @@
       if (!document.hidden) pollNow(true);
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    let idleTicks = 0;
     const timer = setInterval(pollNow, 5000);
     return () => {
       requestId++;

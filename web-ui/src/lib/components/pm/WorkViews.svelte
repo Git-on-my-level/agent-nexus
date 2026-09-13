@@ -202,7 +202,7 @@
                 href={href(work)}
                 boardTitle={boardLabel(work)}
               />
-              {#if requested[key]}
+              {#if requested[key] || decisionId}
                 <p class="mt-1 px-1">
                   {#if decisionId}
                     <a
