@@ -59,6 +59,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
 	"pm turns complete":        {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
 	"pm turns release":         {path: "/pm/turns/{id}/release", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner returns a claimed turn to the queue."},
+	"pm turns heartbeat":       {path: "/pm/turns/{id}/heartbeat", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner renews a claimed turn's lease; renew at less than half the lease TTL."},
 	"pm turns get":             {path: "/pm/turns/{id}", method: "GET", idFlag: "turn-id", summary: "Read a PM conversation turn."},
 }
 

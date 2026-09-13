@@ -137,6 +137,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
 - `pm turns fail` (command): Mark a claimed turn failed with a reason; does not complete work.
 - `pm turns get` (command): Read a PM conversation turn.
+- `pm turns heartbeat` (command): Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `pm turns release` (command): Lease owner returns a claimed turn to the queue.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
@@ -1504,6 +1505,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
   anx pm turns fail            Mark a claimed turn failed with a reason; does not complete work.
   anx pm turns get             Read a PM conversation turn.
+  anx pm turns heartbeat       Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
   anx pm turns propose         Selected PM agent proposes an instruction for the requesting actor, never approval.
   anx pm turns release         Lease owner returns a claimed turn to the queue.
 
@@ -4099,7 +4101,7 @@ Generated Help: pm context
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4133,7 +4135,7 @@ Generated Help: pm actions acknowledge
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4167,7 +4169,7 @@ Generated Help: pm actions get
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4201,7 +4203,7 @@ Generated Help: pm actions list
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4233,7 +4235,7 @@ Generated Help: pm actions reconcile
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4267,7 +4269,7 @@ Generated Help: pm bindings create
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Optional:
@@ -4315,7 +4317,7 @@ Generated Help: pm bindings list
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4347,7 +4349,7 @@ Generated Help: pm conversations create
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4386,7 +4388,7 @@ Generated Help: pm conversations get
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4420,7 +4422,7 @@ Generated Help: pm conversations list
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4452,7 +4454,7 @@ Generated Help: pm conversations message
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4490,7 +4492,7 @@ Generated Help: pm decisions answer
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4529,7 +4531,7 @@ Generated Help: pm decisions create
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4573,7 +4575,7 @@ Generated Help: pm decisions dispatch
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4607,7 +4609,7 @@ Generated Help: pm decisions get
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4641,7 +4643,7 @@ Generated Help: pm decisions list
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -4672,8 +4674,8 @@ Generated Help: pm turns claim
 - Output: Returns `PMClaimedTurn`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Optional:
@@ -4710,7 +4712,7 @@ Generated Help: pm turns complete
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4750,7 +4752,7 @@ Generated Help: pm turns context
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4793,7 +4795,7 @@ Generated Help: pm turns fail
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4831,7 +4833,7 @@ Generated Help: pm turns get
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4842,6 +4844,43 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Read a PM conversation turn.
 
 Usage: anx pm turns get <ref> (or --turn-id <ref>)
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns heartbeat`
+
+Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
+
+```text
+Generated Help: pm turns heartbeat
+
+- Command ID: `pm.turns.heartbeat`
+- CLI path: `pm turns heartbeat`
+- HTTP: `POST /pm/turns/{turn_id}/heartbeat`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Keep an active runner lease alive during execution.
+- Output: Returns `PMHeartbeatTurn`.
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `lease_required`, `turn_closed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
+
+Inputs:
+  Required:
+  - path `turn_id`
+  - body `lease_token` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
+
+Usage: anx pm turns heartbeat <ref> (or --turn-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4865,7 +4904,7 @@ Generated Help: pm turns propose
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns fail`, `pm turns get`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
 Inputs:
   Required:
@@ -4912,7 +4951,7 @@ Generated Help: pm turns release
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `turn_not_claimed`, `turn_closed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`
 
 Inputs:
   Required:
