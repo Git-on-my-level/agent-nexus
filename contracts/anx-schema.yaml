@@ -803,12 +803,14 @@ work_tracking:
   phase: [backlog, ready, in_progress, blocked, review, done, cancelled, unknown]
   freshness: [unknown, fresh, stale, error]
   observation_status: [reported, verified, uncertain, error]
+  refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
   remote_verification: reported
   local_annotations: [project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
   invariants:
     - External workflow fields can only be projected from attributed observations.
     - Observation timestamps do not imply source activity or meaningful progress.
     - Failed refreshes retain the last good observation with its age and error.
+    - refresh.last_error and freshness.last_error share {code, message}; code is the collector kind, not a generic read_failed.
     - Replay keys bind content; conflicting reuse is rejected.
     - Source sequence wins over observer clocks; older observations remain in history.
     - Native completion uses the existing card evidence gate.

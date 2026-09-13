@@ -100,6 +100,9 @@ var (
 		}
 		return out, err
 	}
+	nowFn            = time.Now
+	sleepFn          = sleepCtx
+	startupAckPoll   = 90 * time.Second
 	harnessLogWriter io.Writer
 	typedRefPattern  = regexp.MustCompile(`\b(?:card|work|artifact|topic|document|decision):[A-Za-z0-9._:-]+`)
 	providerModelRe  = regexp.MustCompile(`"provider"\s*:\s*"([^"]+)"\s*,\s*"model"\s*:\s*"([^"]+)"`)
@@ -314,9 +317,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 				active--
 				mu.Unlock()
 			}()
-			if err := a.handleClaimedTurn(ctx, cfg, absDir, agentctl, argv, env, turn); err != nil {
-				a.pmLog("pm serve: turn %s: %v\n", turnID, err)
-			}
+			_ = a.handleClaimedTurn(ctx, cfg, absDir, agentctl, argv, env, turn)
 		}
 		if maxConcurrent == 1 {
 			runTurn()
@@ -327,6 +328,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 }
 
 func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDir, agentctl string, argv, env []string, turn map[string]any) error {
+	started := nowFn()
 	turnID := anyString(turn["id"])
 	leaseToken := anyString(turn["lease_token"])
 	deadline := parseTurnDeadline(turn)
@@ -334,35 +336,50 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if n, ok := intFromAny(turn["max_output_bytes"]); ok && n >= 256 {
 		maxBytes = n
 	}
+	fail := func(reason string, raw []byte) error {
+		if len(raw) > 0 {
+			a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(raw)))
+		}
+		a.pmLog("pm serve: turn %s failed in %ds: %s\n", turnID, elapsedSeconds(started), reason)
+		return a.failTurn(ctx, cfg, turnID, leaseToken, reason)
+	}
+	complete := func(text, provider, model string) error {
+		if err := a.completeTurn(ctx, cfg, turnID, leaseToken, text, maxBytes); err != nil {
+			a.pmLog("pm serve: turn %s failed in %ds: %v\n", turnID, elapsedSeconds(started), err)
+			return err
+		}
+		suffix := ""
+		if provider != "" {
+			suffix = fmt.Sprintf(" provider=%s model=%s", provider, model)
+		}
+		a.pmLog("pm serve: turn %s completed in %ds%s\n", turnID, elapsedSeconds(started), suffix)
+		return nil
+	}
 	prompt := buildPMPrompt(cfg.Agent, turn, maxBytes)
 	promptPath := filepath.Join(workDir, "turn-"+sanitizeFilePart(turnID)+".md")
 	if err := os.WriteFile(promptPath, []byte(prompt), 0o600); err != nil {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "failed to write prompt file: "+err.Error())
+		return fail("failed to write prompt file: "+err.Error(), nil)
 	}
 	remain := time.Until(deadline)
 	if remain < time.Second {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "deadline already passed")
+		return fail(humanTurnFailure("deadline", ""), nil)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, remain)
 	defer cancel()
-	var (
-		out []byte
-		err error
-	)
 	if runnerUsesPromptPlaceholder(argv) {
 		expanded := expandPromptPlaceholder(argv, promptPath)
 		if len(expanded) == 0 || strings.TrimSpace(expanded[0]) == "" {
-			return a.failTurn(ctx, cfg, turnID, leaseToken, "invalid --runner after {prompt} expansion")
+			return fail("invalid --runner after {prompt} expansion", nil)
 		}
-		out, err = runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
+		out, err := runCmd(runCtx, expanded[0], expanded[1:], workDir, env)
 		if err != nil {
-			return a.failTurn(ctx, cfg, turnID, leaseToken, "harness failed: "+trimOutput(out, err))
+			return fail(humanTurnFailure("launch_failed", ""), out)
 		}
 		text := strings.TrimSpace(extractAssistantText(string(out), string(out)))
 		if text == "" {
-			return a.failTurn(ctx, cfg, turnID, leaseToken, "harness returned no assistant text: "+trimOutput(out, nil))
+			return fail(humanTurnFailure("no_assistant", ""), out)
 		}
-		return a.completeTurn(ctx, cfg, turnID, leaseToken, text, maxBytes)
+		return complete(text, "", "")
 	}
 	runArgs := []string{
 		"run", "--background",
@@ -374,29 +391,41 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	}
 	runArgs = append(runArgs, argv...)
 	launchOut, launchErr := runCmd(runCtx, agentctl, runArgs, workDir, env)
+	execID, launchTimeout := "", ""
 	if launchErr != nil {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "agentctl run failed: "+trimOutput(launchOut, launchErr))
+		var ok bool
+		execID, launchTimeout, ok = continuingAgentctlLaunch(launchOut)
+		if !ok {
+			return fail(humanTurnFailure("launch_failed", ""), launchOut)
+		}
+		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(launchOut)))
+	} else {
+		execID = extractExecutionID(launchOut)
 	}
-	execID := extractExecutionID(launchOut)
 	if execID == "" {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "agentctl run returned no execution id: "+trimOutput(launchOut, nil))
+		return fail(humanTurnFailure("launch_failed", ""), launchOut)
 	}
-	awaitOut, awaitErr := runCmd(runCtx, agentctl, []string{"await", execID, "--through-execution-deadline", "--ignore-attention"}, workDir, env)
+	awaitArgs := []string{"await", execID, "--through-execution-deadline", "--ignore-attention"}
+	awaitOut, awaitErr := runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+	if awaitErr != nil && agentctlNotFound(awaitOut, awaitErr) {
+		a.pmLog("pm serve: turn %s agentctl: %s\n", turnID, strings.TrimSpace(string(awaitOut)))
+		if visErr := waitForAgentctlExecution(runCtx, agentctl, execID, workDir, env); visErr != nil {
+			return fail(humanTurnFailure("startup_timeout", launchTimeout), awaitOut)
+		}
+		awaitOut, awaitErr = runCmd(runCtx, agentctl, awaitArgs, workDir, env)
+	}
 	if awaitErr != nil {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "agentctl await failed: "+trimOutput(awaitOut, awaitErr))
+		return fail(humanTurnFailure("await_failed", ""), awaitOut)
 	}
 	contentOut, _ := runCmd(runCtx, agentctl, []string{"result", execID, "--content"}, workDir, env)
 	metaOut, _ := runCmd(runCtx, agentctl, []string{"result", execID}, workDir, env)
 	blob := string(contentOut) + "\n" + string(metaOut) + "\n" + string(awaitOut) + "\n" + string(launchOut)
 	provider, model := extractProviderModel(blob)
-	if provider != "" {
-		a.pmLog("pm serve: turn %s provider=%s model=%s\n", turnID, provider, model)
-	}
 	text := strings.TrimSpace(extractAssistantText(string(contentOut), blob))
 	if text == "" {
-		return a.failTurn(ctx, cfg, turnID, leaseToken, "harness returned no assistant text: "+trimOutput(append(contentOut, awaitOut...), nil))
+		return fail(humanTurnFailure("no_assistant", ""), append(contentOut, awaitOut...))
 	}
-	return a.completeTurn(ctx, cfg, turnID, leaseToken, text, maxBytes)
+	return complete(text, provider, model)
 }
 
 func (a *App) completeTurn(ctx context.Context, cfg config.Resolved, turnID, leaseToken, text string, maxBytes int) error {
@@ -504,6 +533,146 @@ func splitRunnerArgv(raw string) ([]string, error) {
 		out = append(out, cur.String())
 	}
 	return out, nil
+}
+
+func elapsedSeconds(started time.Time) int {
+	n := int(nowFn().Sub(started).Seconds())
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func humanTurnFailure(kind, extra string) string {
+	switch kind {
+	case "startup_timeout":
+		return "The PM harness did not start within " + formatTimeoutPhrase(extra) + ". Retry, or check the runner log."
+	case "await_failed":
+		return "The PM harness did not finish before the turn deadline. Retry, or check the runner log."
+	case "no_assistant":
+		return "The PM harness finished without a reply. Retry, or check the runner log."
+	case "deadline":
+		return "The turn deadline passed before the harness started. Retry, or check the runner log."
+	default:
+		return "The PM harness failed to start. Retry, or check the runner log."
+	}
+}
+
+func formatTimeoutPhrase(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "the startup deadline"
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return raw
+	}
+	if d%time.Second == 0 && d < time.Minute {
+		n := int(d / time.Second)
+		if n == 1 {
+			return "1 second"
+		}
+		return fmt.Sprintf("%d seconds", n)
+	}
+	return d.Round(time.Second).String()
+}
+
+func continuingAgentctlLaunch(raw []byte) (execID, timeout string, ok bool) {
+	env := parseAgentctlJSON(raw)
+	errObj := asMap(env["error"])
+	details := asMap(errObj["details"])
+	execID = firstNonEmpty(anyString(details["execution_id"]), extractExecutionID(raw))
+	if !strings.HasPrefix(execID, "exec-") {
+		return "", "", false
+	}
+	if !anyBool(details["worker_continues"]) && !anyBool(errObj["retryable"]) {
+		return "", "", false
+	}
+	return execID, anyString(details["timeout"]), true
+}
+
+func waitForAgentctlExecution(ctx context.Context, agentctl, execID, workDir string, env []string) error {
+	deadline := nowFn().Add(startupAckPoll)
+	delay := time.Second
+	for {
+		out, err := runCmd(ctx, agentctl, []string{"status", execID}, workDir, env)
+		if agentctlExecutionVisible(out, err) {
+			return nil
+		}
+		if !nowFn().Before(deadline) {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("execution not found")
+		}
+		remain := deadline.Sub(nowFn())
+		if delay > remain {
+			delay = remain
+		}
+		if delay < time.Millisecond {
+			return fmt.Errorf("execution not found")
+		}
+		if err := sleepFn(ctx, delay); err != nil {
+			return err
+		}
+		if delay < 8*time.Second {
+			delay *= 2
+		}
+	}
+}
+
+func agentctlNotFound(raw []byte, err error) bool {
+	env := parseAgentctlJSON(raw)
+	errObj := asMap(env["error"])
+	code := strings.ToLower(anyString(errObj["code"]))
+	if code == "not_found" || code == "unknown_execution" {
+		return true
+	}
+	blob := strings.ToLower(string(raw))
+	if err != nil {
+		blob += " " + strings.ToLower(err.Error())
+	}
+	return strings.Contains(blob, "not found") || strings.Contains(blob, "unknown execution")
+}
+
+func agentctlExecutionVisible(raw []byte, err error) bool {
+	if agentctlNotFound(raw, err) {
+		return false
+	}
+	if extractExecutionID(raw) != "" {
+		return true
+	}
+	env := parseAgentctlJSON(raw)
+	if ok, _ := env["ok"].(bool); ok {
+		return true
+	}
+	return err == nil && len(bytes.TrimSpace(raw)) > 0
+}
+
+func parseAgentctlJSON(raw []byte) map[string]any {
+	var payload any
+	if json.Unmarshal(raw, &payload) == nil {
+		return asMap(payload)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if json.Unmarshal([]byte(line), &payload) == nil {
+			if m := asMap(payload); len(m) > 0 {
+				return m
+			}
+		}
+	}
+	return map[string]any{}
+}
+
+func anyBool(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(strings.TrimSpace(t), "true")
+	}
+	return false
 }
 
 func extractExecutionID(raw []byte) string {
@@ -818,20 +987,6 @@ func intFromAny(v any) (int, bool) {
 		return i, err == nil
 	}
 	return 0, false
-}
-
-func trimOutput(out []byte, err error) string {
-	text := strings.TrimSpace(string(out))
-	if len(text) > 800 {
-		text = text[:800]
-	}
-	if err != nil && text != "" {
-		return err.Error() + ": " + text
-	}
-	if err != nil {
-		return err.Error()
-	}
-	return text
 }
 
 func (a *App) pmLog(format string, args ...any) {

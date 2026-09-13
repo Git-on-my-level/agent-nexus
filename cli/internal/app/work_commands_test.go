@@ -313,6 +313,14 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(work, "card:example") || !strings.Contains(work, "freshness=unknown") || !strings.Contains(work, "next_cursor: next") {
 		t.Errorf("lost work semantics: %s", work)
 	}
+	errored := formatWorkCommandText("work list", map[string]any{"work": []any{map[string]any{"ref": "card:launch", "title": "Tracked", "phase": "review", "source": map[string]any{"authority": "github"}, "freshness": map[string]any{"status": "error", "last_error": map[string]any{"code": "policy_denied", "message": "Generated reader has no active version"}}, "refresh": map[string]any{"state": "failed", "last_error": map[string]any{"code": "policy_denied", "message": "Generated reader has no active version"}}}}})
+	if !strings.Contains(errored, "freshness=error") || !strings.Contains(errored, "last_error=policy_denied: Generated reader has no active version") {
+		t.Fatalf("list hid refresh error: %s", errored)
+	}
+	got := formatWorkCommandText("work get", map[string]any{"work": map[string]any{"ref": "card:launch", "title": "Tracked", "phase": "review", "source": map[string]any{"authority": "github"}, "freshness": map[string]any{"status": "error", "last_error": map[string]any{"code": "rate_limited", "message": "GitHub rate limit reached; next attempt at 2026-09-13T05:00:00Z"}}, "refresh": map[string]any{"state": "failed", "last_error": map[string]any{"code": "rate_limited", "message": "GitHub rate limit reached; next attempt at 2026-09-13T05:00:00Z"}}}})
+	if !strings.Contains(got, "last_error=rate_limited: GitHub rate limit reached") {
+		t.Fatalf("get hid refresh error: %s", got)
+	}
 	bindings := formatWorkCommandText("pm bindings list", map[string]any{"items": []any{map[string]any{"id": "binding-1", "actor_id": "actor-david", "origin": map[string]any{"transport": "telegram", "tenant_id": "bot-1", "channel_id": "-100", "external_user_id": "42"}, "can_approve": true, "enabled": true, "revision": float64(1)}}, "has_more": false})
 	if !strings.Contains(bindings, "bindings: 1") || !strings.Contains(bindings, "binding-1  telegram bot-1/-100 user=42 -> actor-david can_approve=true enabled=true revision=1") {
 		t.Fatalf("unexpected bindings list text: %s", bindings)
