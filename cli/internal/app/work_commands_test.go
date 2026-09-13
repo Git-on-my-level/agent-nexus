@@ -201,7 +201,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 		args                         []string
 		method, path, body, response string
 	}{
-		{[]string{"pm", "context", "--work-ref", "card:launch", "--query", "evidence", "--limit", "5"}, "GET", "/pm/context?limit=5&query=evidence&work_ref=card%3Alaunch", "", `{"items":[],"limitations":["partial"]}`},
+		{[]string{"pm", "context", "--work-ref", "card:launch", "--query", "evidence", "--limit", "5", "--cursor", "ctx+page"}, "GET", "/pm/context?cursor=ctx%2Bpage&limit=5&query=evidence&work_ref=card%3Alaunch", "", `{"items":[],"limitations":["partial"],"next_cursor":"next-ctx"}`},
 		{[]string{"pm", "decisions", "list"}, "GET", "/pm/decisions", "", `{"items":[],"has_more":true}`},
 		{[]string{"pm", "decisions", "get", "decision-1"}, "GET", "/pm/decisions/decision-1", "", `{"id":"decision-1","status":"answered","action_id":"action-1"}`},
 		{[]string{"pm", "decisions", "create", "--from-file", "-"}, "POST", "/pm/decisions", `{"request_key":"decision-key","work_ref":"card:launch","instruction":"Review","scope":"review","target_revision":"abc"}`, `{"id":"decision-1","status":"awaiting_answer"}`},
@@ -302,6 +302,49 @@ func TestPMPaginationCarriesOpaqueCursor(t *testing.T) {
 	}
 }
 
+func TestPMContextPaginationCarriesOpaqueCursor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/context" || r.URL.Query().Get("cursor") != "bound+opaque" || r.URL.Query().Get("limit") != "20" {
+			t.Errorf("request=%s", r.URL)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"items":[{"id":"item-1","work_ref":"card:launch"}],"has_more":true,"next_cursor":"next-ctx","limitations":["partial"]}`)
+	}))
+	defer server.Close()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", "context", "--limit", "20", "--cursor", "bound+opaque"}))
+	data := asMap(payload["data"])
+	if data["next_cursor"] != "next-ctx" || data["has_more"] != true {
+		t.Errorf("json envelope changed or lost pagination: %v", payload)
+	}
+	text := runCLIForTest(t, t.TempDir(), nil, nil, []string{"--base-url", server.URL, "pm", "context", "--limit", "20", "--cursor", "bound+opaque"})
+	if !strings.Contains(text, "has_more: true") || !strings.Contains(text, "next_cursor: next-ctx") {
+		t.Errorf("text mode lost pagination: %s", text)
+	}
+}
+
+func TestPMTurnsContextPaginationCarriesOpaqueCursor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/turns/turn-1/context" || r.URL.Query().Get("cursor") != "turn+page" {
+			t.Errorf("request=%s", r.URL)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"items":[],"has_more":true,"next_cursor":"next-turn"}`)
+	}))
+	defer server.Close()
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "context", "turn-1", "--cursor", "turn+page"}))
+	if asMap(payload["data"])["next_cursor"] != "next-turn" {
+		t.Errorf("cursor lost: %v", payload)
+	}
+}
+
+func TestPMContextHelpDocumentsCursor(t *testing.T) {
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "context"}))
+	raw := fmt.Sprint(payload["data"])
+	if !strings.Contains(raw, "--cursor") {
+		t.Errorf("pm context help missing --cursor: %s", raw)
+	}
+}
+
 func TestWorkRejectsNonObjectSuccessResponse(t *testing.T) {
 	for _, body := range []string{`<html>proxy login</html>`, `null`, `[]`} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) }))
@@ -334,6 +377,10 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
 		t.Errorf("lost receipt uncertainty: %s", pm)
 	}
+	ctx := formatWorkCommandText("pm context", map[string]any{"items": []any{map[string]any{"id": "ctx-1", "work_ref": "card:example", "status": "authorized"}}, "next_cursor": "next-ctx", "has_more": true, "limitations": []any{"partial"}})
+	if !strings.Contains(ctx, "ctx-1") || !strings.Contains(ctx, "has_more: true") || !strings.Contains(ctx, "next_cursor: next-ctx") || !strings.Contains(ctx, "partial") {
+		t.Errorf("lost pm context pagination: %s", ctx)
+	}
 	turn := formatWorkCommandText("pm turns get", map[string]any{"id": "turn-1", "status": "failed", "deadline": "2026-09-08T22:00:00Z", "failure": "deadline passed"})
 	if !strings.Contains(turn, "turn-1") || !strings.Contains(turn, "status=failed") || !strings.Contains(turn, "deadline=2026-09-08T22:00:00Z") || !strings.Contains(turn, "failure=deadline passed") {
 		t.Errorf("lost turn fields: %s", turn)
@@ -354,5 +401,73 @@ func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
 		if _, ok := workCommands[runtimePath]; !ok {
 			t.Errorf("registry command %s (%s) missing from workCommands as %q", cmd.CommandID, path, runtimePath)
 		}
+	}
+}
+
+func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
+	type tc struct {
+		name, commandPath, errorCode, body, want, notWant string
+		args                                              []string
+		details                                           string
+	}
+	cases := []tc{
+		{
+			name:        "answer revision conflict",
+			commandPath: "/pm/decisions/decision-1/answer",
+			errorCode:   "conflict",
+			body:        `{"revision":1,"approve":true,"text":"ok"}`,
+			args:        []string{"pm", "decisions", "answer", "decision-1", "--from-file", "-"},
+			want:        "pm decisions get",
+			notWant:     "if_updated_at",
+		},
+		{
+			name:        "create request-key conflict",
+			commandPath: "/pm/decisions",
+			errorCode:   "conflict",
+			details:     `{"existing_decision_id":"decision-9"}`,
+			body:        `{"request_key":"k","work_ref":"card:x","instruction":"Review","scope":"review","target_revision":"abc"}`,
+			args:        []string{"pm", "decisions", "create", "--from-file", "-"},
+			want:        "error.details.existing_decision_id",
+			notWant:     "if_updated_at",
+		},
+		{
+			name:        "reconcile stale source",
+			commandPath: "/pm/actions/action-1/reconcile",
+			errorCode:   "source_revision_changed",
+			body:        `{}`,
+			args:        []string{"pm", "actions", "reconcile", "action-1"},
+			want:        "propose",
+			notWant:     "if_updated_at",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.commandPath {
+					t.Errorf("path=%s want %s", r.URL.Path, tc.commandPath)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				details := tc.details
+				if details == "" {
+					details = "{}"
+				}
+				fmt.Fprintf(w, `{"error":{"code":%q,"message":"PM revision or state conflict","details":%s}}`, tc.errorCode, details)
+			}))
+			defer server.Close()
+			stdin := strings.NewReader(tc.body)
+			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, stdin, append([]string{"--json", "--base-url", server.URL}, tc.args...)))
+			errObj := asMap(payload["error"])
+			hint := fmt.Sprint(errObj["hint"])
+			if !strings.Contains(strings.ToLower(hint), strings.ToLower(tc.want)) {
+				t.Errorf("hint=%q want substring %q payload=%v", hint, tc.want, payload)
+			}
+			if strings.Contains(hint, tc.notWant) {
+				t.Errorf("hint still uses %q: %q", tc.notWant, hint)
+			}
+			if tc.details != "" && !strings.Contains(hint, "decision-9") {
+				t.Errorf("hint did not name existing_decision_id: %q", hint)
+			}
+		})
 	}
 }

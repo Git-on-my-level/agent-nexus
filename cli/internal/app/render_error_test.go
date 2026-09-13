@@ -29,3 +29,22 @@ func TestRenderErrorTextModeIncludesHintLine(t *testing.T) {
 		t.Fatalf("expected hint line with token name, got %q", out)
 	}
 }
+
+func TestRenderErrorPMConflictUsesRevisionHint(t *testing.T) {
+	t.Parallel()
+
+	var stderr bytes.Buffer
+	a := &App{Stderr: &stderr}
+	err := errnorm.FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
+	exit := a.renderError(machineCommandIdentity{Command: "pm decisions answer", CommandID: "pm.decisions.answer"}, false, err)
+	if exit != 1 {
+		t.Fatalf("expected exit 1, got %d", exit)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "Hint:") || !strings.Contains(out, "pm decisions get") || !strings.Contains(out, "revision") {
+		t.Fatalf("expected PM revision hint, got %q", out)
+	}
+	if strings.Contains(out, "if_updated_at") {
+		t.Fatalf("PM 409 still mentioned if_updated_at: %q", out)
+	}
+}

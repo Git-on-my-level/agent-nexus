@@ -34,7 +34,7 @@ var workCommands = map[string]workCommandSpec{
 	"work capabilities":        {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
 	"work observations list":   {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
 	"work observations submit": {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
-	"pm context":               {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit"}},
+	"pm context":               {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit", "cursor"}},
 	"pm conversations list":    {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm conversations create":  {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
 	"pm conversations get":     {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
@@ -49,7 +49,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm bindings create":       {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
-	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit"}},
+	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
 	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
 	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
@@ -367,13 +367,30 @@ func formatWorkCommandText(name string, body any) string {
 			line += fmt.Sprintf(" can_approve=%t enabled=%t revision=%s", item["can_approve"] == true, item["enabled"] == true, fmt.Sprintf("%v", item["revision"]))
 			lines = append(lines, line)
 		}
-		if more, _ := root["has_more"].(bool); more {
-			lines = append(lines, "has_more: true")
+		return strings.Join(appendPaginationLines(lines, root), "\n")
+	}
+	if name == "pm context" || name == "pm turns context" {
+		rows, _ := root["items"].([]any)
+		lines := []string{fmt.Sprintf("context: %d", len(rows))}
+		for _, row := range rows {
+			item := asMap(row)
+			line := firstNonEmpty(anyString(item["id"]), anyString(item["ref"]), "item")
+			if workRef := anyString(item["work_ref"]); workRef != "" {
+				line += "  " + workRef
+			}
+			if status := anyString(item["status"]); status != "" {
+				line += "  status=" + status
+			}
+			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"]), anyString(item["text"])); title != "" {
+				line += "  " + strings.Join(strings.Fields(title), " ")
+			}
+			lines = append(lines, line)
 		}
-		if cursor := anyString(root["next_cursor"]); cursor != "" {
-			lines = append(lines, "next_cursor: "+cursor)
+		if limitations, ok := root["limitations"].([]any); ok && len(limitations) > 0 {
+			encoded, _ := json.Marshal(limitations)
+			lines = append(lines, "limitations: "+string(encoded))
 		}
-		return strings.Join(lines, "\n")
+		return strings.Join(appendPaginationLines(lines, root), "\n")
 	}
 	if name == "pm decisions list" || name == "pm actions list" || name == "pm conversations list" {
 		rows, _ := root["items"].([]any)
@@ -390,13 +407,7 @@ func formatWorkCommandText(name string, body any) string {
 			}
 			lines = append(lines, line)
 		}
-		if more, _ := root["has_more"].(bool); more {
-			lines = append(lines, "has_more: true")
-		}
-		if cursor := anyString(root["next_cursor"]); cursor != "" {
-			lines = append(lines, "next_cursor: "+cursor)
-		}
-		return strings.Join(lines, "\n")
+		return strings.Join(appendPaginationLines(lines, root), "\n")
 	}
 	if name == "pm turns get" {
 		return fmt.Sprintf("%s  status=%s  deadline=%s  failure=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["deadline"]), anyString(root["failure"]))
@@ -447,6 +458,16 @@ func renderWorkLastError(work map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func appendPaginationLines(lines []string, root map[string]any) []string {
+	if more, _ := root["has_more"].(bool); more {
+		lines = append(lines, "has_more: true")
+	}
+	if cursor := anyString(root["next_cursor"]); cursor != "" {
+		lines = append(lines, "next_cursor: "+cursor)
+	}
+	return lines
 }
 
 func isWorkCommandGroup(topic string) bool {

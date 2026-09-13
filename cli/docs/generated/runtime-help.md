@@ -4105,6 +4105,7 @@ Usage: anx pm context
   --work-ref <value>
   --query <value>
   --limit <value>
+  --cursor <value>
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4721,6 +4722,7 @@ Read context as the requesting actor; only the selected PM agent may call this.
 Usage: anx pm turns context <ref> (or --turn-id <ref>)
   --query <value>
   --limit <value>
+  --cursor <value>
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 

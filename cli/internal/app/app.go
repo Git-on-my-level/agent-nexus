@@ -193,6 +193,7 @@ type commandResult struct {
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {
 	normalized := errnorm.Normalize(err)
+	errnorm.EnrichForCommand(normalized, identity.CommandID)
 	if jsonMode {
 		envelope := output.Envelope{
 			OK:        false,
