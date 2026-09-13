@@ -343,7 +343,12 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 }
 
 func enrichPMBusy(e *Error) (string, map[string]any) {
-	switch strings.ToLower(lookupErrorDetail(e, "reason")) {
+	reason := strings.ToLower(lookupErrorDetail(e, "reason"))
+	if reason == "conversation" || reason == "queue" || reason == "capacity" || reason == "" {
+		rec := true
+		e.Recoverable = &rec
+	}
+	switch reason {
 	case "conversation":
 		return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
 			map[string]any{

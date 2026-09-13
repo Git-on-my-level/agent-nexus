@@ -193,6 +193,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"agent_revoked":                 {Recoverable: false, Hint: "Create/register a new agent profile; revoked agents cannot be reactivated."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx auth register` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth whoami` to refresh credentials, then retry."},
+	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, select a profile with --agent or ANX_AGENT (or `anx auth default <name>` when multiple profiles exist), then run `anx doctor` if connectivity is uncertain."},
 	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},

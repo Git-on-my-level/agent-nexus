@@ -520,8 +520,8 @@ func TestEnrichForCommandPMBusyReasons(t *testing.T) {
 	t.Parallel()
 
 	generic := FromHTTPFailure(429, []byte(`{"error":{"code":"busy","message":"PM execution capacity reached"}}`))
-	if !strings.Contains(strings.ToLower(generic.Hint), "command help") {
-		t.Fatalf("busy without a command should keep the generic hint, got %q", generic.Hint)
+	if !strings.Contains(strings.ToLower(generic.Hint), "retry") || !RecoverableValue(generic) {
+		t.Fatalf("busy without a command should be a recoverable retry hint, got %q recoverable=%v", generic.Hint, generic.Recoverable)
 	}
 
 	conversationBody := []byte(`{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":"conversation"}}}`)
@@ -588,6 +588,21 @@ func TestEnrichForCommandPMBusyReasons(t *testing.T) {
 	EnrichForCommand(other, "pm.decisions.answer")
 	if strings.Contains(other.Hint, conversationHint) || strings.Contains(other.Hint, capacityHint) {
 		t.Fatalf("non-message PM commands must not get message busy hints, got %q", other.Hint)
+	}
+}
+
+func TestBusyQueueCapacityConversationRecoverable(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"queue", "capacity", "conversation"} {
+		body := []byte(fmt.Sprintf(`{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":%q}}}`, reason))
+		err := FromHTTPFailure(429, body)
+		if !RecoverableValue(err) {
+			t.Fatalf("%s recoverable=%v", reason, err.Recoverable)
+		}
+		EnrichForCommand(err, "pm.ask")
+		if !RecoverableValue(err) {
+			t.Fatalf("%s recoverable after command enrich=%v", reason, err.Recoverable)
+		}
 	}
 }
 
