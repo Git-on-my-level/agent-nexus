@@ -6484,6 +6484,7 @@ export const commandRegistry = [
         "path": "/pm/decisions/{decision_id}/answer",
         "operation_id": "pmDecisionsAnswer",
         "summary": "Answer and authorize a scoped decision",
+        "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing, already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
         "why": "Answer and authorize a scoped decision.",
         "input_mode": "json-body",
         "streaming": {
@@ -6575,6 +6576,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
+            "human_proposal_pending",
             "source_revision_changed",
             "busy",
             "unavailable"
@@ -7099,6 +7101,7 @@ export const commandRegistry = [
             "forbidden",
             "not_found",
             "conflict",
+            "human_proposal_pending",
             "turn_closed",
             "lease_required",
             "lease_mismatch",

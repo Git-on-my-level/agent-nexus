@@ -147,7 +147,7 @@ func TestRound4DispatchRequiresCurrentApprovingHuman(t *testing.T) {
 	}
 }
 
-func TestRound4DecisionProvenancePersistsAcrossSupersessionAndReads(t *testing.T) {
+func TestRound4DecisionProvenancePersistsAcrossDeclineAndReads(t *testing.T) {
 	s, st, p, _ := fixture(t)
 	ctx := context.Background()
 	in := DecisionInput{RequestKey: "human", WorkRef: "work:1", Instruction: "Move", Scope: "github", TargetRevision: "r1"}
@@ -163,6 +163,10 @@ func TestRound4DecisionProvenancePersistsAcrossSupersessionAndReads(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A human must handle their pending proposal before a PM can create a new one.
+	if _, err := s.AnswerDecision(ctx, p, human.ID, AnswerInput{Revision: 1, Text: "Decline"}); err != nil {
+		t.Fatal(err)
+	}
 	in.RequestKey = "pm"
 	agent := Principal{WorkspaceID: p.WorkspaceID, ActorID: "pm-agent"}
 	claimTestTurn(t, s, ctx, agent, turn.ID)
@@ -175,7 +179,7 @@ func TestRound4DecisionProvenancePersistsAcrossSupersessionAndReads(t *testing.T
 		t.Fatalf("%+v %v", replay, err)
 	}
 	var old Decision
-	if err := st.get(ctx, "decision", human.ID, &old); err != nil || old.Status != Superseded || old.ProposedBy != p.ActorID || old.OriginKind != "human" {
+	if err := st.get(ctx, "decision", human.ID, &old); err != nil || old.Status != Declined || old.ProposedBy != p.ActorID || old.OriginKind != "human" {
 		t.Fatalf("%+v %v", old, err)
 	}
 	// Restore service from durable records and inspect GET and paginated list.

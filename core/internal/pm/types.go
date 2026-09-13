@@ -367,3 +367,29 @@ type DecisionWork struct {
 	Revision string
 	Phase    string
 }
+
+// HumanProposalPendingError protects an awaiting human proposal under the store lock.
+type HumanProposalPendingError struct {
+	PendingDecisionID string `json:"pending_decision_id"`
+}
+
+func (e *HumanProposalPendingError) Error() string {
+	return fmt.Sprintf("Human proposal %s is pending; a human must decline or answer it first.", e.PendingDecisionID)
+}
+func (e *HumanProposalPendingError) Unwrap() error { return ErrConflict }
+
+// ApprovalTargetError refuses a fresh approval without creating durable state.
+type ApprovalTargetError struct {
+	ApprovedRevision string  `json:"approved_revision"`
+	CurrentRevision  *string `json:"current_revision"`
+	Reason           string  `json:"reason"`
+}
+
+func (e *ApprovalTargetError) Error() string {
+	current := "unavailable"
+	if e.CurrentRevision != nil {
+		current = *e.CurrentRevision
+	}
+	return fmt.Sprintf("Approved source revision has changed (approved at %s, source now %s). Approval refused (%s); inspect the work and create a fresh proposal if needed.", e.ApprovedRevision, current, e.Reason)
+}
+func (e *ApprovalTargetError) Unwrap() error { return ErrStale }

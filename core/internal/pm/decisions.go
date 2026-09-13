@@ -94,9 +94,6 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	if d.Status == Superseded && d.SupersededBy != "" {
 		return Decision{}, &SupersededDecisionError{SupersededBy: d.SupersededBy}
 	}
-	if in.Approve && d.WorkMissing {
-		return Decision{}, ErrNotFound
-	}
 	if in.Approve && !validActionPayload(d.Scope, d.Payload) {
 		return Decision{}, fmt.Errorf("%w: %s", ErrInvalid, invalidActionPayloadMessage)
 	}
@@ -116,6 +113,11 @@ func (s *Service) AnswerDecision(ctx context.Context, p Principal, id string, in
 	}
 	if !validText(in.Text, 16000) {
 		return Decision{}, ErrInvalid
+	}
+	if in.Approve {
+		if err = s.validateApprovalTarget(ctx, p, d); err != nil {
+			return Decision{}, err
+		}
 	}
 	d.Answer = in.Text
 	d.AnsweredBy = p.ActorID
@@ -511,4 +513,30 @@ func hasSentAttempt(a Action) bool {
 		}
 	}
 	return false
+}
+
+// Replays are handled before this check. Dispatch still rechecks the revision
+// because source state can change after approval (including during this read).
+func (s *Service) validateApprovalTarget(ctx context.Context, p Principal, d Decision) error {
+	failure := &ApprovalTargetError{ApprovedRevision: d.TargetRevision, Reason: "work_read_failed"}
+	if s.deps.DecisionWork == nil {
+		return failure
+	}
+	work, err := s.deps.DecisionWork(ctx, p, d.WorkRef)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			failure.Reason = "work_missing"
+		}
+		return failure
+	}
+	failure.CurrentRevision = &work.Revision
+	if d.TargetRevision != work.Revision {
+		failure.Reason = "revision_changed"
+		return failure
+	}
+	if d.Payload != nil && d.Payload.Phase != "" && d.Payload.Phase == work.Phase {
+		failure.Reason = "already_at_target"
+		return failure
+	}
+	return nil
 }

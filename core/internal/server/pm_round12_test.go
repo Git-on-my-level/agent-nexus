@@ -84,8 +84,21 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			current := authority == "external"
 			check(call(t, "GET", "/pm/decisions/"+id, nil, 200), false, current, true, true)
 			check(call(t, "POST", "/pm/decisions", in, 200), false, current, true, true)
+			call(t, "POST", "/pm/decisions/"+id+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409)
+			// Approve a current, non-moot replacement to retain a pending action
+			// for the missing-work list and closure checks below.
+			work, err = store.GetWork(ctx, ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			in.RequestKey += "-current"
+			in.TargetRevision = asString(work["decision_revision"])
+			in.Payload = &pm.ActionPayload{Phase: "blocked"}
+			d = call(t, "POST", "/pm/decisions", in, 201)
+			id = d["id"].(string)
 			d = call(t, "POST", "/pm/decisions/"+id+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 200)
-			check(d, false, current, true, false)
+			check(d, false, true, false, false)
+			current = true
 			actionID := d["action_id"].(string)
 			// Keep an awaiting proposal as well as the answered/pending action.
 			in.RequestKey += "-awaiting"
@@ -163,7 +176,7 @@ func TestRound12DecisionWorkProjectionAndMissingWork(t *testing.T) {
 			if len(page["items"].([]any)) != 1 {
 				t.Fatal(page)
 			}
-			call(t, "POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 404)
+			call(t, "POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409)
 			call(t, "POST", "/pm/decisions/"+id+"/dispatch", struct{}{}, 403)
 			in.RequestKey += "-missing"
 			call(t, "POST", "/pm/decisions", in, 403)
