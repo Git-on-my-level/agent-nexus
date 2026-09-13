@@ -827,7 +827,7 @@ paths:
       - forbidden
       - not_found
       - conflict
-      - source_revision_changed
+      - turn_closed
       - busy
       - unavailable
       x-anx-concepts:
@@ -873,7 +873,7 @@ paths:
       - forbidden
       - not_found
       - conflict
-      - source_revision_changed
+      - turn_closed
       - busy
       - unavailable
       x-anx-concepts:
@@ -932,7 +932,7 @@ paths:
       - forbidden
       - not_found
       - conflict
-      - source_revision_changed
+      - turn_closed
       - busy
       - unavailable
       x-anx-concepts:
@@ -979,7 +979,7 @@ paths:
       - forbidden
       - not_found
       - conflict
-      - source_revision_changed
+      - turn_closed
       - busy
       - unavailable
       x-anx-concepts:

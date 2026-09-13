@@ -217,7 +217,7 @@ func writeError(w http.ResponseWriter, err error) {
 		err    error
 		status int
 		code   string
-	}{{ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrConflict, 409, "conflict"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
+	}{{ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrConflict, 409, "conflict"}, {ErrTurnClosed, 409, "turn_closed"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
 		if errors.Is(err, e.err) {
 			status = e.status
 			code = e.code
@@ -227,6 +227,10 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 	w.WriteHeader(status)
 	body := map[string]any{"code": code, "message": message}
+	var closed *TurnClosedError
+	if errors.As(err, &closed) {
+		body["details"] = closed
+	}
 	var conflict *DecisionConflict
 	if errors.As(err, &conflict) {
 		body["details"] = map[string]string{"existing_decision_id": conflict.ExistingDecisionID}

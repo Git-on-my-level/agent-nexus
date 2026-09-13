@@ -10,6 +10,7 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - Mutating requests require `Authorization: Bearer <access_token>`.
   - Authenticated callers MAY omit `actor_id`; core infers it from the bearer token principal.
   - If authenticated callers provide `actor_id`, it MUST match the authenticated principal mapping.
+- PM turn context, propose (`decisions`), complete, and fail operations return HTTP `409` with code `turn_closed` for an expired turn, with `error.details.turn_id`, `deadline`, and durable `status`. Open turns past their deadline are persisted as failed before returning: "This turn passed its deadline and was failed; nothing can be proposed or read for it. Ask again to start a new turn." Already-terminal turns also return `turn_closed` with a terminal-state message; matching complete/fail replays before the deadline retain their successful response.
 - All timestamps are ISO-8601 strings.
 - Objects MUST preserve unknown fields (additive evolution).
 - `refs` values MUST be typed ref strings per `ref_format`.

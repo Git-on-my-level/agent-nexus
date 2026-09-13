@@ -268,6 +268,9 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
 		return Turn{}, err
 	}
+	if !t.Deadline.After(time.Now()) {
+		return Turn{}, s.requireOpenTurn(ctx, t)
+	}
 	if !validText(text, s.cfg.MaxOutputBytes) || len(evidence) > 50 {
 		return Turn{}, ErrInvalid
 	}
@@ -275,13 +278,13 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 		if t.Response == text {
 			return t, nil
 		}
+		return Turn{}, closedTurnError(t)
+	}
+	if t.Status == Pending {
 		return Turn{}, ErrConflict
 	}
 	if t.Status != Sending && t.Status != Unknown {
-		return Turn{}, ErrConflict
-	}
-	if time.Now().After(t.Deadline) {
-		return Turn{}, ErrStale
+		return Turn{}, closedTurnError(t)
 	}
 	if err := leaseGuard(t, leaseToken); err != nil {
 		return Turn{}, err
@@ -310,6 +313,9 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
 		return Turn{}, err
 	}
+	if !t.Deadline.After(time.Now()) {
+		return Turn{}, s.requireOpenTurn(ctx, t)
+	}
 	if !validText(in.Reason, s.cfg.MaxOutputBytes) {
 		return Turn{}, ErrInvalid
 	}
@@ -317,10 +323,13 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 		if t.Failure == in.Reason {
 			return t, nil
 		}
+		return Turn{}, closedTurnError(t)
+	}
+	if t.Status == Pending {
 		return Turn{}, ErrConflict
 	}
 	if t.Status != Sending && t.Status != Unknown {
-		return Turn{}, ErrConflict
+		return Turn{}, closedTurnError(t)
 	}
 	if err := leaseGuard(t, in.LeaseToken); err != nil {
 		return Turn{}, err
@@ -355,6 +364,41 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.TurnTimeout, s.cfg.MaxOutputBytes)
 }
 
+const turnDeadlineFailure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."
+
+func closedTurnError(t Turn) error {
+	return &TurnClosedError{TurnID: t.ID, Deadline: t.Deadline, Status: t.Status, expired: t.Status == Failed && t.Failure == turnDeadlineFailure}
+}
+
+// Persist expiry before reporting it, so the error describes durable state.
+func (s *Service) requireOpenTurn(ctx context.Context, t Turn) error {
+	for {
+		if t.Status != Pending && t.Status != Sending && t.Status != Unknown {
+			return closedTurnError(t)
+		}
+		if t.Deadline.After(time.Now()) {
+			return nil
+		}
+		old := t.Revision
+		t.Status = Failed
+		t.Failure = turnDeadlineFailure
+		t.LeaseToken = ""
+		t.LeaseOwner = ""
+		t.LeaseExpiresAt = time.Time{}
+		t.Revision++
+		if err := s.store.cas(ctx, "turn", t.ID, old, t); err != nil {
+			if !errors.Is(err, ErrConflict) {
+				return err
+			}
+			if err := s.store.get(ctx, "turn", t.ID, &t); err != nil {
+				return err
+			}
+			continue
+		}
+		return closedTurnError(t)
+	}
+}
+
 // ExpireTurns is workspace maintenance and does not require a runner identity.
 func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
 	turns, err := listOpenTurns(ctx, s.store, s.cfg.WorkspaceID)
@@ -370,7 +414,7 @@ func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
 		}
 		old := t.Revision
 		t.Status = Failed
-		t.Failure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."
+		t.Failure = turnDeadlineFailure
 		t.LeaseToken = ""
 		t.LeaseOwner = ""
 		t.LeaseExpiresAt = time.Time{}
