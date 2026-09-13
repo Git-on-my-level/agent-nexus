@@ -113,13 +113,22 @@ func EnrichForCommand(e *Error, commandID string) {
 }
 
 func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
+	code := strings.TrimSpace(e.Code)
 	switch commandID {
-	case "pm.decisions.answer", "pm.decisions.create", "pm.actions.reconcile":
+	case "pm.conversations.message", "pm.conversations.messages.create":
+		if code == "busy" {
+			return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
+				map[string]any{
+					"kind":        "busy",
+					"refresh_cli": "anx pm conversations get <id>",
+				}
+		}
+		return "", nil
+	case "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.create", "pm.actions.reconcile":
 	default:
 		return "", nil
 	}
-	code := strings.TrimSpace(e.Code)
-	existingID := lookupExistingDecisionID(e)
+	existingID := lookupErrorDetail(e, "existing_decision_id")
 	switch code {
 	case "source_revision_changed":
 		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
@@ -137,6 +146,25 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 					"refresh_cli":          "anx pm decisions get " + existingID,
 				}
 		}
+		if commandID == "pm.decisions.answer" || commandID == "pm.decisions.dispatch" {
+			if replaced := lookupErrorDetail(e, "superseded_by"); replaced != "" {
+				recovery := map[string]any{
+					"kind":          "decision_superseded",
+					"superseded_by": replaced,
+					"refresh_cli":   "anx pm decisions get " + replaced,
+				}
+				if status := lookupErrorDetail(e, "status"); status != "" {
+					recovery["status"] = status
+				}
+				return fmt.Sprintf("This decision was replaced by %s. Inspect the replacement with `anx pm decisions get %s`; retrying this decision cannot succeed.", replaced, replaced),
+					recovery
+			}
+			return "Re-read the decision with `anx pm decisions get <id>` and check `status` before retrying.",
+				map[string]any{
+					"kind":        "decision_state_conflict",
+					"refresh_cli": "anx pm decisions get <id>",
+				}
+		}
 		return "Re-read the decision with `anx pm decisions get <id>` and retry using its current `revision`.",
 			map[string]any{
 				"kind":        "stale_concurrency_token",
@@ -148,27 +176,34 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	}
 }
 
-func lookupExistingDecisionID(e *Error) string {
-	if e == nil {
+func lookupErrorDetail(e *Error, key string) string {
+	if e == nil || strings.TrimSpace(key) == "" {
 		return ""
 	}
 	details, _ := e.Details.(map[string]any)
-	if details == nil {
+	parsed, _ := details["parsed"].(map[string]any)
+	errObj, _ := parsed["error"].(map[string]any)
+	nested, _ := errObj["details"].(map[string]any)
+	if value := nestedString(nested, key); value != "" {
+		return value
+	}
+	if value := nestedString(errObj, key); value != "" {
+		return value
+	}
+	if parsedDetails, _ := parsed["details"].(map[string]any); parsedDetails != nil {
+		if value := nestedString(parsedDetails, key); value != "" {
+			return value
+		}
+	}
+	if value := nestedString(parsed, key); value != "" {
+		return value
+	}
+	// FromHTTPFailure stores the HTTP status at details.status; never treat that
+	// integer as API error.details.status.
+	if key == "status" {
 		return ""
 	}
-	if id := nestedString(details, "existing_decision_id"); id != "" {
-		return id
-	}
-	parsed, _ := details["parsed"].(map[string]any)
-	if id := nestedString(parsed, "existing_decision_id"); id != "" {
-		return id
-	}
-	errObj, _ := parsed["error"].(map[string]any)
-	if id := nestedString(errObj, "existing_decision_id"); id != "" {
-		return id
-	}
-	nested, _ := errObj["details"].(map[string]any)
-	return nestedString(nested, "existing_decision_id")
+	return nestedString(details, key)
 }
 
 func nestedString(m map[string]any, key string) string {
