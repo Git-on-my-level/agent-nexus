@@ -55,7 +55,7 @@ func TestRound5ExecutionOutcomes(t *testing.T) {
 					t.Fatal(a.Receipt)
 				}
 			}
-			if kind == "external" && !strings.Contains(a.Receipt.Detail, "Source handoff outcome is unknown") {
+			if kind == "external" && a.Receipt.Detail != "Source handoff outcome is unknown; reconcile to establish whether it was delivered. This approval will not be sent again; if another send is needed, a fresh proposal and a new approval are required." {
 				t.Fatal(a.Receipt)
 			}
 			if kind != "external" && strings.Contains(a.Receipt.Detail, "Source handoff") {
@@ -141,7 +141,7 @@ func TestRound5LegacyInvalidPayloadFailsBeforeSend(t *testing.T) {
 		return Receipt{}, nil
 	}
 	a, err := s.DispatchDecision(context.Background(), p, d.ID)
-	if err != nil || a.Status != Failed || a.Attempts[0].SentAt != nil || !strings.Contains(a.Receipt.Detail, "payload") {
+	if err != nil || a.Status != Failed || a.Attempts[0].SentAt != nil || a.Receipt.Detail != "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done. This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed." {
 		t.Fatalf("%+v %v", a, err)
 	}
 }

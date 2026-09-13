@@ -184,7 +184,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 		return a, nil
 	} // Includes unknown/sending after crash: NEVER blindly resend.
 	if !validActionPayload(a.Scope, a.Payload) {
-		return s.failBeforeSend(ctx, a, "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done; re-approve with a valid payload")
+		return s.failBeforeSend(ctx, a, "Invalid work.phase payload: phase must be supported and resolution_refs are required only for done. This approval will not be sent; a fresh proposal with a valid payload and a new approval are needed.")
 	}
 	if err = s.validateResolution(ctx, p, a.Scope, a.Payload); err != nil {
 		return s.failBeforeSend(ctx, a, err.Error())
@@ -252,7 +252,7 @@ func (s *Service) DispatchDecision(ctx context.Context, p Principal, id string) 
 	} else if errors.Is(execErr, ErrStale) {
 		receipt = Receipt{Status: Failed, Detail: ErrStale.Error()}
 	} else if execErr != nil {
-		receipt = Receipt{Status: Unknown, Detail: "Source handoff outcome is unknown; reconcile before any retry"}
+		receipt = Receipt{Status: Unknown, Detail: "Source handoff outcome is unknown; reconcile to establish whether it was delivered. This approval will not be sent again; if another send is needed, a fresh proposal and a new approval are required."}
 	}
 	if err = validateReceipt(receipt, verifiedReadBack); err != nil {
 		receipt = Receipt{Status: Unknown, Detail: "Source returned an invalid receipt; reconciliation required"}
