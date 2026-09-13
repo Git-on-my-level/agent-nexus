@@ -882,7 +882,7 @@ func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
 	sleepFn = func(context.Context, time.Duration) error { return nil }
 	t.Cleanup(func() { sleepFn = sleepCtx })
 	ctx, cancel := context.WithCancel(context.Background())
-	stderr := &bytes.Buffer{}
+	stderr := &lockedBuffer{}
 	app := New()
 	app.Stderr = stderr
 	app.Stdout = io.Discard
@@ -897,6 +897,11 @@ func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
 	case <-claimed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("transient claim did not run")
+	}
+	// The response has been sent; the runner logs the failure just after.
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(stderr.String(), "claim failed:") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
 	}
 	cancel()
 	err := <-done
@@ -994,4 +999,22 @@ func TestPMServeReleasesHeldTurnOnShutdown(t *testing.T) {
 	if !strings.Contains(stderr.String(), "released turn turn-held") {
 		t.Fatalf("expected release log, got %s", stderr.String())
 	}
+}
+
+// lockedBuffer is a bytes.Buffer safe to read while the runner goroutine writes.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
