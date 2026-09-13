@@ -283,7 +283,10 @@
     {:else}
       <section class="border-t border-line-subtle pt-4">
         <h3 class="text-meta font-semibold text-fg">
-          {selected.status === "superseded" ? "Declined" : "Approved"}
+          {selected.status === "declined" ||
+          (selected.status === "superseded" && !selected.superseded_by)
+            ? "Declined"
+            : "Approved"}
         </h3>
         <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg-muted">
           {selected.answer || "No note recorded"}

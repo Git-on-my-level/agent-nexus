@@ -162,11 +162,15 @@ export function buildInboxRows({
   now = Date.now(),
 } = {}) {
   const rows = [];
-  const taskTitles = new Map(
-    work
-      .filter((item) => item && workKey(item))
-      .map((item) => [workKey(item), String(item.title || "").trim()]),
-  );
+  const taskTitles = new Map();
+  for (const item of work) {
+    if (!item || !workKey(item)) continue;
+    const title = String(item.title || "").trim();
+    taskTitles.set(workKey(item), title);
+    // Inbox items may name a card by id rather than public ref.
+    if (item.id) taskTitles.set(`card:${item.id}`, title);
+    if (item.handle) taskTitles.set(`card:${item.handle}`, title);
+  }
   for (const item of decisions) {
     const summary = decisionSummary(item, taskTitles.get(item.work_ref) || "");
     rows.push({

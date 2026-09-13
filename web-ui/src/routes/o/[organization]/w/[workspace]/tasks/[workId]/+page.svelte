@@ -1,4 +1,5 @@
 <script>
+  import { decisionRowStatus } from "$lib/inboxMailbox.js";
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
@@ -35,6 +36,7 @@
     error = $state(""),
     evidenceError = $state(""),
     decisions = $state([]),
+    actions = $state([]),
     decisionsError = $state(""),
     decisionsLoading = $state(false),
     notice = $state(""),
@@ -176,7 +178,24 @@
         cursor = result.next_cursor || "";
         if (!cursor) break;
       }
+      // Receipts decide what an answered decision reads as; fail soft.
+      const receipts = [];
+      try {
+        let actionCursor;
+        for (let page = 0; page < 10; page += 1) {
+          const result = await coreClient.listPmActions({
+            limit: 200,
+            cursor: actionCursor,
+          });
+          receipts.push(...(result.items || []));
+          actionCursor = result.next_cursor || "";
+          if (!actionCursor) break;
+        }
+      } catch {
+        // The decision status still renders without receipts.
+      }
       if (ticket !== requestId) return;
+      actions = receipts;
       const ref = workKey(loadedWork);
       decisions = items
         .filter((decision) => decision.work_ref === ref)
@@ -523,7 +542,9 @@
             class="mt-3 divide-y divide-line-subtle border-t border-line-subtle"
           >
             {#each decisions as decision (decision.id)}
-              {@const decisionBadge = receiptSignal(decision.status)}
+              {@const decisionBadge = receiptSignal(
+                decisionRowStatus(decision, actions),
+              )}
               <li class="py-3">
                 <p class="whitespace-pre-wrap break-words text-meta text-fg">
                   {decisionTitle(decision, work?.title || "")}

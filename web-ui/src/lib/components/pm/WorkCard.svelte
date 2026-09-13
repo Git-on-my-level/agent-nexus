@@ -1,6 +1,6 @@
 <script>
   import SignalBadge from "./SignalBadge.svelte";
-  import { sourceLabel } from "$lib/pm/presentation.js";
+  import { sourceLabel, workFreshness } from "$lib/pm/presentation.js";
   import { formatTimestamp } from "$lib/formatDate";
   import {
     actorDisplayLabel,
@@ -31,6 +31,9 @@
       .join(" · "),
   );
   let blocked = $derived(work?.phase === "blocked");
+  // A read that is failing is worth a badge: the reader cannot tell from
+  // the column that this card's evidence is going stale.
+  let readError = $derived(workFreshness(work));
   let critical = $derived(
     ["critical", "urgent", "p0"].includes(
       String(work?.priority ?? "")
@@ -52,10 +55,13 @@
   {#if meta}
     <p class="mt-1 truncate text-micro text-fg-muted">{meta}</p>
   {/if}
-  {#if blocked || critical}
+  {#if blocked || critical || readError.key === "error"}
     <div class="mt-2 flex flex-wrap items-center gap-1.5">
       {#if blocked}
         <SignalBadge tone="warn">Blocked</SignalBadge>
+      {/if}
+      {#if readError.key === "error"}
+        <SignalBadge tone="warn">{readError.label}</SignalBadge>
       {/if}
       {#if critical}
         <SignalBadge tone="danger">Critical</SignalBadge>

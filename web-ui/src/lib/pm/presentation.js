@@ -133,7 +133,7 @@ const RECEIPT_FOLDED = {
   answered: "Answered",
   pending_delivery: "Pending delivery",
   acknowledged: "Acknowledged failure",
-  source_reported: "Source reported; not independently verified",
+  source_reported: "Reported, not verified",
   sending: "Delivery in progress",
   unknown: "Delivery uncertain",
   superseded: "Replaced",

@@ -6,24 +6,16 @@
   "rule_count": 23,
   "rules": {
     "agent_notification_dismissed": {
-      "refs_must_include": [
-        "artifact:\u003cwakeup_id\u003e"
-      ]
+      "refs_must_include": ["artifact:\u003cwakeup_id\u003e"]
     },
     "agent_notification_read": {
-      "refs_must_include": [
-        "artifact:\u003cwakeup_id\u003e"
-      ]
+      "refs_must_include": ["artifact:\u003cwakeup_id\u003e"]
     },
     "board_created": {
-      "refs_must_include": [
-        "board:\u003cboard_handle\u003e"
-      ]
+      "refs_must_include": ["board:\u003cboard_handle\u003e"]
     },
     "board_updated": {
-      "refs_must_include": [
-        "board:\u003cboard_handle\u003e"
-      ]
+      "refs_must_include": ["board:\u003cboard_handle\u003e"]
     },
     "card_archived": {
       "refs_must_include": [
@@ -44,18 +36,14 @@
         "card:\u003ccard_handle\u003e",
         "board:\u003cboard_handle\u003e"
       ],
-      "payload_must_include": [
-        "column_key"
-      ]
+      "payload_must_include": ["column_key"]
     },
     "card_resolved": {
       "refs_must_include": [
         "card:\u003ccard_handle\u003e",
         "board:\u003cboard_handle\u003e"
       ],
-      "payload_must_include": [
-        "resolution"
-      ]
+      "payload_must_include": ["resolution"]
     },
     "card_trashed": {
       "refs_must_include": [
@@ -77,9 +65,7 @@
       ]
     },
     "document_restored": {
-      "refs_must_include": [
-        "document:\u003cdocument_handle\u003e"
-      ]
+      "refs_must_include": ["document:\u003cdocument_handle\u003e"]
     },
     "document_revised": {
       "refs_must_include": [
@@ -89,19 +75,13 @@
       ]
     },
     "document_trashed": {
-      "refs_must_include": [
-        "document:\u003cdocument_handle\u003e"
-      ]
+      "refs_must_include": ["document:\u003cdocument_handle\u003e"]
     },
     "exception_raised": {
-      "payload_must_include": [
-        "subtype"
-      ]
+      "payload_must_include": ["subtype"]
     },
     "human_attention_requested": {
-      "refs_must_include": [
-        "thread:\u003cthread_id\u003e"
-      ],
+      "refs_must_include": ["thread:\u003cthread_id\u003e"],
       "payload_must_include": [
         "kind",
         "title",
@@ -111,9 +91,7 @@
       ]
     },
     "human_attention_responded": {
-      "refs_must_include": [
-        "inbox:\u003cinbox_item_id\u003e"
-      ],
+      "refs_must_include": ["inbox:\u003cinbox_item_id\u003e"],
       "payload_must_include": [
         "inbox_item_id",
         "kind",
@@ -125,29 +103,19 @@
       "thread_id": "required as thread_ref when the message belongs to a backing thread"
     },
     "topic_archived": {
-      "refs_must_include": [
-        "topic:\u003ctopic_handle\u003e"
-      ]
+      "refs_must_include": ["topic:\u003ctopic_handle\u003e"]
     },
     "topic_created": {
-      "refs_must_include": [
-        "topic:\u003ctopic_handle\u003e"
-      ]
+      "refs_must_include": ["topic:\u003ctopic_handle\u003e"]
     },
     "topic_restored": {
-      "refs_must_include": [
-        "topic:\u003ctopic_handle\u003e"
-      ]
+      "refs_must_include": ["topic:\u003ctopic_handle\u003e"]
     },
     "topic_trashed": {
-      "refs_must_include": [
-        "topic:\u003ctopic_handle\u003e"
-      ]
+      "refs_must_include": ["topic:\u003ctopic_handle\u003e"]
     },
     "topic_updated": {
-      "refs_must_include": [
-        "topic:\u003ctopic_handle\u003e"
-      ]
+      "refs_must_include": ["topic:\u003ctopic_handle\u003e"]
     }
   }
 }
