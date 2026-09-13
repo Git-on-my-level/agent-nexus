@@ -46,7 +46,22 @@ export function createStatusChangeDecisionPayload(
  * Awaiting decisions only; phase scope or a status-change instruction;
  * only for refs that match a tracked work.
  */
-export function requestedDecisionMap(decisions = [], records = []) {
+export function requestedDecisionMap(
+  decisions = [],
+  records = [],
+  actions = [],
+) {
+  // An answered request whose action reached a terminal or acknowledged
+  // state is no longer live on the board.
+  const closedDecisions = new Set(
+    actions
+      .filter((action) =>
+        ["acknowledged", "verified", "failed"].includes(
+          String(action?.status ?? ""),
+        ),
+      )
+      .map((action) => action.decision_id),
+  );
   const keyByRef = new Map(
     records
       .filter((work) => work?.ref)
@@ -64,7 +79,9 @@ export function requestedDecisionMap(decisions = [], records = []) {
     // request stays live until a delivery path exists.
     const live =
       decision.status === "awaiting_answer" ||
-      (decision.status === "answered" && externalRefs.has(decision.work_ref));
+      (decision.status === "answered" &&
+        externalRefs.has(decision.work_ref) &&
+        !closedDecisions.has(decision.id));
     if (!live) continue;
     const phaseRequest =
       decision.scope === "work.phase" ||

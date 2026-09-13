@@ -327,7 +327,7 @@
           class="mt-2"
         />
       {/if}
-      {#if ["failed", "unknown"].includes(action?.status) && isApprover}
+      {#if (["failed", "unknown"].includes(action?.status) || (action?.status === "pending_delivery" && undeliverable)) && isApprover}
         <div class="mt-3">
           <button
             class="ui-btn-secondary"
@@ -335,8 +335,10 @@
             onclick={onAcknowledge}
             disabled={busy}
             >{busy && busyWith === "acknowledge"
-              ? "Acknowledging…"
-              : "Acknowledge and clear from Needs you"}</button
+              ? "Closing…"
+              : action?.status === "pending_delivery"
+                ? "Close this request (nothing will be delivered)"
+                : "Acknowledge and clear from Needs you"}</button
           >
         </div>
       {/if}

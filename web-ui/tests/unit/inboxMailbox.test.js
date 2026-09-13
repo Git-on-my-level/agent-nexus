@@ -212,3 +212,25 @@ describe("decisions addressed to someone else", () => {
     });
   });
 });
+
+describe("answered decisions without receipts", () => {
+  it("stay in front of the reader when the actions list could not load", () => {
+    const rows = buildInboxRows({
+      decisions: [
+        {
+          id: "a",
+          status: "answered",
+          instruction: "Do it",
+          work_ref: "card:x",
+        },
+      ],
+      actions: [],
+      receiptsUnavailable: true,
+    });
+    const row = rows.find((entry) => entry.id === "decision:a");
+    expect(row.mailbox).toBe("needs-you");
+    expect(inboxRowBadge(row)).toMatchObject({
+      label: "Delivery state unknown",
+    });
+  });
+});

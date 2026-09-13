@@ -41,6 +41,25 @@
   let moveNotice = $state(null);
   // A pending "done" move waiting for its evidence ref.
   let evidenceFor = $state(null);
+  let evidenceSuggestions = $state([]);
+  async function loadEvidenceSuggestions() {
+    try {
+      const result = await coreClient.listArtifacts({ limit: 25 });
+      const items = Array.isArray(result?.artifacts)
+        ? result.artifacts
+        : Array.isArray(result?.items)
+          ? result.items
+          : [];
+      evidenceSuggestions = items
+        .map((artifact) => ({
+          ref: artifact.ref || (artifact.id ? `artifact:${artifact.id}` : ""),
+          title: artifact.title || artifact.name || artifact.filename || "",
+        }))
+        .filter((entry) => entry.ref);
+    } catch {
+      evidenceSuggestions = [];
+    }
+  }
   let requestId = 0;
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
@@ -88,7 +107,10 @@
       (key) => filters[key],
     ).length,
   );
-  let requestedDecisions = $derived(requestedDecisionMap(decisions, records));
+  let actions = $state([]);
+  let requestedDecisions = $derived(
+    requestedDecisionMap(decisions, records, actions),
+  );
   let search = $state("");
   $effect(() => {
     search = filters.q;
@@ -160,6 +182,18 @@
         if (!cursor) break;
       }
       decisions = items;
+      const receipts = [];
+      let actionCursor;
+      for (let page = 0; page < 10; page += 1) {
+        const result = await coreClient.listPmActions({
+          limit: 200,
+          cursor: actionCursor,
+        });
+        receipts.push(...(Array.isArray(result?.items) ? result.items : []));
+        actionCursor = result?.next_cursor || "";
+        if (!actionCursor) break;
+      }
+      actions = receipts;
     } catch {
       // Fail soft: the Requested badge link degrades, the page stays usable.
     }
@@ -189,6 +223,7 @@
         if (!evidenceFor || evidenceFor.key !== key) {
           evidenceFor = { key, work, phase, ref: "" };
           moveNotice = null;
+          void loadEvidenceSuggestions();
           return;
         }
         const trimmed = String(evidenceFor.ref ?? "").trim();
@@ -576,9 +611,15 @@
         artifact or event that proves it<input
           class="ui-input mt-1"
           bind:value={evidenceFor.ref}
+          list="done-evidence-suggestions"
           placeholder="artifact:… or event:…"
         /></label
       >
+      <datalist id="done-evidence-suggestions">
+        {#each evidenceSuggestions as entry (entry.ref)}
+          <option value={entry.ref}>{entry.title}</option>
+        {/each}
+      </datalist>
       <button
         class="ui-btn-primary"
         type="submit"

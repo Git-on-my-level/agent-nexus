@@ -385,6 +385,8 @@
       error = errorMessage(err);
     } finally {
       sending = false;
+      // The composer was disabled while sending; give the keyboard back.
+      void tick().then(() => composerElement?.focus());
     }
   }
   /**
@@ -559,8 +561,8 @@
 
     {#if conversation?.title || activeWorkRef}
       <p class="pm-context">
-        {#if conversation?.title}<span class="line-clamp-1 min-w-0"
-            >{conversation.title}</span
+        {#if conversation?.title && conversation.title !== turns[0]?.text}<span
+            class="line-clamp-1 min-w-0">{conversation.title}</span
           >{/if}
         {#if activeWorkRef}<a
             class="ui-prose-link shrink-0"

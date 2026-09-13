@@ -356,7 +356,7 @@ export function errorMessage(error) {
     error instanceof Error
       ? error.message
       : String(error || "Unable to load workspace data.");
-  if (/capacity reached|busy/i.test(raw)) {
+  if (/capacity reached|busy|already has an active turn/i.test(raw)) {
     const details = error?.body?.error?.details ?? {};
     if (String(details.reason ?? "") === "capacity") {
       const limit = details.limit

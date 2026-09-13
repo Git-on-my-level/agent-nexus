@@ -53,6 +53,11 @@
   let ready = $state(false);
   let truncated = $state(false);
   let receiptsUnavailable = $state(false);
+  let noticeElement = $state(null);
+  // After an action, keyboard focus lands on the outcome, not on <body>.
+  $effect(() => {
+    if (notice && noticeElement) noticeElement.focus();
+  });
   let now = $state(Date.now());
 
   let workspaceHref = $derived(
@@ -592,7 +597,14 @@
     {/if}
   {/if}
   {#if notice}
-    <p class="text-micro text-fg-muted" role="status">{notice}</p>
+    <p
+      class="text-micro text-fg-muted outline-none"
+      role="status"
+      tabindex="-1"
+      bind:this={noticeElement}
+    >
+      {notice}
+    </p>
   {/if}
   {#if loading && !rows.length}
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
