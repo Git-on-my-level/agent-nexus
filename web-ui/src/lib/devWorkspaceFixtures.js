@@ -2310,7 +2310,8 @@ export function listDevSeedInboxSubjectRefViolations(seed) {
     }
   }
   for (const doc of seed.documents ?? []) {
-    const nested = doc?.document && typeof doc.document === "object" ? doc.document : null;
+    const nested =
+      doc?.document && typeof doc.document === "object" ? doc.document : null;
     const id = String(doc?.id ?? nested?.id ?? "").trim();
     if (id) {
       refs.add(`document:${id}`);
