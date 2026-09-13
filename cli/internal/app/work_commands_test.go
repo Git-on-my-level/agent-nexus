@@ -403,6 +403,13 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if ack != "action-1  status=acknowledged  acknowledged_at=2026-09-13T02:00:00Z" {
 		t.Errorf("acknowledge text lost id/status/timestamp: %s", ack)
 	}
+	reconcile := formatWorkCommandText("pm actions reconcile", map[string]any{"id": "action-1", "status": "source_reported", "reconciliation_conflict": true, "receipt": map[string]any{"status": "source_reported", "detail": "read-back mismatch"}})
+	if !strings.Contains(reconcile, "action-1") || !strings.Contains(reconcile, "status=source_reported") || !strings.Contains(reconcile, "receipt=source_reported") || !strings.Contains(reconcile, "read-back mismatch") || !strings.Contains(reconcile, "reconciliation_conflict=true") {
+		t.Errorf("reconcile text lost fields: %s", reconcile)
+	}
+	if strings.Contains(reconcile, `"id"`) {
+		t.Errorf("reconcile still dumped JSON: %s", reconcile)
+	}
 }
 
 func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
@@ -536,51 +543,104 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 	}
 }
 
-func TestPMConversationMessageBusyHint(t *testing.T) {
+func TestPMReconcileNothingDeliveredHint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/pm/conversations/conv-1/messages" {
+		if r.URL.Path != "/pm/actions/action-1/reconcile" {
 			t.Errorf("path=%s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		io.WriteString(w, `{"error":{"code":"busy","message":"PM execution capacity reached"}}`)
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, `{"error":{"code":"invalid_request","message":"invalid PM request: Nothing has been delivered yet, so there is nothing to read back"}}`)
 	}))
 	defer server.Close()
-	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{"request_key":"k","text":"hello"}`), []string{"--json", "--base-url", server.URL, "pm", "conversations", "message", "conv-1", "--from-file", "-"}))
+	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{}`), []string{"--json", "--base-url", server.URL, "pm", "actions", "reconcile", "action-1"}))
 	hint := fmt.Sprint(asMap(payload["error"])["hint"])
-	if !strings.Contains(hint, "queued or being answered") || !strings.Contains(hint, "pm conversations get") {
-		t.Fatalf("expected conversation busy hint, got %q payload=%v", hint, payload)
+	if hint != "nothing has been delivered yet; deliver first or acknowledge the failure" {
+		t.Fatalf("hint=%q payload=%v", hint, payload)
 	}
-	if strings.Contains(strings.ToLower(hint), "command help") {
-		t.Fatalf("busy hint still generic: %q", hint)
+	if strings.Contains(strings.ToLower(hint), "required fields") {
+		t.Fatalf("still generic required-fields hint: %q", hint)
 	}
 }
 
-func TestPMAskBusyHint(t *testing.T) {
+func TestPMReconcileTextMode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
-			io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
-			w.WriteHeader(http.StatusTooManyRequests)
-			io.WriteString(w, `{"error":{"code":"busy","message":"PM execution capacity reached"}}`)
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-			http.NotFound(w, r)
-		}
+		io.WriteString(w, `{"id":"action-1","status":"unknown","reconciliation_conflict":false,"receipt":{"status":"unknown","detail":"still pending"}}`)
 	}))
 	defer server.Close()
-	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
-	if fmt.Sprint(payload["command_id"]) != "pm.ask" {
-		t.Fatalf("command_id=%v payload=%v", payload["command_id"], payload)
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{}`), []string{"--base-url", server.URL, "pm", "actions", "reconcile", "action-1"})
+	if !strings.Contains(text, "action-1") || !strings.Contains(text, "status=unknown") || !strings.Contains(text, "receipt=unknown") || !strings.Contains(text, "still pending") || !strings.Contains(text, "reconciliation_conflict=false") {
+		t.Fatalf("text=%s", text)
 	}
-	hint := fmt.Sprint(asMap(payload["error"])["hint"])
-	if !strings.Contains(hint, "queued or being answered") || !strings.Contains(hint, "pm conversations get") {
-		t.Fatalf("expected conversation busy hint for pm ask, got %q payload=%v", hint, payload)
+	if strings.Contains(text, `"id":`) {
+		t.Fatalf("raw JSON in text mode: %s", text)
 	}
-	if strings.Contains(strings.ToLower(hint), "command help") {
-		t.Fatalf("pm ask busy hint still generic: %q", hint)
+}
+
+func TestPMConversationMessageBusyHints(t *testing.T) {
+	for _, tc := range []struct {
+		reason, want, hide string
+	}{
+		{reason: "conversation", want: "queued or being answered", hide: "in-flight limit"},
+		{reason: "capacity", want: "in-flight limit for this workspace", hide: "queued or being answered"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/pm/conversations/conv-1/messages" {
+					t.Errorf("path=%s", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				fmt.Fprintf(w, `{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":%q}}}`, tc.reason)
+			}))
+			defer server.Close()
+			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{"request_key":"k","text":"hello"}`), []string{"--json", "--base-url", server.URL, "pm", "conversations", "message", "conv-1", "--from-file", "-"}))
+			hint := fmt.Sprint(asMap(payload["error"])["hint"])
+			if !strings.Contains(hint, tc.want) {
+				t.Fatalf("hint=%q want %q payload=%v", hint, tc.want, payload)
+			}
+			if strings.Contains(hint, tc.hide) {
+				t.Fatalf("hint still has %q: %q", tc.hide, hint)
+			}
+		})
+	}
+}
+
+func TestPMAskBusyHints(t *testing.T) {
+	for _, tc := range []struct {
+		reason, want, hide string
+	}{
+		{reason: "conversation", want: "queued or being answered", hide: "in-flight limit"},
+		{reason: "capacity", want: "in-flight limit for this workspace", hide: "queued or being answered"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+					io.WriteString(w, `{"id":"conv-1","title":"What needs my decision?"}`)
+				case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-1/messages":
+					w.WriteHeader(http.StatusTooManyRequests)
+					fmt.Fprintf(w, `{"error":{"code":"busy","message":"PM execution capacity reached","details":{"reason":%q}}}`, tc.reason)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
+			if fmt.Sprint(payload["command_id"]) != "pm.ask" {
+				t.Fatalf("command_id=%v payload=%v", payload["command_id"], payload)
+			}
+			hint := fmt.Sprint(asMap(payload["error"])["hint"])
+			if !strings.Contains(hint, tc.want) {
+				t.Fatalf("hint=%q want %q payload=%v", hint, tc.want, payload)
+			}
+			if strings.Contains(hint, tc.hide) {
+				t.Fatalf("hint still has %q: %q", tc.hide, hint)
+			}
+		})
 	}
 }
 

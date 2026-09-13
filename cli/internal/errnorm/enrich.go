@@ -117,11 +117,7 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	switch commandID {
 	case "pm.conversations.message", "pm.conversations.messages.create", "pm.ask":
 		if code == "busy" {
-			return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
-				map[string]any{
-					"kind":        "busy",
-					"refresh_cli": "anx pm conversations get <id>",
-				}
+			return enrichPMBusy(e)
 		}
 		return "", nil
 	case "pm.actions.acknowledge":
@@ -139,6 +135,15 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	}
 	existingID := lookupErrorDetail(e, "existing_decision_id")
 	switch code {
+	case "invalid_request":
+		if commandID == "pm.actions.reconcile" && strings.Contains(strings.ToLower(strings.TrimSpace(e.Message)), "nothing has been delivered yet") {
+			return "nothing has been delivered yet; deliver first or acknowledge the failure",
+				map[string]any{
+					"kind":        "nothing_delivered",
+					"refresh_cli": "anx pm actions get <id>",
+				}
+		}
+		return "", nil
 	case "source_revision_changed":
 		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
 			map[string]any{
@@ -183,6 +188,22 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	default:
 		return "", nil
 	}
+}
+
+func enrichPMBusy(e *Error) (string, map[string]any) {
+	if strings.EqualFold(lookupErrorDetail(e, "reason"), "conversation") {
+		return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
+			map[string]any{
+				"kind":        "busy",
+				"reason":      "conversation",
+				"refresh_cli": "anx pm conversations get <id>",
+			}
+	}
+	return "The PM is at its in-flight limit for this workspace; wait for another turn to finish or expire, or release a stuck runner",
+		map[string]any{
+			"kind":   "busy",
+			"reason": "capacity",
+		}
 }
 
 func lookupErrorDetail(e *Error, key string) string {

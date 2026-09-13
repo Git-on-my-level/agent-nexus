@@ -8,11 +8,11 @@ import (
 func TestAppendLifecycleStatesForHTTPList(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name                                                         string
-		explicit                                                     string
+		name                                                       string
+		explicit                                                   string
 		includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-		wantStates                                                   []string
-		wantErr                                                      bool
+		wantStates                                                 []string
+		wantErr                                                    bool
 	}{
 		{
 			name:            "explicit active merges include archived",
