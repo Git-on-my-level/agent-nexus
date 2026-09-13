@@ -447,6 +447,60 @@ func TestPMAskReusesEmptyConversationWhenWorkRefAndTitleMatch(t *testing.T) {
 	}
 }
 
+func TestPMAskReusesMatchingEmptyConversationBehindNewerMismatch(t *testing.T) {
+	created := time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano)
+	creates := 0
+	gotEmpty := 0
+	gotOther := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations":
+			fmt.Fprintf(w, `{"items":[{"id":"conv-busy","title":"Store copy chat","work_ref":"card:launch","created_at":%q,"latest_turn":{"id":"turn-old","status":"delivered"}},{"id":"conv-other","title":"Other","created_at":%q},{"id":"conv-empty","title":"Store copy chat","work_ref":"card:launch","created_at":%q}],"has_more":false}`, created, created, created)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-other":
+			gotOther++
+			io.WriteString(w, `{"conversation":{"id":"conv-other","title":"Other"},"turns":[]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-empty":
+			gotEmpty++
+			io.WriteString(w, `{"conversation":{"id":"conv-empty","title":"Store copy chat","work_ref":"card:launch"},"turns":[]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/conversations/conv-busy":
+			t.Errorf("should skip listed non-empty conversation")
+			io.WriteString(w, `{"conversation":{"id":"conv-busy"},"turns":[{"id":"turn-old"}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations":
+			creates++
+			t.Errorf("created a second conversation")
+			io.WriteString(w, `{"id":"conv-new"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-empty/messages":
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/conversations/conv-other/messages":
+			t.Errorf("reused mismatched title")
+			io.WriteString(w, `{"id":"turn-wrong","status":"sending"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{
+		"--base-url", server.URL, "pm", "ask",
+		"--work-ref", "card:launch",
+		"--title", "Store copy chat",
+		"Retry into a matching empty conversation",
+	})
+	if !strings.Contains(text, "conversation: conv-empty") {
+		t.Fatalf("text=%s", text)
+	}
+	if creates != 0 {
+		t.Fatalf("creates=%d", creates)
+	}
+	if gotEmpty != 1 {
+		t.Fatalf("empty gets=%d", gotEmpty)
+	}
+	if gotOther != 0 {
+		t.Fatalf("other gets=%d want 0 (list title already mismatched)", gotOther)
+	}
+}
+
 func TestPMChannelsDoctorRequiresNoPositional(t *testing.T) {
 	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", "http://127.0.0.1:1", "pm", "channels", "doctor", "extra"}))
 	if code := asMap(payload["error"])["code"]; code != "invalid_args" && code != "invalid_flags" {
@@ -2095,7 +2149,7 @@ func TestHandleClaimedTurnLeaseMismatchAlreadyCompletedDoesNotRerun(t *testing.T
 	}
 }
 
-func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
+func TestHandleClaimedTurnLeaseMismatchPendingRetriesOnNextClaim(t *testing.T) {
 	stubTerminalSleep(t)
 	runs := 0
 	completeCalls := 0
@@ -2119,6 +2173,7 @@ func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
 			claimed++
+			t.Errorf("lease-loss complete should not re-claim in the same poll")
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-2","lease_owner":"runner-1"}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -2133,25 +2188,35 @@ func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
 	app.Getenv = func(string) string { return "" }
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
-	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, claimedTurn(), nil)
-	if !settled {
-		t.Fatal("expected settled after re-run")
+	dir := t.TempDir()
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, claimedTurn(), nil) {
+		t.Fatal("expected settled after first lease loss")
 	}
 	if runs != 1 {
-		t.Fatalf("harness runs=%d want 1 (saved reply on retry)", runs)
+		t.Fatalf("harness runs=%d want 1", runs)
 	}
-	if claimed != 1 {
-		t.Fatalf("claim calls=%d", claimed)
+	if completeCalls != 1 {
+		t.Fatalf("complete calls=%d want 1", completeCalls)
+	}
+	if claimed != 0 {
+		t.Fatalf("claim calls=%d want 0", claimed)
+	}
+	if _, err := os.Stat(turnReplyPath(dir, "turn-1")); err != nil {
+		t.Fatalf("saved reply missing: %v", err)
+	}
+	second := claimedTurn()
+	second["lease_token"] = "lease-2"
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, second, nil) {
+		t.Fatal("expected settled after next claim")
+	}
+	if runs != 1 {
+		t.Fatalf("second claim ran harness: runs=%d", runs)
 	}
 	if completeCalls != 2 {
-		t.Fatalf("complete calls=%d", completeCalls)
+		t.Fatalf("complete calls=%d want 2", completeCalls)
 	}
-	logs := stderr.String()
-	if !strings.Contains(logs, "re-claimed after lease loss; retrying") {
-		t.Fatalf("logs %s", logs)
-	}
-	if !strings.Contains(logs, "from saved reply") {
-		t.Fatalf("expected saved reply delivery, got %s", logs)
+	if !strings.Contains(stderr.String(), "from saved reply") {
+		t.Fatalf("expected saved reply delivery, got %s", stderr.String())
 	}
 }
 
@@ -2247,6 +2312,8 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	failReasons := []string{}
 	failedTurn1 := false
 	claimedTurn2 := false
+	turn1Claims := 0
+	releases := 0
 	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
 		mu.Lock()
 		runs++
@@ -2285,6 +2352,9 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 				fmt.Fprintf(w, `{"id":"turn-2","status":"sending","claimed":true,"lease_token":"lease-b","lease_owner":"runner-1","deadline":%q,"text":"Next question"}`, deadline)
 				return
 			}
+			mu.Lock()
+			turn1Claims++
+			mu.Unlock()
 			fmt.Fprintf(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-%d","lease_owner":"runner-1","deadline":%q,"text":"What needs my decision?"}`, n, deadline)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
 			id := "turn-1"
@@ -2312,6 +2382,11 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			mu.Lock()
+			if strings.Contains(r.URL.Path, "turn-1") {
+				releases++
+			}
+			mu.Unlock()
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -2346,10 +2421,16 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	t.Cleanup(func() { sleepFn = prevSleep })
 	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", dir}, cfg)
 	mu.Lock()
-	gotRuns, gotCompletes, reasons, gotTurn2 := runs, completes["turn-1"], append([]string{}, failReasons...), claimedTurn2
+	gotRuns, gotCompletes, reasons, gotTurn2, gotTurn1Claims, gotReleases := runs, completes["turn-1"], append([]string{}, failReasons...), claimedTurn2, turn1Claims, releases
 	mu.Unlock()
 	if gotRuns < 1 {
 		t.Fatalf("harness never ran")
+	}
+	if gotTurn1Claims != maxDeliveryAttempts {
+		t.Fatalf("turn-1 claims=%d want %d polls", gotTurn1Claims, maxDeliveryAttempts)
+	}
+	if gotReleases != 0 {
+		t.Fatalf("releases=%d want 0", gotReleases)
 	}
 	if gotCompletes != maxDeliveryAttempts {
 		t.Fatalf("turn-1 complete calls=%d want %d", gotCompletes, maxDeliveryAttempts)
@@ -2357,8 +2438,11 @@ func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
 	if len(reasons) != 1 {
 		t.Fatalf("fail reasons=%v", reasons)
 	}
-	if !strings.HasPrefix(reasons[0], undeliverableReplyReasonPrefix) || !strings.Contains(reasons[0], "lease_mismatch") {
+	if reasons[0] != undeliverableReplyReason {
 		t.Fatalf("fail reason=%q", reasons[0])
+	}
+	if !strings.Contains(stderr.String(), "undeliverable: lease_mismatch: lease token does not match") {
+		t.Fatalf("stderr should name the complete cause, got %s", stderr.String())
 	}
 	if _, err := os.Stat(turnReplyPath(dir, "turn-1")); !os.IsNotExist(err) {
 		t.Fatalf("saved reply should be removed, err=%v", err)
@@ -2468,96 +2552,121 @@ func TestHandleClaimedTurnSavedReplyDeletesWhenTurnDelivered(t *testing.T) {
 	}
 }
 
-func TestPMServeSkipWindowReleasesAndClaimsNextTurn(t *testing.T) {
-	// The turn deadline is checked against the wall clock.
+func TestPMServeMaxConcurrentClaimsTwoTurns(t *testing.T) {
 	frozen := time.Now().UTC().Truncate(time.Second)
 	prevNow := nowFn
 	nowFn = func() time.Time { return frozen }
 	t.Cleanup(func() { nowFn = prevNow })
 
 	var mu sync.Mutex
-	claims := []string{}
-	runs := 0
-	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
-		mu.Lock()
-		runs++
-		mu.Unlock()
-		return []byte("Approve the restock."), nil, nil
-	})
-	defer restore()
+	type claimRec struct {
+		runnerID string
+		turnID   string
+	}
+	var claims []claimRec
+	waiting := []string{"turn-1", "turn-2"}
+	held := map[string]string{}
+	completes := 0
+	completesAtSecondClaim := -1
 	deadline := frozen.Add(10 * time.Minute).UTC().Format(time.RFC3339Nano)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			body, _ := io.ReadAll(r.Body)
+			var payload map[string]any
+			_ = json.Unmarshal(body, &payload)
+			runner := anyString(payload["runner_id"])
 			mu.Lock()
-			n := len(claims)
-			mu.Unlock()
-			if n == 0 {
-				mu.Lock()
-				claims = append(claims, "turn-1")
-				mu.Unlock()
-				fmt.Fprintf(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-1","lease_owner":"runner-1","deadline":%q,"text":"Skipped"}`, deadline)
+			defer mu.Unlock()
+			if turnID, ok := held[runner]; ok {
+				fmt.Fprintf(w, `{"id":%q,"status":"sending","claimed":true,"lease_token":"lease-%s","lease_owner":%q,"deadline":%q,"text":"held"}`, turnID, turnID, runner, deadline)
 				return
 			}
-			if n == 1 {
-				mu.Lock()
-				claims = append(claims, "turn-2")
-				mu.Unlock()
-				fmt.Fprintf(w, `{"id":"turn-2","status":"sending","claimed":true,"lease_token":"lease-2","lease_owner":"runner-1","deadline":%q,"text":"Next"}`, deadline)
+			if len(waiting) == 0 {
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			w.WriteHeader(http.StatusNoContent)
+			turnID := waiting[0]
+			waiting = waiting[1:]
+			held[runner] = turnID
+			claims = append(claims, claimRec{runnerID: runner, turnID: turnID})
+			if len(claims) == 2 {
+				completesAtSecondClaim = completes
+			}
+			fmt.Fprintf(w, `{"id":%q,"status":"sending","claimed":true,"lease_token":"lease-%s","lease_owner":%q,"deadline":%q,"text":"Q"}`, turnID, turnID, runner, deadline)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
-			io.WriteString(w, `{"id":"turn-2","status":"delivered"}`)
+			mu.Lock()
+			completes++
+			mu.Unlock()
+			io.WriteString(w, `{"id":"turn","status":"delivered"}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
-			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+			io.WriteString(w, `{"status":"sending"}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(srv.Close)
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		for {
+			mu.Lock()
+			n := len(claims)
+			mu.Unlock()
+			if n >= 2 {
+				return []byte("Approve the restock."), nil, nil
+			}
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	})
+	defer restore()
 	stderr := &lockedBuffer{}
 	app := New()
 	app.Stderr = stderr
 	app.Stdout = io.Discard
 	app.Getenv = func(string) string { return "" }
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
-	app.turnMem().noteLoss("turn-1")
-	app.turnMem().noteLoss("turn-1")
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	polls := 0
 	prevSleep := sleepFn
 	sleepFn = func(ctx context.Context, _ time.Duration) error {
 		if ctx != nil && ctx.Err() != nil {
 			return ctx.Err()
 		}
-		polls++
-		if strings.Contains(stderr.String(), "turn turn-2 completed") || polls >= 8 {
+		mu.Lock()
+		n := len(claims)
+		mu.Unlock()
+		if n >= 2 {
 			cancel()
 			return context.Canceled
 		}
 		return nil
 	}
 	t.Cleanup(func() { sleepFn = prevSleep })
-	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "1s", "--work-dir", t.TempDir()}, cfg)
+	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir(), "--max-concurrent", "2"}, cfg)
 	mu.Lock()
-	gotClaims, gotRuns := append([]string{}, claims...), runs
+	got := append([]claimRec{}, claims...)
+	gotAtSecond := completesAtSecondClaim
 	mu.Unlock()
-	if len(gotClaims) < 2 || gotClaims[0] != "turn-1" || gotClaims[1] != "turn-2" {
-		t.Fatalf("claims=%v", gotClaims)
+	if len(got) < 2 {
+		t.Fatalf("claims=%v want 2 before either completed", got)
 	}
-	if gotRuns != 1 {
-		t.Fatalf("harness runs=%d want 1 (turn-2 only)", gotRuns)
+	if got[0].turnID == got[1].turnID {
+		t.Fatalf("both workers claimed the same turn: %v", got)
+	}
+	if got[0].runnerID == got[1].runnerID {
+		t.Fatalf("workers shared a runner id: %v", got)
+	}
+	if gotAtSecond != 0 {
+		t.Fatalf("completes at second claim=%d want 0", gotAtSecond)
 	}
 	logs := stderr.String()
-	if strings.Count(logs, "skipping turn") != 1 {
-		t.Fatalf("skip should log once, got %s", logs)
-	}
-	if strings.Count(logs, "released turn turn-1 : skip window after repeated lease loss") < 1 {
-		t.Fatalf("expected skip-window release, got %s", logs)
+	if !strings.Contains(logs, "worker_ids=") || !strings.Contains(logs, "-1") || !strings.Contains(logs, "-2") {
+		t.Fatalf("startup should log slot runner ids, got %s", logs)
 	}
 }
 
@@ -2714,8 +2823,11 @@ func TestHandleClaimedTurnPersistentComplete409FailsAfterThreeDeliveries(t *test
 	if len(failReasons) != 1 {
 		t.Fatalf("fail reasons=%v", failReasons)
 	}
-	if !strings.HasPrefix(failReasons[0], undeliverableReplyReasonPrefix) || !strings.Contains(failReasons[0], "lease_mismatch: lease token does not match") {
+	if failReasons[0] != undeliverableReplyReason {
 		t.Fatalf("fail reason=%q", failReasons[0])
+	}
+	if !strings.Contains(stderr.String(), "undeliverable: lease_mismatch: lease token does not match") {
+		t.Fatalf("stderr should name the complete cause, got %s", stderr.String())
 	}
 	if _, err := os.Stat(turnReplyPath(dir, "turn-1")); !os.IsNotExist(err) {
 		t.Fatalf("saved reply should be removed, err=%v", err)
@@ -2742,6 +2854,7 @@ func TestHandleClaimedTurnTransientCompleteThenSucceeds(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			t.Errorf("first claim must not re-claim after lease-mismatch complete")
 			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-2","lease_owner":"runner-1"}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -2759,6 +2872,14 @@ func TestHandleClaimedTurnTransientCompleteThenSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, claimedTurn(), nil) {
 		t.Fatal("expected settled")
+	}
+	if completeCalls != 1 {
+		t.Fatalf("complete calls after first claim=%d", completeCalls)
+	}
+	second := claimedTurn()
+	second["lease_token"] = "lease-2"
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, second, nil) {
+		t.Fatal("expected settled on next claim")
 	}
 	if completeCalls != 2 {
 		t.Fatalf("complete calls=%d", completeCalls)
@@ -2811,7 +2932,7 @@ func TestHandleClaimedTurnFailRefusedAfterUndeliverableForgetsTurn(t *testing.T)
 	if _, err := os.Stat(turnReplyPath(dir, "turn-1")); !os.IsNotExist(err) {
 		t.Fatalf("saved reply should be removed, err=%v", err)
 	}
-	if skip, _, _ := app.turnMem().claimDefer("turn-1"); skip {
+	if app.turnMem().isGivenUp("turn-1") {
 		t.Fatal("forgotten turn should not still be deferred")
 	}
 	if !strings.Contains(app.Stderr.(*bytes.Buffer).String(), "no longer ours") {
@@ -2972,5 +3093,76 @@ func TestHandleClaimedTurnHeartbeatRenewsWhileRunning(t *testing.T) {
 	mu.Unlock()
 	if got < 1 {
 		t.Fatalf("heartbeats=%d", got)
+	}
+}
+
+func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
+	prevStart, prevCap := heartbeatRetryStart, heartbeatRetryCap
+	heartbeatRetryStart = 20 * time.Millisecond
+	heartbeatRetryCap = 80 * time.Millisecond
+	t.Cleanup(func() {
+		heartbeatRetryStart = prevStart
+		heartbeatRetryCap = prevCap
+	})
+	var mu sync.Mutex
+	var statuses []int
+	completes := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/heartbeat"):
+			mu.Lock()
+			n := len(statuses)
+			if n == 0 {
+				statuses = append(statuses, http.StatusServiceUnavailable)
+				mu.Unlock()
+				w.WriteHeader(http.StatusServiceUnavailable)
+				io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
+				return
+			}
+			statuses = append(statuses, http.StatusOK)
+			mu.Unlock()
+			fmt.Fprintf(w, `{"id":"turn-1","lease_expires_at":%q}`, time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			mu.Lock()
+			completes++
+			mu.Unlock()
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		time.Sleep(150 * time.Millisecond)
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	turn := claimedTurn()
+	turn["lease_expires_at"] = time.Now().Add(80 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/echo", "{prompt}"}, nil, turn, nil) {
+		t.Fatal("expected settled")
+	}
+	mu.Lock()
+	got, gotComplete := append([]int{}, statuses...), completes
+	mu.Unlock()
+	if len(got) < 2 {
+		t.Fatalf("heartbeats=%v want fail then success", got)
+	}
+	if got[0] != http.StatusServiceUnavailable || got[1] != http.StatusOK {
+		t.Fatalf("heartbeat statuses=%v", got)
+	}
+	if gotComplete != 1 {
+		t.Fatalf("completes=%d", gotComplete)
+	}
+	if strings.Contains(stderr.String(), "lease lost") {
+		t.Fatalf("transient 503 must not count as lease loss: %s", stderr.String())
 	}
 }

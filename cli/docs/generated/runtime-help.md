@@ -8103,7 +8103,7 @@ Flags:
   --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker.
   --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used.
   --poll-interval <duration>   Sleep between empty claims and after a released turn (default 2s).
-  --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Core also bounds workspace sending turns.
+  --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Each worker claims with a distinct runner id (<id>-<slot>). Core also bounds workspace sending turns.
 
 
 Global flags:
