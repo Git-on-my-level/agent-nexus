@@ -922,8 +922,8 @@ func TestPMServeKeepsPollingTransientClaimErrors(t *testing.T) {
 	if !strings.Contains(stderr.String(), "claim failed:") {
 		t.Fatalf("expected transient claim logs, got %s", stderr.String())
 	}
-	if strings.Contains(err.Error(), "non-retryable") {
-		t.Fatalf("transient errors exited: %v", err)
+	if strings.Contains(stderr.String(), "non-retryable") {
+		t.Fatalf("transient errors exited: %s", stderr.String())
 	}
 }
 
