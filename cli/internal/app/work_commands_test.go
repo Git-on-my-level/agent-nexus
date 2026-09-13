@@ -1037,6 +1037,9 @@ func TestPMAskBusyHints(t *testing.T) {
 			if strings.Contains(hint, tc.hide) {
 				t.Fatalf("hint still has %q: %q", tc.hide, hint)
 			}
+			if rec, _ := asMap(payload["error"])["recoverable"].(bool); !rec {
+				t.Fatalf("recoverable=%v payload=%v", asMap(payload["error"])["recoverable"], payload)
+			}
 			if !strings.Contains(hint, "Conversation conv-1") || !strings.Contains(hint, "anx pm conversations message conv-1") {
 				t.Fatalf("missing conversation retry hint: %q", hint)
 			}
