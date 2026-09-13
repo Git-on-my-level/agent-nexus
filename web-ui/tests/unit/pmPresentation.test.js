@@ -202,3 +202,25 @@ describe("freshness names the cause of a failed read", () => {
     ).toMatchObject({ key: "error", label: "Can't reach GitHub" });
   });
 });
+
+describe("target revision follows core's decision_revision rule", () => {
+  it("prefers the published field, then the external source revision, then version", async () => {
+    const { workTargetRevision } = await import("$lib/pm/presentation.js");
+    expect(workTargetRevision({ decision_revision: "abc", version: 9 })).toBe(
+      "abc",
+    );
+    expect(
+      workTargetRevision({
+        source: { authority: "github", revision: "sha1" },
+        version: 4,
+      }),
+    ).toBe("sha1");
+    expect(
+      workTargetRevision({
+        source: { authority: "github" },
+        freshness: { source_revision: "x" },
+        version: 6,
+      }),
+    ).toBe("6");
+  });
+});

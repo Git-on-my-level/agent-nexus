@@ -7,6 +7,7 @@
     actorDisplayLabel,
     actorRegistry,
     principalRegistry,
+    selectedActorId,
   } from "$lib/actorSession";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -667,6 +668,7 @@
               id
                 ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
                 : ""}
+            currentActorId={$selectedActorId || ""}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),
             )}

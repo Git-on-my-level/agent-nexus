@@ -8,6 +8,7 @@
     decisionSummary,
     isNexusOwned,
     label,
+    proposerLabel,
     receiptSignal,
     safeSourceHref,
     sentenceCase,
@@ -24,6 +25,7 @@
     busyWith = "",
     actionError = "",
     actorLabel = (id) => id,
+    currentActorId = "",
     answer = $bindable(""),
     choice = $bindable(""),
     onAnswer,
@@ -43,6 +45,19 @@
   // Core says whether a delivery path exists for this action's scope; an
   // older core omits the flag, in which case the server remains the judge.
   let undeliverable = $derived(action?.deliverable === false);
+  let proposer = $derived(
+    proposerLabel(selected, { actorLabel, currentActorId }),
+  );
+  // Only the approver may deliver, and only a handoff that left core can be
+  // read back (a preflight failure has no sent attempt).
+  let isApprover = $derived(
+    !currentActorId ||
+      !selected?.actor_id ||
+      selected.actor_id === currentActorId,
+  );
+  let handedOff = $derived(
+    Boolean(action?.attempts?.some((attempt) => attempt?.sent_at)),
+  );
   let delivered = $derived(
     Boolean(action) && !["pending", "pending_delivery"].includes(action.status),
   );
@@ -92,14 +107,14 @@
         </p>
       {/if}
       {#if proposal}
-        <p class="ui-label mt-4">The PM proposes</p>
+        <p class="ui-label mt-4">{proposer}</p>
         <p
           class="whitespace-pre-wrap break-words text-meta leading-relaxed text-fg"
         >
           {proposal}
         </p>
       {:else if fields.length}
-        <p class="ui-label mt-4">The PM proposes</p>
+        <p class="ui-label mt-4">{proposer}</p>
         <dl class="space-y-1 text-meta">
           {#each fields as row (row.label)}
             <div class="flex gap-2">
@@ -261,14 +276,14 @@
           </p>
         {/if}
         <div class="mt-4 flex flex-wrap items-center gap-2">
-          {#if action.status === "pending_delivery" && !undeliverable}
+          {#if action.status === "pending_delivery" && !undeliverable && isApprover}
             <button class="ui-btn-primary" onclick={onDeliver} disabled={busy}
               >{busy && busyWith === "deliver"
                 ? "Requesting delivery…"
                 : "Deliver approved instruction"}</button
             >
           {/if}
-          {#if delivered}
+          {#if delivered && handedOff}
             <button
               class="ui-btn-secondary"
               onclick={onReconcile}

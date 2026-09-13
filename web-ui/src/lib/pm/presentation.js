@@ -231,13 +231,38 @@ export function cardIdFromWork(work) {
   return ref;
 }
 
+/**
+ * The revision a proposal must fence on. Core publishes it as
+ * `decision_revision` (source.revision for a known external revision,
+ * otherwise the Nexus work version); the fallback mirrors that rule for an
+ * older core that omits the field.
+ */
 export function workTargetRevision(work) {
-  return String(
-    work?.source?.revision ||
-      work?.freshness?.source_revision ||
-      work?.version ||
-      "0",
-  );
+  const published = String(work?.decision_revision ?? "").trim();
+  if (published) return published;
+  const external =
+    String(work?.source?.authority ?? "").toLowerCase() !== "nexus";
+  const sourceRevision = String(work?.source?.revision ?? "").trim();
+  if (external && sourceRevision) return sourceRevision;
+  return String(work?.version ?? "0");
+}
+
+/**
+ * Who proposed a decision, in the reader's words. `actorLabel` maps an actor
+ * id to a display name; `currentActorId` turns the reader's own proposals
+ * into "You".
+ */
+export function proposerLabel(
+  item,
+  { actorLabel = (id) => id, currentActorId = "" } = {},
+) {
+  const kind = String(item?.origin_kind ?? "").toLowerCase();
+  const by = String(item?.proposed_by ?? "").trim();
+  if (kind === "pm_turn") return "The PM proposes";
+  if (kind === "channel") return "Proposed from a channel";
+  if (by && currentActorId && by === currentActorId) return "You proposed";
+  if (by) return `${actorLabel(by) || by} proposes`;
+  return "Proposed";
 }
 
 export function phaseGroups(records) {
