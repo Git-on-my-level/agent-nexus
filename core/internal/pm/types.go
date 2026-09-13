@@ -189,6 +189,9 @@ type Turn struct {
 type ClaimInput struct {
 	RunnerID string `json:"runner_id"`
 }
+type HeartbeatInput struct {
+	LeaseToken string `json:"lease_token"`
+}
 type ReleaseInput struct {
 	RunnerID   string `json:"runner_id"`
 	LeaseToken string `json:"lease_token"`
@@ -333,6 +336,7 @@ type Config struct {
 	AgentActorID   string
 	AgentHandle    string
 	TurnTimeout    time.Duration
+	LeaseTTL       time.Duration
 	MaxOutputBytes int
 	MaxConcurrent  int
 	MaxQueued      int

@@ -32,7 +32,7 @@ func TestRound5NativeFailures(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := pm.Principal{WorkspaceID: "ws_main", ActorID: human.ActorID, Human: true}
-			in := pm.DecisionInput{RequestKey: kind, WorkRef: asString(w["ref"]), TargetRevision: "1", Scope: "work.phase", Instruction: "Done", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{"card:this-ref-does-not-exist"}}}
+			in := pm.DecisionInput{RequestKey: kind, WorkRef: asString(w["ref"]), TargetRevision: "1.1", Scope: "work.phase", Instruction: "Done", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{"card:this-ref-does-not-exist"}}}
 			want := "resolution_refs"
 			if kind == "missing_board" {
 				// An orphaned canonical card is still readable as work, but cannot move.
@@ -46,9 +46,15 @@ func TestRound5NativeFailures(t *testing.T) {
 				in.Scope = "work.annotate"
 				in.Instruction = `{"phase":"done"}`
 				in.Payload = nil
-				want = "source-owned"
+				want = "annotation keys phase are not allowed"
 			}
 			d, err := rt.Service.ProposeDecision(ctx, p, in)
+			if kind == "invalid_annotation" {
+				if !errors.Is(err, pm.ErrInvalid) || !strings.Contains(err.Error(), want) {
+					t.Fatal(err)
+				}
+				return
+			}
 			if kind == "invalid_resolution" {
 				if !errors.Is(err, pm.ErrInvalid) || !strings.Contains(err.Error(), "card:this-ref-does-not-exist") {
 					t.Fatal(err)
@@ -92,7 +98,7 @@ func (s round5MutationStore) PatchWork(context.Context, string, string, int64, m
 	return nil, s.cause
 }
 func (s round5MutationStore) GetWork(context.Context, string) (map[string]any, error) {
-	return map[string]any{"id": "one", "source": map[string]any{"authority": "nexus"}}, nil
+	return map[string]any{"id": "one", "version": int64(1), "head_revision_number": int64(1), "source": map[string]any{"authority": "nexus"}}, nil
 }
 
 func TestRound5NativeErrorBoundary(t *testing.T) {
@@ -103,7 +109,7 @@ func TestRound5NativeErrorBoundary(t *testing.T) {
 			err = &primitives.MutationOutcomeUnknown{Cause: cause}
 		}
 		store := round5MutationStore{cause: err}
-		a := pm.Action{WorkRef: "work:one", TargetRevision: "1", Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}}
+		a := pm.Action{WorkRef: "work:one", TargetRevision: "1.1", Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}}
 		for _, execute := range []func(context.Context, nativeMutationStore, pm.Action) (pm.Receipt, error){executeWorkPhase, executeNativeAnnotation} {
 			_, err := execute(context.Background(), store, a)
 			var native *pm.NativeExecutionError
@@ -222,7 +228,7 @@ func TestRound5PostWriteCanonicalRecovery(t *testing.T) {
 					t.Fatal(err)
 				}
 				p := pm.Principal{WorkspaceID: "ws_main", ActorID: "actor", Human: true}
-				d, err := service.ProposeDecision(ctx, p, pm.DecisionInput{RequestKey: "recover", Scope: scope, WorkRef: asString(w["ref"]), TargetRevision: "1", Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}})
+				d, err := service.ProposeDecision(ctx, p, pm.DecisionInput{RequestKey: "recover", Scope: scope, WorkRef: asString(w["ref"]), TargetRevision: "1.1", Instruction: `{"next_action":"review"}`, Payload: &pm.ActionPayload{Phase: "ready"}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -292,7 +298,7 @@ func TestRound5StorePostCommitMarkers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if after["decision_revision"] != "2" || (scope == "phase" && after["phase"] != "ready") || (scope == "annotation" && after["next_action"] != "review") {
+			if after["decision_revision"] != "2.1" || (scope == "phase" && after["phase"] != "ready") || (scope == "annotation" && after["next_action"] != "review") {
 				t.Fatalf("write did not commit: %+v", after)
 			}
 		})

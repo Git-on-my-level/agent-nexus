@@ -184,6 +184,7 @@ export declare class AnxClient {
     pmTurnsDecisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsFail(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    pmTurnsHeartbeat(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
     secretsCreate(options?: RequestOptions): Promise<InvokeResult>;

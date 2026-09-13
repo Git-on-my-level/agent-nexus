@@ -37,6 +37,7 @@ variables.
 | Bootstrap token for first principal registration | n/a | `ANX_BOOTSTRAP_TOKEN` | unset |
 | Selected PM agent actor (claim/complete/fail when set) | n/a | `ANX_PM_AGENT_ACTOR_ID` | unset |
 | Selected PM agent handle (wake-bridge path only) | n/a | `ANX_PM_AGENT_HANDLE` | unset |
+| PM runner lease TTL (renew at a cadence strictly less than TTL/2) | n/a | `ANX_PM_LEASE_TTL` | `60s` (range `1s`–`10m`) |
 | PM turn wall time (queued runner and wake dispatch) | n/a | `ANX_PM_TURN_TIMEOUT` | `2m` (max `10m`) |
 | PM turn response byte cap | n/a | `ANX_PM_MAX_OUTPUT_BYTES` | `16000` |
 | Enable wake-routing PM bridge | n/a | `ANX_PM_BRIDGE_ENABLED` | `false` |
@@ -129,9 +130,16 @@ the Studio PM agent (`actor-gds-pm` / `dev.pm`), sets `ANX_PM_AGENT_ACTOR_ID`
 and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
-`lease_token`. Past-deadline sending turns expire to `failed` on claim.
+`lease_token`. Runners must renew through `POST /pm/turns/{turn_id}/heartbeat`
+with `{"lease_token":"..."}` at a cadence strictly less than `ANX_PM_LEASE_TTL / 2`
+(for example every 20s for the default 60s TTL). Use returned `lease_expires_at`
+to track ownership, and stop execution on `409 lease_mismatch`. Renewal never
+extends the turn deadline. A crashed runner frees capacity when its lease expires;
+the next poll can reclaim the same turn with a fresh token and preserved history.
+Ensure runner implementations support heartbeat before relying on turns longer
+than the lease TTL. Past-deadline sending turns expire to `failed` on claim.
 `ANX_PM_MAX_CONCURRENT` (default 2) bounds claimed turns with unexpired runner
-leases; new claims return 204 at that cap. `ANX_PM_MAX_QUEUED` (default 20)
+leases; new claims with waiting work return `429 busy` at that cap (204 if no work waits). `ANX_PM_MAX_QUEUED` (default 20)
 separately bounds open turns waiting without an unexpired lease, including
 unknown wakeup outcomes. A full queue returns `429 busy` with `reason: queue`,
 `queued`, and `limit`; each conversation still allows at most one pending turn.

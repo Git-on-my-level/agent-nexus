@@ -151,7 +151,7 @@ func TestHTTPClaimAndFailTurns(t *testing.T) {
 func TestHTTPDecisionOwnerIsTheOnlyAnsweringHuman(t *testing.T) {
 	s, _, p, _ := fixture(t)
 	ctx := context.Background()
-	d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "actor-bound", WorkRef: "work:1", Instruction: "Review", Scope: "work.annotate", TargetRevision: "r1"})
+	d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: "actor-bound", WorkRef: "work:1", Instruction: `{"next_action":"review"}`, Scope: "work.annotate", TargetRevision: "r1"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -186,16 +186,18 @@ queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to on
 runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
 `POST /pm/turns/{id}/fail` require an active lease and its matching token.
 Turn context and proposal operations also require an active lease. An open turn
-without one returns `409 conflict`: "this turn is not claimed; claim it first",
-even when a stale token is supplied. Claim again after release or lease expiry.
-Identical terminal completion/failure replays also refuse a cleared lease without mutation.
+without one returns `409 lease_required` for a missing token and
+`409 lease_mismatch` for an expired, released, or stale token. Claim again after
+release or lease expiry. Identical terminal completion/failure replays accept
+the terminal owner token without mutation; other tokens return `409 lease_mismatch`.
 Legacy tokenless bridge reply events cannot complete a turn: bridge runners must
 claim and call the authenticated completion endpoint with that lease token.
 Do not place lease tokens in durable events or public context.
 `POST /pm/turns/{id}/release` requires the selected PM actor plus the current
 `runner_id` and `lease_token`. It clears an unexpired lease and returns the turn
 to the queue as `sending`, `claimed: false`, retaining `claimed_at`. A different
-runner or wrong token returns 403; no active lease returns 409. Runners should
+runner or wrong token returns `409 lease_mismatch`; no active lease returns
+`409 turn_not_claimed`. Runners should
 stop local execution, then release on SIGINT/SIGTERM with a bounded shutdown
 request independent of the canceled run context. An abrupt kill cannot release;
 a restart with the same runner ID recovers its existing lease and token.
@@ -204,14 +206,15 @@ current unexpired lease, plus `claimed_at` when the latest claim time is known.
 That timestamp survives completion and expiry; older records omit it. Public
 turns (including history, single-turn reads, and message replays) omit lease
 credentials. Active `lease_owner` (runner ID) is visible to the requesting actor
-and configured PM actor; only claim returns the token and expiry. The configured
+and configured PM actor; only claim returns the token. Claim and heartbeat
+return the lease expiry. The configured
 PM actor may read any turn in its workspace using `pm.respond` authorization;
 the requesting actor retains conversation read authorization.
 Turn admission returns `429 busy` with `error.details.reason: conversation` and
 `turn_id` for the blocking conversation turn, or `reason: capacity` plus workspace
 `in_flight` and `limit`. Conversation serialization wins if both constraints apply.
 The reason and counts are observed inside the admission transaction.
-`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/release/complete/fail to that actor;
+`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/heartbeat/release/complete/fail to that actor;
 `make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
 
 The optional existing-bridge path is separate. `ANX_PM_BRIDGE_ENABLED` defaults
@@ -406,9 +409,12 @@ decision cannot be approved or dispatched.
 
 Every work response exposes read-only `decision_revision`. Clients must copy it
 verbatim into proposal `target_revision`. It is the nonempty `source.revision`
-when authority is external, otherwise the decimal Nexus work `version`.
+when authority is external, otherwise `<work_metadata.version>.<head_revision_number>`
+with decimal components (for example `0.1` becomes `0.2` after a card content revision
+and `1.1` after a metadata-only edit).
 Dispatch uses the same helper. `freshness.source_revision` is not a fallback.
-A metadata or refresh version change therefore invalidates a fallback fence;
+A canonical metadata mutation or card content revision invalidates a fallback fence;
+refresh attempts, failures, and freshness bookkeeping do not change it;
 a known external revision remains the fence independently of local version changes.
 
 PM context uses canonical work cursors: send the returned `next_cursor` as
@@ -446,3 +452,25 @@ Answering or dispatching a superseded decision returns 409 `conflict` with
 replacement ID). This also covers a
 supersession racing the answer CAS. An identical replay of a rejection remains
 idempotent. Clients can link the replacement directly from the conflict response.
+
+PM annotate proposals validate `instruction` as a nonempty JSON object using the
+canonical primitives annotation validator before insertion. The allowed keys are
+`project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`,
+`start_at`, `due_at`, `relations`, and `executions`. Invalid keys and value shapes
+return `400 invalid_request`, naming the offending keys and allowed set.
+
+Runner leases use `ANX_PM_LEASE_TTL` (default `60s`, range `1s` to `10m`). Runners
+must call `POST /pm/turns/{turn_id}/heartbeat` with `{"lease_token":"..."}` at a
+cadence strictly less than TTL/2. Heartbeat returns `200 PMHeartbeatTurn` with renewed
+`lease_expires_at`, capped by the turn deadline, without returning the token.
+Missing tokens return `409 lease_required`; expired, released, and foreign tokens
+return `409 lease_mismatch`. Closed turns return `409 turn_closed`. Lease expiry
+makes the same open turn claimable with a fresh token; it does not fail the turn
+or erase its history. The wire status stays `sending` (or `unknown` for an uncertain
+wake); `claimed` becomes false and the turn is eligible for the next claim.
+Only the turn deadline fails an unanswered turn. Complete/fail/release retain
+their existing live-lease semantics.
+
+A pending human proposal blocks changed PM proposals only for the same approver
+actor, work, and scope. Another actor's human proposal does not block the current
+actor's PM. This matches the actor boundary used for deduplication and supersession.

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `162`
+- Commands: `163`
 
 ## `actors.create`
 
@@ -1548,7 +1548,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMClaimedTurn`.
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and pm.Config turn timeout. Channel-origin turns use this same claim/complete/fail pipeline.
+- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.
 
 ## `pm.turns.complete`
 
@@ -1614,6 +1614,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Output: Returns `PMTurn`.
 - Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+
+## `pm.turns.heartbeat`
+
+- CLI path: `pm turns heartbeat`
+- HTTP: `POST /pm/turns/{turn_id}/heartbeat`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Keep an active runner lease alive during execution.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `lease_required`, `turn_closed`, `busy`, `unavailable`
+- Output: Returns `PMHeartbeatTurn`.
+- Agent notes: Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.
 
 ## `pm.turns.release`
 

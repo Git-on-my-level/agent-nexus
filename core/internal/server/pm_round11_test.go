@@ -52,7 +52,10 @@ func TestRound11DecisionExecutorRegistry(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			in := pm.DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: asString(w["ref"]), Scope: tc.scope, Instruction: "Ready", TargetRevision: "1"}
+			in := pm.DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: asString(w["ref"]), Scope: tc.scope, Instruction: "Ready", TargetRevision: "1.1"}
+			if tc.scope == "work.annotate" {
+				in.Instruction = `{"next_action":"review"}`
+			}
 			if tc.scope == "work.phase" {
 				in.Payload = &pm.ActionPayload{Phase: "ready"}
 			}

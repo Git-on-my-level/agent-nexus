@@ -432,7 +432,7 @@ func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) err
 		return nil
 	}
 	var id string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.WorkRef, d.Scope).Scan(&id)
+	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND actor_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.ActorID, d.WorkRef, d.Scope).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -440,4 +440,45 @@ func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) err
 		return err
 	}
 	return &HumanProposalPendingError{PendingDecisionID: id}
+}
+
+// Renew under the same SQLite write lock as claim, so an expired owner can
+// never renew over a replacement lease or a terminal write.
+func (s *Store) heartbeatTurn(ctx context.Context, id, token string, ttl time.Duration) (Turn, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Turn{}, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision WHERE kind='turn' AND id=?", id); err != nil {
+		return Turn{}, err
+	}
+	var raw []byte
+	if err = tx.QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='turn' AND id=?", id).Scan(&raw); err != nil {
+		return Turn{}, err
+	}
+	var t Turn
+	if err = json.Unmarshal(raw, &t); err != nil {
+		return Turn{}, err
+	}
+	if t.Status != Sending && t.Status != Unknown && t.Status != Pending {
+		return Turn{}, closedTurnError(t)
+	}
+	if err = leaseGuard(t, token); err != nil {
+		return Turn{}, err
+	}
+	now := time.Now().UTC()
+	if !t.Deadline.After(now) {
+		return Turn{}, closedTurnError(t)
+	}
+	t.LeaseExpiresAt = leaseDeadline(t.Deadline, now, ttl)
+	t.Revision++
+	raw, err = json.Marshal(t)
+	if err != nil {
+		return Turn{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE pm_records SET revision=revision+1,body=? WHERE kind='turn' AND id=?", raw, id); err != nil {
+		return Turn{}, err
+	}
+	return t, tx.Commit()
 }

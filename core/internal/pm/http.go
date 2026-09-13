@@ -160,6 +160,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if err = decode(&in); err == nil {
 			out, err = s.ClaimTurn(ctx, p, in)
 		}
+	case len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" && r.Method == http.MethodPost:
+		var in HeartbeatInput
+		if err = decode(&in); err == nil {
+			out, err = s.HeartbeatTurn(ctx, p, path[1], in)
+		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "release" && r.Method == http.MethodPost:
 		var in ReleaseInput
 		if err = decode(&in); err == nil {
@@ -203,7 +208,11 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		out = Page[any]{Items: items, HasMore: value.HasMore, NextCursor: value.NextCursor}
 	case Turn:
-		out = turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
+		view := turnResponse(value, r.Method == http.MethodPost && len(path) == 2 && path[0] == "turns" && path[1] == "claim")
+		if len(path) == 3 && path[0] == "turns" && path[2] == "heartbeat" {
+			view.LeaseExpiresAt = &value.LeaseExpiresAt
+		}
+		out = view
 	case ConversationDetail:
 		turns := make([]any, 0, len(value.Turns))
 		for _, turn := range value.Turns {
@@ -308,16 +317,18 @@ func writeError(w http.ResponseWriter, err error) {
 }
 
 // Expose the active runner identity; reserve lease credentials for claims.
-func turnResponse(t Turn, includeLease bool) any {
+type turnView struct {
+	Turn
+	Claimed        bool       `json:"claimed"`
+	LeaseToken     string     `json:"lease_token,omitempty"`
+	LeaseOwner     string     `json:"lease_owner,omitempty"`
+	LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
+}
+
+func turnResponse(t Turn, includeLease bool) turnView {
 	t.FailureKind = turnFailureKind(t)
 	t.TerminalLeaseHash = ""
-	out := struct {
-		Turn
-		Claimed        bool       `json:"claimed"`
-		LeaseToken     string     `json:"lease_token,omitempty"`
-		LeaseOwner     string     `json:"lease_owner,omitempty"`
-		LeaseExpiresAt *time.Time `json:"lease_expires_at,omitempty"`
-	}{Turn: t, Claimed: leaseHeld(t, time.Now().UTC())}
+	out := turnView{Turn: t, Claimed: leaseHeld(t, time.Now().UTC())}
 	if out.Claimed {
 		out.LeaseOwner = t.LeaseOwner
 	}

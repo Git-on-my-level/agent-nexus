@@ -93,7 +93,7 @@ func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
 					t.Fatal(err)
 				}
 				observe(i, "error", "")
-				assertFence("1")
+				assertFence("1.1")
 			}
 			got, err := store.GetWork(ctx, ref)
 			if err != nil || got["version"] != int64(1) {
@@ -112,9 +112,9 @@ func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
 				if _, err := store.MoveBoardCard(ctx, "actor", "", asString(work["id"]), primitives.MoveBoardCardInput{ColumnKey: "ready", IfWorkVersion: &version}); err != nil {
 					t.Fatal(err)
 				}
-				assertFence("2")
+				assertFence("2.1")
 				observe(20, "reported", "external-ignored")
-				assertFence("2")
+				assertFence("2.1")
 			} else {
 				observe(20, "reported", "source-r1")
 				assertFence("source-r1")

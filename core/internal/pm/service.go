@@ -30,6 +30,9 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 	if cfg.TurnTimeout == 0 {
 		cfg.TurnTimeout = 2 * time.Minute
 	}
+	if cfg.LeaseTTL == 0 {
+		cfg.LeaseTTL = time.Minute
+	}
 	if cfg.MaxOutputBytes == 0 {
 		cfg.MaxOutputBytes = 16000
 	}
@@ -39,7 +42,7 @@ func NewService(store *Store, cfg Config, deps Dependencies) (*Service, error) {
 	if cfg.MaxQueued == 0 {
 		cfg.MaxQueued = 20
 	}
-	if cfg.TurnTimeout < time.Second || cfg.TurnTimeout > 10*time.Minute || cfg.MaxOutputBytes < 256 || cfg.MaxOutputBytes > 64000 || cfg.MaxConcurrent < 1 || cfg.MaxConcurrent > 16 || cfg.MaxQueued < 1 {
+	if cfg.LeaseTTL < time.Second || cfg.LeaseTTL > 10*time.Minute || cfg.TurnTimeout < time.Second || cfg.TurnTimeout > 10*time.Minute || cfg.MaxOutputBytes < 256 || cfg.MaxOutputBytes > 64000 || cfg.MaxConcurrent < 1 || cfg.MaxConcurrent > 16 || cfg.MaxQueued < 1 {
 		return nil, ErrInvalid
 	}
 	return &Service{store: store, cfg: cfg, deps: deps}, nil
@@ -379,6 +382,24 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	return t, nil
 }
 
+// HeartbeatTurn renews only the currently owned live lease.
+func (s *Service) HeartbeatTurn(ctx context.Context, p Principal, turnID string, in HeartbeatInput) (Turn, error) {
+	var t Turn
+	if err := s.store.get(ctx, "turn", turnID, &t); err != nil {
+		return Turn{}, err
+	}
+	if p.WorkspaceID != t.WorkspaceID || p.ActorID != t.AgentActorID {
+		return Turn{}, ErrForbidden
+	}
+	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
+		return Turn{}, err
+	}
+	if err := s.requireOpenTurn(ctx, t); err != nil {
+		return Turn{}, err
+	}
+	return s.store.heartbeatTurn(ctx, t.ID, in.LeaseToken, s.cfg.LeaseTTL)
+}
+
 // ReleaseTurn relinquishes an active lease without terminating the turn.
 func (s *Service) ReleaseTurn(ctx context.Context, p Principal, turnID string, in ReleaseInput) (Turn, error) {
 	var t Turn
@@ -430,7 +451,7 @@ func (s *Service) ClaimTurn(ctx context.Context, p Principal, in ClaimInput) (Tu
 	if err := s.ExpireTurns(ctx, now); err != nil {
 		return Turn{}, err
 	}
-	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.TurnTimeout, s.cfg.MaxOutputBytes)
+	return s.store.claimTurn(ctx, p, runner, now, s.cfg.MaxConcurrent, s.cfg.LeaseTTL, s.cfg.MaxOutputBytes)
 }
 
 const turnDeadlineFailure = "The PM did not answer before the deadline. Retry, or check that a runner is attached."
