@@ -2272,6 +2272,84 @@ export function listDevSeedThreadRefViolations(seed) {
   return violations;
 }
 
+/**
+ * Inbox `human_attention_requested` subject_refs that claim to be a card,
+ * topic, or document must match a seeded resource id/ref.
+ *
+ * @param {Record<string, unknown>} seed
+ * @returns {string[]}
+ */
+export function listDevSeedInboxSubjectRefViolations(seed) {
+  if (!seed || typeof seed !== "object") {
+    return ["listDevSeedInboxSubjectRefViolations: seed is missing"];
+  }
+
+  const refs = new Set();
+  for (const card of seed.cards ?? []) {
+    const id = String(card?.id ?? "").trim();
+    if (id) {
+      refs.add(`card:${id}`);
+    }
+    const handle = String(card?.handle ?? "").trim();
+    if (handle) {
+      refs.add(`card:${handle}`);
+    }
+    const ref = String(card?.ref ?? "").trim();
+    if (ref) {
+      refs.add(ref);
+    }
+  }
+  for (const topic of seed.topics ?? []) {
+    const id = String(topic?.id ?? "").trim();
+    if (id) {
+      refs.add(`topic:${id}`);
+      const suffix = mockTopicRefSuffixFromThreadId(id);
+      if (suffix) {
+        refs.add(`topic:${suffix}`);
+      }
+    }
+  }
+  for (const doc of seed.documents ?? []) {
+    const nested = doc?.document && typeof doc.document === "object" ? doc.document : null;
+    const id = String(doc?.id ?? nested?.id ?? "").trim();
+    if (id) {
+      refs.add(`document:${id}`);
+    }
+    const handle = String(doc?.handle ?? nested?.handle ?? "").trim();
+    if (handle) {
+      refs.add(`document:${handle}`);
+    }
+    const ref = String(doc?.ref ?? nested?.ref ?? "").trim();
+    if (ref) {
+      refs.add(ref);
+    }
+  }
+
+  const violations = [];
+  for (const event of seed.events ?? []) {
+    if (String(event?.type ?? "").trim() !== "human_attention_requested") {
+      continue;
+    }
+    const subjectRef = String(event?.payload?.subject_ref ?? "").trim();
+    if (!subjectRef) {
+      violations.push(
+        `event:${String(event?.id ?? "unknown")}: inbox item is missing payload.subject_ref`,
+      );
+      continue;
+    }
+    const prefix = subjectRef.slice(0, Math.max(subjectRef.indexOf(":"), 0));
+    if (prefix !== "card" && prefix !== "topic" && prefix !== "document") {
+      continue;
+    }
+    if (!refs.has(subjectRef)) {
+      violations.push(
+        `event:${String(event?.id ?? "unknown")}: subject_ref ${subjectRef} does not resolve to a seeded card, topic, or document`,
+      );
+    }
+  }
+  return violations;
+}
+
 export function getDevSeedData() {
   const exportedArtifacts = artifacts.filter(keepDevSeedArtifact);
   const exportedEvents = events.map(cleanDevSeedEvent).filter(Boolean);

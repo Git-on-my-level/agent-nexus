@@ -13,7 +13,10 @@ import {
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
-import { listDevSeedThreadRefViolations } from "../src/lib/devWorkspaceFixtures.js";
+import {
+  listDevSeedInboxSubjectRefViolations,
+  listDevSeedThreadRefViolations,
+} from "../src/lib/devWorkspaceFixtures.js";
 import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
 import {
   listResolutionEvidenceViolations,
@@ -73,6 +76,14 @@ if (threadRefViolations.length > 0) {
   failWithPrefix(
     "seed-core-from-mock failed",
     `dev seed thread ref integrity:\n${threadRefViolations.join("\n")}`,
+  );
+}
+
+const inboxSubjectRefViolations = listDevSeedInboxSubjectRefViolations(seed);
+if (inboxSubjectRefViolations.length > 0) {
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `dev seed inbox subject ref integrity:\n${inboxSubjectRefViolations.join("\n")}`,
   );
 }
 
@@ -1064,7 +1075,8 @@ async function seedBoards() {
       const createdCardThreadId = String(created?.thread_id ?? "").trim();
       const sourceCardId = String(sourceCard.id ?? "").trim();
       if (sourceCardId && createdCardId) {
-        cardIdMap.set(sourceCardId, createdCardId);
+        const publicValue = publicRefValue(created, "card", createdCardId);
+        cardIdMap.set(sourceCardId, publicValue);
       }
       for (const sourceThreadAlias of [
         sourceCardId,
@@ -1136,7 +1148,9 @@ async function postSeedEvent(sourceEvent) {
   }
   const actorId = pickActorId(sourceEvent.actor_id);
   const mappedThreadId = mapThreadId(sourceEvent.thread_id);
-  const payload = normalizeEventPayload(sourceEvent.type, sourceEvent.payload);
+  const payload = mapInboxSubjectInPayload(
+    normalizeEventPayload(sourceEvent.type, sourceEvent.payload),
+  );
   const refs = mapRefs(sourceEvent.refs);
   const eventPayload = {
     type: sourceEvent.type,
@@ -1260,6 +1274,33 @@ function mapOptionalDocumentId(documentId) {
     return "";
   }
   return documentIdMap.get(raw) ?? "";
+}
+
+function mapInboxSubjectInPayload(payload) {
+  const next = payload && typeof payload === "object" ? { ...payload } : {};
+  if (next.subject_ref) {
+    next.subject_ref = mapRef(next.subject_ref);
+  }
+  if (Array.isArray(next.related_refs)) {
+    next.related_refs = mapRefs(next.related_refs);
+  }
+  const title = String(next.subject_title ?? next.title ?? "").trim();
+  if (title) {
+    next.subject_title = title;
+  }
+  return next;
+}
+
+function publicRefValue(created, prefix, fallbackId) {
+  const ref = String(created?.ref ?? "").trim();
+  if (ref.startsWith(`${prefix}:`)) {
+    return ref.slice(prefix.length + 1);
+  }
+  const handle = String(created?.handle ?? "").trim();
+  if (handle) {
+    return handle;
+  }
+  return String(fallbackId ?? "").trim();
 }
 
 function mapRef(ref) {

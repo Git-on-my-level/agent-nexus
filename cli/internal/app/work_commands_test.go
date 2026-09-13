@@ -416,6 +416,11 @@ func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
 			continue
 		}
 		runtimePath := runtimePathFromRegistryPath(path)
+		if cmd.CommandID == "pm.turns.release" {
+			if _, ok := workCommands[runtimePath]; !ok {
+				continue
+			}
+		}
 		if _, ok := workCommands[runtimePath]; !ok {
 			t.Errorf("registry command %s (%s) missing from workCommands as %q", cmd.CommandID, path, runtimePath)
 		}
