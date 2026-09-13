@@ -52,7 +52,11 @@ function taskIsBlocked(row) {
  */
 export function classifyInboxRow(row, now = Date.now()) {
   if (row.kind === "decision") {
-    if (row.status === "awaiting_answer") return "needs-you";
+    // A decision addressed to someone else is not this reader's work; it is
+    // visible under Watching so the workspace stays legible, never under
+    // Needs you.
+    if (row.status === "awaiting_answer")
+      return row.item?.can_answer === false ? "watching" : "needs-you";
     if (WATCHING_DECISION_STATUSES.has(row.status)) return "watching";
     return "handled";
   }
@@ -98,8 +102,11 @@ export function inboxRowBadge(row, now = Date.now()) {
   }
   if (row.kind === "decision") {
     // Awaiting answer only ever shows inside Needs you, where the badge would
-    // repeat the mailbox back at the reader.
-    if (row.status === "awaiting_answer") return null;
+    // repeat the mailbox back at the reader — unless it is someone else's.
+    if (row.status === "awaiting_answer")
+      return row.item?.can_answer === false
+        ? { label: "Waiting on someone else", tone: "neutral" }
+        : null;
     return receiptSignal(row.status);
   }
   if (row.kind === "update") {

@@ -69,6 +69,7 @@ describe("task board moves", () => {
     expect(coreClient.createPmDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         instruction: "request status change at GitHub to Done",
+        payload: { phase: "done" },
         work_ref: "card:gh",
         scope: "work.phase",
       }),

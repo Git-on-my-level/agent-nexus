@@ -354,10 +354,14 @@ export function decisionConsequence(item, work = null) {
   const scope = String(item?.scope ?? "");
   const source = work?.source ? sourceLabel(work.source) : "";
   const owned = work ? isNexusOwned(work) : false;
+  const phase = String(item?.payload?.phase ?? "").trim();
   if (scope === "work.phase") {
+    const target = phase ? ` to ${label(phase)}` : "";
     if (owned || !source || source === "Nexus")
-      return "Approving moves this task in Nexus.";
-    return `Approving asks the PM to request this change at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
+      return phase
+        ? `Approving moves this task${target} in Nexus.`
+        : "This proposal names no target phase, so it cannot be applied. Decline it and ask the PM to propose again.";
+    return `Approving asks the PM to request this change${target} at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
   }
   if (scope === "work.annotate")
     return "Approving records the PM's note on this task in Nexus. The source is not changed.";

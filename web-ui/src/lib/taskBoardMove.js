@@ -21,6 +21,9 @@ export function statusChangeInstruction(work, phase) {
 export function createStatusChangeDecisionPayload(work, phase) {
   return {
     instruction: statusChangeInstruction(work, phase),
+    // The target phase travels as structured data; the instruction is prose
+    // for the reader and never the thing core executes.
+    payload: { phase },
     request_key: phaseRequestKey(work, phase),
     scope: "work.phase",
     target_revision: workTargetRevision(work),

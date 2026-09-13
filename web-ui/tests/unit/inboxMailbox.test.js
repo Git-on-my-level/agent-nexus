@@ -181,3 +181,34 @@ describe("inbox row badges", () => {
     });
   });
 });
+
+describe("decisions addressed to someone else", () => {
+  it("go to Watching with a badge, never Needs you", () => {
+    const rows = buildInboxRows({
+      decisions: [
+        {
+          id: "mine",
+          status: "awaiting_answer",
+          can_answer: true,
+          instruction: "Mine",
+          work_ref: "card:a",
+        },
+        {
+          id: "theirs",
+          status: "awaiting_answer",
+          can_answer: false,
+          instruction: "Theirs",
+          work_ref: "card:a",
+        },
+      ],
+    });
+    const mine = rows.find((row) => row.id === "decision:mine");
+    const theirs = rows.find((row) => row.id === "decision:theirs");
+    expect(mine.mailbox).toBe("needs-you");
+    expect(inboxRowBadge(mine)).toBeNull();
+    expect(theirs.mailbox).toBe("watching");
+    expect(inboxRowBadge(theirs)).toMatchObject({
+      label: "Waiting on someone else",
+    });
+  });
+});

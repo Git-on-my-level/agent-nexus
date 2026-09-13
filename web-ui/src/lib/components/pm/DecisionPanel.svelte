@@ -5,6 +5,8 @@
     decisionConsequence,
     decisionPayload,
     decisionSummary,
+    isNexusOwned,
+    label,
     receiptSignal,
     safeSourceHref,
     sentenceCase,
@@ -36,6 +38,16 @@
   );
   let consequence = $derived(decisionConsequence(selected, work));
   let noteMissing = $derived(!answer.trim());
+  // Core derives can_answer for the current reader; an older core omits it,
+  // in which case the server is the judge and the form stays available.
+  let cannotAnswer = $derived(selected?.can_answer === false);
+  let targetPhase = $derived(String(selected?.payload?.phase ?? "").trim());
+  let unappliable = $derived(
+    selected?.scope === "work.phase" &&
+      !targetPhase &&
+      work &&
+      isNexusOwned(work),
+  );
 
   // Approve and Decline are the two verbs; each submits the form with its
   // choice. The note is required by core (the answer text is the record).
@@ -57,6 +69,12 @@
           {summary.title}
         {/if}
       </h2>
+      {#if targetPhase}
+        <p class="mt-3 text-meta text-fg">
+          <span class="text-fg-muted">Requested change:</span> move to
+          <strong>{label(targetPhase)}</strong>
+        </p>
+      {/if}
       {#if proposal}
         <p class="ui-label mt-4">The PM proposes</p>
         <p
@@ -101,7 +119,14 @@
         </dl>
       </details>
     </header>
-    {#if selected.status === "awaiting_answer"}
+    {#if selected.status === "awaiting_answer" && cannotAnswer}
+      <section class="border-t border-line-subtle pt-4">
+        <p class="text-meta text-fg">
+          This decision is addressed to {selected.actor_id || "another person"}.
+          Only they can answer it.
+        </p>
+      </section>
+    {:else if selected.status === "awaiting_answer"}
       <form
         class="space-y-3 border-t border-line-subtle pt-4"
         onsubmit={(event) => decide(event, choice || "approve")}
@@ -122,7 +147,7 @@
             class="ui-btn-primary"
             type="submit"
             onclick={(event) => decide(event, "approve")}
-            disabled={busy || noteMissing}
+            disabled={busy || noteMissing || unappliable}
             >{busy && choice === "approve" ? "Approving…" : "Approve"}</button
           >
           <button
@@ -173,6 +198,14 @@
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <ReceiptSignal signal={state} />
         </div>
+        {#if action.reconciliation_conflict}
+          <p
+            class="mt-2 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
+          >
+            The last read-back did not confirm this outcome. The status above is
+            what was reported; the detail below is what the source showed.
+          </p>
+        {/if}
         {#if action.receipt?.detail}
           <p class="mt-2 whitespace-pre-wrap break-words text-meta text-fg">
             {action.receipt.detail}
@@ -185,18 +218,6 @@
             target="_blank"
             rel="noreferrer">Open authoritative receipt ↗</a
           >
-        {/if}
-        {#if action.receipt?.external_id}
-          <p class="mt-2 break-words font-mono text-micro text-fg-muted">
-            {action.receipt.external_id}
-          </p>
-        {/if}
-        {#if action.receipt?.evidence_refs?.length}
-          <ul class="mt-2 space-y-1 font-mono text-micro text-fg-muted">
-            {#each action.receipt.evidence_refs as ref}
-              <li class="break-all">{ref}</li>
-            {/each}
-          </ul>
         {/if}
         <div class="mt-4 flex flex-wrap items-center gap-2">
           {#if action.status === "pending_delivery"}
@@ -223,6 +244,8 @@
                 authorization_basis: action.authorization_basis,
                 scope: action.scope,
                 target_revision: action.target_revision,
+                receipt_id: action.receipt?.external_id || undefined,
+                evidence_refs: action.receipt?.evidence_refs || undefined,
                 attempts: action.attempts || [],
               },
               null,

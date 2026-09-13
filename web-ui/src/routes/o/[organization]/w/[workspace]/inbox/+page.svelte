@@ -8,6 +8,7 @@
   import { formatTimestamp } from "$lib/formatDate";
   import {
     errorMessage,
+    isNexusOwned,
     taskDetailPath,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -239,9 +240,10 @@
       decisions = decisions.map((item) =>
         item.id === result.id ? result : item,
       );
+      const approved = choice === "approve";
       answer = "";
       choice = "";
-      notice = "Answer recorded.";
+      notice = approved ? "Approved." : "Declined.";
       if (result.action_id) {
         try {
           const receipt = await coreClient.getPmAction(result.action_id);
@@ -251,6 +253,29 @@
           ];
         } catch (err) {
           actionError = errorMessage(err);
+        }
+        // A Nexus-owned change has no one to deliver to but core itself, so
+        // approving applies it in the same breath. Source-owned requests keep
+        // the explicit deliver step, because delivery there has a receipt.
+        if (approved && selectedWork && isNexusOwned(selectedWork)) {
+          try {
+            let applied = await coreClient.dispatchPmDecision(result.id);
+            // Core reports the write, then verifies it by reading the
+            // canonical record back; for Nexus-owned work both are local.
+            if (applied.status !== "failed") {
+              applied = await coreClient.reconcilePmAction(applied.id);
+            }
+            actions = [
+              ...actions.filter((item) => item.id !== applied.id),
+              applied,
+            ];
+            notice =
+              applied.status === "verified"
+                ? "Approved and applied."
+                : "Approved. Delivery is in progress.";
+          } catch (err) {
+            actionError = errorMessage(err);
+          }
         }
       }
     } catch (err) {
@@ -271,7 +296,12 @@
       actions = [...actions.filter((item) => item.id !== result.id), result];
       notice = "Delivery request recorded.";
     } catch (err) {
-      error = errorMessage(err);
+      const raw = errorMessage(err);
+      // Core has no executor for this source yet: the approval is intact and
+      // the action stays pending. That is not an outage.
+      error = /not configured|unavailable/i.test(raw)
+        ? "No delivery path is configured for this source yet. The approved request stays pending until one is."
+        : raw;
       await refreshReceipt();
     } finally {
       busy = false;
