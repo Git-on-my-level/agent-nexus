@@ -286,7 +286,7 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 		return Turn{}, s.requireOpenTurn(ctx, t)
 	}
 	if t.Status == Pending {
-		if err := requireLease(t); err != nil {
+		if err := leaseGuard(t, leaseToken); err != nil {
 			return Turn{}, err
 		}
 		return Turn{}, ErrConflict
@@ -338,7 +338,7 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 		return Turn{}, s.requireOpenTurn(ctx, t)
 	}
 	if t.Status == Pending {
-		if err := requireLease(t); err != nil {
+		if err := leaseGuard(t, in.LeaseToken); err != nil {
 			return Turn{}, err
 		}
 		return Turn{}, ErrConflict
@@ -491,18 +491,12 @@ func (s *Service) ExpireTurns(ctx context.Context, now time.Time) error {
 func leaseHeld(t Turn, now time.Time) bool {
 	return t.LeaseToken != "" && !t.LeaseExpiresAt.IsZero() && t.LeaseExpiresAt.After(now)
 }
-func requireLease(t Turn) error {
-	if !leaseHeld(t, time.Now().UTC()) {
-		return fmt.Errorf("%w: this turn is not claimed; claim it first", ErrConflict)
-	}
-	return nil
-}
 func leaseGuard(t Turn, token string) error {
-	if err := requireLease(t); err != nil {
-		return err
+	if strings.TrimSpace(token) == "" {
+		return ErrLeaseRequired
 	}
-	if strings.TrimSpace(token) == "" || token != t.LeaseToken {
-		return ErrConflict
+	if !leaseHeld(t, time.Now().UTC()) || token != t.LeaseToken {
+		return ErrLeaseMismatch
 	}
 	return nil
 }

@@ -15,6 +15,8 @@ var (
 	ErrForbidden        = errors.New("PM permission denied")
 	ErrInvalid          = errors.New("invalid PM request")
 	ErrConflict         = errors.New("PM revision or state conflict")
+	ErrLeaseRequired    = fmt.Errorf("%w: this turn's current lease token is required", ErrConflict)
+	ErrLeaseMismatch    = fmt.Errorf("%w: the lease was released or re-claimed; claim the turn again", ErrConflict)
 	ErrNotFound         = errors.New("PM record not found")
 	ErrTurnClosed       = errors.New("PM turn is closed")
 	ErrStale            = errors.New("approved source revision has changed")
@@ -218,6 +220,7 @@ type DecisionInput struct {
 	Origin         *Origin        `json:"origin,omitempty"`
 }
 type Decision struct {
+	Replayed               bool           `json:"-"` // Response-only proposal reuse; never persisted.
 	ProposedBy             string         `json:"proposed_by,omitempty"`
 	OriginKind             string         `json:"origin_kind,omitempty"`
 	TurnID                 string         `json:"turn_id,omitempty"`
@@ -251,6 +254,7 @@ type AnswerInput struct {
 	Text     string `json:"text"`
 }
 type Action struct {
+	ClosedWithoutDelivery  bool           `json:"closed_without_delivery,omitempty"`
 	AcknowledgedBy         string         `json:"acknowledged_by,omitempty"`
 	AcknowledgedAt         *time.Time     `json:"acknowledged_at,omitempty"`
 	CreatedAt              *time.Time     `json:"created_at,omitempty"`
@@ -324,9 +328,10 @@ type DispatchRequest struct {
 // Authorize must consult current principal permissions on EVERY operation.
 // Execute must atomically enforce TargetRevision at the source if supported;
 // otherwise it must fail closed when a race cannot be excluded. The action ID
-// is the stable remote idempotency key. CheckDelivery is a required read-only
-// preflight using the same routing as Execute. Missing executors must be rejected
-// there, before recording any attempt. Errors after Execute starts are uncertain.
+// is the stable remote idempotency key. DeliveryPath (or legacy CheckDelivery)
+// is a required read-only preflight using the same routing as Execute. Missing
+// executors must be rejected there, before recording any attempt. Errors after
+// Execute starts are uncertain.
 // Reconcile is read-only.
 type Dependencies struct {
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
@@ -336,7 +341,10 @@ type Dependencies struct {
 	ReadContextPage   func(context.Context, Principal, string, string, string, int) (ContextPage, error)
 	Dispatch          func(context.Context, DispatchRequest) error
 	CurrentRevision   func(context.Context, Principal, string) (string, error)
-	CheckDelivery     func(context.Context, Action) error
-	Execute           func(context.Context, Action) (Receipt, error)
-	Reconcile         func(context.Context, Action) (Receipt, error)
+	// DeliveryPath is the named preflight, using the same registry as Execute.
+	// CheckDelivery supports older integrations without a named route.
+	DeliveryPath  func(context.Context, Action) (string, error)
+	CheckDelivery func(context.Context, Action) error
+	Execute       func(context.Context, Action) (Receipt, error)
+	Reconcile     func(context.Context, Action) (Receipt, error)
 }

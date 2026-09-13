@@ -89,7 +89,11 @@ func TestRound9UnclaimedTurnOperations(t *testing.T) {
 				}
 				for _, supplied := range []string{"", token} {
 					rr := call(supplied)
-					if rr.Code != 409 || !strings.Contains(rr.Body.String(), "this turn is not claimed; claim it first") {
+					code := "lease_required"
+					if supplied != "" {
+						code = "lease_mismatch"
+					}
+					if rr.Code != 409 || !strings.Contains(rr.Body.String(), code) {
 						t.Fatalf("unclaimed %d %s", rr.Code, rr.Body)
 					}
 				}
@@ -222,7 +226,7 @@ func TestRound9AcknowledgeNoDeliveryPath(t *testing.T) {
 	ack(403)
 	caller = p
 	a := ack(200)
-	if a.Status != Acknowledged || a.Deliverable || a.AcknowledgedBy != p.ActorID || a.AcknowledgedAt == nil || !strings.Contains(a.Receipt.Detail, "No delivery path is configured for GitHub") || len(a.Attempts) != 0 || strings.Contains(a.Receipt.Detail, "action stays pending") {
+	if a.Status != Acknowledged || a.Deliverable || a.AcknowledgedBy != p.ActorID || a.AcknowledgedAt == nil || a.Receipt.Detail != "Closed by "+p.ActorID+": no delivery path is configured for GitHub, nothing was sent" || !a.ClosedWithoutDelivery || len(a.Attempts) != 0 || strings.Contains(a.Receipt.Detail, "action stays pending") {
 		t.Fatalf("%+v", a)
 	}
 	if replay := ack(200); !reflect.DeepEqual(replay, a) {

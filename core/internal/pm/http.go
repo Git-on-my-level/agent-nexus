@@ -87,8 +87,12 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(path) == 1 && path[0] == "decisions" && r.Method == http.MethodPost:
 		var in DecisionInput
 		if err = decode(&in); err == nil {
-			out, err = s.ProposeDecision(ctx, p, in)
-			status = http.StatusCreated
+			var d Decision
+			d, err = s.ProposeDecision(ctx, p, in)
+			out = d
+			if !d.Replayed {
+				status = http.StatusCreated
+			}
 		}
 	case len(path) == 2 && path[0] == "decisions" && r.Method == http.MethodGet:
 		out, err = s.decision(ctx, p, path[1], "pm.read")
@@ -259,7 +263,7 @@ func writeError(w http.ResponseWriter, err error) {
 		err    error
 		status int
 		code   string
-	}{{ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrConflict, 409, "conflict"}, {ErrTurnClosed, 409, "turn_closed"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
+	}{{ErrInvalid, 400, "invalid_request"}, {ErrForbidden, 403, "forbidden"}, {ErrNotFound, 404, "not_found"}, {ErrLeaseRequired, 409, "lease_required"}, {ErrLeaseMismatch, 409, "lease_mismatch"}, {ErrConflict, 409, "conflict"}, {ErrTurnClosed, 409, "turn_closed"}, {ErrStale, 409, "source_revision_changed"}, {ErrBusy, 429, "busy"}, {ErrPMIdentity, 503, "unavailable"}, {ErrUnavailable, 503, "unavailable"}} {
 		if errors.Is(err, e.err) {
 			status = e.status
 			code = e.code

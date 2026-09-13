@@ -45,18 +45,9 @@ func TestPhaseApprovalRequiresStructuredTarget(t *testing.T) {
 	for i, payload := range []*ActionPayload{nil, {Phase: "bogus"}, {Phase: "done"}} {
 		s, _, p, _ := fixture(t)
 		ctx := context.Background()
-		d, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move to ready", TargetRevision: "r1", Payload: payload})
-		if payload != nil && payload.Phase == "done" {
-			if !errors.Is(err, ErrInvalid) {
-				t.Fatal(err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = s.AnswerDecision(ctx, p, d.ID, AnswerInput{Revision: 1, Approve: true, Text: "yes"}); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("payload %+v: %v", payload, err)
+		_, err := s.ProposeDecision(ctx, p, DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.phase", Instruction: "Move to ready", TargetRevision: "r1", Payload: payload})
+		if !errors.Is(err, ErrInvalid) {
+			t.Fatalf("payload %+v accepted at propose: %v", payload, err)
 		}
 	}
 }

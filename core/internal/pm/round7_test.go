@@ -154,6 +154,9 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			}
 			var replacement Decision
 			for i := 0; i < 2; i++ {
+				if i > 0 {
+					wantStatus = http.StatusOK
+				}
 				rr := httptest.NewRecorder()
 				h.ServeHTTP(rr, httptest.NewRequest("POST", path, strings.NewReader(string(raw))))
 				if rr.Code != wantStatus {

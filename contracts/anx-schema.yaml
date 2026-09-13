@@ -827,7 +827,8 @@ conversational_pm:
   decision_dispatch_scope: actor_id
   action_acknowledgement_scope: actor_id
   undeliverable_pending_acknowledgement: preserves_approval_and_detail_requires_fresh_proposal_to_deliver
-  action_acknowledgement_fields: [acknowledged_by, acknowledged_at]
+  action_acknowledgement_fields: [acknowledged_by, acknowledged_at, closed_without_delivery]
+  turn_lease_error_codes: [lease_required, lease_mismatch]
   turn_failure_kind: [expired]
   decision_provenance: [proposed_by, origin_kind, turn_id]
   decision_origin_kind: [human, pm_turn, channel]
@@ -836,6 +837,10 @@ conversational_pm:
   action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
   channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
   invariants:
+    - All work.phase proposals validate payload shape before persistence using the dispatch validation sentence.
+    - Identical request-key proposal replays return HTTP 200 with response-only replayed true; non-awaiting decisions also expose replayed_terminal_status without creating another request.
+    - Decision deliverable and delivery_path are read-only projections of the action executor registry; absent delivery routes project none.
+    - Closing an undeliverable pending action records closed_without_delivery and a human-readable receipt naming the actor and stating nothing was sent.
     - Done proposals validate every resolution ref; decision payload.resolution is read-only and derived at response time.
     - Same-runner claims recover the existing unexpired lease before allocating; owner release requires runner_id and lease_token and returns sending with claimed false.
     - Expired turns carry failure_kind expired; turn_closed errors expose the reason and name the deadline.
