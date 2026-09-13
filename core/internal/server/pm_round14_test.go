@@ -88,20 +88,45 @@ func TestRound14DecisionWorkLifecycle(t *testing.T) {
 						t.Fatal(got)
 					}
 				}
-				checkMissing := func(out map[string]any) {
+				checkMissing := func(out map[string]any, proposal ...bool) {
 					t.Helper()
 					e := out["error"].(map[string]any)
 					detail := e["details"].(map[string]any)
-					expected := (&pm.ApprovalTargetError{ApprovedRevision: in.TargetRevision, Reason: "work_missing"}).Error()
+					expected := fmt.Sprintf("Approved source revision has changed (approved at %s, source now unavailable). Approval refused (work_missing); inspect the work and create a fresh proposal if needed.", in.TargetRevision)
+					if len(proposal) > 0 && proposal[0] {
+						expected = fmt.Sprintf("Proposal target has changed (proposed at %s, source now unavailable). Approval refused (work_missing); decline it or wait for a fresh proposal.", in.TargetRevision)
+					}
 					if e["code"] != "source_revision_changed" || e["message"] != expected || detail["reason"] != "work_missing" || detail["current_revision"] != nil || detail["approved_revision"] != in.TargetRevision {
 						t.Fatal(out)
 					}
 				}
-				checkMissing(call("POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409))
+				checkMissing(call("POST", "/pm/decisions/"+awaitingID+"/answer", pm.AnswerInput{Revision: 1, Approve: true, Text: "yes"}, 409), true)
 				checkMissing(call("POST", "/pm/decisions/"+approvedID+"/dispatch", struct{}{}, 409))
 				action := call("GET", "/pm/actions/"+actionID, nil, 200)
-				if action["status"] != string(pm.Pending) || len(action["attempts"].([]any)) != 0 || action["deliverable"] != (authority == "nexus") || action["delivery_path"] != wantPath {
+				if action["status"] != string(pm.Failed) || len(action["attempts"].([]any)) != 1 || action["deliverable"] != (authority == "nexus") || action["delivery_path"] != wantPath {
 					t.Fatal(action)
+				}
+				failedBody, err := json.Marshal(action)
+				if err != nil {
+					t.Fatal(err)
+				}
+				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
+				checkMissing(call("POST", "/pm/decisions/"+approvedID+"/dispatch", struct{}{}, 409))
+				afterFailed, err := json.Marshal(call("GET", "/pm/actions/"+actionID, nil, 200))
+				if err != nil || !bytes.Equal(failedBody, afterFailed) {
+					t.Fatalf("repeat dispatch or reconcile changed failed action: %s", afterFailed)
+				}
+				receipt := action["receipt"].(map[string]any)
+				attempt := action["attempts"].([]any)[0].(map[string]any)
+				if receipt["detail"] != "The task this approval refers to no longer exists (trashed or purged); nothing was sent" || attempt["sent_at"] != nil || attempt["status"] != "failed" || attempt["finished_at"] == nil {
+					t.Fatal(action)
+				}
+				token = other.AccessToken
+				call("POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 403)
+				token = human.AccessToken
+				ack := call("POST", "/pm/actions/"+actionID+"/acknowledge", struct{}{}, 200)
+				if ack["status"] != string(pm.Acknowledged) || ack["acknowledged_at"] == nil || ack["receipt"].(map[string]any)["detail"] != receipt["detail"] || len(ack["attempts"].([]any)) != 1 {
+					t.Fatal(ack)
 				}
 				checkMissing(call("POST", "/pm/actions/"+actionID+"/reconcile", struct{}{}, 409))
 				// Exercise reconcile's source-call branch, not only a pending action guard.

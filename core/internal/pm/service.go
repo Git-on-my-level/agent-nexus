@@ -57,6 +57,13 @@ func (s *Service) authorize(ctx context.Context, p Principal, permission, ref st
 		}
 	}
 	if err := s.deps.Authorize(ctx, p, permission, ref); err != nil {
+		if errors.Is(err, ErrUnavailable) {
+			return err
+		}
+		var nonHuman *ConversationOwnerNotHumanError
+		if permission == "pm.propose" && errors.As(err, &nonHuman) {
+			return nonHuman
+		}
 		// Authorizers may report missing work only after checking the principal's
 		// permission. Preserve that diagnosis for proposals/source actions. Other
 		// lookups retain the forbidden fold to prevent cross-principal existence leaks.

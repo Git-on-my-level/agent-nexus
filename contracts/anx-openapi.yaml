@@ -470,7 +470,7 @@ paths:
     post:
       operationId: pmDecisionsAnswer
       summary: Answer and authorize a scoped decision
-      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
       tags:
       - pm
       x-anx-surface: canonical
@@ -525,7 +525,7 @@ paths:
   /pm/decisions/{decision_id}/dispatch:
     post:
       operationId: pmDecisionsDispatch
-      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call or attempt. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.
+      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. For a pending action with no sent attempt, dispatch durably records a failed attempt without sent_at and advances the action to failed, making it acknowledgeable. Receipt detail is "The task this approval refers to no longer exists (trashed or purged); nothing was sent". Transient work_read_failed errors leave durable state unchanged. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.
       summary: Hand off an authorized source action
       tags:
       - pm
@@ -675,7 +675,7 @@ paths:
   /pm/actions/{action_id}/reconcile:
     post:
       operationId: pmActionsReconcile
-      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.
+      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Missing work never changes durable state during reconciliation or resurrects an action failed before send. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.
       summary: Read back an action outcome without resending
       tags:
       - pm
@@ -6861,7 +6861,7 @@ components:
       - request_key
       - text
     PMErrorResponse:
-      description: Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or capacity with in_flight and limit for the workspace. Conversation serialization takes precedence when both limits apply.
+      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or capacity with in_flight and limit for the workspace. Conversation serialization takes precedence when both limits apply.
       type: object
       required: [error]
       properties:
@@ -6887,8 +6887,8 @@ components:
                   description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
                 reason:
                   type: string
-                  enum: [conversation, capacity, revision_changed, work_missing, already_at_target, work_read_failed]
-                  description: Turn admission constraint or reason fresh approval was refused.
+                  enum: [conversation, capacity, revision_changed, work_missing, already_at_target, work_read_failed, conversation_owner_not_human]
+                  description: Turn admission constraint, approval/source preflight refusal, or conversation_owner_not_human for a turn proposal whose owner is an agent principal. That 403 message is "Proposals need a human approver; this conversation belongs to an agent principal".
                 in_flight:
                   type: integer
                   description: Current workspace in-flight turns for capacity errors.

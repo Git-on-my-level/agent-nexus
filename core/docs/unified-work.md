@@ -156,7 +156,11 @@ PM decision targets must be live: trashed, archived and purged work all project
 returns `404 not_found`; fresh approval, dispatch and reconcile return
 `409 source_revision_changed`, reason `work_missing`, with the approved revision
 and `current_revision: null`, before any source call. Recorded answer replays
-remain idempotent. Principal and decision ownership checks precede these diagnoses.
+remain idempotent. Dispatch durably fails an unsent pending action with a failed
+attempt and the receipt "The task this approval refers to no longer exists
+(trashed or purged); nothing was sent", allowing human acknowledgement.
+Reconcile cannot resurrect it, and transient reader errors do not change durable
+state. Principal and decision ownership checks precede these diagnoses.
 
 Executor routing is independent of work liveness. Decisions capture trusted
 `source_authority` and copy it to their actions; reads derive `deliverable` and

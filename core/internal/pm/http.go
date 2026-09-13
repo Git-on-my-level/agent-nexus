@@ -280,6 +280,10 @@ func writeError(w http.ResponseWriter, err error) {
 	if humanPending != nil {
 		body["details"] = humanPending
 	}
+	var nonHuman *ConversationOwnerNotHumanError
+	if errors.As(err, &nonHuman) {
+		body["details"] = map[string]string{"reason": "conversation_owner_not_human"}
+	}
 	var target *ApprovalTargetError
 	if errors.As(err, &target) {
 		body["details"] = target

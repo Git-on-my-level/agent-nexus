@@ -96,7 +96,7 @@ func TestRound14MissingWorkNeverCallsSource(t *testing.T) {
 			if err := st.get(ctx, "action", d.ActionID, &a); err != nil {
 				t.Fatal(err)
 			}
-			if len(a.Attempts) != 0 || a.Status != Pending {
+			if len(a.Attempts) != 1 || a.Status != Failed || a.Attempts[0].SentAt != nil {
 				t.Fatal(a)
 			}
 			a.Status = Unknown

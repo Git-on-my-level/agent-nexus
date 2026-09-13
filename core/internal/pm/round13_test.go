@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -226,7 +227,12 @@ func TestRound13ApprovalTarget(t *testing.T) {
 					t.Fatal(err)
 				}
 				details := response.Error.Details
-				if response.Error.Code != "source_revision_changed" || details.Reason != tc.reason || details.ApprovedRevision != "r1" || response.Error.Message != details.Error() {
+				current := "unavailable"
+				if details.CurrentRevision != nil {
+					current = *details.CurrentRevision
+				}
+				expectedMessage := fmt.Sprintf("Proposal target has changed (proposed at r1, source now %s). Approval refused (%s); decline it or wait for a fresh proposal.", current, tc.reason)
+				if response.Error.Code != "source_revision_changed" || details.Reason != tc.reason || details.ApprovedRevision != "r1" || response.Error.Message != expectedMessage {
 					t.Fatalf("%s", raw)
 				}
 				if tc.readErr != nil || tc.noReader {

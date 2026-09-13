@@ -6202,7 +6202,7 @@
       "path": "/pm/actions/{action_id}/reconcile",
       "operation_id": "pmActionsReconcile",
       "summary": "Read back an action outcome without resending",
-      "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.",
+      "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Missing work never changes durable state during reconciliation or resurrects an action failed before send. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.",
       "why": "Read back an action outcome without resending.",
       "input_mode": "json-body",
       "streaming": {
@@ -6771,7 +6771,7 @@
       "path": "/pm/decisions/{decision_id}/answer",
       "operation_id": "pmDecisionsAnswer",
       "summary": "Answer and authorize a scoped decision",
-      "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
+      "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is \"Proposal target has changed (proposed at \u003crev\u003e, source now \u003crev|unavailable\u003e). Approval refused (\u003creason\u003e); decline it or wait for a fresh proposal.\" Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
       "why": "Answer and authorize a scoped decision.",
       "input_mode": "json-body",
       "streaming": {
@@ -6953,7 +6953,7 @@
       "path": "/pm/decisions/{decision_id}/dispatch",
       "operation_id": "pmDecisionsDispatch",
       "summary": "Hand off an authorized source action",
-      "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call or attempt. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.",
+      "description": "Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, and current_revision null before any source call. For a pending action with no sent attempt, dispatch durably records a failed attempt without sent_at and advances the action to failed, making it acknowledgeable. Receipt detail is \"The task this approval refers to no longer exists (trashed or purged); nothing was sent\". Transient work_read_failed errors leave durable state unchanged. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.",
       "why": "Hand off an authorized source action.",
       "input_mode": "json-body",
       "streaming": {
