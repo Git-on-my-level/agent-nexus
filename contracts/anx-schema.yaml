@@ -840,7 +840,7 @@ conversational_pm:
     - Action deliverable reflects configured executors; unavailable dispatch records no attempt and leaves the action unchanged.
     - Pending actions and failed actions with no sent attempt have nothing to reconcile and return invalid_request.
     - Failed action status never regresses to unknown during read-back.
-    - attempts.sent_at records entry into executor handoff, not confirmed delivery; preflight failures omit it.
+    - attempts.sent_at records entry into executor handoff, not confirmed delivery; preflight failures and confirmed native failures before commit omit it; native commit uncertainty is resolved by canonical read-back when possible.
     - New decisions record proposed_by and origin_kind; PM turn proposals also record turn_id. Supersession preserves each record's proposer.
     - Human approval and scope-specific authority are required for downstream actions.
     - Answer and durable delivery intent are atomic; an answer is not an applied outcome.

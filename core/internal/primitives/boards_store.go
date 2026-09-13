@@ -2186,16 +2186,16 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
-		return BoardCardMutationResult{}, fmt.Errorf("commit board card move transaction: %w", err)
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card move transaction: %w", err)}
 	}
 
 	boardMap, err := boardRowToAPI(ctx, s.db, boardRow)
 	if err != nil {
-		return BoardCardMutationResult{}, err
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: err}
 	}
 	cardMap, err := cardRow.toMap()
 	if err != nil {
-		return BoardCardMutationResult{}, err
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: err}
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 }

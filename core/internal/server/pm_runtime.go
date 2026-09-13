@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -196,7 +197,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	deps.ReadContextPage = func(ctx context.Context, p pm.Principal, ref, query, cursor string, limit int) (pm.ContextPage, error) {
 		if ref != "" {
 			if cursor != "" {
-				return pm.ContextPage{}, pm.ErrInvalid
+				return pm.ContextPage{}, pm.ErrContextWorkCursor
 			}
 			w, err := store.GetWork(ctx, ref)
 			if err != nil {
@@ -206,7 +207,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 		}
 		page, err := store.ListWork(ctx, primitives.WorkListFilter{Query: query, Cursor: cursor, Limit: limit})
 		if errors.Is(err, primitives.ErrInvalidCursor) {
-			return pm.ContextPage{}, pm.ErrInvalid
+			return pm.ContextPage{}, pm.ErrContextCursor
 		}
 		if err != nil {
 			return pm.ContextPage{}, err
@@ -313,14 +314,26 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 	return runtime, nil
 }
 
-func executeNativeAnnotation(ctx context.Context, store *primitives.Store, a pm.Action) (pm.Receipt, error) {
+type nativeMutationStore interface {
+	GetWork(context.Context, string) (map[string]any, error)
+	PatchWork(context.Context, string, string, int64, map[string]any) (map[string]any, error)
+	MoveBoardCard(context.Context, string, string, string, primitives.MoveBoardCardInput) (primitives.BoardCardMutationResult, error)
+}
+
+func executeNativeAnnotation(ctx context.Context, store nativeMutationStore, a pm.Action) (receipt pm.Receipt, execErr error) {
+	defer func() {
+		if execErr != nil {
+			var uncertain *primitives.MutationOutcomeUnknown
+			execErr = &pm.NativeExecutionError{Cause: execErr, WriteStarted: errors.As(execErr, &uncertain)}
+		}
+	}()
 	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
 	if err != nil {
-		return pm.Receipt{}, pm.ErrInvalid
+		return pm.Receipt{}, fmt.Errorf("%w: invalid native target revision: %v", pm.ErrInvalid, err)
 	}
 	patch := map[string]any{}
 	if err = json.Unmarshal([]byte(a.Instruction), &patch); err != nil {
-		return pm.Receipt{}, pm.ErrInvalid
+		return pm.Receipt{}, fmt.Errorf("%w: invalid annotation JSON: %v", pm.ErrInvalid, err)
 	}
 	w, err := store.GetWork(ctx, a.WorkRef)
 	if err != nil {
@@ -336,7 +349,7 @@ func executeNativeAnnotation(ctx context.Context, store *primitives.Store, a pm.
 	return pm.Receipt{Status: pm.Reported, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, Detail: "Nexus annotation mutation committed; reconcile for read-back verification"}, nil
 }
 
-func reconcileNativeAnnotation(ctx context.Context, store *primitives.Store, a pm.Action) (pm.Receipt, error) {
+func reconcileNativeAnnotation(ctx context.Context, store nativeMutationStore, a pm.Action) (pm.Receipt, error) {
 	w, err := store.GetWork(ctx, a.WorkRef)
 	if err != nil {
 		return pm.Receipt{}, err
@@ -349,7 +362,7 @@ func reconcileNativeAnnotation(ctx context.Context, store *primitives.Store, a p
 		actual, _ := json.Marshal(w[key])
 		expected, _ := json.Marshal(want)
 		if string(actual) != string(expected) {
-			return pm.Receipt{Status: pm.Unknown, Detail: "Current local fields do not establish the requested outcome"}, nil
+			return pm.Receipt{Status: pm.Failed, Detail: "Canonical annotation fields do not match the requested outcome"}, nil
 		}
 	}
 	return pm.Receipt{Status: pm.Verified, ExternalID: a.ID, EvidenceRefs: []string{a.WorkRef}, IndependentlyVerified: true, Detail: "Read back requested Nexus annotation fields from canonical work"}, nil
@@ -396,9 +409,16 @@ func workSourceMap(w map[string]any) map[string]any {
 	return source
 }
 
-func executeWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action) (pm.Receipt, error) {
+func executeWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Action) (receipt pm.Receipt, execErr error) {
+	writeCompleted := false
+	defer func() {
+		if execErr != nil {
+			var uncertain *primitives.MutationOutcomeUnknown
+			execErr = &pm.NativeExecutionError{Cause: execErr, WriteStarted: writeCompleted || errors.As(execErr, &uncertain)}
+		}
+	}()
 	if a.Payload == nil || a.Payload.Phase == "" {
-		return pm.Receipt{}, pm.ErrInvalid
+		return pm.Receipt{}, fmt.Errorf("%w: work.phase payload requires a phase", pm.ErrInvalid)
 	}
 	w, err := store.GetWork(ctx, a.WorkRef)
 	if err != nil {
@@ -409,7 +429,7 @@ func executeWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action)
 	}
 	version, err := strconv.ParseInt(a.TargetRevision, 10, 64)
 	if err != nil {
-		return pm.Receipt{}, pm.ErrInvalid
+		return pm.Receipt{}, fmt.Errorf("%w: invalid native target revision: %v", pm.ErrInvalid, err)
 	}
 	input := primitives.MoveBoardCardInput{ColumnKey: a.Payload.Phase, IfWorkVersion: &version}
 	if len(a.Payload.ResolutionRefs) > 0 {
@@ -422,9 +442,10 @@ func executeWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action)
 	if err != nil {
 		return pm.Receipt{}, err
 	}
+	writeCompleted = true
 	return readBackWorkPhase(ctx, store, a, false)
 }
-func readBackWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action, reconcile bool) (pm.Receipt, error) {
+func readBackWorkPhase(ctx context.Context, store nativeMutationStore, a pm.Action, reconcile bool) (pm.Receipt, error) {
 	w, err := store.GetWork(ctx, a.WorkRef)
 	if err != nil {
 		return pm.Receipt{}, err
@@ -434,7 +455,7 @@ func readBackWorkPhase(ctx context.Context, store *primitives.Store, a pm.Action
 	}
 	phase := anyString(w["phase"])
 	if phase != a.Payload.Phase {
-		return pm.Receipt{Status: pm.Unknown, Detail: "Canonical phase does not match requested phase: " + phase}, nil
+		return pm.Receipt{Status: pm.Failed, Detail: "Canonical phase does not match requested phase: " + phase}, nil
 	}
 	status := pm.Reported
 	if reconcile {

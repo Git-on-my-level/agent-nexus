@@ -502,9 +502,13 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
-		return nil, err
+		return nil, &MutationOutcomeUnknown{Cause: err}
 	}
-	return s.GetWork(ctx, id)
+	out, err := s.GetWork(ctx, id)
+	if err != nil {
+		return nil, &MutationOutcomeUnknown{Cause: err}
+	}
+	return out, nil
 }
 
 func (s *Store) ListWorkObservations(ctx context.Context, identifier string, limit int, cursor string) ([]map[string]any, string, error) {

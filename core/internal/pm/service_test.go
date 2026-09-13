@@ -257,12 +257,12 @@ func TestContextPaginationUsesRequestingPrincipalAndBounds(t *testing.T) {
 	s, _, p, _ := fixture(t)
 	ctx := context.Background()
 	s.deps.ReadContextPage = func(_ context.Context, got Principal, work, query, cursor string, limit int) (ContextPage, error) {
-		if got.ActorID != p.ActorID || cursor != "next" || limit != 2 {
+		if got.ActorID != p.ActorID || work != "" || cursor != "next" || limit != 2 {
 			t.Fatalf("context scope changed %+v %q %d", got, cursor, limit)
 		}
 		return ContextPage{Items: []any{"evidence"}}, nil
 	}
-	page, err := s.QueryContextPage(ctx, p, "work:1", "", "next", 2)
+	page, err := s.QueryContextPage(ctx, p, "", "", "next", 2)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatalf("context page %+v %v", page, err)
 	}
