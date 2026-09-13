@@ -475,8 +475,16 @@ scenario, writes CLI profile homes from registration tokens (no refresh
 exchange), and prints the exact command. Wake routing and
 `ANX_PM_BRIDGE_ENABLED` are not required.
 
+Export `ZAI_API_KEY` in the shell that launches `pm serve`. The runner does not
+read `~/.hermes/auth.json` or inject the key. If the harness argv names `zai`
+and that variable is unset, the turn fails with a sentence that names
+`ZAI_API_KEY`. Run the PM harness as a different uid or on a different host
+from core's JIT generated-reader process: Seatbelt on this OS cannot hide
+another same-uid process's environment.
+
 ```sh
 make cli-build
+export ZAI_API_KEY
 ANX_DEV_BLOB_BACKEND=filesystem make serve
 HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
   --work-dir .tmp/pm-runner \

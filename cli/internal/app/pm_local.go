@@ -361,6 +361,9 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	if remain < time.Second {
 		return fail(humanTurnFailure("deadline", ""), nil)
 	}
+	if reason := missingHarnessSecretReason(argv, env); reason != "" {
+		return fail(reason, nil)
+	}
 	runCtx, cancel := context.WithTimeout(ctx, remain)
 	defer cancel()
 	if runnerUsesPromptPlaceholder(argv) {
@@ -373,12 +376,9 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 		if err != nil {
 			return fail(humanTurnFailure("launch_failed", ""), joinCmdOutput(stdout, stderr))
 		}
-		text, usedCombined := assistantTextFromRunnerOutput(stdout, stderr)
-		if usedCombined {
-			a.pmLog("pm serve: turn %s stdout empty; using combined output for assistant text\n", turnID)
-		}
+		text := assistantTextFromRunnerOutput(stdout)
 		if text == "" {
-			return fail(humanTurnFailure("no_assistant", ""), joinCmdOutput(stdout, stderr))
+			return fail(humanTurnFailure("no_assistant", ""), stderr)
 		}
 		return complete(text, "", "")
 	}
@@ -426,15 +426,9 @@ func (a *App) handleClaimedTurn(ctx context.Context, cfg config.Resolved, workDi
 	metaOut, _, _ := runCmd(runCtx, agentctl, []string{"result", execID}, workDir, env)
 	blob := string(contentOut) + "\n" + string(metaOut) + "\n" + string(awaitOut) + "\n" + string(launchOut)
 	provider, model := extractProviderModel(blob)
-	text, usedCombined := assistantTextFromRunnerOutput(contentOut, contentErrOut)
-	if usedCombined {
-		a.pmLog("pm serve: turn %s stdout empty; using combined output for assistant text\n", turnID)
-	}
+	text := assistantTextFromRunnerOutput(contentOut)
 	if text == "" {
-		text = strings.TrimSpace(extractAssistantText(string(contentOut), blob))
-	}
-	if text == "" {
-		return fail(humanTurnFailure("no_assistant", ""), joinCmdOutput(contentOut, awaitOut))
+		return fail(humanTurnFailure("no_assistant", ""), contentErrOut)
 	}
 	return complete(text, provider, model)
 }
@@ -831,14 +825,8 @@ func joinCmdOutput(stdout, stderr []byte) []byte {
 	return out
 }
 
-func assistantTextFromRunnerOutput(stdout, stderr []byte) (text string, usedCombined bool) {
-	text = strings.TrimSpace(extractAssistantText(string(stdout), string(stdout)))
-	if text != "" {
-		return text, false
-	}
-	combined := joinCmdOutput(stdout, stderr)
-	text = strings.TrimSpace(extractAssistantText(string(combined), string(combined)))
-	return text, text != ""
+func assistantTextFromRunnerOutput(stdout []byte) string {
+	return strings.TrimSpace(extractAssistantText(string(stdout), string(stdout)))
 }
 
 func (a *App) logRunnerStderr(turnID string, stderr []byte) {
@@ -868,7 +856,7 @@ func loadOrCreateRunnerID(dir string) (string, error) {
 }
 
 func harnessChildEnv(cfg config.Resolved, base []string) []string {
-	env := withZAIAPIKey(append([]string{}, base...))
+	env := append([]string{}, base...)
 	setEnv := func(key, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -898,58 +886,33 @@ func passwdHome() string {
 	return ""
 }
 
-func withZAIAPIKey(env []string) []string {
+func missingHarnessSecretReason(argv, env []string) string {
+	if !runnerNeedsZAIAPIKey(argv) {
+		return ""
+	}
+	if envHasNonEmpty(env, "ZAI_API_KEY") {
+		return ""
+	}
+	return "ZAI_API_KEY is not set. Export ZAI_API_KEY before starting the runner."
+}
+
+func runnerNeedsZAIAPIKey(argv []string) bool {
+	for _, arg := range argv {
+		if strings.Contains(strings.ToLower(arg), "zai") {
+			return true
+		}
+	}
+	return false
+}
+
+func envHasNonEmpty(env []string, key string) bool {
+	prefix := key + "="
 	for _, item := range env {
-		if strings.HasPrefix(item, "ZAI_API_KEY=") && len(item) > len("ZAI_API_KEY=") {
-			return env
+		if strings.HasPrefix(item, prefix) && strings.TrimSpace(item[len(prefix):]) != "" {
+			return true
 		}
 	}
-	token := zaiTokenFromHermesAuth()
-	if token == "" {
-		return env
-	}
-	return append(env, "ZAI_API_KEY="+token)
-}
-
-func zaiTokenFromHermesAuth() string {
-	for _, home := range hermesAuthHomes() {
-		raw, err := os.ReadFile(filepath.Join(home, ".hermes", "auth.json"))
-		if err != nil {
-			continue
-		}
-		var doc map[string]any
-		if json.Unmarshal(raw, &doc) != nil {
-			continue
-		}
-		pool, _ := doc["credential_pool"].(map[string]any)
-		zai, _ := pool["zai"].([]any)
-		if len(zai) == 0 {
-			continue
-		}
-		first, _ := zai[0].(map[string]any)
-		token := strings.TrimSpace(anyString(first["access_token"]))
-		if token != "" {
-			return token
-		}
-	}
-	return ""
-}
-
-func hermesAuthHomes() []string {
-	seen := map[string]bool{}
-	var homes []string
-	add := func(home string) {
-		home = strings.TrimSpace(home)
-		if home == "" || seen[home] {
-			return
-		}
-		seen[home] = true
-		homes = append(homes, home)
-	}
-	add(passwdHome())
-	home, _ := os.UserHomeDir()
-	add(home)
-	return homes
+	return false
 }
 
 func parseTurnDeadline(turn map[string]any) time.Time {
