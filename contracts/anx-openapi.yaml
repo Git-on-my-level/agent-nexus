@@ -344,6 +344,7 @@ paths:
       - forbidden
       - not_found
       - conflict
+      - human_proposal_pending
       - source_revision_changed
       - busy
       - unavailable
@@ -373,7 +374,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PMDecision'
         '409':
-          description: Request key intent conflicts; error.details.existing_decision_id identifies the existing decision.
+          description: Request key intent conflicts include error.details.existing_decision_id. Non-human proposals blocked by an awaiting human proposal return human_proposal_pending with error.details.pending_decision_id; a human must decline or answer it first.
           content:
             application/json:
               schema:
@@ -468,6 +469,7 @@ paths:
     post:
       operationId: pmDecisionsAnswer
       summary: Answer and authorize a scoped decision
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing, already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. Details include approved_revision, current_revision (null if unavailable), and reason (revision_changed, work_missing, already_at_target, or work_read_failed). Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
       tags:
       - pm
       x-anx-surface: canonical
@@ -508,7 +510,7 @@ paths:
               $ref: '#/components/schemas/PMDecisionAnswerRequest'
       responses:
         '409':
-          description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
+          description: source_revision_changed for fresh approval of stale, missing, moot, or unreadable work includes revision and reason details. Decision state conflicts on superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
           content:
             application/json:
               schema:
@@ -1091,6 +1093,7 @@ paths:
       - forbidden
       - not_found
       - conflict
+      - human_proposal_pending
       - turn_closed
       - lease_required
       - lease_mismatch
@@ -1115,6 +1118,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PMTurnProposeRequest'
       responses:
+        '409':
+          description: Lease or request-key conflict, or human_proposal_pending with error.details.pending_decision_id; a human must decline or answer the pending human proposal first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
         '200':
           description: Record or replay a selected PM agent proposal. Replays include replayed true and terminal replays also include replayed_terminal_status.
           content:
@@ -6862,14 +6871,24 @@ components:
                   description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
                 reason:
                   type: string
-                  enum: [conversation, capacity]
-                  description: Reason turn admission is busy.
+                  enum: [conversation, capacity, revision_changed, work_missing, already_at_target, work_read_failed]
+                  description: Turn admission constraint or reason fresh approval was refused.
                 in_flight:
                   type: integer
                   description: Current workspace in-flight turns for capacity errors.
                 limit:
                   type: integer
                   description: Workspace turn capacity for capacity errors.
+                pending_decision_id:
+                  type: string
+                  description: Awaiting human decision blocking a different non-human proposal on this work.
+                approved_revision:
+                  type: string
+                  description: Decision target_revision that the refused approval would authorize.
+                current_revision:
+                  type: string
+                  nullable: true
+                  description: Current Work.decision_revision, or null when work is missing or unreadable.
                 existing_decision_id:
                   type: string
                   description: Existing proposal for a conflicting request key.
@@ -6909,7 +6928,7 @@ components:
           maximum: 50
           default: 20
     PMDecisionCreateRequest:
-      description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
+      description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while any human-origin decision awaits an answer on that work in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
       type: object
       additionalProperties: false
       properties:
@@ -6933,7 +6952,7 @@ components:
       - scope
       - target_revision
     PMTurnProposeRequest:
-      description: Selected PM agents must supply the current lease token; stale tokens return 409. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. A fresh proposal reuses only identical awaiting intent; changed intent supersedes the earlier decision atomically.
+      description: Selected PM agents must supply the current lease token; stale tokens return 409. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while any human-origin decision awaits an answer on that work in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
       type: object
       additionalProperties: false
       properties:

@@ -230,7 +230,8 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool
 
 // proposeDecision serializes proposal deduplication and turn linkage in SQLite,
 // including across Service instances. Only identical intent is reused; changed
-// intent supersedes the awaiting decision in the same transaction as its replacement.
+// intent may supersede an awaiting decision, but non-human proposals cannot
+// displace pending human intent. All checks and replacement writes are atomic.
 func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseToken string) (Decision, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -268,7 +269,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 		if err = json.Unmarshal(raw, &prior); err != nil {
 			return Decision{}, false, err
 		}
-		if prior.ProposedBy != d.ProposedBy || prior.OriginKind != d.OriginKind || prior.WorkRef != d.WorkRef || prior.Instruction != d.Instruction || prior.Scope != d.Scope || prior.TargetRevision != d.TargetRevision || !sameOrigin(prior.Origin, d.Origin) || !reflect.DeepEqual(prior.Payload, d.Payload) {
+		if !sameDecisionIntent(prior, d) || (prior.Status != AwaitingAnswer && (prior.ProposedBy != d.ProposedBy || prior.OriginKind != d.OriginKind || !sameOrigin(prior.Origin, d.Origin))) {
 			return Decision{}, false, &DecisionConflict{ExistingDecisionID: prior.ID}
 		}
 		d = prior
@@ -282,10 +283,13 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 			if err = json.Unmarshal(raw, &prior); err != nil {
 				return Decision{}, false, err
 			}
-			if prior.ProposedBy == d.ProposedBy && prior.OriginKind == d.OriginKind && prior.Instruction == d.Instruction && prior.TargetRevision == d.TargetRevision && reflect.DeepEqual(prior.Payload, d.Payload) && sameOrigin(prior.Origin, d.Origin) {
+			if sameDecisionIntent(prior, d) {
 				d = prior
 				reuse = true
 			} else {
+				if err = rejectPendingHumanProposal(ctx, tx, d); err != nil {
+					return Decision{}, false, err
+				}
 				d.Supersedes = prior.ID
 				d.SupersedesProposedBy = prior.ProposedBy
 				d.SupersedesOriginKind = prior.OriginKind
@@ -293,7 +297,7 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 				prior.SupersededBy = d.ID
 				prior.SupersededByProposedBy = d.ProposedBy
 				prior.SupersededByOriginKind = d.OriginKind
-				prior.SupersededReason = "Replaced by a proposal with changed payload, instruction, target revision, or origin"
+				prior.SupersededReason = "Replaced by a proposal with changed payload, instruction, or target revision"
 				prior.CanAnswer = false
 				prior.Revision++
 				raw, err = json.Marshal(prior)
@@ -308,6 +312,9 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseTo
 			return Decision{}, false, err
 		}
 		if !reuse {
+			if err = rejectPendingHumanProposal(ctx, tx, d); err != nil {
+				return Decision{}, false, err
+			}
 			raw, err = json.Marshal(d)
 			if err != nil {
 				return Decision{}, false, err
@@ -405,4 +412,24 @@ func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now t
 		return Turn{}, err
 	}
 	return t, tx.Commit()
+}
+
+// Proposer and delivery origin are provenance, not proposal intent.
+func sameDecisionIntent(a, b Decision) bool {
+	return a.WorkspaceID == b.WorkspaceID && a.ActorID == b.ActorID && a.WorkRef == b.WorkRef && a.Scope == b.Scope && a.Instruction == b.Instruction && a.TargetRevision == b.TargetRevision && reflect.DeepEqual(a.Payload, b.Payload)
+}
+
+func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) error {
+	if d.OriginKind == "human" {
+		return nil
+	}
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.WorkRef).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return &HumanProposalPendingError{PendingDecisionID: id}
 }

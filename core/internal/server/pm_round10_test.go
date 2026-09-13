@@ -32,6 +32,13 @@ func TestRound10RefreshBookkeepingPreservesDecisionFence(t *testing.T) {
 			executions := 0
 			svc, err := pm.NewService(st, pm.Config{WorkspaceID: "ws_main"}, pm.Dependencies{
 				Authorize: func(context.Context, pm.Principal, string, string) error { return nil },
+				DecisionWork: func(ctx context.Context, _ pm.Principal, ref string) (pm.DecisionWork, error) {
+					w, err := store.GetWork(ctx, ref)
+					if err != nil {
+						return pm.DecisionWork{}, err
+					}
+					return pm.DecisionWork{Revision: primitives.WorkDecisionRevision(w), Phase: asString(w["phase"])}, nil
+				},
 				CurrentRevision: func(ctx context.Context, _ pm.Principal, ref string) (string, error) {
 					return currentWorkDecisionRevision(ctx, store, ref)
 				},

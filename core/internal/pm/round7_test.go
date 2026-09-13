@@ -101,7 +101,7 @@ func TestRound7DeclinedDecisionLifecycle(t *testing.T) {
 }
 
 func TestRound7ReplacementAttribution(t *testing.T) {
-	for _, kind := range []string{"human_replaces_pm", "pm_replaces_human", "legacy"} {
+	for _, kind := range []string{"human_replaces_pm", "pm_replaces_pm", "legacy"} {
 		t.Run(kind, func(t *testing.T) {
 			s, st, p, _ := fixture(t)
 			ctx := context.Background()
@@ -117,7 +117,7 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			claimTestTurn(t, s, ctx, agent, turn.ID)
 			in := DecisionInput{RequestKey: "first", WorkRef: "work:1", Scope: "assignment", Instruction: "Assign", TargetRevision: "r1"}
 			var prior Decision
-			if kind == "human_replaces_pm" {
+			if kind != "legacy" {
 				claimTestTurn(t, s, ctx, agent, turn.ID)
 				prior, err = s.ProposeForTurn(ctx, agent, turn.ID, in, testTurnLease(t, s, ctx, turn.ID))
 			} else {
@@ -138,14 +138,15 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			}
 			caller, path := p, "/pm/decisions"
 			wantStatus := http.StatusCreated
-			if kind == "pm_replaces_human" {
+			if kind == "pm_replaces_pm" {
 				caller, path = agent, "/pm/turns/"+turn.ID+"/decisions"
 				wantStatus = http.StatusOK
 			}
 			h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return caller, nil }}
 			in.RequestKey = "replacement"
+			in.Instruction = "Assign another owner"
 			var request any = in
-			if kind == "pm_replaces_human" {
+			if kind == "pm_replaces_pm" {
 				request = TurnProposeInput{DecisionInput: in, LeaseToken: testTurnLease(t, s, ctx, turn.ID)}
 			}
 			raw, err := json.Marshal(request)

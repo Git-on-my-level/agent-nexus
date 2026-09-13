@@ -271,8 +271,19 @@ func writeError(w http.ResponseWriter, err error) {
 			break
 		}
 	}
+	var humanPending *HumanProposalPendingError
+	if errors.As(err, &humanPending) {
+		status, code, message = http.StatusConflict, "human_proposal_pending", err.Error()
+	}
 	w.WriteHeader(status)
 	body := map[string]any{"code": code, "message": message}
+	if humanPending != nil {
+		body["details"] = humanPending
+	}
+	var target *ApprovalTargetError
+	if errors.As(err, &target) {
+		body["details"] = target
+	}
 	var busy *BusyError
 	if errors.As(err, &busy) {
 		body["details"] = busy
