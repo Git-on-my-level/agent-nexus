@@ -67,7 +67,7 @@ func TestRound17QueueAndRunnerCapacityHTTP(t *testing.T) {
 	if first.ID == second.ID {
 		t.Fatal("same turn allocated twice")
 	}
-	claim("runner-3", 204)
+	claim("runner-3", 429)
 	if recovered := claim("runner-1", 200); !reflect.DeepEqual(recovered, first) {
 		t.Fatalf("recovery changed: %+v", recovered)
 	}
@@ -89,7 +89,7 @@ func TestRound17QueueAndRunnerCapacityHTTP(t *testing.T) {
 	if reclaimed.ID != first.ID || reclaimed.LeaseToken == first.LeaseToken {
 		t.Fatalf("expired lease not reclaimed: %+v", reclaimed)
 	}
-	claim("runner-4", 204)
+	claim("runner-4", 429)
 }
 
 func TestRound17QueueCountsOnlyWaitingTurns(t *testing.T) {

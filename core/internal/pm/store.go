@@ -378,7 +378,7 @@ func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now t
 	if err != nil {
 		return Turn{}, err
 	}
-	held := 0
+	held, waiting := 0, 0
 	var candidate *Turn
 	for i := range turns {
 		t := &turns[i]
@@ -392,12 +392,18 @@ func (s *Store) claimTurn(ctx context.Context, p Principal, runner string, now t
 			}
 			continue
 		}
-		if candidate == nil && t.AgentActorID == p.ActorID {
-			candidate = t
+		if t.AgentActorID == p.ActorID {
+			waiting++
+			if candidate == nil {
+				candidate = t
+			}
 		}
 	}
-	if held >= capacity || candidate == nil {
+	if candidate == nil {
 		return Turn{}, ErrEmpty
+	}
+	if held >= capacity {
+		return Turn{}, &BusyError{Reason: "capacity", InFlight: held, Limit: capacity, Waiting: waiting}
 	}
 	t := *candidate
 	t.LeaseToken = newLeaseToken()
@@ -426,7 +432,7 @@ func rejectPendingHumanProposal(ctx context.Context, tx *sql.Tx, d Decision) err
 		return nil
 	}
 	var id string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.WorkRef).Scan(&id)
+	err := tx.QueryRowContext(ctx, `SELECT id FROM pm_records WHERE kind='decision' AND workspace_id=? AND json_extract(body,'$.work_ref')=? AND json_extract(body,'$.scope')=? AND json_extract(body,'$.status')='awaiting_answer' AND json_extract(body,'$.origin_kind')='human' ORDER BY rowid LIMIT 1`, d.WorkspaceID, d.WorkRef, d.Scope).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

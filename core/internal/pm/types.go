@@ -36,12 +36,13 @@ func (e *terminalLeaseMismatchError) Error() string {
 }
 func (e *terminalLeaseMismatchError) Unwrap() error { return ErrLeaseMismatch }
 
-// BusyError describes the admission constraint observed under the store lock.
+// BusyError describes the admission or claim constraint observed under the store lock.
 type BusyError struct {
 	Reason   string `json:"reason"`
 	TurnID   string `json:"turn_id,omitempty"`
 	InFlight int    `json:"in_flight,omitempty"`
 	Queued   int    `json:"queued,omitempty"`
+	Waiting  int    `json:"waiting,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 }
 
