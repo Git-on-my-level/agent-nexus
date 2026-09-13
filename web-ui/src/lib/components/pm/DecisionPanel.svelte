@@ -40,6 +40,12 @@
   );
   let consequence = $derived(decisionConsequence(selected, work));
   let fields = $derived(decisionFields(selected));
+  // Core says whether a delivery path exists for this action's scope; an
+  // older core omits the flag, in which case the server remains the judge.
+  let undeliverable = $derived(action?.deliverable === false);
+  let delivered = $derived(
+    Boolean(action) && !["pending", "pending_delivery"].includes(action.status),
+  );
   // Core's read-back names the phase by key; the reader knows it by label.
   function readableDetail(text) {
     return String(text ?? "").replace(
@@ -137,7 +143,18 @@
         {/if}
       </details>
     </header>
-    {#if selected.status === "awaiting_answer" && cannotAnswer}
+    {#if selected.status === "superseded" && selected.superseded_by}
+      <section class="border-t border-line-subtle pt-4">
+        <p class="text-meta text-fg">
+          The PM replaced this proposal{#if selected.superseded_reason}: {selected.superseded_reason}{/if}.
+          <a
+            class="ui-prose-link"
+            href={`?item=decision:${encodeURIComponent(selected.superseded_by)}`}
+            >Open the replacement</a
+          >
+        </p>
+      </section>
+    {:else if selected.status === "awaiting_answer" && cannotAnswer}
       <section class="border-t border-line-subtle pt-4">
         <p class="text-meta text-fg">
           This decision is addressed to {actorLabel(selected.actor_id) ||
@@ -237,19 +254,30 @@
             rel="noreferrer">Open authoritative receipt ↗</a
           >
         {/if}
+        {#if undeliverable && !delivered}
+          <p class="mt-2 text-meta text-fg-muted">
+            No delivery path is configured for this source yet. The approval is
+            kept, and the request stays pending until one is.
+          </p>
+        {/if}
         <div class="mt-4 flex flex-wrap items-center gap-2">
-          {#if action.status === "pending_delivery"}
+          {#if action.status === "pending_delivery" && !undeliverable}
             <button class="ui-btn-primary" onclick={onDeliver} disabled={busy}
               >{busy && busyWith === "deliver"
                 ? "Requesting delivery…"
                 : "Deliver approved instruction"}</button
             >
           {/if}
-          <button class="ui-btn-secondary" onclick={onReconcile} disabled={busy}
-            >{busy && busyWith === "reconcile"
-              ? "Checking receipt…"
-              : "Check source receipt"}</button
-          >
+          {#if delivered}
+            <button
+              class="ui-btn-secondary"
+              onclick={onReconcile}
+              disabled={busy}
+              >{busy && busyWith === "reconcile"
+                ? "Checking receipt…"
+                : "Check source receipt"}</button
+            >
+          {/if}
         </div>
         <details class="mt-4 text-micro text-fg-muted">
           <summary class="cursor-pointer"

@@ -209,8 +209,25 @@
         };
       }
     } catch (err) {
+      const existing = existingDecisionId(err);
+      if (existing) {
+        moveNotice = {
+          text: `A request for this task is already waiting for your answer.`,
+          href: workspaceHref(
+            `/inbox?item=decision:${encodeURIComponent(existing)}`,
+          ),
+        };
+        return;
+      }
       moveError = errorMessage(err);
     }
+  }
+  // Core answers a replayed request key with the decision it already holds.
+  function existingDecisionId(err) {
+    const details =
+      err?.details?.details ?? err?.details ?? err?.body?.error?.details ?? {};
+    const id = details?.existing_decision_id ?? err?.existing_decision_id;
+    return typeof id === "string" && id ? id : "";
   }
   function isTextEntryTarget(target) {
     return (

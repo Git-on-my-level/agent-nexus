@@ -134,6 +134,8 @@ export function inboxRowBadge(row, now = Date.now()) {
       return row.item?.can_answer === false
         ? { label: "Waiting on someone else", tone: "neutral" }
         : null;
+    if (row.status === "superseded" && row.item?.superseded_by)
+      return { label: "Replaced", tone: "neutral" };
     return receiptSignal(row.status);
   }
   if (row.kind === "update") {
