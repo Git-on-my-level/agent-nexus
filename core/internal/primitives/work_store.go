@@ -86,21 +86,41 @@ func insertWorkMetadata(ctx context.Context, tx *sql.Tx, cardID, actorID string,
 	return insertWorkEvent(ctx, tx, actorID, map[string]any{"id": cardID, "thread_id": threadID, "board_id": boardID}, "card_updated", "Commitment registered: "+workString(m["title"]), map[string]any{"changed_fields": []string{"work"}, "source": source})
 }
 
+// workLocalInvalid gives callers enough field-specific guidance to repair a value.
+func workLocalInvalid(field, reason string) error {
+	accepted := "a string or null"
+	switch field {
+	case "project_ref":
+		accepted = "an existing workspace topic ref topic:<handle-or-id>, a bare topic handle or ID, an empty string, or null"
+	case "priority":
+		accepted = "p0, p1, p2, p3, an empty string, or null"
+	case "start_at", "due_at":
+		accepted = "an RFC 3339 timestamp, an empty string, or null"
+	case "blockers":
+		accepted = "an array of strings (at most 200 items)"
+	case "relations":
+		accepted = "an array of objects (at most 200 items) with kind (parent, child, depends_on, related, artifact) and a nonempty string ref <type>:<handle-or-id> resolving inside this workspace; parent, child, depends_on require card refs and also accept bare card handles or IDs"
+	case "executions":
+		accepted = "an array of objects (at most 200 items) with required nonempty string fields authority and run_id"
+	}
+	return workInvalid("%s: %s; accepted: %s", field, reason, accepted)
+}
+
 func validateWorkLocal(m map[string]any) error {
 	for _, k := range []string{"project_ref", "priority", "next_actor", "next_action", "wake_condition", "start_at", "due_at"} {
 		if v, ok := m[k]; ok && v != nil {
 			if _, ok := v.(string); !ok {
-				return workInvalid("%s must be a string or null", k)
+				return workLocalInvalid(k, "must be a string or null")
 			}
 		}
 	}
 	if p := workString(m["priority"]); p != "" && p != "p0" && p != "p1" && p != "p2" && p != "p3" {
-		return workInvalid("invalid priority")
+		return workLocalInvalid("priority", "invalid priority")
 	}
 	for _, k := range []string{"start_at", "due_at"} {
 		if workString(m[k]) != "" {
 			if _, err := workTimestamp(m[k]); err != nil {
-				return workInvalid("%s must be RFC3339", k)
+				return workLocalInvalid(k, "invalid timestamp")
 			}
 		}
 	}
@@ -108,37 +128,37 @@ func validateWorkLocal(m map[string]any) error {
 		if v, ok := m[k]; ok {
 			b, e := json.Marshal(v)
 			if e != nil {
-				return workInvalid("invalid %s", k)
+				return workLocalInvalid(k, "invalid value")
 			}
 			var a []any
 			if json.Unmarshal(b, &a) != nil || a == nil {
-				return workInvalid("%s must be an array", k)
+				return workLocalInvalid(k, "must be an array")
 			}
 			if len(a) > 200 {
-				return workInvalid("%s exceeds 200 items", k)
+				return workLocalInvalid(k, "exceeds 200 items")
 			}
 			for _, v := range a {
 				if k == "blockers" {
 					if _, ok := v.(string); !ok {
-						return workInvalid("blockers must contain strings")
+						return workLocalInvalid(k, "must contain strings")
 					}
 				} else {
 					item, ok := v.(map[string]any)
 					if !ok {
-						return workInvalid("%s must contain objects", k)
+						return workLocalInvalid(k, "must contain objects")
 					}
 					if k == "relations" {
 						kind := workString(item["kind"])
 						switch kind {
 						case "parent", "child", "depends_on", "related", "artifact":
 						default:
-							return workInvalid("invalid relation kind")
+							return workLocalInvalid(k, "invalid relation kind")
 						}
 						if workString(item["ref"]) == "" {
-							return workInvalid("relation ref required")
+							return workLocalInvalid(k, "relation ref required")
 						}
 					} else if workString(item["authority"]) == "" || workString(item["run_id"]) == "" {
-						return workInvalid("execution authority and run_id required")
+						return workLocalInvalid(k, "execution authority and run_id required")
 					}
 				}
 			}
@@ -465,12 +485,9 @@ func ValidateWorkAnnotations(patch map[string]any) error {
 		return workInvalid("annotation keys %s are not allowed; allowed keys: %s", strings.Join(invalid, ", "), strings.Join(allowed, ", "))
 	}
 	if len(patch) == 0 {
-		return workInvalid("annotation patch required; allowed keys: %s", strings.Join(allowed, ", "))
+		return workInvalid("annotation patch required; expected a nonempty JSON object")
 	}
-	if err := validateWorkLocal(patch); err != nil {
-		return fmt.Errorf("%w; allowed keys: %s", err, strings.Join(allowed, ", "))
-	}
-	return nil
+	return validateWorkLocal(patch)
 }
 
 func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version int64, patch map[string]any) (map[string]any, error) {
@@ -930,7 +947,7 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 	if ref := workString(m["project_ref"]); ref != "" {
 		resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: "topic", Ref: ref})
 		if err != nil {
-			return workInvalid("project_ref must resolve to an existing workspace topic")
+			return workLocalInvalid("project_ref", "must resolve to an existing workspace topic")
 		}
 		m["project_ref"] = resolved.CanonicalRef
 	}
@@ -938,7 +955,7 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 		b, _ := json.Marshal(value)
 		var relations []map[string]any
 		if json.Unmarshal(b, &relations) != nil {
-			return workInvalid("relations must be objects")
+			return workLocalInvalid("relations", "must contain objects")
 		}
 		for _, relation := range relations {
 			ref := workString(relation["ref"])
@@ -949,7 +966,7 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 			}
 			resolved, err := s.ResolveResourceRef(ctx, ResourceRefInput{Type: typ, Ref: ref})
 			if err != nil {
-				return workInvalid("relation ref must resolve inside this workspace")
+				return workLocalInvalid("relations", "relation ref must resolve inside this workspace")
 			}
 			relation["ref"] = resolved.CanonicalRef
 		}

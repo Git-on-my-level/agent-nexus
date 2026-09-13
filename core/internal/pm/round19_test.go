@@ -32,12 +32,17 @@ func TestRound19AnnotateProposalValidation(t *testing.T) {
 				claimed := claimTestTurn(t, s, ctx, caller, turn.ID)
 				token, path = claimed.LeaseToken, "/pm/turns/"+turn.ID+"/decisions"
 			}
-			for i, tc := range []struct{ instruction, key string }{
+			for i, tc := range []struct{ instruction, want string }{
 				{`{"risk":"medium","title":"changed"}`, "risk, title"},
-				{`{"priority":42}`, "priority"}, {`{"priority":"medium"}`, "priority"},
-				{`{"due_at":"tomorrow"}`, "due_at"}, {`{"blockers":[1]}`, "blockers"},
-				{`{"relations":[{"kind":"invalid","ref":"card:1"}]}`, "relation"},
-				{`{"executions":[{}]}`, "execution"}, {`{}`, "patch"}, {`null`, "patch"}, {`[]`, "JSON object"},
+				{`{"priority":42}`, "p0, p1, p2, p3"}, {`{"priority":"high"}`, "p0, p1, p2, p3"},
+				{`{"due_at":"tomorrow"}`, "RFC 3339 timestamp"}, {`{"start_at":42}`, "RFC 3339 timestamp"},
+				{`{"blockers":[1]}`, "array of strings"}, {`{"blockers":null}`, "array of strings"},
+				{`{"relations":[{"kind":"invalid","ref":"card:1"}]}`, "parent, child, depends_on, related, artifact"},
+				{`{"relations":[{"kind":"related"}]}`, "ref <type>:<handle-or-id>"},
+				{`{"relations":{}}`, "parent, child, depends_on, related, artifact"},
+				{`{"executions":[{}]}`, "required nonempty string fields authority and run_id"},
+				{`{"executions":[42]}`, "required nonempty string fields authority and run_id"},
+				{`{}`, "nonempty JSON object"}, {`null`, "nonempty JSON object"}, {`[]`, "nonempty JSON object"},
 			} {
 				in := DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: "work:1", Scope: "work.annotate", Instruction: tc.instruction, TargetRevision: "r1"}
 				var body any = in
@@ -51,8 +56,14 @@ func TestRound19AnnotateProposalValidation(t *testing.T) {
 				if err := json.Unmarshal(raw, &out); err != nil {
 					t.Fatal(err)
 				}
-				if out.Error.Code != "invalid_request" || !strings.Contains(out.Error.Message, tc.key) || !strings.Contains(out.Error.Message, strings.Join(primitives.WorkAnnotationKeys(), ", ")) {
+				if out.Error.Code != "invalid_request" || !strings.Contains(out.Error.Message, tc.want) {
 					t.Fatalf("%s", raw)
+				}
+				if unknownKey := i == 0; strings.Contains(out.Error.Message, "allowed keys:") != unknownKey {
+					t.Fatalf("key allowlist should appear only for unknown keys: %s", raw)
+				}
+				if i == 0 && !strings.Contains(out.Error.Message, strings.Join(primitives.WorkAnnotationKeys(), ", ")) {
+					t.Fatalf("unknown key error missing allowlist: %s", raw)
 				}
 			}
 			decisions, err := listRecords[Decision](ctx, st, "decision", p.WorkspaceID, "", "")
