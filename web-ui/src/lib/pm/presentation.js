@@ -385,11 +385,17 @@ export function errorMessage(error) {
     /capacity reached|busy|already has an active turn|still queued or being answered/i.test(
       raw,
     ) ||
-    ["conversation", "capacity"].includes(
+    ["conversation", "capacity", "queue"].includes(
       String(error?.body?.error?.details?.reason ?? ""),
     )
   ) {
     const details = error?.body?.error?.details ?? {};
+    if (String(details.reason ?? "") === "queue") {
+      const limit = details.limit
+        ? ` (${details.queued ?? "?"} of ${details.limit})`
+        : "";
+      return `The PM queue for this workspace is full${limit}. Your message is kept; send it again in a moment, once a waiting question is answered or expires.`;
+    }
     if (String(details.reason ?? "") === "capacity") {
       const limit = details.limit
         ? ` (${details.in_flight ?? "?"} of ${details.limit})`

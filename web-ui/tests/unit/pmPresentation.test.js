@@ -212,6 +212,23 @@ describe("phase-change decisions lead with the phase", () => {
   });
 });
 
+describe("a full PM queue reads as a queue, not a runner limit", () => {
+  it("names the queue and keeps the draft", async () => {
+    const { errorMessage } = await import("$lib/pm/presentation.js");
+    const err = new Error("Workspace PM queue is full (20 waiting; limit 20)");
+    err.status = 429;
+    err.body = {
+      error: {
+        code: "busy",
+        details: { reason: "queue", queued: 20, limit: 20 },
+      },
+    };
+    expect(errorMessage(err)).toBe(
+      "The PM queue for this workspace is full (20 of 20). Your message is kept; send it again in a moment, once a waiting question is answered or expires.",
+    );
+  });
+});
+
 describe("read errors are explained in the reader's words", () => {
   it("maps known codes to a sentence and falls back to the message", async () => {
     const { readErrorExplanation } = await import("$lib/pm/presentation.js");
