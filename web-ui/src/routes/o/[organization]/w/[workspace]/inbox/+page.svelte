@@ -3,6 +3,11 @@
   import { page } from "$app/stores";
   import { beforeNavigate } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
+  import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatTimestamp } from "$lib/formatDate";
@@ -628,6 +633,10 @@
             work={selectedWork}
             {action}
             {busyWith}
+            actorLabel={(id) =>
+              id
+                ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
+                : ""}
             workHref={workspaceHref(
               taskDetailPath({ ref: selectedDecision.work_ref }),
             )}
