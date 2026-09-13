@@ -210,6 +210,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 		{[]string{"pm", "actions", "list"}, "GET", "/pm/actions", "", `{"items":[],"has_more":true}`},
 		{[]string{"pm", "actions", "get", "action-1"}, "GET", "/pm/actions/action-1", "", `{"id":"action-1","status":"source_reported","receipt":{"independently_verified":false}}`},
 		{[]string{"pm", "actions", "reconcile", "action-1"}, "POST", "/pm/actions/action-1/reconcile", `{}`, `{"id":"action-1","status":"unknown","receipt":{"independently_verified":false}}`},
+		{[]string{"pm", "actions", "acknowledge", "action-1"}, "POST", "/pm/actions/action-1/acknowledge", `{}`, `{"id":"action-1","status":"acknowledged","acknowledged_by":"actor:human","acknowledged_at":"2026-09-13T02:00:00Z"}`},
 		{[]string{"pm", "turns", "claim"}, "POST", "/pm/turns/claim", `{}`, `{"id":"turn-1","status":"sending","lease_token":"abc"}`},
 		{[]string{"pm", "turns", "get", "turn-1"}, "GET", "/pm/turns/turn-1", "", `{"id":"turn-1","status":"failed","deadline":"2026-09-08T22:00:00Z","failure":"deadline passed"}`},
 		{[]string{"pm", "turns", "fail", "turn-1", "--from-file", "-"}, "POST", "/pm/turns/turn-1/fail", `{"reason":"harness timeout","lease_token":"abc"}`, `{"id":"turn-1","status":"failed"}`},
@@ -243,13 +244,13 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 			}
 		})
 	}
-	for _, args := range [][]string{{"help", "pm"}, {"pm", "decisions", "--help"}, {"pm", "actions", "reconcile", "--help"}} {
+	for _, args := range [][]string{{"help", "pm"}, {"pm", "decisions", "--help"}, {"pm", "actions", "reconcile", "--help"}, {"pm", "actions", "acknowledge", "--help"}} {
 		assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--json"}, args...)))
 	}
 }
 
 func TestWorkAndPMMetadataDocsAreDiscoverable(t *testing.T) {
-	for _, topic := range []string{"work", "work observations submit", "pm", "pm decisions answer", "pm actions reconcile"} {
+	for _, topic := range []string{"work", "work observations submit", "pm", "pm decisions answer", "pm actions reconcile", "pm actions acknowledge"} {
 		payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "meta", "doc", topic}))
 		if !strings.Contains(fmt.Sprint(payload), "anx ") {
 			t.Errorf("missing actionable help %s: %v", topic, payload)
@@ -397,6 +398,10 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	if !strings.Contains(dispatch, "action-1") || !strings.Contains(dispatch, "status=failed") || !strings.Contains(dispatch, "receipt=failed") || !strings.Contains(dispatch, "unavailable") || !strings.Contains(dispatch, "nothing was sent") {
 		t.Errorf("dispatch text lost receipt outcome: %s", dispatch)
 	}
+	ack := formatWorkCommandText("pm actions acknowledge", map[string]any{"id": "action-1", "status": "acknowledged", "acknowledged_at": "2026-09-13T02:00:00Z"})
+	if ack != "action-1  status=acknowledged  acknowledged_at=2026-09-13T02:00:00Z" {
+		t.Errorf("acknowledge text lost id/status/timestamp: %s", ack)
+	}
 }
 
 func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
@@ -478,6 +483,15 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			body:        `{}`,
 			args:        []string{"pm", "actions", "reconcile", "action-1"},
 			want:        "propose",
+			notWant:     "if_updated_at",
+		},
+		{
+			name:        "acknowledge status conflict",
+			commandPath: "/pm/actions/action-1/acknowledge",
+			errorCode:   "conflict",
+			body:        `{}`,
+			args:        []string{"pm", "actions", "acknowledge", "action-1"},
+			want:        "not in a state that can be acknowledged",
 			notWant:     "if_updated_at",
 		},
 	}
@@ -604,6 +618,38 @@ func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
 				t.Fatalf("JSON output changed: %s want %s", got, encodedWant)
 			}
 		})
+	}
+}
+
+func TestPMAcknowledgeTextRendersIDStatusAndTimestamp(t *testing.T) {
+	body := `{"id":"action-1","status":"acknowledged","acknowledged_by":"actor:human","acknowledged_at":"2026-09-13T02:00:00Z"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/pm/actions/action-1/acknowledge" {
+			t.Errorf("request=%s %s", r.Method, r.URL.Path)
+		}
+		got, _ := io.ReadAll(r.Body)
+		if strings.TrimSpace(string(got)) != "{}" {
+			t.Errorf("body=%s want {}", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, body)
+	}))
+	defer server.Close()
+	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "actions", "acknowledge", "action-1"})
+	want := "action-1  status=acknowledged  acknowledged_at=2026-09-13T02:00:00Z"
+	if !strings.Contains(text, want) {
+		t.Fatalf("missing %q in %s", want, text)
+	}
+	if strings.Contains(text, `"acknowledged_by"`) {
+		t.Fatalf("text mode still printed JSON: %s", text)
+	}
+	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "actions", "acknowledge", "action-1"}))
+	var wantBody any
+	_ = json.Unmarshal([]byte(body), &wantBody)
+	got, _ := json.Marshal(payload["data"])
+	encodedWant, _ := json.Marshal(wantBody)
+	if string(got) != string(encodedWant) {
+		t.Fatalf("JSON output changed: %s want %s", got, encodedWant)
 	}
 }
 

@@ -49,6 +49,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm bindings create":       {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
 	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
+	"pm actions acknowledge":   {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
 	"pm turns context":         {path: "/pm/turns/{id}/context", method: "GET", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
 	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
 	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
@@ -414,6 +415,9 @@ func formatWorkCommandText(name string, body any) string {
 	}
 	if name == "pm decisions dispatch" {
 		return formatPMDispatchText(root)
+	}
+	if name == "pm actions acknowledge" {
+		return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["acknowledged_at"]))
 	}
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])

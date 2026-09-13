@@ -124,6 +124,15 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 				}
 		}
 		return "", nil
+	case "pm.actions.acknowledge":
+		if code == "conflict" {
+			return "This action is not in a state that can be acknowledged. Reconcile first if a read-back can still advance it (`anx pm actions reconcile <id>`).",
+				map[string]any{
+					"kind":        "action_state_conflict",
+					"refresh_cli": "anx pm actions reconcile <id>",
+				}
+		}
+		return "", nil
 	case "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.create", "pm.actions.reconcile":
 	default:
 		return "", nil

@@ -352,6 +352,15 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
 	}
 
+	ack := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict"}}`))
+	EnrichForCommand(ack, "pm.actions.acknowledge")
+	if !strings.Contains(ack.Hint, "not in a state that can be acknowledged") || !strings.Contains(ack.Hint, "pm actions reconcile") {
+		t.Fatalf("expected acknowledge state-conflict hint, got %q", ack.Hint)
+	}
+	if strings.Contains(ack.Hint, "if_updated_at") || strings.Contains(ack.Hint, "retry using its current") {
+		t.Fatalf("acknowledge hint still used revision language: %q", ack.Hint)
+	}
+
 	existing := FromHTTPFailure(409, []byte(`{"error":{"code":"conflict","message":"PM revision or state conflict","details":{"existing_decision_id":"decision-9"}}}`))
 	EnrichForCommand(existing, "pm.decisions.create")
 	if !strings.Contains(existing.Hint, "error.details.existing_decision_id") || !strings.Contains(existing.Hint, "decision-9") {
