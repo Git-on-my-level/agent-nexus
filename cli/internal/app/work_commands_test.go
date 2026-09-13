@@ -679,6 +679,26 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			notWant:     "if_updated_at",
 		},
 		{
+			name:        "create human proposal pending",
+			commandPath: "/pm/decisions",
+			errorCode:   "human_proposal_pending",
+			details:     `{"pending_decision_id":"decision-7"}`,
+			body:        `{"request_key":"k","work_ref":"card:x","instruction":"Review","scope":"review","target_revision":"abc"}`,
+			args:        []string{"pm", "decisions", "create", "--from-file", "-"},
+			want:        "A human proposal decision-7 is already waiting on this task",
+			notWant:     "command help",
+		},
+		{
+			name:        "propose human proposal pending",
+			commandPath: "/pm/turns/turn-1/decisions",
+			errorCode:   "human_proposal_pending",
+			details:     `{"pending_decision_id":"decision-4"}`,
+			body:        `{"request_key":"k","work_ref":"card:x","instruction":"Review","scope":"review","target_revision":"abc"}`,
+			args:        []string{"pm", "turns", "propose", "turn-1", "--from-file", "-"},
+			want:        "A human proposal decision-4 is already waiting on this task",
+			notWant:     "command help",
+		},
+		{
 			name:        "dispatch stale human origin",
 			commandPath: "/pm/decisions/decision-1/dispatch",
 			errorCode:   "source_revision_changed",
@@ -933,6 +953,7 @@ func TestPMConversationMessageBusyHints(t *testing.T) {
 	}{
 		{reason: "conversation", want: "queued or being answered", hide: "in-flight limit"},
 		{reason: "capacity", want: "in-flight limit for this workspace", hide: "queued or being answered"},
+		{reason: "queue", want: "PM queue for this workspace is full", hide: "in-flight limit"},
 	} {
 		t.Run(tc.reason, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -962,6 +983,7 @@ func TestPMAskBusyHints(t *testing.T) {
 	}{
 		{reason: "conversation", want: "queued or being answered", hide: "in-flight limit"},
 		{reason: "capacity", want: "in-flight limit for this workspace", hide: "queued or being answered"},
+		{reason: "queue", want: "PM queue for this workspace is full", hide: "in-flight limit"},
 	} {
 		t.Run(tc.reason, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -574,12 +574,13 @@ to do` and moves on; still pending and claimable re-claims and retries (a
 saved reply is delivered with the same complete retry budget and never
 followed by a harness run). After two lease losses or undeliverable terminal
 calls for the same turn, this process skips re-claiming it for 30s (doubling
-up to 5 minutes) and always sleeps the poll interval after a release. A claim
-that returns a turn still in that skip window is released once (`released
-turn … : skip window after repeated lease loss`); later polls in the same
-window sleep without claiming so the turn is not claim/release churned. A
-turn is given up after 3 harness runs in this process; it stays claimable for
-another runner until its deadline.
+up to 5 minutes). The skip window starts when that loss is noted, so later
+polls sleep without claiming. A claim that still returns a turn in that window
+(for example it became deferred while another runner held it) is released once
+(`released turn … : skip window after repeated lease loss`) and later polls in
+the same window keep sleeping without claiming. The runner always sleeps the
+poll interval after a release. A turn is given up after 3 harness runs in this
+process; it stays claimable for another runner until its deadline.
 
 If `complete` cannot be delivered after retries, the runner does **not** fail
 the turn. It writes the reply to `turn-<id>.reply.md` (0600) in `--work-dir`,
