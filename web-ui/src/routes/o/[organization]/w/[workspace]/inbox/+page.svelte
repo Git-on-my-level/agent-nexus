@@ -343,6 +343,21 @@
         }
       }
     } catch (err) {
+      if (errorCode(err) === "source_revision_changed") {
+        // Core refused a knowingly stale approval; this page was behind.
+        // Reload so the row shows why, and leave the reader the decline.
+        const reason = String(
+          err?.body?.error?.details?.reason ?? err?.details?.reason ?? "",
+        );
+        error =
+          reason === "work_missing"
+            ? "The task this proposal refers to no longer exists, so it cannot be approved. You can still decline it."
+            : reason === "already_at_target"
+              ? "The task is already where this proposal asks, so there is nothing to approve. You can dismiss it."
+              : "The task changed after this was proposed, so approving it is refused. Decline it or wait for a fresh proposal.";
+        void load();
+        return;
+      }
       error = supersededMessage(err) || errorMessage(err);
     } finally {
       busy = false;
