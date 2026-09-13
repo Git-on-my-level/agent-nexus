@@ -1482,7 +1482,7 @@ Local Help: pm
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
-  anx pm actions acknowledge Acknowledge a failed or unresolvable action.
+  anx pm actions acknowledge   Acknowledge a failed or unresolvable action.
   anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
   anx pm actions list          Report durable action and receipt statuses with principal-bound pagination.
   anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
