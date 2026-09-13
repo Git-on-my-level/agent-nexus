@@ -23,6 +23,7 @@ type App struct {
 	UserHomeDir func() (string, error)
 	ReadFile    func(string) ([]byte, error)
 	StdinIsTTY  func() bool
+	pmTurns     *pmTurnMemory
 }
 
 func isAPICallHelpOnly(remaining []string) bool {
@@ -68,6 +69,7 @@ func New() *App {
 		Getenv:      os.Getenv,
 		UserHomeDir: os.UserHomeDir,
 		ReadFile:    os.ReadFile,
+		pmTurns:     newPMTurnMemory(),
 	}
 	app.StdinIsTTY = func() bool {
 		file, ok := app.Stdin.(*os.File)

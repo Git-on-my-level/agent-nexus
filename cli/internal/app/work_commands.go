@@ -539,11 +539,12 @@ func decisionOperatorFlags(item map[string]any) string {
 		return ""
 	}
 	var parts []string
-	if v, ok := item["can_answer"].(bool); ok && !v {
+	freshness := decisionFreshnessFlag(item)
+	if v, ok := item["can_answer"].(bool); ok && !v && freshness == "" {
 		parts = append(parts, "waiting on someone else")
 	}
-	if flag := decisionFreshnessFlag(item); flag != "" {
-		parts = append(parts, flag)
+	if freshness != "" {
+		parts = append(parts, freshness)
 	}
 	return strings.Join(parts, "\n")
 }

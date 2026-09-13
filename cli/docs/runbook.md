@@ -570,12 +570,21 @@ until the turn deadline). Identical terminal replays are idempotent, so a
 retry after a lost response is safe. `lease_required` is not retried. If the
 lease was lost (`lease_mismatch`, `turn_closed`, `turn_not_claimed`), the
 runner reads the turn: already terminal logs `turn already <status>; nothing
-to do` and moves on; still pending and claimable re-claims and re-runs the
-harness (it does not replay a stale reply under a new lease). If retries are
-exhausted, the runner fails the turn with `complete failed after N attempts:
-<last error>`. If `fail` also cannot be delivered, it releases the lease (best
-effort), logs that, and moves to the next turn. A live lease is never left
-held with no further action.
+to do` and moves on; still pending and claimable re-claims and retries (a
+saved reply is delivered before a new harness run). After two lease losses
+or undeliverable terminal calls for the same turn, this process skips
+re-claiming it for 30s (doubling up to 5 minutes) and always sleeps the
+poll interval after a release. A turn is given up after 3 harness runs in
+this process; it stays claimable for another runner until its deadline.
+
+If `complete` cannot be delivered after retries, the runner does **not** fail
+the turn. It writes the reply to `turn-<id>.reply.md` (0600) in `--work-dir`,
+releases the lease, and logs that the turn stays claimable until its
+deadline. The next claim of that turn in this process sends the saved reply
+once before re-running the harness. The file is deleted after a successful
+complete or when the turn is already terminal. Runner-internal failures
+(harness crash, timeout, missing secret) still fail the turn with a
+reader-facing reason; technical detail stays on stderr.
 
 Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
 2 minutes; core accepts `ANX_PM_MAX_OUTPUT_BYTES` up to 64000). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use

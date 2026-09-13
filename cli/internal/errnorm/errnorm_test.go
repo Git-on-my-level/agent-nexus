@@ -352,6 +352,18 @@ func TestEnrichForCommandPMDecisionConflicts(t *testing.T) {
 		t.Fatalf("expected stale-approval propose-again hint, got %q", stale.Hint)
 	}
 
+	dispatchHuman := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"origin_kind":"human","proposed_by":"actor-maya"}}}`))
+	EnrichForCommand(dispatchHuman, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchHuman.Hint, "Propose it again from the board") || !strings.Contains(dispatchHuman.Hint, "anx pm decisions create") || strings.Contains(dispatchHuman.Hint, "The PM must propose") {
+		t.Fatalf("expected human dispatch propose-again hint, got %q", dispatchHuman.Hint)
+	}
+
+	dispatchPM := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"approved source revision has changed","details":{"origin_kind":"pm_turn","proposed_by":"actor-gds-pm"}}}`))
+	EnrichForCommand(dispatchPM, "pm.decisions.dispatch")
+	if !strings.Contains(dispatchPM.Hint, "The PM must propose the decision again") || strings.Contains(dispatchPM.Hint, "from the board") {
+		t.Fatalf("expected pm_turn dispatch propose-again hint, got %q", dispatchPM.Hint)
+	}
+
 	answerStale := FromHTTPFailure(409, []byte(`{"error":{"code":"source_revision_changed","message":"target is not current","details":{"reason":"revision_changed"}}}`))
 	EnrichForCommand(answerStale, "pm.decisions.answer")
 	if !strings.Contains(answerStale.Hint, "task changed after this proposal") || !strings.Contains(answerStale.Hint, "failed at delivery") {

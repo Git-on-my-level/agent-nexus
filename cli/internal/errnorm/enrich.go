@@ -160,6 +160,9 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 		if commandID == "pm.decisions.answer" {
 			return enrichDecisionAnswerStale(lookupErrorDetail(e, "reason"))
 		}
+		if commandID == "pm.decisions.dispatch" {
+			return enrichDecisionDispatchStale(e)
+		}
 		return "This approval is stale because the source revision changed. The PM must propose the decision again; do not retry the previous answer.",
 			map[string]any{
 				"kind":        "stale_source_revision",
@@ -203,6 +206,26 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	default:
 		return "", nil
 	}
+}
+
+func enrichDecisionDispatchStale(e *Error) (string, map[string]any) {
+	origin := strings.ToLower(strings.TrimSpace(lookupErrorDetail(e, "origin_kind")))
+	proposedBy := lookupErrorDetail(e, "proposed_by")
+	rec := map[string]any{
+		"kind":        "stale_source_revision",
+		"refresh_cli": "anx pm decisions get <id>",
+	}
+	if origin != "" {
+		rec["origin_kind"] = origin
+	}
+	if proposedBy != "" {
+		rec["proposed_by"] = proposedBy
+	}
+	again := "The PM must propose the decision again"
+	if origin == "human" {
+		again = "Propose it again from the board (or `anx pm decisions create`)"
+	}
+	return "This approval is stale because the source revision changed. " + again + "; do not retry the previous answer.", rec
 }
 
 func enrichDecisionAnswerStale(reason string) (string, map[string]any) {

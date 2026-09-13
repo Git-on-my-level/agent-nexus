@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -413,16 +414,16 @@ func TestContinuingAgentctlLaunchAndHumanFailures(t *testing.T) {
 	if !ok || id != "exec-retry-only" {
 		t.Fatalf("retryable launch %q %v", id, ok)
 	}
-	if got := humanTurnFailure("startup_timeout", "30s"); got != "The PM harness did not start within 30 seconds. Retry, or check the runner log." {
+	if got := humanTurnFailure("startup_timeout", "30s"); got != "The PM did not start in time (30 seconds)." {
 		t.Fatalf("startup timeout %q", got)
 	}
-	if got := humanTurnFailure("await_failed", ""); !strings.Contains(got, "did not finish") || strings.Contains(got, "{") {
+	if got := humanTurnFailure("await_failed", ""); !strings.Contains(got, "did not reply before the deadline") || strings.Contains(got, "{") {
 		t.Fatalf("await %q", got)
 	}
-	if got := humanTurnFailure("no_assistant", ""); !strings.Contains(got, "without a reply") {
+	if got := humanTurnFailure("no_assistant", ""); !strings.Contains(got, "did not produce a reply") {
 		t.Fatalf("assistant %q", got)
 	}
-	if got := humanTurnFailure("deadline", ""); !strings.Contains(got, "deadline passed") {
+	if got := humanTurnFailure("deadline", ""); !strings.Contains(got, "did not reply before the deadline") {
 		t.Fatalf("deadline %q", got)
 	}
 	if !agentctlNotFound([]byte(`{"ok":false,"error":{"code":"not_found","message":"execution not found"}}`), fmt.Errorf("exit status 1")) {
@@ -583,7 +584,7 @@ func TestHandleClaimedTurnFailsPlainLanguageWhenStatusNeverAppears(t *testing.T)
 	if strings.Contains(reason, "{") || strings.Contains(reason, "execution_id") {
 		t.Fatalf("raw json in failTurn %s", reason)
 	}
-	if reason != "The PM harness did not start within 30 seconds. Retry, or check the runner log." {
+	if reason != "The PM did not start in time (30 seconds)." {
 		t.Fatalf("reason %q", reason)
 	}
 }
@@ -606,7 +607,7 @@ func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
 					return nil, fmt.Errorf("unexpected %v", args)
 				}
 			},
-			want: "The PM harness did not finish before the turn deadline. Retry, or check the runner log.",
+			want: "The PM did not reply before the deadline.",
 		},
 		{
 			name: "no assistant",
@@ -622,7 +623,7 @@ func TestHandleClaimedTurnMapsOtherFailuresToPlainSentences(t *testing.T) {
 					return nil, fmt.Errorf("unexpected %v", args)
 				}
 			},
-			want: "The PM harness finished without a reply. Retry, or check the runner log.",
+			want: "The PM did not produce a reply.",
 		},
 	}
 	for _, tc := range cases {
@@ -904,7 +905,7 @@ func TestHandleClaimedTurnDirectRunnerFailsWhenStdoutHasNoAssistant(t *testing.T
 	if len(posts.complete) != 0 {
 		t.Fatalf("posted stderr as reply: %v", posts.complete)
 	}
-	if len(posts.fail) != 1 || !strings.Contains(posts.fail[0], "without a reply") {
+	if len(posts.fail) != 1 || !strings.Contains(posts.fail[0], "did not produce a reply") {
 		t.Fatalf("fail %v", posts.fail)
 	}
 	logs := harness.stderr.String()
@@ -1121,11 +1122,11 @@ func TestHarnessCmdFailureDistinguishesStartExitAndDeadline(t *testing.T) {
 	}
 	cmd := exec.Command("/bin/sh", "-c", "exit 7")
 	err := cmd.Run()
-	want := "The PM harness exited with an error (exit 7). Retry, or check the runner log."
+	want := "The PM did not produce a reply (the runner exited with status 7)."
 	if got := harnessCmdFailure(err); got != want {
 		t.Fatalf("exit 7: %q", got)
 	}
-	if got := harnessCmdFailure(exec.ErrNotFound); got != "The PM harness failed to start. Retry, or check the runner log." {
+	if got := harnessCmdFailure(exec.ErrNotFound); got != "The PM did not produce a reply." {
 		t.Fatalf("exec error %q", got)
 	}
 }
@@ -1137,7 +1138,7 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 		if !settled {
 			t.Fatal("expected start failure")
 		}
-		if len(posts.fail) != 1 || posts.fail[0] != "The PM harness failed to start. Retry, or check the runner log." {
+		if len(posts.fail) != 1 || posts.fail[0] != "The PM did not produce a reply." {
 			t.Fatalf("fail %v", posts.fail)
 		}
 		if strings.Contains(harness.stderr.String(), "agentctl:") {
@@ -1150,7 +1151,7 @@ func TestHandleClaimedTurnDirectRunnerMapsStartExitAndDeadline(t *testing.T) {
 		if !settled {
 			t.Fatal("expected exit failure")
 		}
-		want := "The PM harness exited with an error (exit 1). Retry, or check the runner log."
+		want := "The PM did not produce a reply (the runner exited with status 1)."
 		if len(posts.fail) != 1 || posts.fail[0] != want {
 			t.Fatalf("fail %v", posts.fail)
 		}
@@ -1666,7 +1667,7 @@ func TestPMServeSignalDuringRunReleasesInsteadOfFailing(t *testing.T) {
 			if !strings.Contains(logs, "released turn turn-held on shutdown") {
 				t.Fatalf("expected release log, got %s", logs)
 			}
-			if strings.Contains(logs, "failed in") || strings.Contains(logs, "The PM harness exited") {
+			if strings.Contains(logs, "failed in") || strings.Contains(logs, "The PM harness exited") || strings.Contains(logs, "exited with status") {
 				t.Fatalf("harness death failed the turn: %s", logs)
 			}
 		})
@@ -1805,10 +1806,10 @@ func TestHandleClaimedTurnRetriesCompleteThenSucceeds(t *testing.T) {
 	}
 }
 
-func TestHandleClaimedTurnPersistentComplete503FailsAndReleases(t *testing.T) {
+func TestHandleClaimedTurnPersistentComplete503SavesReplyAndReleases(t *testing.T) {
 	stubTerminalSleep(t)
 	completeCalls := 0
-	var failReason string
+	failCalls := 0
 	released := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -1817,10 +1818,7 @@ func TestHandleClaimedTurnPersistentComplete503FailsAndReleases(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
-			var payload map[string]any
-			body, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(body, &payload)
-			failReason = anyString(payload["reason"])
+			failCalls++
 			io.WriteString(w, `{"id":"turn-1","status":"failed"}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
 			released++
@@ -1838,34 +1836,44 @@ func TestHandleClaimedTurnPersistentComplete503FailsAndReleases(t *testing.T) {
 	app.Getenv = func(string) string { return "" }
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
-	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
+	dir := t.TempDir()
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
 	if !settled {
-		t.Fatal("expected settled after fail")
+		t.Fatal("expected settled after release")
 	}
 	if completeCalls != 1+len(terminalRetryDelays) {
 		t.Fatalf("complete calls=%d want %d", completeCalls, 1+len(terminalRetryDelays))
 	}
-	want := fmt.Sprintf("complete failed after %d attempts:", completeCalls)
-	if !strings.Contains(failReason, want) || !strings.Contains(failReason, "core down") {
-		t.Fatalf("fail reason %q", failReason)
+	if failCalls != 0 {
+		t.Fatalf("turn should not be failed, failCalls=%d", failCalls)
 	}
-	if released != 0 {
-		t.Fatalf("successful fail should not also release, released=%d", released)
+	if released != 1 {
+		t.Fatalf("released=%d", released)
 	}
-	if !strings.Contains(stderr.String(), "complete retry") {
-		t.Fatalf("missing retry logs: %s", stderr.String())
+	raw, err := os.ReadFile(filepath.Join(dir, "turn-turn-1.reply.md"))
+	if err != nil {
+		t.Fatalf("reply file: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "Approve the restock." {
+		t.Fatalf("reply file %q", raw)
+	}
+	logs := stderr.String()
+	if !strings.Contains(logs, "reply for turn turn-1 saved to") || !strings.Contains(logs, "lease released") || !strings.Contains(logs, "stays claimable until") {
+		t.Fatalf("missing save/release log: %s", logs)
+	}
+	if !strings.Contains(logs, "complete retry") {
+		t.Fatalf("missing retry logs: %s", logs)
 	}
 }
 
 func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
 	stubTerminalSleep(t)
 	released := 0
+	failCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
-			w.WriteHeader(http.StatusServiceUnavailable)
-			io.WriteString(w, `{"error":{"code":"unavailable","message":"complete 503"}}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			failCalls++
 			w.WriteHeader(http.StatusServiceUnavailable)
 			io.WriteString(w, `{"error":{"code":"unavailable","message":"fail 503"}}`)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
@@ -1884,9 +1892,12 @@ func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
 	app.Getenv = func(string) string { return "" }
 	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
 	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
-	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "printf '%s\\n' 'Approve the restock.'", "{prompt}"}, nil, claimedTurn(), nil)
+	settled := app.handleClaimedTurn(context.Background(), nil, cfg, t.TempDir(), "", []string{"/bin/sh", "-c", "exit 1", "{prompt}"}, nil, claimedTurn(), nil)
 	if !settled {
 		t.Fatal("expected move-on after undeliverable fail")
+	}
+	if failCalls != 1+len(terminalRetryDelays) {
+		t.Fatalf("fail calls=%d", failCalls)
 	}
 	if released != 1 {
 		t.Fatalf("released=%d", released)
@@ -1894,6 +1905,9 @@ func TestHandleClaimedTurnFailAlso503ReleasesLease(t *testing.T) {
 	logs := stderr.String()
 	if !strings.Contains(logs, "fail request failed") || !strings.Contains(logs, "releasing lease") {
 		t.Fatalf("expected fail+release logs: %s", logs)
+	}
+	if !strings.Contains(logs, "harness error") {
+		t.Fatalf("expected technical harness error on stderr: %s", logs)
 	}
 }
 
@@ -1979,8 +1993,8 @@ func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
 	if !settled {
 		t.Fatal("expected settled after re-run")
 	}
-	if runs != 2 {
-		t.Fatalf("harness runs=%d want 2", runs)
+	if runs != 1 {
+		t.Fatalf("harness runs=%d want 1 (saved reply on retry)", runs)
 	}
 	if claimed != 1 {
 		t.Fatalf("claim calls=%d", claimed)
@@ -1988,7 +2002,153 @@ func TestHandleClaimedTurnLeaseMismatchPendingReclaimsAndReruns(t *testing.T) {
 	if completeCalls != 2 {
 		t.Fatalf("complete calls=%d", completeCalls)
 	}
-	if !strings.Contains(stderr.String(), "re-claimed after lease loss; re-running harness") {
+	logs := stderr.String()
+	if !strings.Contains(logs, "re-claimed after lease loss; retrying") {
+		t.Fatalf("logs %s", logs)
+	}
+	if !strings.Contains(logs, "from saved reply") {
+		t.Fatalf("expected saved reply delivery, got %s", logs)
+	}
+}
+
+func TestHandleClaimedTurnReclaimDeliversSavedReplyWithoutHarness(t *testing.T) {
+	stubTerminalSleep(t)
+	var mu sync.Mutex
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		mu.Lock()
+		runs++
+		mu.Unlock()
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	completeCalls := 0
+	failCalls := 0
+	released := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			completeCalls++
+			if completeCalls <= 1+len(terminalRetryDelays) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				io.WriteString(w, `{"error":{"code":"unavailable","message":"core down"}}`)
+				return
+			}
+			io.WriteString(w, `{"id":"turn-1","status":"delivered"}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/fail"):
+			failCalls++
+			io.WriteString(w, `{"id":"turn-1","status":"failed"}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			released++
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	dir := t.TempDir()
+	first := claimedTurn()
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, first, nil) {
+		t.Fatal("expected first claim to settle")
+	}
+	mu.Lock()
+	firstRuns := runs
+	mu.Unlock()
+	if firstRuns != 1 {
+		t.Fatalf("first harness runs=%d", firstRuns)
+	}
+	if failCalls != 0 {
+		t.Fatalf("failCalls=%d", failCalls)
+	}
+	if released != 1 {
+		t.Fatalf("released=%d", released)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "turn-turn-1.reply.md")); err != nil {
+		t.Fatalf("saved reply missing: %v", err)
+	}
+	second := claimedTurn()
+	second["lease_token"] = "lease-2"
+	if !app.handleClaimedTurn(context.Background(), nil, cfg, dir, "", []string{"/bin/echo", "{prompt}"}, nil, second, nil) {
+		t.Fatal("expected second claim to settle")
+	}
+	mu.Lock()
+	if runs != firstRuns {
+		t.Fatalf("re-claim ran harness again: runs=%d", runs)
+	}
+	mu.Unlock()
+	if completeCalls != 1+len(terminalRetryDelays)+1 {
+		t.Fatalf("complete calls=%d", completeCalls)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "turn-turn-1.reply.md")); !os.IsNotExist(err) {
+		t.Fatalf("saved reply should be deleted after delivery, err=%v", err)
+	}
+	if !strings.Contains(stderr.String(), "from saved reply") {
 		t.Fatalf("logs %s", stderr.String())
+	}
+}
+
+func TestPMServePersistentLeaseMismatchCapsHarnessRuns(t *testing.T) {
+	stubTerminalSleep(t)
+	var mu sync.Mutex
+	runs := 0
+	restore := stubAgentctlStreams(t, func(ctx context.Context, name string, args []string, dir string, env []string) ([]byte, []byte, error) {
+		mu.Lock()
+		runs++
+		mu.Unlock()
+		return []byte("Approve the restock."), nil, nil
+	})
+	defer restore()
+	leases := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/turns/claim":
+			mu.Lock()
+			leases++
+			n := leases
+			mu.Unlock()
+			fmt.Fprintf(w, `{"id":"turn-1","status":"sending","claimed":true,"lease_token":"lease-%d","lease_owner":"runner-1","deadline":%q,"text":"What needs my decision?"}`, n, time.Now().Add(2*time.Minute).UTC().Format(time.RFC3339Nano))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/complete"):
+			w.WriteHeader(http.StatusConflict)
+			io.WriteString(w, `{"error":{"code":"lease_mismatch","message":"lease token does not match"}}`)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/pm/turns/"):
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			io.WriteString(w, `{"id":"turn-1","status":"sending","claimed":false}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	stderr := &bytes.Buffer{}
+	app := New()
+	app.Stderr = stderr
+	app.Stdout = io.Discard
+	app.Getenv = func(string) string { return "" }
+	app.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "fixture", Timeout: 5 * time.Second, Agent: "pm"}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, _ = app.runPMServe(ctx, []string{"--runner", "/bin/true {prompt}", "--poll-interval", "200ms", "--work-dir", t.TempDir()}, cfg)
+	mu.Lock()
+	got := runs
+	mu.Unlock()
+	if got > maxHarnessRunsPerTurn {
+		t.Fatalf("harness runs=%d want <= %d", got, maxHarnessRunsPerTurn)
+	}
+	if got < 1 {
+		t.Fatalf("harness never ran")
+	}
+	logs := stderr.String()
+	if strings.Count(logs, "skipping turn") != 1 {
+		t.Fatalf("skip should log once, got %s", logs)
 	}
 }
