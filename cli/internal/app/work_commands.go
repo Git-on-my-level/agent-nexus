@@ -54,6 +54,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
 	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
 	"pm turns complete":        {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
+	"pm turns get":             {path: "/pm/turns/{id}", method: "GET", idFlag: "turn-id", summary: "Read a PM conversation turn."},
 }
 
 type parsedWorkCommand struct {
@@ -396,6 +397,9 @@ func formatWorkCommandText(name string, body any) string {
 			lines = append(lines, "next_cursor: "+cursor)
 		}
 		return strings.Join(lines, "\n")
+	}
+	if name == "pm turns get" {
+		return fmt.Sprintf("%s  status=%s  deadline=%s  failure=%s", anyString(root["id"]), firstNonEmpty(anyString(root["status"]), "unknown"), anyString(root["deadline"]), anyString(root["failure"]))
 	}
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])

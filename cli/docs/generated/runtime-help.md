@@ -135,6 +135,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
 - `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
 - `pm turns fail` (command): Mark a claimed turn failed with a reason; does not complete work.
+- `pm turns get` (command): Read a PM conversation turn.
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
 - `work create` (command): Register a native commitment or canonical external source on an existing board.
@@ -1499,6 +1500,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm turns complete        Selected PM agent records response text and evidence_refs; does not complete work.
   anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
   anx pm turns fail            Mark a claimed turn failed with a reason; does not complete work.
+  anx pm turns get             Read a PM conversation turn.
   anx pm turns propose         Selected PM agent proposes an instruction for the requesting actor, never approval.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
@@ -4758,6 +4760,40 @@ Mark a claimed turn failed with a reason; does not complete work.
 Usage: anx pm turns fail <ref> (or --turn-id <ref>) --from-file <path|->
 
 JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `pm turns get`
+
+Read a PM conversation turn.
+
+```text
+Generated Help: pm turns get
+
+- Command ID: `pm.turns.get`
+- CLI path: `pm turns get`
+- HTTP: `GET /pm/turns/{turn_id}`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read a PM conversation turn.
+- Output: Returns `PMTurn`.
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`
+
+Inputs:
+  Required:
+  - path `turn_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Read a PM conversation turn.
+
+Usage: anx pm turns get <ref> (or --turn-id <ref>)
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 

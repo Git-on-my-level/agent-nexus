@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"agent-nexus-cli/internal/registry"
 )
 
 func TestWorkUsageBeforeProfileResolution(t *testing.T) {
@@ -31,6 +33,8 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 		{[]string{"work", "invent"}, "unknown_subcommand"},
 		{[]string{"work", "observations", "submit"}, "invalid_request"},
 		{[]string{"work", "observations", "submit", "--workspace-id", "other"}, "invalid_flags"},
+		{[]string{"pm", "turns", "get"}, "invalid_request"},
+		{[]string{"pm", "turns", "invent"}, "unknown_subcommand"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -207,6 +211,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 		{[]string{"pm", "actions", "get", "action-1"}, "GET", "/pm/actions/action-1", "", `{"id":"action-1","status":"source_reported","receipt":{"independently_verified":false}}`},
 		{[]string{"pm", "actions", "reconcile", "action-1"}, "POST", "/pm/actions/action-1/reconcile", `{}`, `{"id":"action-1","status":"unknown","receipt":{"independently_verified":false}}`},
 		{[]string{"pm", "turns", "claim"}, "POST", "/pm/turns/claim", `{}`, `{"id":"turn-1","status":"sending","lease_token":"abc"}`},
+		{[]string{"pm", "turns", "get", "turn-1"}, "GET", "/pm/turns/turn-1", "", `{"id":"turn-1","status":"failed","deadline":"2026-09-08T22:00:00Z","failure":"deadline passed"}`},
 		{[]string{"pm", "turns", "fail", "turn-1", "--from-file", "-"}, "POST", "/pm/turns/turn-1/fail", `{"reason":"harness timeout","lease_token":"abc"}`, `{"id":"turn-1","status":"failed"}`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
@@ -328,5 +333,26 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
 	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
 		t.Errorf("lost receipt uncertainty: %s", pm)
+	}
+	turn := formatWorkCommandText("pm turns get", map[string]any{"id": "turn-1", "status": "failed", "deadline": "2026-09-08T22:00:00Z", "failure": "deadline passed"})
+	if !strings.Contains(turn, "turn-1") || !strings.Contains(turn, "status=failed") || !strings.Contains(turn, "deadline=2026-09-08T22:00:00Z") || !strings.Contains(turn, "failure=deadline passed") {
+		t.Errorf("lost turn fields: %s", turn)
+	}
+}
+
+func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
+	meta, err := registry.LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range meta.Commands {
+		path := strings.TrimSpace(cmd.CLIPath)
+		if !strings.HasPrefix(path, "pm ") && !strings.HasPrefix(path, "work ") {
+			continue
+		}
+		runtimePath := runtimePathFromRegistryPath(path)
+		if _, ok := workCommands[runtimePath]; !ok {
+			t.Errorf("registry command %s (%s) missing from workCommands as %q", cmd.CommandID, path, runtimePath)
+		}
 	}
 }
