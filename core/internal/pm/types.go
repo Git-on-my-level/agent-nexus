@@ -35,7 +35,7 @@ type BusyError struct {
 
 func (e *BusyError) Error() string {
 	if e.Reason == "conversation" {
-		return "This conversation already has an active turn"
+		return fmt.Sprintf("The previous message in this conversation is still queued or being answered (turn %s).", e.TurnID)
 	}
 	return fmt.Sprintf("Workspace PM capacity reached (%d in flight; limit %d)", e.InFlight, e.Limit)
 }
@@ -166,6 +166,9 @@ type Turn struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	Deadline       time.Time  `json:"deadline"`
 	Revision       int        `json:"revision"`
+
+	// Private durable replay credential; stripped by turnResponse.
+	TerminalLeaseHash string `json:"terminal_lease_hash,omitempty"`
 }
 type ClaimInput struct {
 	RunnerID string `json:"runner_id"`
@@ -192,6 +195,17 @@ type ContextPage struct {
 type ActionPayload struct {
 	Phase          string   `json:"phase,omitempty"`
 	ResolutionRefs []string `json:"resolution_refs,omitempty"`
+}
+
+type TurnProposeInput struct {
+	DecisionInput
+	LeaseToken string `json:"lease_token"`
+}
+type TurnContextInput struct {
+	LeaseToken string `json:"lease_token"`
+	Query      string `json:"query"`
+	Cursor     string `json:"cursor"`
+	Limit      int    `json:"limit"`
 }
 
 type DecisionInput struct {

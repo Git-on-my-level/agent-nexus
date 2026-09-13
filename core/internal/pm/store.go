@@ -231,7 +231,7 @@ func (s *Store) insertTurn(ctx context.Context, t Turn, maxConcurrent int) (bool
 // proposeDecision serializes proposal deduplication and turn linkage in SQLite,
 // including across Service instances. Only identical intent is reused; changed
 // intent supersedes the awaiting decision in the same transaction as its replacement.
-func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) (Decision, bool, error) {
+func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID, leaseToken string) (Decision, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Decision{}, false, err
@@ -242,6 +242,25 @@ func (s *Store) proposeDecision(ctx context.Context, d Decision, turnID string) 
 		return Decision{}, false, err
 	}
 	var raw []byte
+	// Revalidate under the write lock, including before an idempotent replay.
+	if turnID != "" {
+		var t Turn
+		if err = tx.QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='turn' AND id=?", turnID).Scan(&raw); err != nil {
+			return Decision{}, false, err
+		}
+		if err = json.Unmarshal(raw, &t); err != nil {
+			return Decision{}, false, err
+		}
+		if t.WorkspaceID != d.WorkspaceID || t.ActorID != d.ActorID || t.AgentActorID != d.ProposedBy {
+			return Decision{}, false, ErrForbidden
+		}
+		if !t.Deadline.After(time.Now()) || (t.Status != Sending && t.Status != Unknown) {
+			return Decision{}, false, closedTurnError(t)
+		}
+		if err = leaseGuard(t, leaseToken); err != nil {
+			return Decision{}, false, err
+		}
+	}
 	inserted := false
 	err = tx.QueryRowContext(ctx, "SELECT body FROM pm_records WHERE kind='decision' AND id=?", d.ID).Scan(&raw)
 	if err == nil {

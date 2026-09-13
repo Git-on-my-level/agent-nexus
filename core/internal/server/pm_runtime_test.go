@@ -464,7 +464,7 @@ func TestPMRuntimeAgentOnlyProposesForRequestingHuman(t *testing.T) {
 		if err != nil || claimed.ID != turn.ID {
 			t.Fatalf("claim: %+v %v", claimed, err)
 		}
-		d, err := rt.Service.ProposeForTurn(ctx, agent, turn.ID, input)
+		d, err := rt.Service.ProposeForTurn(ctx, agent, turn.ID, input, claimed.LeaseToken)
 		if !owner.Human {
 			if !errors.Is(err, pm.ErrForbidden) {
 				t.Fatalf("agent addressed itself: %+v %v", d, err)

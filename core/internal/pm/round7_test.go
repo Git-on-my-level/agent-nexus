@@ -119,7 +119,7 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			var prior Decision
 			if kind == "human_replaces_pm" {
 				claimTestTurn(t, s, ctx, agent, turn.ID)
-				prior, err = s.ProposeForTurn(ctx, agent, turn.ID, in)
+				prior, err = s.ProposeForTurn(ctx, agent, turn.ID, in, testTurnLease(t, s, ctx, turn.ID))
 			} else {
 				prior, err = s.ProposeDecision(ctx, p, in)
 			}
@@ -144,7 +144,11 @@ func TestRound7ReplacementAttribution(t *testing.T) {
 			}
 			h := Handler{Service: s, Authenticate: func(*http.Request) (Principal, error) { return caller, nil }}
 			in.RequestKey = "replacement"
-			raw, err := json.Marshal(in)
+			var request any = in
+			if kind == "pm_replaces_human" {
+				request = TurnProposeInput{DecisionInput: in, LeaseToken: testTurnLease(t, s, ctx, turn.ID)}
+			}
+			raw, err := json.Marshal(request)
 			if err != nil {
 				t.Fatal(err)
 			}

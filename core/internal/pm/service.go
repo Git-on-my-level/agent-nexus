@@ -3,10 +3,12 @@ package pm
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -268,20 +270,20 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
 		return Turn{}, err
 	}
-	if !t.Deadline.After(time.Now()) {
-		return Turn{}, s.requireOpenTurn(ctx, t)
-	}
 	if !validText(text, s.cfg.MaxOutputBytes) || len(evidence) > 50 {
 		return Turn{}, ErrInvalid
 	}
 	if t.Status == Delivered {
-		if t.Response == text {
-			if err := leaseGuard(t, leaseToken); err != nil {
+		if t.Response == text && slices.Equal(t.EvidenceRefs, evidence) {
+			if err := terminalLeaseGuard(t, leaseToken); err != nil {
 				return Turn{}, err
 			}
 			return t, nil
 		}
 		return Turn{}, closedTurnError(t)
+	}
+	if !t.Deadline.After(time.Now()) {
+		return Turn{}, s.requireOpenTurn(ctx, t)
 	}
 	if t.Status == Pending {
 		if err := requireLease(t); err != nil {
@@ -299,6 +301,7 @@ func (s *Service) completeTurn(ctx context.Context, p Principal, turnID, text st
 	t.Response = text
 	t.EvidenceRefs = evidence
 	t.Status = Delivered
+	t.TerminalLeaseHash = leaseTokenHash(t.LeaseToken)
 	t.LeaseToken = ""
 	t.LeaseOwner = ""
 	t.LeaseExpiresAt = time.Time{}
@@ -319,20 +322,20 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	if err := s.authorize(ctx, p, "pm.respond", t.ConversationID); err != nil {
 		return Turn{}, err
 	}
-	if !t.Deadline.After(time.Now()) {
-		return Turn{}, s.requireOpenTurn(ctx, t)
-	}
 	if !validText(in.Reason, s.cfg.MaxOutputBytes) {
 		return Turn{}, ErrInvalid
 	}
 	if t.Status == Failed {
 		if t.Failure == in.Reason {
-			if err := leaseGuard(t, in.LeaseToken); err != nil {
+			if err := terminalLeaseGuard(t, in.LeaseToken); err != nil {
 				return Turn{}, err
 			}
 			return t, nil
 		}
 		return Turn{}, closedTurnError(t)
+	}
+	if !t.Deadline.After(time.Now()) {
+		return Turn{}, s.requireOpenTurn(ctx, t)
 	}
 	if t.Status == Pending {
 		if err := requireLease(t); err != nil {
@@ -349,6 +352,7 @@ func (s *Service) FailTurn(ctx context.Context, p Principal, turnID string, in F
 	old := t.Revision
 	t.Failure = in.Reason
 	t.Status = Failed
+	t.TerminalLeaseHash = leaseTokenHash(t.LeaseToken)
 	t.LeaseToken = ""
 	t.LeaseOwner = ""
 	t.LeaseExpiresAt = time.Time{}
@@ -538,4 +542,16 @@ func (s *Service) GetTurn(ctx context.Context, p Principal, id string) (Turn, er
 	}
 	err := s.store.get(ctx, "turn", id, &t)
 	return t, err
+}
+
+// Keep only a durable digest for terminal replay; it is never a live lease.
+func leaseTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+func terminalLeaseGuard(t Turn, token string) error {
+	if token == "" || t.TerminalLeaseHash == "" || leaseTokenHash(token) != t.TerminalLeaseHash {
+		return ErrConflict
+	}
+	return nil
 }

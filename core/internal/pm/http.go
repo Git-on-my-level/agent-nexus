@@ -3,6 +3,7 @@ package pm
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -134,16 +135,19 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case len(path) == 2 && path[0] == "turns" && r.Method == http.MethodGet:
 		out, err = s.GetTurn(ctx, p, path[1])
-	case len(path) == 3 && path[0] == "turns" && path[2] == "context" && r.Method == http.MethodGet:
-		var limit int
-		limit, err = queryLimit(r)
-		if err == nil {
-			out, err = s.GetTurnContextPage(ctx, p, path[1], r.URL.Query().Get("query"), r.URL.Query().Get("cursor"), limit)
+	case len(path) == 3 && path[0] == "turns" && path[2] == "context" && r.Method == http.MethodPost:
+		in := TurnContextInput{Limit: 20}
+		if err = decode(&in); err == nil {
+			if in.Limit < 1 || in.Limit > 50 {
+				err = ErrInvalid
+			} else {
+				out, err = s.GetTurnContextPage(ctx, p, path[1], in.Query, in.Cursor, in.Limit, in.LeaseToken)
+			}
 		}
 	case len(path) == 3 && path[0] == "turns" && path[2] == "decisions" && r.Method == http.MethodPost:
-		var in DecisionInput
+		var in TurnProposeInput
 		if err = decode(&in); err == nil {
-			out, err = s.ProposeForTurn(ctx, p, path[1], in)
+			out, err = s.ProposeForTurn(ctx, p, path[1], in.DecisionInput, in.LeaseToken)
 		}
 	case len(path) == 2 && path[0] == "turns" && path[1] == "claim" && r.Method == http.MethodPost:
 		var in ClaimInput
@@ -221,7 +225,22 @@ func queryLimit(r *http.Request) (int, error) {
 }
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	d := json.NewDecoder(r.Body)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return ErrInvalid
+	}
+	switch v.(type) {
+	case *DecisionInput, *TurnProposeInput:
+		var body struct {
+			Payload map[string]json.RawMessage `json:"payload"`
+		}
+		if json.Unmarshal(raw, &body) == nil {
+			if _, exists := body.Payload["resolution"]; exists {
+				return fmt.Errorf("%w: payload.resolution is read-only; send payload.resolution_refs", ErrInvalid)
+			}
+		}
+	}
+	d := json.NewDecoder(strings.NewReader(string(raw)))
 	d.DisallowUnknownFields()
 	if err := d.Decode(v); err != nil {
 		return ErrInvalid
@@ -272,6 +291,7 @@ func writeError(w http.ResponseWriter, err error) {
 // Expose the active runner identity; reserve lease credentials for claims.
 func turnResponse(t Turn, includeLease bool) any {
 	t.FailureKind = turnFailureKind(t)
+	t.TerminalLeaseHash = ""
 	out := struct {
 		Turn
 		Claimed        bool       `json:"claimed"`

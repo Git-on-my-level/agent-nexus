@@ -79,11 +79,9 @@ func TestRound9UnclaimedTurnOperations(t *testing.T) {
 					case "fail":
 						body = fmt.Sprintf(`{"reason":"failed","lease_token":%q}`, token)
 					case "decisions":
-						body = `{"request_key":"proposal","work_ref":"work:1","scope":"assignment","instruction":"assign","target_revision":"r1"}`
+						body = fmt.Sprintf(`{"request_key":"proposal","work_ref":"work:1","scope":"assignment","instruction":"assign","target_revision":"r1","lease_token":%q}`, token)
 					case "context":
-						method = "GET"
-						body = ""
-						path += "?lease_token=" + token
+						body = fmt.Sprintf(`{"lease_token":%q}`, token)
 					}
 					rr := httptest.NewRecorder()
 					h.ServeHTTP(rr, httptest.NewRequest(method, path, strings.NewReader(body)))
@@ -115,7 +113,7 @@ func TestRound9UnclaimedTurnOperations(t *testing.T) {
 				if claimed.LeaseToken == token {
 					t.Fatal("stale token reused")
 				}
-				if endpoint == "complete" || endpoint == "fail" {
+				{
 					if rr := call(token); rr.Code != 409 {
 						t.Fatalf("stale token accepted %d %s", rr.Code, rr.Body)
 					}
@@ -424,7 +422,7 @@ func TestRound9ExternalDispatchRemainsSourceReported(t *testing.T) {
 	}
 }
 
-func TestRound9TerminalReplaysRequireLease(t *testing.T) {
+func TestRound9TerminalReplaysPreserveState(t *testing.T) {
 	for _, endpoint := range []string{"complete", "fail"} {
 		t.Run(endpoint, func(t *testing.T) {
 			s, st, p, _ := fixture(t)
@@ -457,7 +455,7 @@ func TestRound9TerminalReplaysRequireLease(t *testing.T) {
 			if err := st.get(ctx, "turn", turn.ID, &before); err != nil {
 				t.Fatal(err)
 			}
-			if rr := call(); rr.Code != 409 || !strings.Contains(rr.Body.String(), "this turn is not claimed; claim it first") {
+			if rr := call(); rr.Code != 200 {
 				t.Fatalf("replay: %d %s", rr.Code, rr.Body)
 			}
 			if err := st.get(ctx, "turn", turn.ID, &after); err != nil || !reflect.DeepEqual(before, after) {

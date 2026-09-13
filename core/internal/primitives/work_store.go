@@ -823,7 +823,7 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 			delete(refresh, "last_error")
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET latest_observation_id=?,latest_attempt_id=?,refresh_json=?,version=version+1,updated_at=?,updated_by=? WHERE card_id=?`, oldGoodID, oldAttemptID, workJSON(refresh), o["received_at"], actor, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET latest_observation_id=?,latest_attempt_id=?,refresh_json=?,updated_at=?,updated_by=? WHERE card_id=?`, oldGoodID, oldAttemptID, workJSON(refresh), o["received_at"], actor, id); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -939,7 +939,8 @@ func (s *Store) validateWorkReferences(ctx context.Context, m map[string]any) er
 }
 
 // WorkDecisionRevision is the proposal and dispatch fence for a projected work
-// record. Observation freshness never substitutes for source identity.
+// record. Work version changes only for canonical mutations, never observation
+// or refresh bookkeeping. Successful external reads supply the source revision.
 func WorkDecisionRevision(w map[string]any) string {
 	source := workMap(w["source"])
 	if authority := workString(source["authority"]); authority != "" && authority != "nexus" {

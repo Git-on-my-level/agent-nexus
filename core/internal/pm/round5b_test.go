@@ -18,7 +18,7 @@ func TestHTTPTurnClosedLifecycle(t *testing.T) {
 			path, method, body string
 			success            int
 		}{
-			{"context", "GET", "", 200},
+			{"context", "POST", `{}`, 200},
 			{"decisions", "POST", `{"request_key":"proposal","work_ref":"work:1","scope":"work.phase","instruction":"Move","target_revision":"r1","payload":{"phase":"ready"}}`, 200},
 			{"complete", "POST", `{"text":"Done"}`, 200},
 			{"fail", "POST", `{"reason":"Harness failed"}`, 200},
@@ -61,7 +61,9 @@ func TestHTTPTurnClosedLifecycle(t *testing.T) {
 				body := op.body
 				if state == "live" {
 					claimed := claimTestTurn(t, s, ctx, agent, turn.ID)
-					if op.path == "complete" || op.path == "fail" {
+					if op.path == "context" {
+						body = fmt.Sprintf(`{"lease_token":%q}`, claimed.LeaseToken)
+					} else {
 						body = strings.TrimSuffix(body, "}") + fmt.Sprintf(`,"lease_token":%q}`, claimed.LeaseToken)
 					}
 				}
