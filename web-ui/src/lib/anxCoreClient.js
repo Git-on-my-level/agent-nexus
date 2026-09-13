@@ -91,8 +91,10 @@ function parseGeneratedFailure(error, commandId) {
     payloadStart >= 0 ? remainder.slice(payloadStart) : remainder;
   const details =
     extractErrorMessage(payloadText) || extractErrorMessage(remainder);
+  const body = parseErrorBody(payloadText) || parseErrorBody(remainder);
 
   return {
+    body,
     status: Number.isFinite(status) ? status : undefined,
     details,
   };
@@ -237,6 +239,7 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
     );
     requestError.status = generatedFailure.status;
     requestError.details = generatedFailure.details;
+    requestError.body = generatedFailure.body;
     return requestError;
   }
 
@@ -246,7 +249,10 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
   );
 }
 
-function buildRawRequestError({ status, details }, { target, method, path }) {
+function buildRawRequestError(
+  { status, details, body },
+  { target, method, path },
+) {
   const detailSuffix = details ? ` - ${details}` : "";
   const guidanceSuffix =
     status >= 500
@@ -257,7 +263,19 @@ function buildRawRequestError({ status, details }, { target, method, path }) {
   );
   requestError.status = status;
   requestError.details = details;
+  // The parsed error body keeps structured details (for example the id of
+  // an existing decision on a 409) that the message text flattens.
+  requestError.body = body;
   return requestError;
+}
+
+function parseErrorBody(text) {
+  try {
+    const parsed = JSON.parse(String(text ?? ""));
+    return parsed && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function parseRawErrorResponse(response) {
@@ -266,6 +284,7 @@ async function parseRawErrorResponse(response) {
   return {
     status: response.status,
     details,
+    body: parseErrorBody(rawDetails),
   };
 }
 
