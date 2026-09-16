@@ -2569,41 +2569,6 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "move.after_card_id",
-                    "type": "string"
-                },
-                {
-                    "name": "move.before_card_id",
-                    "type": "string"
-                },
-                {
-                    "name": "move.column_key",
-                    "type": "string",
-                    "enum_values": [
-                        "backlog",
-                        "blocked",
-                        "done",
-                        "in_progress",
-                        "ready",
-                        "review"
-                    ]
-                },
-                {
-                    "name": "move.if_board_updated_at",
-                    "type": "datetime"
-                },
-                {
-                    "name": "move.resolution",
-                    "type": "string",
-                    "enum_values": [
-                        "done"
-                    ]
-                },
-                {
-                    "name": "move.resolution_refs",
-                    "type": "list\u003cany\u003e"
-                },
-                {
                     "name": "resolution",
                     "type": "string",
                     "enum_values": [

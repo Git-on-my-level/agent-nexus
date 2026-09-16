@@ -14,12 +14,12 @@ Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on du
 ## Module Purpose
 `web-ui` is the operator control surface for Agent Nexus.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention such as decisions, reviews, resource edits (topics, docs, boards, cards), acknowledgments, and message posting. It is a client of `anx-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, Tasks (work projection), Docs, Ask PM, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
 - Treat `anx-core` as the single source of truth for all durable state.
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
-- Provide the main operator workflow surfaces for inbox triage, topic and backing-thread inspection, boards and cards, artifacts, documents, and review flows.
+- Provide the main operator workflow surfaces: Inbox, Tasks (table/board), Docs, Ask PM, and settings. Thread inspection stays available for backing conversations; it is not a fourth primitive.
 - Handle forward-compatible data safely: unknown fields and refs must remain visible rather than breaking the UI. `event.type` and `artifact.kind` are strict contract enums; drift there may surface as an API error instead of a rendered row.
 - Inbox items from the API use `related_refs` only (see shared `inbox_item` schema). Do not read `item.refs` on inbox rows; legacy stored rows are normalized in core before they reach clients.
 - Human-attention writes (`human_attention_requested`, `human_attention_responded`) are thread-grounded in core: event `refs` must include `thread:<thread_id>`. Prefer reflecting that in any client-side validation or examples even when the operator navigates by topic.

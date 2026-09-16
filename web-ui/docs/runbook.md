@@ -186,14 +186,15 @@ With **`make serve`** (or matching env), the seed also writes **`web-ui/.dev/loc
 `ANX_DEV_REGISTER_LINKED_ACTORS=1` on anx-core. The sidebar **Fixture persona**
 control then switches cookie-backed sessions among seeded principals.
 
-Primary board UI entry points:
+Primary Tasks UI entry points:
 
-- `/:workspace/boards`
-- `/:workspace/boards/:boardRef`
+- `/:workspace/tasks`
+- `/:workspace/tasks?view=board`
+- `/:workspace/tasks/:workId`
 
-The board detail page relies on `GET /boards/{board_ref}/workspace` for the
-canonical read model and reloads that workspace after mutations or `409
-conflict` responses.
+`/:workspace/work` redirects to Tasks. The Tasks board persists Nexus-owned
+drops through `cards.move` and `GET /boards/{board_ref}` for the concurrency
+token. `/boards` is not an operator destination.
 
 ## Packaging and serving
 

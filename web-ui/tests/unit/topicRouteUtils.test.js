@@ -8,7 +8,6 @@ import {
   resolveBoardCardThreadIdField,
   shouldShowBoardWorkspaceContextLink,
   topicRouteSegmentFromBackingThread,
-  topicRouteSegmentFromBoardCardRow,
   topicRouteSegmentFromBoardWorkspace,
   warningInspectNav,
 } from "../../src/lib/topicRouteUtils.js";
@@ -42,26 +41,6 @@ describe("topicRouteUtils", () => {
           id: "thread-a",
         }),
       ).toBe("");
-    });
-  });
-
-  describe("topicRouteSegmentFromBoardCardRow", () => {
-    it("delegates segment from boardCardInspectNav", () => {
-      expect(
-        topicRouteSegmentFromBoardCardRow(
-          {
-            topic_ref: "topic:top-1",
-            thread_id: "thread-x",
-          },
-          { id: "thread-x", topic_ref: "topic:top-2" },
-        ),
-      ).toBe("top-1");
-    });
-
-    it("returns thread id segment when no topic ref", () => {
-      expect(
-        topicRouteSegmentFromBoardCardRow({ thread_id: "thread-z" }, null),
-      ).toBe("thread-z");
     });
   });
 

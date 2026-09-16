@@ -960,25 +960,14 @@
   /**
    * Page dock layout: the page becomes a single flex column constrained to the
    * visible viewport so a sticky bottom strip ("dock") stays in the operator's
-   * thumb / mouse reach while the rest scrolls above it. Used by Boards
-   * (announcements feed), Topic Messages (composer), and Doc detail
-   * (discussion drawer) so all three feel the same.
+   * thumb / mouse reach while the rest scrolls above it. Used by Topic Messages
+   * (composer) and Doc detail (discussion drawer).
    *
    * Variants:
    *   .page-dock-layout              — constrains on both mobile and desktop
-   *                                    (boards: announcements always pinned)
    *   .page-dock-layout--mobile-only — below `lg` (1024px) keeps the viewport
    *                                    dock; from `lg` up the page falls back to
    *                                    natural flow (doc body + fixed-right rail).
-   *   .page-dock-layout--board-viewport-chat — from `lg` up, board announcements
-   *                                    use a viewport-fixed bottom sheet (resize
-   *                                    + height persistence via DiscussionDrawer).
-   *   .page-dock-layout--embedded-modal-chat — Card modal: class marker; height
-   *                                    host is `[data-discussion-dock-host]` (see
-   *                                    CardDetailModalInner).
-   *   .page-dock-layout--card-page-chat — Full-route card panel: dock discussion
-   *                                    at every width (`mobile-only` excludes the
-   *                                    default dock rules from tablet/desktop).
    */
   .page-dock-layout {
     display: flex;
@@ -1322,101 +1311,6 @@
       .page-dock-feed:has([data-mobile-chat-expanded]) {
       height: auto;
       max-height: none;
-    }
-
-    /*
-     * Card detail page: keep the discussion dock above in-flow page chrome but
-     * below the shell bottom nav. Otherwise the nav clearance reads as empty
-     * space below the composer on mobile.
-     */
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--card-page-chat
-      .page-dock-feed {
-      z-index: 19;
-    }
-  }
-
-  /**
-   * Board (desktop): same viewport-anchored bottom sheet + drag-resize height
-   * as narrow viewports, inset from the persistent sidebar.
-   */
-  @media (min-width: 1024px) {
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat.page-dock-layout {
-      min-height: 0;
-      max-height: none;
-      --mobile-chat-panel-height: min(40dvh, 22rem);
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-scroll {
-      overflow: visible;
-      flex: none;
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat:has(
-        [data-mobile-chat-expanded]
-      )
-      .page-dock-scroll {
-      padding-bottom: calc(
-        var(--mobile-chat-panel-height) + 1.25rem +
-          env(safe-area-inset-bottom, 0px)
-      );
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat:not(
-        :has([data-mobile-chat-expanded])
-      )
-      .page-dock-scroll {
-      padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-feed {
-      position: fixed;
-      left: calc(14.5rem + 1px);
-      right: 0;
-      bottom: 0;
-      z-index: 15;
-      width: auto;
-      max-width: none;
-      margin: 0;
-      margin-top: 0;
-      flex: unset;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-      box-sizing: border-box;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-feed:not(:has([data-mobile-chat-expanded])) {
-      max-height: none;
-      height: auto;
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-feed:has([data-mobile-chat-expanded]) {
-      height: var(--mobile-chat-panel-height);
-      max-height: var(--mobile-chat-panel-height);
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-feed
-      > * {
-      display: flex;
-      min-height: 0;
-      flex: 0 1 auto;
-      flex-direction: column;
-    }
-
-    .page-dock-layout--fixed-mobile-chat.page-dock-layout--board-viewport-chat
-      .page-dock-feed:has([data-mobile-chat-expanded])
-      > * {
-      flex: 1 1 auto;
-      height: 100%;
-      max-height: 100%;
-      min-height: 0;
     }
   }
 

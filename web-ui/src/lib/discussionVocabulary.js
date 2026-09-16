@@ -2,14 +2,13 @@
  * Canonical, cross-surface vocabulary for the unified Discussion model.
  *
  * Mental model (shared by operators and agents):
- *   Boards, Cards, Topics, and Docs each have exactly one Discussion.
+ *   Docs and topic/thread inspection each have exactly one Discussion.
  *   A Discussion is a thread of Messages.
  *   A Comment is a Message anchored to a text selection in a Doc.
  *
  * Every messaging surface pulls its user-facing copy from here so the nouns
- * cannot drift again (board "announcements" vs topic "messages" vs doc
- * "comments" vs the "Post message" / "Comment" button split). Surface-specific
- * builders live in `discussionSurface.js`; this module owns the words.
+ * cannot drift. Surface-specific builders live in `discussionSurface.js`;
+ * this module owns the words.
  */
 
 /** Section / panel title used everywhere a Discussion is shown. */
@@ -56,10 +55,6 @@ export function messageCountLabel(count) {
   const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
   return `${n} ${n === 1 ? "message" : "messages"}`;
 }
-
-/** Board Discussion empty-state copy. */
-export const BOARD_EMPTY =
-  "Board-wide updates and discussion live here, separate from individual card threads. Post a short note the whole board should see — triage callouts, column policy, or sprint boundaries.";
 
 /**
  * Document Discussion empty-state copy. Doubles as a discoverability hint for

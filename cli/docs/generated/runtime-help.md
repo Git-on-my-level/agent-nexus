@@ -6817,15 +6817,9 @@ Inputs:
   - body `actor_id` (string)
   - body `after_card_id` (string)
   - body `before_card_id` (string)
-  - body `move.after_card_id` (string)
-  - body `move.before_card_id` (string)
-  - body `move.column_key` (string)
-  - body `move.if_board_updated_at` (datetime)
-  - body `move.resolution` (string)
-  - body `move.resolution_refs` (list<any>)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
-  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; move.column_key: backlog, blocked, done, in_progress, ready, review; move.resolution: done; resolution: done
+  Enum values: column_key: backlog, blocked, done, in_progress, ready, review; resolution: done
 
 Local Help: cards move
 

@@ -4914,16 +4914,6 @@ paths:
             type: string
             enum: [open, completed]
             default: open
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Open inbox reads always return the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation. Ignored when status=completed.
-          schema:
-            type: integer
-            minimum: 0
         - name: limit
           in: query
           required: false
@@ -6038,16 +6028,6 @@ paths:
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/InboxID'
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Inbox item reads always return the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation.
-          schema:
-            type: integer
-            minimum: 0
       responses:
         '200':
           description: Inbox item
@@ -6076,16 +6056,6 @@ paths:
       x-anx-concepts: [inbox]
       x-anx-stability: beta
       parameters:
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Inbox streams emit changes from the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation.
-          schema:
-            type: integer
-            minimum: 0
         - name: last_event_id
           in: query
           required: false
@@ -8733,9 +8703,8 @@ components:
 
     MoveCardRequest:
       description: >
-        Flat card move body aligned with refactor spec §8.1 (`column_key`, optional placement
-        hints, optional terminal resolution). Clients MAY also send a legacy nested
-        `move` object with the same fields; core flattens it when `column_key` is not set at the root.
+        Flat card move body (`column_key`, optional placement
+        hints, optional terminal resolution).
       allOf:
         - $ref: '#/components/schemas/MoveCardInput'
         - type: object
@@ -8743,10 +8712,6 @@ components:
             actor_id:
               type: string
               description: Optional actor performing the move (may also be supplied via auth headers).
-            move:
-              $ref: '#/components/schemas/MoveCardInput'
-              deprecated: true
-              description: Legacy envelope; prefer flat top-level fields. Ignored when `column_key` is set at the root.
 
     CreateEventRequest:
       type: object

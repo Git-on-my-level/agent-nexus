@@ -138,13 +138,13 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 	}`, http.StatusCreated).Body.Close()
 }
 
-func TestInboxRiskHorizonReadsMaterializedProjectionWithFreshness(t *testing.T) {
+func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
 	t.Parallel()
 
 	h := newPrimitivesTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
-		"title":           "Risk horizon materialized projection",
+		"title":           "Materialized inbox projection",
 		"type":            "incident",
 		"status":          "active",
 		"priority":        "p1",
@@ -159,22 +159,18 @@ func TestInboxRiskHorizonReadsMaterializedProjectionWithFreshness(t *testing.T) 
 	requestEventID := asString(created["id"])
 
 	standard := getInboxPayload(t, h.baseURL+"/inbox")
-	withRisk := getInboxPayload(t, h.baseURL+"/inbox?risk_horizon_days=30")
-	if asString(standard.ProjectionFreshness["status"]) != "current" || asString(withRisk.ProjectionFreshness["status"]) != "current" {
-		t.Fatalf("expected current freshness on both inbox reads, got standard=%#v risk=%#v", standard.ProjectionFreshness, withRisk.ProjectionFreshness)
-	}
-	if string(mustJSON(t, standard.Items)) != string(mustJSON(t, withRisk.Items)) {
-		t.Fatalf("expected risk_horizon_days read to return materialized inbox items, standard=%#v risk=%#v", standard.Items, withRisk.Items)
+	if asString(standard.ProjectionFreshness["status"]) != "current" {
+		t.Fatalf("expected current freshness on inbox reads, got %#v", standard.ProjectionFreshness)
 	}
 
-	item, ok := findInboxItem(withRisk.Items, func(candidate map[string]any) bool {
+	item, ok := findInboxItem(standard.Items, func(candidate map[string]any) bool {
 		return asString(candidate["kind"]) == "ask" && asString(candidate["source_event_id"]) == requestEventID
 	})
 	if !ok {
-		t.Fatalf("expected materialized inbox item for source_event_id=%s, got %#v", requestEventID, withRisk.Items)
+		t.Fatalf("expected materialized inbox item for source_event_id=%s, got %#v", requestEventID, standard.Items)
 	}
 
-	itemResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(asString(item["id"])) + "?risk_horizon_days=30")
+	itemResp, err := http.Get(h.baseURL + "/inbox/" + url.PathEscape(asString(item["id"])))
 	if err != nil {
 		t.Fatalf("GET /inbox/{id}: %v", err)
 	}
@@ -197,17 +193,17 @@ func TestInboxRiskHorizonReadsMaterializedProjectionWithFreshness(t *testing.T) 
 	}
 }
 
-func TestInboxRiskHorizonReadDoesNotRecomputePendingProjection(t *testing.T) {
+func TestInboxReadDoesNotRecomputePendingProjection(t *testing.T) {
 	t.Parallel()
 
 	h := newManualProjectionTestServer(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated).Body.Close()
 
-	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Pending risk horizon projection")
+	threadID := createBoardThreadViaHTTP(t, h.primitivesTestHarness, "Pending inbox projection")
 	createHumanAttentionEvent(t, h.baseURL, threadID, "ask", "Do not recompute on read", "thread:"+threadID, nil, nil)
 
 	inboxBefore := countTableRows(t, h.workspace.DB(), "derived_inbox_items")
-	payload := getInboxPayload(t, h.baseURL+"/inbox?risk_horizon_days=30")
+	payload := getInboxPayload(t, h.baseURL+"/inbox")
 	if got := asString(payload.ProjectionFreshness["status"]); got != "pending" {
 		t.Fatalf("expected pending freshness before worker runs, got %#v", payload.ProjectionFreshness)
 	}
@@ -215,7 +211,7 @@ func TestInboxRiskHorizonReadDoesNotRecomputePendingProjection(t *testing.T) {
 		t.Fatalf("expected no read-time recomputed inbox items, got %#v", payload.Items)
 	}
 	if inboxAfter := countTableRows(t, h.workspace.DB(), "derived_inbox_items"); inboxAfter != inboxBefore {
-		t.Fatalf("expected risk-horizon read not to write derived inbox rows, got before=%d after=%d", inboxBefore, inboxAfter)
+		t.Fatalf("expected inbox read not to write derived inbox rows, got before=%d after=%d", inboxBefore, inboxAfter)
 	}
 }
 

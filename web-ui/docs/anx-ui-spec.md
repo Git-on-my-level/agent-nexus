@@ -85,11 +85,20 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 
 ---
 
-## 2. Core UX model: topic-and-board workflows
+## 2. Core UX model: Inbox, Tasks, Docs
 
-### 2.1 Topics and boards as navigation backbone
+### 2.1 Three product primitives
 
-The primary navigation unit is the **topic**, with boards and cards for execution. Threads remain the read-only backing timeline for evidence and audit navigation.
+The primary navigation units are **Inbox**, **Tasks**, and **Docs**. Ask PM is
+an action in the shell, not a nav category. Settings (Access, Secrets,
+Integrations, Audit) live in the sidebar footer and `/more`.
+
+Tasks is the operator projection over work (`work.list` / `work.get`), shown as
+table or board. Boards and cards remain the backing store; they are not
+separate product destinations. Threads remain the read-only backing timeline
+for docs, inbox deep links, and audit inspection at `/threads/...`.
+
+`/work` and `/decisions` redirect to `/tasks` and `/inbox`.
 
 ### 2.2 Topic detail: timeline + workspace
 
@@ -124,18 +133,14 @@ Mutable topic and card fields are interpretive and versioned through events. The
 
 ## 3. Required UI surfaces (v0)
 
-### 3.0 Home and Events
+### 3.0 Workspace root and Events
 
-Home is an unread activity feed, not a state-of-world dashboard. It reads
-`GET /home/unread`, renders high-signal unread events grouped by topic, and
-marks read through durable core cursors via `POST /home/read`. Home does not
-use browser-local handoff markers.
+The workspace root redirects to Inbox. There is no Home unread-feed destination.
 
-Events is the full workspace event browser. It reads `GET /events`, supports
-URL/shareable filter intent for type, group, backing scope, topic, actor,
-search, time range, cursor, and the shared `home_feed` preset.
-The first implementation keeps Events under More on mobile rather than adding a
-primary bottom-nav slot.
+Events is the full workspace event browser under settings. It reads `GET /events`,
+supports URL/shareable filter intent for type, group, backing scope, topic, actor,
+search, time range, and cursor.
+Events stays under More on mobile rather than a primary bottom-nav slot.
 
 ### 3.1 Inbox
 

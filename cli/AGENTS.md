@@ -28,11 +28,12 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 
 The CLI should teach the same workspace model as the web UI:
 
-- **Topics** are for topic-centered discussion and current context around a project, incident, decision, or recurring process.
-- **Boards** are active-work views: status columns, ownership, ordering, and progress across many Cards.
-- **Cards** are first-class work items that can live on Boards. Use `anx cards ...` for card create, list, get, message, assign, move, revise, resolve, reopen, and lifecycle operations. Their summary/body is text-heavy agent work, so `cards create` and `cards revise` should prefer local files via `--body-file` (or inline `--body` where appropriate).
+- **Inbox** is human attention (decisions, blocked/stale work, material events). Use `anx inbox ...`.
+- **Work / Tasks** is the projection over commitments. Prefer `anx work list|get|create` and public `card:<handle>` refs. `anx cards move` is the write for Nexus-owned phase/rank changes; source-owned changes go through PM decisions.
+- **Docs** are durable context and institutional knowledge. `docs create` and `docs revise` should prefer local files via `--body-file` (or inline `--body` on create).
+- **Topics** remain the backing discussion/context primitive. Use `topics message/messages/reply` when you are already on a topic thread.
+- **Boards and cards** are the store behind Tasks, not a second product. Use `anx cards ...` for card create, list, get, message, assign, move, revise, resolve, reopen, and lifecycle. `cards create` and `cards revise` should prefer `--body-file` (or inline `--body`). Board-scoped `boards cards list|get|create-batch` is only for board-scoped reads or batch JSON creation; do not add card workflow verbs under `boards cards`.
 - **Domain messages** are ordinary conversation/status updates on a Topic, Document, or Card backing thread. Use `topics message/messages/reply`, `docs message/messages/reply`, and `cards message/messages/reply` for agent authoring; use `--body-file` for file-backed message bodies; do not make agents hand-author `message_posted` event JSON for routine domain discussion.
-- **Docs** are durable context and institutional knowledge. `docs create` and `docs revise` should also prefer local files via `--body-file` (or inline `--body` on create).
 
 Use the smallest domain verb that says what is happening:
 
@@ -55,8 +56,6 @@ Use the smallest domain verb that says what is happening:
 Do not add compatibility aliases for new CLI surfaces. Transitional aliases removed in the CLI ergonomics consolidation include: `--content-file`, `--json-file`, and bare `--card` / `--board` as duplicates of `--<resource>-id` on the same command.
 
 If an old command path conflicts with this model, prefer a clean replacement and update help, generated metadata, tests, and this guide together.
-
-Board-scoped card commands are intentionally narrow. Use `boards cards list|get|create-batch` only for board-scoped reads or batch JSON creation; do not add card workflow verbs under `boards cards`.
 
 ## Output And Runtime Invariants
 

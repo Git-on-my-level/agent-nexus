@@ -243,10 +243,6 @@ func handleInboxStream(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	if !validateInboxRiskHorizonParam(w, r) {
-		return
-	}
-
 	lastEventID := resolveLastEventID(r)
 	controller, flusher, ok := prepareSSE(w)
 	if !ok {

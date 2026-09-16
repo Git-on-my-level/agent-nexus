@@ -1,90 +1,62 @@
 # Unified work and PM operator surface
 
-The Work table and board project the same canonical `/work` records. Work stays
-backed by existing cards; projects remain topics. Filters are shareable URL
+Primary navigation is Inbox, Tasks, and Docs. Ask PM is an action, not a
+destination category. Tasks table and board project the same canonical `/work`
+records. Work stays backed by existing cards. Filters are shareable URL
 parameters, and list pagination uses opaque server cursors. External source
-statuses remain visible even when their normalized phase is unfamiliar. The
-board has no drag/drop mutation. Source workflow changes go through authorized
-PM decisions and source executors.
+statuses remain visible even when their normalized phase is unfamiliar.
+
+Nexus-owned Tasks board drops call `cards.move` with public `card:` refs.
+Source-owned drops file a PM decision; they never silently mutate the source.
 
 ## Operator routes
 
-All routes are under the current `/o/{organization}/w/{workspace}` prefix.
+All routes are under `/o/{organization}/w/{workspace}`.
 
-- `/work?view=table|board`: commitments, source status, next actor/action,
-  meaningful progress and evidence freshness. Search and project/source/owner/
-  phase/freshness filters call the canonical list endpoint.
-- `/work/new`: native commitment creation on an existing board, with required
-  acceptance criteria. External work registration belongs to source integration
-  tooling. Save errors retain the form.
-- `/work/{card_ref}`: source authority, acceptance criteria, blockers, next
-  action, observation history, read failures, uncertainty, coverage, linked
-  executions, relationships and source refresh requests.
-- `/integrations`: collection health grouped by source connection across loaded
-  work, with pagination and explicit coverage limits. Connections with no visible
-  tracked work cannot be inferred from this projection.
-- `/pm`: private durable conversation history, scoped work context, queued turn
-  states, retained failed drafts, replay-safe request keys, conversation and
-  message pagination. Suggested questions populate the composer without sending.
-- `/decisions`: email-style Needs you / Watching / All decision mailboxes,
-  explicit mobile reader navigation, source scope/revision, exact answers,
-  delivery attempts and read-back receipts. Decisions and receipts are paged;
-  a direct decision link loads its record even outside the current list page.
-- `/inbox`: existing event-oriented triage remains intact. The clear-inbox state
-  does not claim that all work or integrations are healthy.
+- `/inbox`, `/inbox/{id}`: Needs you / Watching / Handled. Selection is the URL
+  (`?item=`). Decisions awaiting an answer live here, not on a separate page.
+- `/tasks?view=table|board`: commitments, source status, next actor/action,
+  evidence freshness. Search and project/source/owner/phase/freshness filters
+  call `work.list`.
+- `/tasks/new`: native commitment creation on an existing board, with required
+  acceptance criteria.
+- `/tasks/{card_ref}`: source authority, acceptance criteria, blockers, next
+  action, observation history, and refresh requests.
+- `/docs`, `/docs/{document_ref}`: shared knowledge. Comments are first-class;
+  a doc can become a discussion room.
+- `/pm`: Ask PM — private durable conversation, queued turns, replay-safe
+  request keys. Suggested questions populate the composer without sending.
+- `/integrations`, `/access`, `/secrets`, `/events`: settings (also under
+  `/more` on mobile). Events is the audit log.
 
-Work and PM are primary navigation destinations. Topics, legacy boards,
-Integration health, and Decisions & receipts remain available under More and the
-desktop secondary navigation.
+`/work` and `/work/{card_ref}` redirect to `/tasks`. `/decisions` redirects to
+`/inbox`. Those paths are bookmarks, not product.
+
+`/threads` and `/threads/{threadId}` remain inspection surfaces for backing
+conversations and inbox deep links. They are not a fourth primitive.
 
 ## Boundaries
 
-All persistent actions use the existing authenticated workspace core client and
-generated command registry. There is no browser database, alternate authority,
+All persistent actions use the authenticated workspace core client and generated
+command registry. There is no browser database, alternate authority,
 provider/model registry, worker launcher, or fabricated PM reply. Observed time,
 source activity, and meaningful progress are displayed separately. An observation
 that claims verification remains a reported claim unless core supplies trusted
 verification. A queued refresh only records a request. Delivered and acknowledged
-instructions are not outcomes; an outcome badge requires independently verified
-receipt evidence.
+instructions are not outcomes.
 
 Approvals carry the current decision revision. Delivery is a separate explicit
-operation; receipt checking never resends. Unknown or sending actions have no
-blind-retry button. A draft navigation guard protects unsent messages and answers;
-pending writes block navigation until their result is known. External links must
-be absolute HTTP(S) without embedded credentials.
+operation; receipt checking never resends. External links must be absolute
+HTTP(S) without embedded credentials.
 
 ## Validation
-
-Run the normal module gate and production build:
 
 ```sh
 make -C web-ui check
 pnpm --dir web-ui run build
 ```
 
-The dedicated browser suite starts an isolated schema fixture server and Vite
-on configurable test ports. It never starts or writes to a real core workspace:
-
-```sh
-pnpm --dir web-ui exec playwright test --config playwright.pm.config.js
-```
-
-Its fixtures are synthetic. It covers board/table parity, preserved source
-states, failed refreshes, retained list data, PM request replay, failed delivery,
-and desktop/mobile overflow and axe accessibility checks. Component tests cover
-these interaction boundaries independently, including out-of-order work loads,
-revision-bound answers, navigation during writes and later-page discovery.
-
-The implementation run passed the production build and unit/module checks.
-Chromium launch was blocked by the macOS execution sandbox before any browser
-assertion (`MachPortRendezvousServer` registration denied). Browser visual,
-responsive and axe results therefore remain **unverified** until this suite runs
-in a browser-capable environment. No real source, channel or deployment proof is
-claimed by UI fixtures.
-
 The runtime requires the canonical Work/PM contract and corresponding core
-handlers. An unconfigured reader, PM bridge or source executor produces an
-explicit unavailable/queued state. Real-source central import, authorized live
-channel conversations and source-action verification require integrated dogfood;
-they cannot be established by a frontend build.
+handlers. An unconfigured reader or source executor produces an explicit
+unavailable/queued state. `anx pm serve` is the PM runner; it does not require
+`ANX_PM_BRIDGE_ENABLED`.

@@ -8,8 +8,6 @@ import {
   boardRecordFromBoardsListRow,
   searchArtifacts,
   backingThreadIdFromTopicRecord,
-  topicSearchResultToPickerOption,
-  topicSearchResultToBoardRefOption,
   documentSearchPickerSubtitle,
   boardSearchPickerSubtitle,
 } from "../../src/lib/searchHelpers.js";
@@ -50,48 +48,6 @@ describe("searchHelpers", () => {
       expect(
         backingThreadIdFromTopicRecord({ id: "topic-only", title: "T" }),
       ).toBe("topic-only");
-    });
-  });
-
-  describe("topicSearchResultToPickerOption", () => {
-    it("prefers backing thread public ref as picker value", () => {
-      const opt = topicSearchResultToPickerOption({
-        id: "topic-1",
-        thread_id: "thr-9",
-        thread_ref: "thread:coordination",
-        ref: "topic:coordination",
-        title: "Coordination",
-        type: "incident",
-        state: "active",
-      });
-      expect(opt.id).toBe("thread:coordination");
-      expect(opt.title).toBe("Coordination");
-      expect(opt.subtitle).toBe("active · topic:coordination");
-      expect(opt.keywords).toEqual([]);
-    });
-  });
-
-  describe("topicSearchResultToBoardRefOption", () => {
-    it("uses topic typed ref as picker value", () => {
-      const opt = topicSearchResultToBoardRefOption({
-        id: "5e63c3fc-271b-4785-8036-cf06e1ee03b0",
-        ref: "topic:alpha",
-        thread_id: "d002c2fa-8f5a-4bbe-9c92-4e333e1f75fe",
-        title: "Alpha",
-        type: "initiative",
-        state: "active",
-      });
-      expect(opt.id).toBe("topic:alpha");
-      expect(opt.title).toBe("Alpha");
-      expect(opt.subtitle).toBe("active · topic:alpha");
-    });
-
-    it("preserves already-typed ref ids", () => {
-      const opt = topicSearchResultToBoardRefOption({
-        id: "topic:already",
-        title: "T",
-      });
-      expect(opt.id).toBe("topic:already");
     });
   });
 

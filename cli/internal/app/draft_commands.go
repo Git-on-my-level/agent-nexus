@@ -691,27 +691,9 @@ func validateDraftCardPatch(body map[string]any) []string {
 func validateDraftCardMove(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	move := effectiveCardMoveMutationMap(body)
-	if move == nil {
-		out = append(out, "column_key is required (flat body or nested move object)")
-		return out
-	}
-	useNestedPath := nestedMutationMap(body, "move") != nil && strings.TrimSpace(anyString(body["column_key"])) == ""
-	path := "move"
-	if !useNestedPath {
-		path = ""
-	}
-	colPath := "column_key"
-	if useNestedPath {
-		colPath = "move.column_key"
-	}
-	requiredStringField(move, "column_key", colPath, true, &out)
-	ifBoardPath := "if_board_updated_at"
-	if useNestedPath {
-		ifBoardPath = "move.if_board_updated_at"
-	}
-	validateRequiredRFC3339(move, "if_board_updated_at", ifBoardPath, &out)
-	validateCardFields(move, false, path, &out)
+	requiredStringField(body, "column_key", "column_key", true, &out)
+	validateRequiredRFC3339(body, "if_board_updated_at", "if_board_updated_at", &out)
+	validateCardFields(body, false, "", &out)
 	return out
 }
 

@@ -31,24 +31,23 @@
   const RAIL_W_COLLAPSED = 64;
 
   /**
-   * A self-contained Discussion panel for one primitive (board, card, topic,
-   * document). Manages its own isolated timelineContext by default; topic
-   * Messages uses `useParentTimelineContext` to keep the page-level topic
-   * detail store.
+   * A self-contained Discussion panel for one primitive (topic, document).
+   * Manages its own isolated timelineContext by default; topic Messages uses
+   * `useParentTimelineContext` to keep the page-level topic detail store.
    *
    * There are exactly three formal layout modes (see `discussionSurface.js`):
-   * - `primary` — the Discussion *is* the artifact (Topic). Always open,
-   *   non-collapsible, fills its pane.
+   * - `primary` — the Discussion *is* the artifact (topic/thread inspection).
+   *   Always open, non-collapsible, fills its pane.
    * - `rail` — Discussion beside a primary artifact on desktop (Document).
    *   Resizable right aside on `lg`+, collapsible dock chrome below.
-   * - `dock` — Discussion docked under/within an artifact (Board, Card).
+   * - `dock` — Discussion docked under/within an artifact on narrow viewports.
    *   Collapsible, with an "N messages" count badge.
    *
    * Prefer passing a descriptor built by `discussionSurface.js`:
-   *   <DiscussionDrawer {...boardDiscussionSurface(board)} {workspaceId} … />
+   *   <DiscussionDrawer {...documentDiscussionSurface(doc)} {workspaceId} … />
    */
   let {
-    /** Surface kind for descriptors (board|card|topic|document). Documentation only. */
+    /** Surface kind for descriptors (topic|document). Documentation only. */
     kind = "",
     threadId,
     /** Forwarded to MessagesTab; refresh/list scope (e.g. topic URL id vs thread id). */
@@ -59,7 +58,7 @@
     label = DISCUSSION_TITLE,
     /**
      * Used to namespace the localStorage open/close preference.
-     * E.g. "board-feed:thread-abc" or "doc-discussion:doc-xyz".
+     * E.g. "doc-discussion:doc-xyz".
      * If empty, open state is not persisted.
      */
     storageKey = "",
@@ -67,8 +66,8 @@
     layout = "dock",
     /**
      * Dock placement for collapsible bottom drawers:
-     * - `viewport`: fixed/sticky page dock controlled by app.css (doc mobile, board feed).
-     * - `embedded`: in-flow dock inside a bounded host such as the card modal.
+     * - `viewport`: fixed/sticky page dock controlled by app.css (doc mobile).
+     * - `embedded`: in-flow dock inside a bounded host.
      */
     dockPlacement = "viewport",
     /**
@@ -162,8 +161,8 @@
      */
     prefetchedMessageCount = undefined,
     /**
-     * Where the isolated timeline is sourced from: `thread` (default; board,
-     * card, doc) or `topic`. Ignored when `useParentTimelineContext` is set.
+     * Where the isolated timeline is sourced from: `thread` (default; doc)
+     * or `topic`. Ignored when `useParentTimelineContext` is set.
      */
     timelineSource = "thread",
     /**
@@ -175,11 +174,7 @@
   } = $props();
 
   let timelineLoadOpts = $derived(
-    timelineSource === "topic"
-      ? { asTopic: true }
-      : timelineSource === "card"
-        ? { asCard: true }
-        : {},
+    timelineSource === "topic" ? { asTopic: true } : {},
   );
 
   let hasSecondaryPanel = $derived(typeof secondaryPanel === "function");

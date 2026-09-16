@@ -375,7 +375,7 @@ export function filterWork(records, filters = {}, now = Date.now()) {
 }
 
 export function workKey(work) {
-  return work.ref || work.handle || work.id;
+  return work.ref || work.handle;
 }
 export function sourceLabel(source) {
   return (

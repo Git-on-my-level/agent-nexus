@@ -11,7 +11,8 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 | ~~`compat_aliases.go` old command shapes~~ | CLI | Transitional command mapping | **Removed** (pre-user batch) | `cli/internal/app/compat_aliases.go` |
 | ~~`--reconnect` on stream commands~~ | CLI | Older follow semantics | **Removed** (pre-user batch) | stream command handlers in `cli/internal/app/` |
 | ~~`anx bridge workspace-id --document-id agentreg.<handle>`~~ | CLI | Superseded handle flag | **Removed** (pre-user batch) | `cli/internal/app/bridge_commands.go` |
-| Nested `{"move":{...}}` body on board card move HTTP API | Core HTTP + contract | Clients sent nested envelope before flat body was canonical | Log clients still using nested envelope; remove `flattenLegacyMoveCardEnvelope` after confirmed zero use | `core/internal/server/board_card_request_parse.go` (`flattenLegacyMoveCardEnvelope`, `decodeMoveCardHTTPPayload`) |
+| ~~Nested `{"move":{...}}` body on board card move HTTP API~~ | Core HTTP + contract | Clients sent nested envelope before flat body was canonical | **Removed** — `MoveCardRequest` is flat; core decodes JSON directly | `core/internal/server/boards_handlers.go`, `contracts/anx-openapi.yaml` (`MoveCardRequest`) |
+| ~~`risk_horizon_days` inbox query / `--risk-horizon-days`~~ | Core HTTP + CLI | Validated compatibility param that did not recompute the inbox | **Removed** | previously `inbox_handlers.go`, `anx inbox get|stream` |
 
 ## Web UI
 

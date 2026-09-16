@@ -60,7 +60,6 @@ var (
 		{name: "id", kind: preflightFlagString, usage: "Inbox item id or alias"},
 		{name: "inbox-id", kind: preflightFlagString, usage: "Alias for --id"},
 		{name: "inbox-item-id", kind: preflightFlagString, usage: "Inbox item id or alias"},
-		{name: "risk-horizon-days", kind: preflightFlagString, usage: "Derived inbox risk horizon days"},
 	}
 	cardsListRuntimeFlags = []runtimeCommandFlagSpec{
 		{name: "board", kind: preflightFlagString, usage: "Board ref, handle, or id; uses the board-scoped card list"},
@@ -1413,16 +1412,12 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards list", err
 		}
-		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-		if err != nil {
-			return nil, "boards cards list", err
-		}
 		result, callErr := a.invokeTypedJSON(
 			ctx,
 			cfg,
 			"boards cards list",
 			"boards.cards.list",
-			map[string]string{"board_id": resolvedBoard},
+			map[string]string{"board_id": boardID},
 			nil,
 			nil,
 		)
@@ -1454,15 +1449,7 @@ func (a *App) runBoardCardsCommand(ctx context.Context, args []string, cfg confi
 		if err != nil {
 			return nil, "boards cards get", err
 		}
-		resolvedBoard, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-		if err != nil {
-			return nil, "boards cards get", err
-		}
-		resolvedCard, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoard, cardID)
-		if err != nil {
-			return nil, "boards cards get", err
-		}
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": resolvedBoard, "card_id": resolvedCard}, nil, nil)
+		result, callErr := a.invokeTypedJSON(ctx, cfg, "boards cards get", "boards.cards.get", map[string]string{"board_id": boardID, "card_id": cardID}, nil, nil)
 		return result, "boards cards get", callErr
 	default:
 		return nil, "boards cards", boardsCardsSubcommandSpec.unknownError(args[0])
@@ -2372,11 +2359,9 @@ func enrichInboxListBody(body map[string]any, cfg config.Resolved) bool {
 func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	fs := newSilentFlagSet("inbox get")
 	var idFlag, inboxIDFlag, inboxItemIDFlag trackedString
-	var riskHorizonFlag trackedInt
 	registerRuntimeStringFlag(fs, &idFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "id"))
 	registerRuntimeStringFlag(fs, &inboxIDFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "inbox-id"))
 	registerRuntimeStringFlag(fs, &inboxItemIDFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "inbox-item-id"))
-	registerRuntimeIntFlag(fs, &riskHorizonFlag, runtimeFlagSpec(inboxGetRuntimeFlags, "risk-horizon-days"))
 	if err := fs.Parse(args); err != nil {
 		return nil, "inbox get", errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -2390,13 +2375,9 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 	if len(positionals) > 0 {
 		return nil, "inbox get", errnorm.Usage("invalid_args", "unexpected positional arguments for `anx inbox get`; use `--id <id-or-alias>`")
 	}
-	query := make([]queryParam, 0, 1)
-	if riskHorizonFlag.set {
-		addSingleQuery(&query, "risk_horizon_days", fmt.Sprintf("%d", riskHorizonFlag.value))
-	}
 
 	if rawID == "" {
-		listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
+		listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 		if err != nil {
 			return nil, "inbox get", err
 		}
@@ -2407,7 +2388,7 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 		return nil, "inbox get", err
 	}
 
-	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, query, nil)
+	listResult, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {
 		return nil, "inbox get", err
 	}
@@ -2422,7 +2403,7 @@ func (a *App) runInboxGet(ctx context.Context, args []string, cfg config.Resolve
 		"inbox get",
 		"inbox.get",
 		map[string]string{"inbox_item_id": match.ID},
-		query,
+		nil,
 		nil,
 	)
 	return result, "inbox get", callErr
@@ -2492,11 +2473,9 @@ func (a *App) runEventsStream(ctx context.Context, args []string, cfg config.Res
 
 func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Resolved, commandName string, defaultFollow bool) (*commandResult, error) {
 	fs := newSilentFlagSet(commandName)
-	var riskHorizonFlag trackedInt
 	var lastEventIDFlag, cursorFlag trackedString
 	var followFlag trackedBool
 	var maxEventsFlag trackedInt
-	fs.Var(&riskHorizonFlag, "risk-horizon-days", "Derived inbox risk horizon days")
 	fs.Var(&followFlag, "follow", "Keep stream open and reconnect when it drops")
 	fs.Var(&lastEventIDFlag, "last-event-id", "Resume stream after this event id")
 	fs.Var(&cursorFlag, "cursor", "Alias of --last-event-id")
@@ -2508,16 +2487,12 @@ func (a *App) runInboxStream(ctx context.Context, args []string, cfg config.Reso
 		return nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
 	}
 
-	query := make([]queryParam, 0, 2)
-	if riskHorizonFlag.set {
-		addSingleQuery(&query, "risk_horizon_days", fmt.Sprintf("%d", riskHorizonFlag.value))
-	}
 	lastEventID := firstNonEmpty(lastEventIDFlag.value, cursorFlag.value)
 	follow := defaultFollow
 	if followFlag.set {
 		follow = followFlag.value
 	}
-	return a.runTailStream(ctx, cfg, commandName, "inbox.stream", query, lastEventID, follow, maxEventsFlag.value)
+	return a.runTailStream(ctx, cfg, commandName, "inbox.stream", nil, lastEventID, follow, maxEventsFlag.value)
 }
 
 type jsonBodyInputOptions struct {
@@ -2956,10 +2931,7 @@ func (a *App) parseBoardBatchCardCreateInput(ctx context.Context, args []string,
 	if err := finalizeMutationActorID(bodyMap, cfg); err != nil {
 		return "", nil, err
 	}
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", nil, err
-	}
+	resolvedBoardID := boardID
 	return resolvedBoardID, bodyMap, nil
 }
 
@@ -3103,10 +3075,7 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 	if err := validateID(identifier, "card id"); err != nil {
 		return "", "", nil, err
 	}
-	resolvedBoardID, err := a.resolveMaybeBoardID(ctx, cfg, boardID)
-	if err != nil {
-		return "", "", nil, err
-	}
+	resolvedBoardID := boardID
 	skipStdin := hasAnyBoardMutationFieldFlags(actorIDFlag, ifBoardUpdatedAtFlag, columnFlag, beforeCardIDFlag, afterCardIDFlag)
 	payload, err := a.readBoardCardBodyInput(fromFileFlag.value, skipStdin)
 	if err != nil {
@@ -3138,18 +3107,10 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 			bodyMap["if_board_updated_at"] = ifBoardUpdatedAt
 		}
 		if beforeCardID := strings.TrimSpace(beforeCardIDFlag.value); beforeCardID != "" {
-			resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCardID)
-			if err != nil {
-				return "", "", nil, err
-			}
-			bodyMap["before_card_id"] = resolved
+			bodyMap["before_card_id"] = beforeCardID
 		}
 		if afterCardID := strings.TrimSpace(afterCardIDFlag.value); afterCardID != "" {
-			resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCardID)
-			if err != nil {
-				return "", "", nil, err
-			}
-			bodyMap["after_card_id"] = resolved
+			bodyMap["after_card_id"] = afterCardID
 		}
 		if rawActorID := strings.TrimSpace(actorIDFlag.value); rawActorID != "" {
 			actorID, err := resolveActorIDAlias(rawActorID, cfg)
@@ -3180,18 +3141,10 @@ func (a *App) parseBoardCardMoveInput(ctx context.Context, args []string, cfg co
 		body["column_key"] = column
 	}
 	if beforeCardID := strings.TrimSpace(beforeCardIDFlag.value); beforeCardID != "" {
-		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, beforeCardID)
-		if err != nil {
-			return "", "", nil, err
-		}
-		body["before_card_id"] = resolved
+		body["before_card_id"] = beforeCardID
 	}
 	if afterCardID := strings.TrimSpace(afterCardIDFlag.value); afterCardID != "" {
-		resolved, err := a.resolveMaybeBoardCardID(ctx, cfg, resolvedBoardID, afterCardID)
-		if err != nil {
-			return "", "", nil, err
-		}
-		body["after_card_id"] = resolved
+		body["after_card_id"] = afterCardID
 	}
 	return resolvedBoardID, identifier, body, nil
 }
@@ -3285,17 +3238,6 @@ func (a *App) normalizeBoardMutationCardAnchorField(ctx context.Context, cfg con
 	return nil
 }
 
-func (a *App) resolveMaybeBoardCardID(ctx context.Context, cfg config.Resolved, boardID, rawCardID string) (string, error) {
-	_ = ctx
-	_ = cfg
-	_ = boardID
-	rawCardID = strings.TrimSpace(rawCardID)
-	if rawCardID == "" {
-		return "", nil
-	}
-	return rawCardID, nil
-}
-
 func parseBoardCardsListInput(args []string) (string, bool, error) {
 	fs := newSilentFlagSet("boards cards list")
 	var boardIDFlag trackedString
@@ -3345,18 +3287,6 @@ func hasAnyBoardMutationFieldFlags(values ...any) bool {
 		}
 	}
 	return false
-}
-
-func (a *App) resolveMaybeBoardID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	_ = ctx
-	_ = cfg
-	return rawID, nil
-}
-
-func (a *App) resolveMaybeThreadID(ctx context.Context, cfg config.Resolved, rawID string) (string, error) {
-	_ = ctx
-	_ = cfg
-	return rawID, nil
 }
 
 func parseIDArg(args []string, idFlag string, idLabel string) (string, error) {

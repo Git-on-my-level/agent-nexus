@@ -52,45 +52,6 @@ export function boardOwnsTopicId(board, topicId) {
   return legacy.prefix === "topic" && legacy.id === tid;
 }
 
-export function topicRouteSegmentFromBoardCardRow(membership, backingThread) {
-  const nav = boardCardInspectNav(membership, backingThread);
-  return nav ? nav.segment : "";
-}
-
-/**
- * Navigation target for a board card title link: topic detail vs backing-thread detail.
- * @returns {{ kind: 'topic' | 'thread', segment: string } | null}
- */
-export function boardCardInspectNav(membership, backingThread) {
-  const m = membership && typeof membership === "object" ? membership : {};
-  const fromMembership = splitTypedRef(String(m.topic_ref ?? "").trim());
-  if (fromMembership.prefix === "topic" && fromMembership.id) {
-    return { kind: "topic", segment: fromMembership.id };
-  }
-
-  const refs = Array.isArray(m.related_refs) ? m.related_refs : [];
-  for (const raw of refs) {
-    const p = splitTypedRef(String(raw ?? "").trim());
-    if (p.prefix === "topic" && p.id) return { kind: "topic", segment: p.id };
-  }
-
-  const bt =
-    backingThread && typeof backingThread === "object" ? backingThread : null;
-  const topicRefOnThread = splitTypedRef(String(bt?.topic_ref ?? "").trim());
-  if (topicRefOnThread.prefix === "topic" && topicRefOnThread.id) {
-    return { kind: "topic", segment: topicRefOnThread.id };
-  }
-
-  const threadIdFromBacking = String(bt?.id ?? "").trim();
-  if (threadIdFromBacking)
-    return { kind: "thread", segment: threadIdFromBacking };
-
-  const threadIdFromRow = resolveBoardCardThreadIdField(m);
-  if (threadIdFromRow) return { kind: "thread", segment: threadIdFromRow };
-
-  return null;
-}
-
 /**
  * Board header / context line: canonical topic id for topic refs.
  */

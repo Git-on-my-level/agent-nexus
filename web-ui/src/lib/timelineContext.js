@@ -89,8 +89,6 @@ export function createTimelineContext(coreClient) {
       let res;
       if (lastLoadOpts.asTopic) {
         res = await coreClient.listTopicTimeline(scopeId);
-      } else if (lastLoadOpts.asCard) {
-        res = await coreClient.listCardTimeline(scopeId);
       } else {
         res = await coreClient.listThreadTimeline(scopeId);
       }

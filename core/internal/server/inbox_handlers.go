@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -283,10 +282,6 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 
-	if !validateInboxRiskHorizonParam(w, r) {
-		return
-	}
-
 	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load threads")
@@ -339,10 +334,6 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	now := time.Now().UTC()
 	if strings.HasPrefix(inboxItemID, "completed:") {
 		handleGetCompletedInboxItem(w, r, opts, inboxItemID, now)
-		return
-	}
-
-	if !validateInboxRiskHorizonParam(w, r) {
 		return
 	}
 
@@ -453,17 +444,6 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func validateInboxRiskHorizonParam(w http.ResponseWriter, r *http.Request) bool {
-	if rawDays := strings.TrimSpace(r.URL.Query().Get("risk_horizon_days")); rawDays != "" {
-		days, err := strconv.Atoi(rawDays)
-		if err != nil || days < 0 {
-			writeError(w, http.StatusBadRequest, "invalid_request", "risk_horizon_days must be a non-negative integer")
-			return false
-		}
-	}
-	return true
 }
 
 func isStaleTopicException(event map[string]any) bool {
