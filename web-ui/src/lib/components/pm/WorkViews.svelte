@@ -1,5 +1,6 @@
 <script>
   import { tick } from "svelte";
+  import { flip } from "svelte/animate";
   import WorkCard from "./WorkCard.svelte";
   import SignalBadge from "./SignalBadge.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
@@ -16,8 +17,16 @@
     workKey,
     taskDetailPath,
     workFreshness,
+    sortWorkBoardItems,
   } from "$lib/pm/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
+  import {
+    DRAG_THRESHOLD_PX,
+    columnAtPoint,
+    columnSlots,
+    flipDuration,
+    insertIndexAtY,
+  } from "$lib/workBoardDrag.js";
   let {
     records = [],
     view = "table",
@@ -32,13 +41,19 @@
     onMove,
   } = $props();
   let groups = $derived(
-    phaseGroups(records).filter(
-      (group) =>
-        group.items.length ||
-        ["backlog", "in_progress", "blocked", "review", "done"].includes(
-          group.key,
-        ),
-    ),
+    phaseGroups(records)
+      .filter(
+        (group) =>
+          group.items.length ||
+          ["backlog", "in_progress", "blocked", "review", "done"].includes(
+            group.key,
+          ),
+      )
+      .map((group) =>
+        view === "board"
+          ? { ...group, items: sortWorkBoardItems(group.items) }
+          : group,
+      ),
   );
   const href = (work) => workspaceHref(taskDetailPath(work));
   let focusedKey = $state("");
@@ -107,16 +122,211 @@
     return groups.map((group) => group.key);
   }
 
-  function handleDragStart(event, work) {
-    event.dataTransfer.setData("text/plain", workKey(work));
-    event.dataTransfer.effectAllowed = "move";
+  /** @type {{ work: object, key: string, pointerId: number, startX: number, startY: number, offsetX: number, offsetY: number, width: number, height: number, x: number, y: number, fromPhase: string, target: HTMLElement | null } | null} */
+  let drag = $state(null);
+  /** @type {{ phase: string, index: number } | null} */
+  let hover = $state(null);
+  let pointerMoved = $state(false);
+  // After release, keep the hole until the parent list matches it. Clearing
+  // drag first restores the origin column for a frame, then the drop lands —
+  // the whole board flashes.
+  let landing = $state(false);
+  let suppressClick = $state(false);
+  let pointerX = $state(0);
+  let pointerY = $state(0);
+
+  function slotsFor(group) {
+    if (!drag || !pointerMoved) {
+      return group.items.map((work) => ({ key: workKey(work), work }));
+    }
+    return columnSlots(group.items, drag.key, group.key, hover);
   }
 
-  function handleDrop(event, phase) {
+  function teardownDragListeners() {
+    window.removeEventListener("pointermove", handlePointerMove, true);
+    window.removeEventListener("pointerup", handlePointerUp, true);
+    window.removeEventListener("pointercancel", handlePointerCancel, true);
+    window.removeEventListener("dragstart", handleCardDragStart, true);
+  }
+
+  function releasePointer(session) {
+    const id = session?.pointerId;
+    const target = session?.target;
+    if (target && typeof id === "number" && target.hasPointerCapture?.(id)) {
+      try {
+        target.releasePointerCapture(id);
+      } catch {
+        // Capture is already gone after pointercancel or navigation.
+      }
+    }
+  }
+
+  function clearDrag() {
+    releasePointer(drag);
+    teardownDragListeners();
+    drag = null;
+    hover = null;
+    pointerMoved = false;
+    landing = false;
+  }
+
+  function commitDrop(session, phase, index) {
+    onMove(session.work, phase, { index, pointer: true });
+  }
+
+  function slotFlipDuration(distance) {
+    if (drag && pointerMoved && !landing) return flipDuration(distance);
+    return 0;
+  }
+
+  function updateHover(x, y) {
+    if (!drag) {
+      hover = null;
+      return;
+    }
+    const columnEl = columnAtPoint(x, y);
+    if (!(columnEl instanceof HTMLElement)) {
+      hover = null;
+      return;
+    }
+    const phase = columnEl.getAttribute("data-work-phase") || "";
+    if (!phase) {
+      hover = null;
+      return;
+    }
+    hover = { phase, index: insertIndexAtY(columnEl, y, drag.key) };
+  }
+
+  /** @param {PointerEvent} event @param {object} work */
+  function handleCardPointerDown(event, work) {
+    if (event.button != null && event.button !== 0) return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("a[href]")
+    ) {
+      const cardLink = event.currentTarget.querySelector("a[href]");
+      if (event.target.closest("a[href]") !== cardLink) return;
+    }
+    const slot = event.currentTarget;
+    if (!(slot instanceof HTMLElement)) return;
+    const rect = slot.getBoundingClientRect();
+    drag = {
+      work,
+      key: workKey(work),
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      x: event.clientX,
+      y: event.clientY,
+      fromPhase: work.phase || "unknown",
+      target: slot,
+    };
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    pointerMoved = false;
+    hover = null;
+    window.addEventListener("pointermove", handlePointerMove, {
+      capture: true,
+      passive: false,
+    });
+    window.addEventListener("pointerup", handlePointerUp, true);
+    window.addEventListener("pointercancel", handlePointerCancel, true);
+    window.addEventListener("dragstart", handleCardDragStart, true);
+  }
+
+  /** @param {DragEvent} event */
+  function handleCardDragStart(event) {
+    // Links are draggable by default. If the browser starts an HTML5 drag,
+    // it fires pointercancel and our pointer session dies with no drop.
     event.preventDefault();
-    const key = event.dataTransfer.getData("text/plain");
-    const work = records.find((item) => workKey(item) === key);
-    if (work && onMove) onMove(work, phase);
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerMove(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!pointerMoved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+    if (!pointerMoved) {
+      pointerMoved = true;
+      window.getSelection?.()?.removeAllRanges?.();
+      try {
+        drag.target?.setPointerCapture(event.pointerId);
+      } catch {
+        // Capture is optional; window listeners still see bubbling pointer events.
+      }
+    }
+    event.preventDefault();
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    updateHover(event.clientX, event.clientY);
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerCancel(event) {
+    if (drag && pointerMoved) {
+      handlePointerUp(event);
+      return;
+    }
+    clearDrag();
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerUp(event) {
+    if (drag && pointerMoved) {
+      updateHover(event.clientX, event.clientY);
+    }
+    const session = drag;
+    const target = hover;
+    const moved = pointerMoved;
+    if (!session || !moved) {
+      clearDrag();
+      return;
+    }
+    suppressClick = true;
+    window.setTimeout(() => {
+      suppressClick = false;
+    }, 0);
+    const phase = target?.phase;
+    const fromIndex = (
+      groups.find((group) => group.key === session.fromPhase)?.items || []
+    ).findIndex((item) => workKey(item) === session.key);
+    if (
+      !phase ||
+      !onMove ||
+      (phase === session.fromPhase && target.index === fromIndex)
+    ) {
+      clearDrag();
+      return;
+    }
+    // Confirm() must not sit under a frozen overlay. Nexus-owned drops are
+    // optimistic: hold the hole until records catch up, then drop the ghost.
+    if (!isNexusOwned(session.work)) {
+      clearDrag();
+      commitDrop(session, phase, target.index);
+      return;
+    }
+    releasePointer(session);
+    teardownDragListeners();
+    landing = true;
+    try {
+      commitDrop(session, phase, target.index);
+    } finally {
+      void tick().then(() => {
+        clearDrag();
+      });
+    }
+  }
+
+  /** @param {MouseEvent} event */
+  function handleCardClickCapture(event) {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   function handleCardKey(event, work) {
@@ -172,7 +382,9 @@
   <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
-    class="board-scroll flex gap-3 overflow-x-auto pb-3"
+    class="board-scroll flex gap-3 overflow-x-auto pb-3 {drag && pointerMoved
+      ? 'select-none'
+      : ''}"
     role="region"
     aria-label="Task board grouped by phase"
     tabindex="0"
@@ -183,11 +395,15 @@
       tracker asks for confirmation and files a request for you to approve.
     </p>
     {#each groups as group (group.key)}
+      {@const slots = slotsFor(group)}
       <section
-        class="w-72 shrink-0 rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[10.5rem] xl:flex-1"
+        class="w-72 shrink-0 rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[10.5rem] xl:flex-1 {hover?.phase ===
+        group.key
+          ? 'ring-1 ring-accent/40'
+          : ''}"
         aria-label={group.label}
-        ondragover={(event) => event.preventDefault()}
-        ondrop={(event) => handleDrop(event, group.key)}
+        data-work-phase-column
+        data-work-phase={group.key}
       >
         <div class="mb-2 flex items-baseline justify-between gap-2 px-1 py-1">
           <h2 class="ui-label mb-0 truncate">{group.label}</h2>
@@ -197,48 +413,55 @@
             >{group.items.length}{truncated ? "+" : ""}</span
           >
         </div>
-        <div class="flex flex-col gap-2">
-          {#each group.items as work (workKey(work))}
-            {@const key = workKey(work)}
-            {@const decisionId = requestedDecisions[key]}
-            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div class="flex min-h-[4.5rem] flex-col gap-2">
+          {#each slots as slot (slot.key)}
+            {@const work = slot.work}
+            {@const key = slot.key}
+            {@const decisionId = work ? requestedDecisions[key] : ""}
             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
             <div
-              class="outline-none {focusedKey === key
+              class="work-card-slot outline-none {focusedKey === key
                 ? 'ring-1 ring-accent'
                 : ''}"
-              data-work-ref={work.ref}
-              draggable="true"
-              tabindex="0"
-              role="group"
-              aria-label={work.title || "Untitled task"}
-              aria-keyshortcuts="ArrowLeft ArrowRight Enter"
-              aria-describedby="task-board-card-help"
-              ondragstart={(event) => handleDragStart(event, work)}
-              onfocus={() => (focusedKey = key)}
-              onkeydown={(event) => handleCardKey(event, work)}
+              data-work-slot
+              data-work-ref={work ? workKey(work) : undefined}
+              data-placeholder={slot.placeholder ? "" : undefined}
+              tabindex={slot.placeholder ? undefined : 0}
+              role={slot.placeholder ? "presentation" : "group"}
+              aria-hidden={slot.placeholder ? "true" : undefined}
+              aria-label={work ? work.title || "Untitled task" : undefined}
+              aria-keyshortcuts={slot.placeholder
+                ? undefined
+                : "ArrowLeft ArrowRight Enter"}
+              aria-describedby={slot.placeholder
+                ? undefined
+                : "task-board-card-help"}
+              animate:flip={{ duration: slotFlipDuration }}
+              style={slot.placeholder
+                ? `height: ${drag?.height ?? 72}px`
+                : undefined}
+              onpointerdown={slot.placeholder
+                ? undefined
+                : (event) => handleCardPointerDown(event, work)}
+              ondragstart={handleCardDragStart}
+              onclickcapture={handleCardClickCapture}
+              onfocus={slot.placeholder ? undefined : () => (focusedKey = key)}
+              onkeydown={slot.placeholder
+                ? undefined
+                : (event) => handleCardKey(event, work)}
             >
-              <WorkCard
-                {work}
-                href={href(work)}
-                boardTitle={boardLabel(work)}
-              />
-              {#if requested[key] || decisionId}
-                <p class="mt-1 px-1">
-                  {#if decisionId}
-                    <a
-                      class="inline-flex rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                      href={workspaceHref(
+              {#if !slot.placeholder}
+                <WorkCard
+                  {work}
+                  href={href(work)}
+                  boardTitle={boardLabel(work)}
+                  requested={Boolean(requested[key] || decisionId)}
+                  requestedHref={decisionId
+                    ? workspaceHref(
                         `/inbox?item=decision:${encodeURIComponent(decisionId)}`,
-                      )}
-                      title="Answer this request in Inbox"
-                    >
-                      <SignalBadge tone="warn">Requested</SignalBadge>
-                    </a>
-                  {:else}
-                    <SignalBadge tone="warn">Requested</SignalBadge>
-                  {/if}
-                </p>
+                      )
+                    : ""}
+                />
               {/if}
             </div>
           {:else}
@@ -250,6 +473,22 @@
       </section>
     {/each}
   </div>
+  {#if drag && pointerMoved}
+    <div
+      class="pointer-events-none fixed left-0 top-0 z-[100] rounded-md shadow-lg ring-1 ring-line-strong"
+      data-work-drag-overlay
+      aria-hidden="true"
+      style="width: {drag.width}px; transform: translate3d({pointerX -
+        drag.offsetX}px, {pointerY - drag.offsetY}px, 0)"
+    >
+      <WorkCard
+        work={drag.work}
+        href={href(drag.work)}
+        boardTitle={boardLabel(drag.work)}
+        requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
+      />
+    </div>
+  {/if}
 {:else}
   <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -426,5 +665,14 @@
   .board-scroll::-webkit-scrollbar-track {
     background: var(--bg-soft);
     border-radius: 999px;
+  }
+
+  .work-card-slot {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .board-scroll.select-none :global(.work-card-slot) {
+    cursor: grabbing;
   }
 </style>

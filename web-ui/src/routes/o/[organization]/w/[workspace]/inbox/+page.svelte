@@ -71,7 +71,7 @@
   let urlItem = $derived($page.url.searchParams.get("item") || "");
   // Holds the answered row until goto can pin it in the URL. Without this,
   // updating `decisions` moves the row out of the current mailbox and the
-  // panel jumps to visible[0], which clears the notice.
+  // pane goes empty, which clears the notice.
   let heldItem = $state("");
   let selectedId = $derived(urlItem || heldItem);
 
@@ -94,9 +94,7 @@
     handled: filterMailbox(rows, "handled").length,
   });
   let selected = $derived(
-    selectedId
-      ? rows.find((row) => row.id === selectedId) || null
-      : visible[0] || null,
+    selectedId ? rows.find((row) => row.id === selectedId) || null : null,
   );
   let selectedDecision = $derived(
     selected?.kind === "decision" ? selected.item : null,
@@ -744,7 +742,7 @@
             {@const badge = inboxRowBadge(row, now)}
             <li>
               <a
-                class="flex h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 {selected?.id ===
+                class="flex h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 {selectedId ===
                 row.id
                   ? 'border-accent bg-bg-soft'
                   : 'border-transparent hover:bg-panel-hover'}"
@@ -753,7 +751,7 @@
                 data-testid={row.kind === "inbox" && row.item?.id
                   ? `inbox-row-${row.item.id}`
                   : `inbox-row-${row.id}`}
-                aria-current={selected?.id === row.id ? "page" : undefined}
+                aria-current={selectedId === row.id ? "page" : undefined}
               >
                 <div class="flex min-w-0 items-center gap-2">
                   <span
@@ -811,7 +809,9 @@
         aria-label="Selected inbox item"
       >
         <div
-          class="flex items-center gap-3 border-b border-line-subtle px-4 py-2 text-micro"
+          class="flex items-center gap-3 border-b border-line-subtle px-4 py-2 text-micro {selectedId
+            ? ''
+            : 'hidden'}"
         >
           <a class="text-accent-text lg:hidden" href={href({ item: "" })}
             >← List</a
@@ -1017,7 +1017,7 @@
           <p class="p-6 text-meta text-fg-muted">
             {selectedId
               ? "This item is not in the loaded mailbox."
-              : "Select a row."}
+              : "Choose an item."}
           </p>
         {/if}
       </section>

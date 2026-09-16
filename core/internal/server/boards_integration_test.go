@@ -1589,6 +1589,106 @@ func TestBoardCardMoveRejectsInvalidPlacementAnchors(t *testing.T) {
 	}`, "before and after anchors are mutually exclusive")
 }
 
+func TestCardMovePlacementAnchorAcceptsPublicIdentity(t *testing.T) {
+	t.Parallel()
+
+	h := newPrimitivesTestServer(t)
+	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
+
+	primaryThreadID := createBoardThreadViaHTTP(t, h, "Public anchor primary")
+	threadA := createBoardThreadViaHTTP(t, h, "Public anchor A")
+	threadB := createBoardThreadViaHTTP(t, h, "Public anchor B")
+
+	createBoardResp := postJSONExpectStatus(t, h.baseURL+"/boards", `{
+		"actor_id":"actor-1",
+		"board":{"title":"Public anchor board","refs":["thread:`+primaryThreadID+`"]}
+	}`, http.StatusCreated)
+	defer createBoardResp.Body.Close()
+	var createBoardPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(createBoardResp.Body).Decode(&createBoardPayload); err != nil {
+		t.Fatalf("decode create board response: %v", err)
+	}
+	boardID := asString(createBoardPayload.Board["id"])
+	boardUpdatedAt := asString(createBoardPayload.Board["updated_at"])
+
+	addAResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+boardUpdatedAt+`",
+		"title":"Public A",
+		"related_refs":["thread:`+threadA+`"],
+		"column_key":"backlog"
+	}`, http.StatusCreated)
+	defer addAResp.Body.Close()
+	var addAPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addAResp.Body).Decode(&addAPayload); err != nil {
+		t.Fatalf("decode add card A: %v", err)
+	}
+	cardARef := asString(addAPayload.Card["ref"])
+	afterAddA := asString(addAPayload.Board["updated_at"])
+
+	addBResp := postJSONExpectStatus(t, h.baseURL+"/boards/"+boardID+"/cards", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddA+`",
+		"title":"Public B",
+		"related_refs":["thread:`+threadB+`"],
+		"column_key":"backlog"
+	}`, http.StatusCreated)
+	defer addBResp.Body.Close()
+	var addBPayload struct {
+		Board map[string]any `json:"board"`
+		Card  map[string]any `json:"card"`
+	}
+	if err := json.NewDecoder(addBResp.Body).Decode(&addBPayload); err != nil {
+		t.Fatalf("decode add card B: %v", err)
+	}
+	handleB := asString(addBPayload.Card["handle"])
+	afterAddB := asString(addBPayload.Board["updated_at"])
+	if handleB == "" {
+		t.Fatal("card B missing handle")
+	}
+
+	moveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardARef+"/move", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+afterAddB+`",
+		"column_key":"backlog",
+		"before_card_id":"`+handleB+`"
+	}`, http.StatusOK)
+	defer moveResp.Body.Close()
+	var movePayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(moveResp.Body).Decode(&movePayload); err != nil {
+		t.Fatalf("decode move: %v", err)
+	}
+
+	typedMoveResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardARef+"/move", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(movePayload.Board["updated_at"])+`",
+		"column_key":"backlog",
+		"before_card_id":"card:`+handleB+`"
+	}`, http.StatusOK)
+	defer typedMoveResp.Body.Close()
+	var typedPayload struct {
+		Board map[string]any `json:"board"`
+	}
+	if err := json.NewDecoder(typedMoveResp.Body).Decode(&typedPayload); err != nil {
+		t.Fatalf("decode typed-ref move: %v", err)
+	}
+
+	missingResp := postJSONExpectStatus(t, h.baseURL+"/cards/"+cardARef+"/move", `{
+		"actor_id":"actor-1",
+		"if_board_updated_at":"`+asString(typedPayload.Board["updated_at"])+`",
+		"column_key":"backlog",
+		"before_card_id":"missing-handle"
+	}`, http.StatusBadRequest)
+	missingResp.Body.Close()
+}
+
 func TestCardMoveResolutionTransitionsAndEvents(t *testing.T) {
 	t.Parallel()
 

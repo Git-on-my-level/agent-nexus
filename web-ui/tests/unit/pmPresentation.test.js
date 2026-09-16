@@ -7,6 +7,8 @@ import {
   filterWork,
   decisionTitle,
   decisionPayload,
+  cardIdFromWork,
+  sortWorkBoardItems,
 } from "../../src/lib/pm/presentation.js";
 
 describe("PM evidence presentation", () => {
@@ -155,6 +157,22 @@ describe("PM evidence presentation", () => {
     expect(filterWork(records, { q: "two" }).map((item) => item.id)).toEqual([
       "b",
     ]);
+  });
+  it("identifies work by public ref, not storage id", () => {
+    expect(
+      cardIdFromWork({ id: "uuid-1", ref: "card:release", handle: "release" }),
+    ).toBe("card:release");
+    expect(cardIdFromWork({ handle: "release" })).toBe("release");
+    expect(cardIdFromWork({ id: "uuid-1" })).toBe("");
+  });
+  it("sorts board columns by board then rank", () => {
+    expect(
+      sortWorkBoardItems([
+        { ref: "card:b", board_ref: "board:z", rank: "1" },
+        { ref: "card:a", board_ref: "board:a", rank: "2" },
+        { ref: "card:c", board_ref: "board:a", rank: "1" },
+      ]).map((item) => item.ref),
+    ).toEqual(["card:c", "card:a", "card:b"]);
   });
   it("never titles a decision with a JSON blob", () => {
     expect(

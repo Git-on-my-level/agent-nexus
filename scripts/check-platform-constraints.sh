@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VIOLATIONS=""
 
 while IFS= read -r FILE; do
-  if [[ "$FILE" == *"vendor"* ]] || [[ "$FILE" == *"generated"* ]] || [[ "$FILE" == *"_test.go" ]]; then
+  if [[ "$FILE" == *"vendor"* ]] || [[ "$FILE" == *"generated"* ]] || [[ "$FILE" == *"_test.go" ]] || [[ "$FILE" == *"_windows.go" ]]; then
     continue
   fi
 

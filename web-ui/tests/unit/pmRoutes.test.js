@@ -428,7 +428,11 @@ describe("PM operator interactions", () => {
       ],
     });
     render(InboxPage);
-    await screen.findByRole("heading", { name: "Later sample instruction" });
+    await screen.findByRole("link", { name: /Later sample instruction/ });
+    expect(
+      screen.queryByRole("heading", { name: "Later sample instruction" }),
+    ).toBeNull();
+    expect(screen.getByText("Choose an item.")).toBeTruthy();
     expect(
       screen.getAllByRole("link", { name: /Needs you/ }).length,
     ).toBeGreaterThan(0);

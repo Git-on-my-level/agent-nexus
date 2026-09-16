@@ -744,7 +744,9 @@
     {/if}
 
     {#if createdToken && !tokenDismissed}
-      <div class="rounded-md border border-ok bg-ok-soft px-4 py-3">
+      <div
+        class="fixed inset-x-3 top-16 z-40 mx-auto max-w-3xl rounded-md border border-ok bg-ok-soft px-4 py-3 lg:top-20"
+      >
         <div class="flex items-start gap-3">
           <div class="flex-1">
             <p class="text-meta font-medium text-ok-text">
@@ -1349,7 +1351,7 @@
 
     {#if principalRevokeTarget}
       <div
-        class="rounded-md border border-danger bg-danger-soft px-4 py-3"
+        class="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-3xl rounded-md border border-danger bg-danger-soft px-4 py-3 lg:bottom-6"
         role="alert"
       >
         <div class="flex items-start gap-3">

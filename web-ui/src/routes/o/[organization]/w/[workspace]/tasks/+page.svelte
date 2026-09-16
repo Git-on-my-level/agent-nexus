@@ -24,6 +24,11 @@
   import { navIconPath } from "$lib/icons.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import {
+    beforeCardRefForInsert,
+    boardPhasePeers,
+    placeWorkInPhase,
+  } from "$lib/workBoardDrag.js";
+  import {
     applyTaskPhaseMove,
     requestedDecisionMap,
   } from "$lib/taskBoardMove.js";
@@ -70,11 +75,6 @@
   let evidenceSuggestions = $state([]);
   let evidenceInput = $state(null);
   let moveNoticeElement = $state(null);
-  // Outcomes get the keyboard: the evidence field when it opens, the notice
-  // after a move.
-  $effect(() => {
-    if (moveNotice && moveNoticeElement) moveNoticeElement.focus();
-  });
   $effect(() => {
     if (evidenceFor && evidenceInput) evidenceInput.focus();
   });
@@ -272,15 +272,29 @@
       // Fail soft: the Requested badge link degrades, the page stays usable.
     }
   }
-  async function moveTask(work, phase, { undo = false } = {}) {
+  function setMoveNotice(notice, { pointer = false } = {}) {
+    moveNotice = notice;
+    // Keyboard moves land the caret on Undo. Pointer drops leave the board
+    // alone — focusing the notice was scrolling the page.
+    if (notice && !pointer) {
+      void tick().then(() => moveNoticeElement?.focus());
+    }
+  }
+  async function moveTask(
+    work,
+    phase,
+    { undo = false, index, pointer = false } = {},
+  ) {
     moveError = "";
     moveSessionExpired = false;
-    moveNotice = null;
     const key = workKey(work);
     const from = work.phase || "unknown";
+    const samePhase = from === phase;
+    const previous = records;
     if (!isNexusOwned(work)) {
       // A move on source-owned work files a request for you to approve; that
       // is an obligation, so it is never created by an accidental keypress.
+      if (samePhase) return;
       const source = sourceLabel(work.source);
       if (
         !window.confirm(
@@ -297,7 +311,7 @@
         // inline (no prompt(): embedded browsers and phones lack it).
         if (!evidenceFor || evidenceFor.key !== key) {
           evidenceFor = { key, work, phase, ref: "" };
-          moveNotice = null;
+          setMoveNotice(null);
           void loadEvidenceSuggestions();
 
           return;
@@ -306,28 +320,55 @@
         if (!trimmed) return;
         resolutionRefs = [trimmed];
       }
+      let beforeCardId;
+      if (Number.isInteger(index)) {
+        beforeCardId = beforeCardRefForInsert(
+          work,
+          boardPhasePeers(previous, phase, key),
+          index,
+        );
+      }
+      if (isNexusOwned(work) && Number.isInteger(index)) {
+        records = placeWorkInPhase(records, work, phase, index);
+      }
+      if (samePhase && !Number.isInteger(index)) {
+        return;
+      }
       const result = await applyTaskPhaseMove(coreClient, work, phase, {
         resolutionRefs,
+        ...(Number.isInteger(index) ? { beforeCardId } : {}),
       });
       // The evidence form closes only once core accepted the ref; a rejected
       // ref keeps the typed value in front of the reader with the error.
       if (result.kind !== "needs_evidence") evidenceFor = null;
       if (result.kind === "needs_evidence") {
-        moveNotice = {
-          text: "Done needs evidence. Add the artifact or event that proves completion.",
-        };
+        setMoveNotice(
+          {
+            text: "Done needs evidence. Add the artifact or event that proves completion.",
+          },
+          { pointer },
+        );
         return;
       }
       if (result.kind === "moved") {
-        records = records.map((item) =>
-          workKey(item) === key ? { ...item, phase } : item,
+        if (!Number.isInteger(index)) {
+          records = records.map((item) =>
+            workKey(item) === key ? { ...item, phase } : item,
+          );
+        }
+        setMoveNotice(
+          undo
+            ? { text: `Moved “${work.title}” back to ${label(phase)}.` }
+            : {
+                text: samePhase
+                  ? `Moved “${work.title}”.`
+                  : `Moved “${work.title}” to ${label(phase)}.`,
+                undo: samePhase
+                  ? undefined
+                  : () => moveTask({ ...work, phase }, from, { undo: true }),
+              },
+          { pointer },
         );
-        moveNotice = undo
-          ? { text: `Moved “${work.title}” back to ${label(phase)}.` }
-          : {
-              text: `Moved “${work.title}” to ${label(phase)}.`,
-              undo: () => moveTask({ ...work, phase }, from, { undo: true }),
-            };
         const next = { ...requested };
         delete next[key];
         requested = next;
@@ -341,43 +382,54 @@
       ) {
         // Core replayed an identical earlier request that is already
         // answered or closed; nothing new was filed.
-        moveNotice = {
-          text: `That request was already ${
-            result.decision.status === "declined" ? "declined" : "answered"
-          }; nothing new was filed. Change the target or ask the PM to propose again.`,
-          href: workspaceHref(
-            `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-          ),
-        };
+        setMoveNotice(
+          {
+            text: `That request was already ${
+              result.decision.status === "declined" ? "declined" : "answered"
+            }; nothing new was filed. Change the target or ask the PM to propose again.`,
+            href: workspaceHref(
+              `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
+            ),
+          },
+          { pointer },
+        );
       } else if (result.kind === "requested") {
         requested = { ...requested, [key]: phase };
         if (result.decision) decisions = [...decisions, result.decision];
-        moveNotice = {
-          text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. It waits in Inbox under Needs you: a change at ${sourceLabel(work.source)} is only sent once someone records a yes, even the person who asked.${
-            result.decision?.supersedes
-              ? result.decision.supersedes_origin_kind === "pm_turn"
-                ? " This replaced the PM's earlier proposal for this task."
-                : " This replaced an earlier proposal for this task."
-              : ""
-          }`,
-          href: result.decision?.id
-            ? workspaceHref(
-                `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
-              )
-            : "",
-        };
+        setMoveNotice(
+          {
+            text: `Requested a move to ${label(phase)} at ${sourceLabel(work.source)}. It waits in Inbox under Needs you: a change at ${sourceLabel(work.source)} is only sent once someone records a yes, even the person who asked.${
+              result.decision?.supersedes
+                ? result.decision.supersedes_origin_kind === "pm_turn"
+                  ? " This replaced the PM's earlier proposal for this task."
+                  : " This replaced an earlier proposal for this task."
+                : ""
+            }`,
+            href: result.decision?.id
+              ? workspaceHref(
+                  `/inbox?item=decision:${encodeURIComponent(result.decision.id)}`,
+                )
+              : "",
+          },
+          { pointer },
+        );
       }
     } catch (err) {
+      records = previous;
       const existing = existingDecisionId(err);
       if (existing) {
-        moveNotice = {
-          text: `A request for this task is already waiting for your answer.`,
-          href: workspaceHref(
-            `/inbox?item=decision:${encodeURIComponent(existing)}`,
-          ),
-        };
+        setMoveNotice(
+          {
+            text: `A request for this task is already waiting for your answer.`,
+            href: workspaceHref(
+              `/inbox?item=decision:${encodeURIComponent(existing)}`,
+            ),
+          },
+          { pointer },
+        );
         return;
       }
+      setMoveNotice(null);
       moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
@@ -746,10 +798,11 @@
   {/if}
   {#if moveNotice}
     <p
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg outline-none"
+      class="fixed inset-x-3 bottom-20 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-panel px-3 py-2 text-meta text-fg outline-none lg:bottom-6"
       role="status"
       tabindex="-1"
       bind:this={moveNoticeElement}
+      data-work-move-notice
     >
       <span class="min-w-0 flex-1">{moveNotice.text}</span>
       {#if moveNotice.undo}
@@ -767,7 +820,7 @@
       <button
         class="ui-prose-link text-micro"
         type="button"
-        onclick={() => (moveNotice = null)}>Dismiss</button
+        onclick={() => setMoveNotice(null)}>Dismiss</button
       >
     </p>
   {/if}

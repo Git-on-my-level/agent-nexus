@@ -294,6 +294,24 @@ function pathParams(entries) {
   );
 }
 
+function renderCommandPath(path, params = {}) {
+  return String(path ?? "").replace(/\{([^}]+)\}/g, (match, name) => {
+    const value = params[name];
+    if (value === undefined || value === null || value === "") return match;
+    return encodeURIComponent(String(value));
+  });
+}
+
+function decodePathParam(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 const q = (query) => ({ query });
 const b = (body) => ({ body });
 const pq = (pathParams, query) => ({ pathParams, options: q(query) });
@@ -925,7 +943,7 @@ export function createAnxCoreClient(options = {}) {
     return command;
   }
 
-  async function invokeJSON(commandId, invokeFn) {
+  async function invokeJSON(commandId, invokeFn, pathParams = {}) {
     const command = commandInfo(commandId);
 
     try {
@@ -940,7 +958,7 @@ export function createAnxCoreClient(options = {}) {
         target,
         commandId,
         method: command.method,
-        path: command.path,
+        path: renderCommandPath(command.path, pathParams),
       });
     }
   }
@@ -1043,16 +1061,17 @@ export function createAnxCoreClient(options = {}) {
     const command = commandInfo(commandId);
     const requestOptions = { ...(request.options ?? {}) };
 
-    return invokeJSON(commandId, () => {
-      if (request.injectActor && command.method !== "GET") {
-        requestOptions.body = withActorId(requestOptions.body ?? {});
-      }
-      return callGeneratedCommand(
-        command,
-        request.pathParams ?? {},
-        requestOptions,
-      );
-    });
+    const pathParams = request.pathParams ?? {};
+    return invokeJSON(
+      commandId,
+      () => {
+        if (request.injectActor && command.method !== "GET") {
+          requestOptions.body = withActorId(requestOptions.body ?? {});
+        }
+        return callGeneratedCommand(command, pathParams, requestOptions);
+      },
+      pathParams,
+    );
   }
 
   const tableDrivenClient = Object.fromEntries(
@@ -1204,16 +1223,17 @@ export function createAnxCoreClient(options = {}) {
         injectActor: true,
       }),
     getInboxItem: (inboxItemId, filters) => {
-      if (!inboxItemId) {
+      const id = decodePathParam(inboxItemId);
+      if (!id) {
         throw new Error("getInboxItem requires inboxItemId.");
       }
       return invokeCommand("inbox.get", {
-        pathParams: pathParams({ inbox_id: inboxItemId }),
+        pathParams: pathParams({ inbox_id: id }),
         options: { query: filters ?? {} },
       });
     },
     respondInboxItem: async (inboxItemId, payload) => {
-      const id = String(inboxItemId ?? "").trim();
+      const id = decodePathParam(inboxItemId);
       if (!id) {
         throw new Error("respondInboxItem requires inboxItemId.");
       }

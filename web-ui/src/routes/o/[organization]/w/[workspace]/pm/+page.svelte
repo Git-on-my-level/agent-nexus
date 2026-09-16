@@ -390,25 +390,9 @@
       await loadList();
       void loadWorkTitles();
       ready = true;
-      // Landing on an empty composer while a conversation already exists
-      // reads as "nothing happened". Open the most recent one instead; the
-      // composer still sends into it, and New starts a fresh thread.
-      // "New" (?new=1) means an empty composer on purpose.
-      const startNew = $page.url.searchParams.get("new") === "1";
-      if (!selectedId && !workRef && !startNew && conversations.length > 0) {
-        const latest = [...conversations].sort((a, b) =>
-          String(b.updated_at || b.created_at || "").localeCompare(
-            String(a.updated_at || a.created_at || ""),
-          ),
-        )[0];
-        if (latest?.id) {
-          await goto(
-            workspaceHref(`/pm?conversation=${encodeURIComponent(latest.id)}`),
-            { replaceState: true },
-          );
-          return;
-        }
-      }
+      // No conversation in the URL means an empty thread; History lists prior
+      // threads without implying one is open. Send creates or continues from
+      // the URL (?conversation=, ?work_ref=, or ?new=1).
       if (!selectedId) loading = false;
     } catch (err) {
       error = errorMessage(err);
@@ -417,6 +401,8 @@
   }
   async function send(event) {
     event?.preventDefault?.();
+    const pointerSend =
+      event?.type === "submit" && event.submitter instanceof HTMLElement;
     const text = draft.trim();
     if (!text || sending || !ready) return;
     sending = true;
@@ -469,8 +455,11 @@
       errorFromSend = true;
     } finally {
       sending = false;
-      // The composer was disabled while sending; give the keyboard back.
-      void tick().then(() => composerElement?.focus());
+      // Keyboard send keeps the caret in the composer; pointer send should not
+      // yank focus back after the operator clicked Send.
+      if (!pointerSend) {
+        void tick().then(() => composerElement?.focus());
+      }
     }
   }
   /**

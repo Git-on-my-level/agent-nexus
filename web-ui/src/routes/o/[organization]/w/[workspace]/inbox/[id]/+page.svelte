@@ -13,13 +13,14 @@
   import { coreClient } from "$lib/coreClient";
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
+  import { decodeInboxItemId } from "$lib/inboxUtils";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { searchActors } from "$lib/searchHelpers";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
 
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-  let inboxItemID = $derived($page.params.id);
+  let inboxItemID = $derived(decodeInboxItemId($page.params.id));
 
   let loading = $state(false);
   let loadError = $state("");
@@ -262,6 +263,11 @@
       }
     } catch (error) {
       if (seq !== inboxLoadSeq || routeKey !== inboxRouteKey()) return;
+      if (error?.status === 404) {
+        loadError =
+          "This item is no longer in the open inbox. It may already be handled.";
+        return;
+      }
       loadError =
         error instanceof Error
           ? `Failed to load inbox item: ${error.message}`

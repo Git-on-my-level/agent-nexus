@@ -133,6 +133,19 @@
   let discussionDockHostEnabled = $derived(
     cardDiscussionDockHostEnabled(presentation, linkedThreadId),
   );
+  /** Timeline / revisions own the viewport; hide the discussion dock so tabs are not lying. */
+  let showCardDiscussionDock = $derived(
+    Boolean(linkedThreadId) &&
+      cdmDetailPane !== "timeline" &&
+      cdmDetailPane !== "revisions",
+  );
+  let cdmPanelShellClass = $derived(
+    presentation === "modal"
+      ? `cdm-panel${showCardDiscussionDock ? " page-dock-layout--embedded-modal-chat" : ""}`
+      : showCardDiscussionDock
+        ? "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"
+        : "cdm-panel cdm-page-panel",
+  );
   let cardKey = $derived(boardCardStableId(membership));
   let cardSurface = $derived(
     cardDiscussionSurface({ threadId: linkedThreadId, cardKey }),
@@ -1062,11 +1075,12 @@
     <div class="cdm-overlay" onclick={handleBackdropClick}></div>
   {/if}
   <div
-    class={presentation === "modal"
-      ? "cdm-panel page-dock-layout--embedded-modal-chat"
-      : "cdm-panel cdm-page-panel page-dock-layout page-dock-layout--mobile-only page-dock-layout--fixed-mobile-chat page-dock-layout--card-page-chat"}
+    class={cdmPanelShellClass}
     data-card-detail-presentation={presentation}
-    data-discussion-dock-host={discussionDockHostEnabled ? "" : undefined}
+    data-discussion-dock-host={discussionDockHostEnabled &&
+    showCardDiscussionDock
+      ? ""
+      : undefined}
   >
     <div
       class="sticky top-0 z-10 border-b border-line bg-panel px-4 pt-2 sm:px-6 sm:pt-2.5"
@@ -1883,7 +1897,7 @@
       {/if}
     </div>
 
-    {#if linkedThreadId}
+    {#if showCardDiscussionDock}
       <div class="page-dock-feed">
         <DiscussionDrawer
           {...cardSurface}

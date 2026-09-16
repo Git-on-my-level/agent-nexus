@@ -3801,9 +3801,34 @@ func ensureBoardCardParentThreadAvailable(ctx context.Context, rower queryRower,
 }
 
 func resolveBoardPlacementAnchors(ctx context.Context, rower queryRower, boardID, beforeCardID, afterCardID string) (string, string, error) {
-	beforeCardID = strings.TrimSpace(beforeCardID)
-	afterCardID = strings.TrimSpace(afterCardID)
-	return beforeCardID, afterCardID, nil
+	before, err := resolveBoardPlacementAnchor(ctx, rower, beforeCardID)
+	if err != nil {
+		return "", "", err
+	}
+	after, err := resolveBoardPlacementAnchor(ctx, rower, afterCardID)
+	if err != nil {
+		return "", "", err
+	}
+	return before, after, nil
+}
+
+func resolveBoardPlacementAnchor(ctx context.Context, rower queryRower, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	resolved, err := resolveResourceRef(ctx, rower, ResourceRefInput{Type: "card", Ref: raw})
+	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidResourceRef) {
+			return "", invalidBoardRequest("placement anchor must reference a card already on the board")
+		}
+		return "", err
+	}
+	id := strings.TrimSpace(resolved.ID)
+	if id == "" {
+		return "", invalidBoardRequest("placement anchor must reference a card already on the board")
+	}
+	return id, nil
 }
 
 func loadThreadTitleForBoardCard(ctx context.Context, rower queryRower, threadID string) (string, error) {

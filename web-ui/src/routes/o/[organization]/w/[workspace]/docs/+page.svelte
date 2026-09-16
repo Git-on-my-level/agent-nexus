@@ -788,14 +788,14 @@
                   {/if}
                 {/snippet}
               </WorkspaceResourceListRow>
-              <div
-                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+              <span
+                class="hidden w-14 shrink-0 self-start pt-0.5 text-right text-micro text-fg-muted sm:inline"
+                >{formatTimestamp(doc.updated_at) || "—"}</span
               >
-                <span class="w-14 text-right text-fg-muted"
-                  >{formatTimestamp(doc.updated_at) || "—"}</span
-                >
-              </div>
             </div>
+            <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
+              Updated {formatTimestamp(doc.updated_at) || "—"}
+            </p>
             {@render docEnrichment(doc, false)}
             <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
             {@render docLastComment(doc)}
@@ -822,52 +822,68 @@
           <div
             class="min-w-0 flex-1 px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
           >
-            <a
-              class="block min-w-0"
-              href={workspaceHref(
-                `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
-              )}
-            >
-              <WorkspaceResourceListRow
-                title={resourceDisplayLabel(doc)}
-                description={doc.summary ?? ""}
-                titleClass="group-hover/row:text-accent-text transition-colors"
+            <div class="flex min-w-0 items-start justify-between gap-2">
+              <a
+                class="block min-w-0 flex-1"
+                href={workspaceHref(
+                  `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+                )}
               >
-                {#snippet badges()}
-                  <LifecycleBadge
-                    state={doc.state}
-                    label={DOC_STATE_LABELS[doc.state]}
-                    forceShow={docsHaveMixedLifecycle}
-                  />
-                  {#if doc.head_revision_number != null}
-                    <span
-                      class="font-mono text-micro tabular-nums text-fg-subtle"
-                      title="Head revision"
-                    >
-                      v{doc.head_revision_number}
-                    </span>
-                  {/if}
-                {/snippet}
-              </WorkspaceResourceListRow>
-            </a>
+                <WorkspaceResourceListRow
+                  title={resourceDisplayLabel(doc)}
+                  description={doc.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={doc.state}
+                      label={DOC_STATE_LABELS[doc.state]}
+                      forceShow={docsHaveMixedLifecycle}
+                    />
+                    {#if doc.head_revision_number != null}
+                      <span
+                        class="font-mono text-micro tabular-nums text-fg-subtle"
+                        title="Head revision"
+                      >
+                        v{doc.head_revision_number}
+                      </span>
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
+              </a>
+              <div class="shrink-0 sm:hidden">
+                <CopyButton
+                  value={docLink}
+                  iconOnly
+                  icon="link"
+                  label="Copy document link"
+                  size="sm"
+                />
+              </div>
+            </div>
+            <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
+              Updated {formatTimestamp(doc.updated_at) || "—"}
+            </p>
             {@render docEnrichment(doc, true)}
             <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
             {@render docLastComment(doc)}
           </div>
         {/snippet}
         {#snippet meta()}
-          <span class="w-14 text-right text-fg-muted"
+          <span class="hidden w-14 text-right text-fg-muted sm:inline"
             >{formatTimestamp(doc.updated_at) || "—"}</span
           >
         {/snippet}
         {#snippet actions()}
-          <CopyButton
-            value={docLink}
-            iconOnly
-            icon="link"
-            label="Copy document link"
-            size="sm"
-          />
+          <div class="hidden sm:block">
+            <CopyButton
+              value={docLink}
+              iconOnly
+              icon="link"
+              label="Copy document link"
+              size="sm"
+            />
+          </div>
         {/snippet}
       </WorkspaceListRowShell>
     {/if}

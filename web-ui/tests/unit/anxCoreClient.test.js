@@ -420,4 +420,52 @@ describe("anxCoreClient error messaging", () => {
       notify_mode: "none",
     });
   });
+
+  it("encodes typed inbox ids in GET /inbox/{inbox_id} and reports the rendered path", async () => {
+    const seenUrls = [];
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        seenUrls.push(String(url));
+        return new Response(
+          JSON.stringify({ error: { message: "inbox item not found" } }),
+          {
+            status: 404,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    });
+    const typedId = "inbox:escalate:thread-gds-launch:evt:evt";
+
+    await expect(client.getInboxItem(typedId)).rejects.toThrow(
+      "anx-core request failed at http://core.test: GET /inbox/inbox%3Aescalate%3Athread-gds-launch%3Aevt%3Aevt (404) - inbox item not found",
+    );
+    expect(seenUrls).toEqual([
+      "http://core.test/inbox/inbox%3Aescalate%3Athread-gds-launch%3Aevt%3Aevt",
+    ]);
+  });
+
+  it("decodes a percent-encoded inbox id before encoding the request path", async () => {
+    const seenUrls = [];
+    const client = createAnxCoreClient({
+      baseUrl: "http://core.test",
+      fetchFn: async (url) => {
+        seenUrls.push(String(url));
+        return new Response(
+          JSON.stringify({ item: { id: "inbox:escalate:x" } }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    });
+
+    await client.getInboxItem("inbox%3Aescalate%3Athread-x%3Anone%3Aevt");
+
+    expect(seenUrls).toEqual([
+      "http://core.test/inbox/inbox%3Aescalate%3Athread-x%3Anone%3Aevt",
+    ]);
+  });
 });

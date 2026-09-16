@@ -15,7 +15,6 @@ describe("task board moves", () => {
     };
     const work = {
       ref: "card:local",
-      id: "card-local",
       board_ref: "board:studio",
       phase: "backlog",
       source: { authority: "nexus" },
@@ -25,13 +24,42 @@ describe("task board moves", () => {
     expect(coreClient.getBoard).toHaveBeenCalledWith("board:studio");
     expect(coreClient.moveBoardCard).toHaveBeenCalledWith(
       "board:studio",
-      "card-local",
+      "card:local",
       {
         column_key: "in_progress",
         if_board_updated_at: "2026-09-12T10:00:00Z",
       },
     );
     expect(coreClient.createPmDecision).not.toHaveBeenCalled();
+  });
+
+  it("reorders a Nexus-owned task in the same column via before_card_id", async () => {
+    const coreClient = {
+      getBoard: vi
+        .fn()
+        .mockResolvedValue({ board: { updated_at: "2026-09-12T10:00:00Z" } }),
+      moveBoardCard: vi.fn().mockResolvedValue({}),
+      createPmDecision: vi.fn(),
+    };
+    const work = {
+      ref: "card:local",
+      board_ref: "board:studio",
+      phase: "ready",
+      source: { authority: "nexus" },
+    };
+    const result = await applyTaskPhaseMove(coreClient, work, "ready", {
+      beforeCardId: "card:peer",
+    });
+    expect(result.kind).toBe("moved");
+    expect(coreClient.moveBoardCard).toHaveBeenCalledWith(
+      "board:studio",
+      "card:local",
+      {
+        column_key: "ready",
+        if_board_updated_at: "2026-09-12T10:00:00Z",
+        before_card_id: "card:peer",
+      },
+    );
   });
 
   it("refuses to move a Nexus-owned task that is not on a board", async () => {
@@ -42,7 +70,6 @@ describe("task board moves", () => {
     };
     const work = {
       ref: "card:loose",
-      id: "card-loose",
       phase: "backlog",
       source: { authority: "nexus" },
     };

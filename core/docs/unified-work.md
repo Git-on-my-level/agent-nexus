@@ -347,6 +347,9 @@ record creation time at approval; legacy actions use their decision creation tim
 Work lists return newest `updated_at` first, then descending card id. Opaque
 cursors retain both ordering values, so newer inserts and changes ahead of the
 cursor appear on a fresh first page without shifting the older continuation.
+Work rows also project read-only `rank` and `column_key` from board membership.
+Board-like clients sort within a phase by `board_ref` then `rank`; list and table
+consumers keep this recency order.
 Cursors from the previous ordering must be discarded; response shapes are unchanged.
 
 A stale source revision at dispatch persists a finished failed attempt and marks

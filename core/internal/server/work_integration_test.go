@@ -20,6 +20,9 @@ func TestWorkHTTPRegistrationObservationAndAuthority(t *testing.T) {
 	if _, ok := work["id"]; ok {
 		t.Fatal("public work leaks storage id")
 	}
+	if asString(work["rank"]) == "" {
+		t.Fatal("public work omitted board rank")
+	}
 	again := workPostJSON(t, h.baseURL+"/work", body, http.StatusCreated)
 	if again["work"].(map[string]any)["ref"] != ref {
 		t.Fatal("source dedupe failed")

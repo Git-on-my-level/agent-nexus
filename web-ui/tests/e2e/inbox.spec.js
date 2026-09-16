@@ -268,8 +268,12 @@ test("inbox triage lists actionable rows and responding removes an item", async 
 
   const targetRow = page.getByTestId("inbox-row-inbox-001");
   await expect(targetRow).toBeVisible();
+  await expect(
+    page.locator("[data-inbox-row][aria-current='page']"),
+  ).toHaveCount(0);
 
   await targetRow.click();
+  await expect(targetRow).toHaveAttribute("aria-current", "page");
   await expect(
     page.getByRole("heading", {
       name: "Approve onboarding exception handling",

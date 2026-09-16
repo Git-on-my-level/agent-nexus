@@ -359,3 +359,20 @@ describe("acknowledging a delivery that failed before it was sent", () => {
     expect(closedRow.status).toBe("closed");
   });
 });
+
+describe("inbox mailbox row ids", () => {
+  it("keeps a typed inbox id instead of prefixing inbox: twice", () => {
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "inbox:escalate:thread-gds-launch:evt:evt",
+          title: "Escalate the bug bash",
+          kind: "escalate",
+        },
+      ],
+    });
+    expect(rows.map((row) => row.id)).toEqual([
+      "inbox:escalate:thread-gds-launch:evt:evt",
+    ]);
+  });
+});

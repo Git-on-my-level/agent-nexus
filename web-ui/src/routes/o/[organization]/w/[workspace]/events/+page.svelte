@@ -200,7 +200,7 @@
   >
     <div class="min-w-0">
       <h1 class="text-title text-fg">Audit</h1>
-      <p class="mt-0.5 text-meta text-fg-muted">
+      <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
         Full workspace event history.
       </p>
     </div>

@@ -424,6 +424,49 @@ test("board and table preserve source states and show the same commitments", asy
   expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0);
 });
 
+test("board pointer drag lifts the card, then moves it to another phase", async ({
+  page,
+}) => {
+  const { calls } = await setup(page);
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto(`${root}/tasks?view=board`);
+  const board = page.getByRole("region", {
+    name: "Task board grouped by phase",
+  });
+  await expect(board).toBeVisible();
+  const card = page.locator('[data-work-ref="card:release"]');
+  const target = page.getByRole("section", { name: "In progress" });
+  await expect(card).toBeVisible();
+  await expect(target).toBeVisible();
+  const from = await card.boundingBox();
+  const to = await target.boundingBox();
+  expect(from).toBeTruthy();
+  expect(to).toBeTruthy();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + 40, to.y + 80, { steps: 12 });
+  await expect(page.locator("[data-work-drag-overlay]")).toBeVisible();
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      calls.some(
+        (call) => call.path === "/pm/decisions" && call.method === "POST",
+      ),
+    )
+    .toBe(true);
+});
+
+test("board card click still opens the task after pointer-drag handlers are wired", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.goto(`${root}/tasks?view=board`);
+  await page
+    .getByRole("link", { name: "Document the sample outcome", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/tasks\/card%3Adocs/);
+});
+
 test("failed refresh retains last-good evidence and never promotes a claim to verified", async ({
   page,
 }) => {

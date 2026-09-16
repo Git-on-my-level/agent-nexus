@@ -185,6 +185,7 @@
               {/if}
             </div>
             <div class="text-micro text-fg-muted">
+              <span class="text-fg-subtle sm:hidden">Observed · </span>
               <SignalBadge tone={signal.tone}>{signal.label}</SignalBadge>
               <span class="ml-1.5"
                 >{formatTimestamp(item.freshness?.last_observed_at) ||
@@ -192,7 +193,8 @@
               >
             </div>
             <p class="text-micro text-fg-muted">
-              Refresh {item.refresh?.state || "unknown"} · next {formatTimestamp(
+              <span class="text-fg-subtle sm:hidden">Refresh · </span>
+              {item.refresh?.state || "unknown"} · next {formatTimestamp(
                 item.refresh?.next_due_at,
               ) || "not scheduled"}
             </p>

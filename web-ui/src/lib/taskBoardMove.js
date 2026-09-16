@@ -106,15 +106,18 @@ export function requestedDecisionMap(
  * Apply a board drop. Nexus-owned tasks move via cards.move.
  * Source-owned tasks never mutate the source: propose a PM decision instead.
  *
- * @returns {Promise<{ kind: "moved" | "requested", work: object, decision?: object }>}
+ * @returns {Promise<{ kind: "moved" | "requested" | "noop" | "needs_evidence", work: object, decision?: object }>}
  */
-export async function applyTaskPhaseMove(
-  coreClient,
-  work,
-  phase,
-  { resolutionRefs = [] } = {},
-) {
-  if (!work || !phase || (work.phase || "unknown") === phase) {
+export async function applyTaskPhaseMove(coreClient, work, phase, opts = {}) {
+  const { resolutionRefs = [], beforeCardId } = opts;
+  const samePhase = (work?.phase || "unknown") === phase;
+  if (!work || !phase) {
+    return { kind: "noop", work };
+  }
+  if (samePhase && !isNexusOwned(work)) {
+    return { kind: "noop", work };
+  }
+  if (samePhase && !("beforeCardId" in opts)) {
     return { kind: "noop", work };
   }
   // Done is a completion, and core refuses a completion without evidence,
@@ -141,6 +144,7 @@ export async function applyTaskPhaseMove(
     await coreClient.moveBoardCard(boardId, cardId, {
       column_key: phase,
       if_board_updated_at: token,
+      ...("beforeCardId" in opts ? { before_card_id: beforeCardId } : {}),
       ...(phase === "done"
         ? { resolution: "done", resolution_refs: resolutionRefs }
         : {}),

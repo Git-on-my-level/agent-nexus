@@ -7467,6 +7467,14 @@ components:
           - done
           - cancelled
           - unknown
+        column_key:
+          type: string
+          readOnly: true
+          description: Board column for the backing card. Matches phase for Nexus-owned work.
+        rank:
+          type: string
+          readOnly: true
+          description: Board membership rank within the backing card's column. Projected from the card; work.list remains updated_at order. Board-like clients sort within a phase by board_ref then rank.
         version:
           type: integer
         freshness:
@@ -8412,10 +8420,10 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
         before_card_id:
           type: string
-          description: Insert immediately before this card ref or handle in column_key; mutually exclusive with after_card_id.
+          description: Insert immediately before this card ref or handle in column_key; mutually exclusive with after_card_id. Resolved like path `{card_id}` (typed `card:` ref, handle, or UUID).
         after_card_id:
           type: string
-          description: Insert immediately after this card ref or handle in column_key; mutually exclusive with before_card_id.
+          description: Insert immediately after this card ref or handle in column_key; mutually exclusive with before_card_id. Resolved like path `{card_id}` (typed `card:` ref, handle, or UUID).
         resolution:
           type: string
           enum: [done]

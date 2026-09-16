@@ -75,9 +75,12 @@
     workspaceSlug;
     const parsed = parseTopicListSearchParams($page.url.searchParams);
     filters = { ...defaultFilters, ...parsed };
-    if ([...$page.url.searchParams.keys()].length > 0) {
-      filtersOpen = true;
-    }
+    const st = parsed.states ?? ["active"];
+    filtersOpen = !(
+      st.length === 1 &&
+      String(st[0]) === "active" &&
+      String(parsed.q ?? "").trim() === ""
+    );
     void loadBackingThreadsFromState(parsed);
   });
 

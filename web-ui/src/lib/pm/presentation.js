@@ -274,11 +274,26 @@ export function taskDetailPath(work) {
 }
 
 export function cardIdFromWork(work) {
-  const id = String(work?.id ?? "").trim();
-  if (id) return id;
-  const ref = String(work?.ref ?? work?.handle ?? "").trim();
-  if (ref.startsWith("card:")) return ref.slice("card:".length);
-  return ref;
+  const ref = String(work?.ref ?? "").trim();
+  if (ref) return ref;
+  const handle = String(work?.handle ?? "").trim();
+  return handle;
+}
+
+/**
+ * Board-column order for a phase: same board together, then membership rank.
+ * work.list itself stays recency; board views sort after fetch.
+ */
+export function sortWorkBoardItems(items) {
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const board = String(a?.board_ref ?? "").localeCompare(
+      String(b?.board_ref ?? ""),
+    );
+    if (board) return board;
+    const rank = String(a?.rank ?? "").localeCompare(String(b?.rank ?? ""));
+    if (rank) return rank;
+    return String(workKey(a) ?? "").localeCompare(String(workKey(b) ?? ""));
+  });
 }
 
 /**

@@ -266,6 +266,8 @@
   let lastOpenSignal = $state(0);
 
   let showOpen = $derived(!collapsibleEff || open);
+  /** Tab selected styling only when the panel body is actually visible. */
+  let sideTabChromeActive = $derived(showOpen);
 
   let railWidth = $state(RAIL_W_DEFAULT);
   let railResizing = $state(false);
@@ -704,7 +706,7 @@
               onclick={() => openRailCollapsed("messages")}
             >
               <span
-                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
+                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-fg-muted"
                 aria-hidden="true"
               >
                 <svg
@@ -778,7 +780,7 @@
             onclick={() => setOpen(true)}
           >
             <span
-              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-accent-text"
+              class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-bg-soft text-fg-muted"
               aria-hidden="true"
             >
               <svg
@@ -849,9 +851,10 @@
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={sideTab === "messages"}
-                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTab ===
-                    'messages'
+                    aria-selected={sideTabChromeActive &&
+                      sideTab === "messages"}
+                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTabChromeActive &&
+                    sideTab === 'messages'
                       ? 'bg-line-subtle text-fg'
                       : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
                     onclick={() => pickSideTab("messages")}
@@ -861,9 +864,10 @@
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={sideTab === "secondary"}
-                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTab ===
-                    'secondary'
+                    aria-selected={sideTabChromeActive &&
+                      sideTab === "secondary"}
+                    class="min-w-0 flex-1 rounded-md px-2 py-1 text-center text-micro font-medium transition-colors {sideTabChromeActive &&
+                    sideTab === 'secondary'
                       ? 'bg-line-subtle text-fg'
                       : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
                     onclick={() => pickSideTab("secondary")}
@@ -1020,12 +1024,12 @@
               <button
                 type="button"
                 role="tab"
-                aria-selected={sideTab === "messages"}
+                aria-selected={sideTabChromeActive && sideTab === "messages"}
                 aria-label={displayMessageCount > 0
                   ? `${label}, ${messageCountLabel(displayMessageCount)}`
                   : label}
-                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
-                'messages'
+                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTabChromeActive &&
+                sideTab === 'messages'
                   ? 'bg-line-subtle text-fg'
                   : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
                 onclick={() => {
@@ -1064,9 +1068,9 @@
               <button
                 type="button"
                 role="tab"
-                aria-selected={sideTab === "secondary"}
-                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTab ===
-                'secondary'
+                aria-selected={sideTabChromeActive && sideTab === "secondary"}
+                class="min-w-0 flex-1 rounded-md px-2 py-1.5 text-center text-micro font-medium transition-colors {sideTabChromeActive &&
+                sideTab === 'secondary'
                   ? 'bg-line-subtle text-fg'
                   : 'text-fg-muted hover:bg-bg-soft hover:text-fg'}"
                 onclick={() => {

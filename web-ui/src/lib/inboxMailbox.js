@@ -2,6 +2,7 @@ import {
   enrichInboxItem,
   getInboxSubjectLabel,
   getInboxSubjectRef,
+  inboxItemMailboxId,
 } from "./inboxUtils.js";
 import {
   decisionSummary,
@@ -293,7 +294,7 @@ export function buildInboxRows({
     const subjectRef = String(getInboxSubjectRef(item) ?? "").trim();
     const subjectTitle = taskTitles.get(subjectRef);
     rows.push({
-      id: `inbox:${item.id}`,
+      id: inboxItemMailboxId(item),
       kind: "inbox",
       title: item.title || item.summary || "Inbox item",
       // Name the subject when we know it; a raw ref is a last resort.
