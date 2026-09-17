@@ -765,7 +765,9 @@
                       <RefChip
                         href={link.href}
                         external={link.isExternal}
-                        title={link.raw}>{link.label}</RefChip
+                        title={link.raw}
+                        ><span class="min-w-0 truncate">{link.label}</span
+                        ></RefChip
                       >
                     </li>
                   {/each}
@@ -963,6 +965,10 @@
     flex: 1 1 auto;
     display: grid;
     grid-template-rows: auto 1fr auto;
+    /* An auto column grows to its widest row's min-content, so one unbreakable
+       id in the header or a turn would push the whole page past the viewport
+       (the shell clips it, so it cannot even be scrolled to). */
+    grid-template-columns: minmax(0, 1fr);
     height: 100%;
     min-height: 0;
   }
@@ -1317,6 +1323,20 @@
     background: var(--panel);
     box-shadow: var(--shadow-menu);
     padding: 0.25rem;
+  }
+  /* Narrow screens wrap the header actions to the left edge, where a panel
+     anchored to the trigger's right edge hangs off-screen. Span the page
+     gutters instead; the static position keeps it under the trigger. */
+  @media (max-width: 639px) {
+    .pm-history-panel {
+      position: fixed;
+      top: auto;
+      left: 0.75rem;
+      right: 0.75rem;
+      width: auto;
+      margin-top: 0.375rem;
+      max-height: min(24rem, 60vh);
+    }
   }
   .pm-history-item {
     display: grid;

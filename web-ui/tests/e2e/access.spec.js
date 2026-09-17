@@ -147,7 +147,10 @@ test("does not repeat the username in principal rows", async ({ page }) => {
 
   await page.goto("/o/local/w/local/access");
 
-  await expect(page.getByText("m4-hermes", { exact: true })).toBeVisible();
+  // The signed-in account name in the shell also reads "m4-hermes".
+  await expect(
+    page.getByRole("main").getByText("m4-hermes", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("agent via public_key", { exact: true }),
   ).toBeVisible();

@@ -318,7 +318,7 @@
         {#if work.definition_of_done?.length}
           <section>
             <h2 class="ui-label">Done when</h2>
-            <ul class="list-disc space-y-1 pl-5 text-meta text-fg">
+            <ul class="list-disc space-y-1 break-words pl-5 text-meta text-fg">
               {#each work.definition_of_done as criterion}<li>
                   {criterion}
                 </li>{/each}
@@ -344,7 +344,7 @@
             </p>
             {#if work.blockers?.length}
               <ul
-                class="mt-2 list-disc space-y-1 pl-5 text-meta text-warn-text"
+                class="mt-2 list-disc space-y-1 break-words pl-5 text-meta text-warn-text"
               >
                 {#each work.blockers as blocker}<li>{blocker}</li>{/each}
               </ul>
@@ -438,7 +438,7 @@
                     </span>
                   </div>
                   {#if row.message}
-                    <p class="mt-1.5 text-meta text-danger-text">
+                    <p class="mt-1.5 break-words text-meta text-danger-text">
                       {row.message}
                     </p>
                   {/if}
@@ -470,14 +470,14 @@
                     >
                   </div>
                   {#if observation.error}<p
-                      class="mt-1.5 text-meta text-danger-text"
+                      class="mt-1.5 break-words text-meta text-danger-text"
                     >
                       {typeof observation.error === "string"
                         ? observation.error
                         : observation.error.message || observation.error.code}
                     </p>{/if}
                   {#if observation.uncertainty?.length}<ul
-                      class="mt-1.5 list-disc pl-5 text-meta text-warn-text"
+                      class="mt-1.5 list-disc break-words pl-5 text-meta text-warn-text"
                     >
                       {#each observation.uncertainty as item}<li>
                           {item}
@@ -603,7 +603,7 @@
                   <h2 class="ui-label">Runs</h2>
                   <ul class="divide-y divide-line-subtle">
                     {#each work.executions as execution}<li
-                        class="py-2 text-meta text-fg"
+                        class="break-words py-2 text-meta text-fg"
                       >
                         {#if safeSourceHref(execution.url)}<a
                             class="text-accent-text hover:underline"
@@ -636,7 +636,7 @@
                   <ul class="space-y-3">
                     {#each observations as observation, index (observation.id || index)}
                       <li>
-                        <p class="text-micro text-fg-subtle">
+                        <p class="break-words text-micro text-fg-subtle">
                           {observation.reader_id ||
                             "unknown reader"}{#if observation.reader_revision}
                             @{observation.reader_revision}{/if}{#if observation.source_revision}
@@ -666,13 +666,19 @@
           </details>
         {/if}
       </div>
-      <aside class="space-y-6 text-meta" aria-label="Source and follow-through">
+      <!-- `break-words` wraps text but does not shrink the column's intrinsic
+           minimum, so a long project ref or source id used to widen the whole
+           grid past the viewport. -->
+      <aside
+        class="min-w-0 space-y-6 text-meta"
+        aria-label="Source and follow-through"
+      >
         <section>
           <h2 class="ui-label">Source</h2>
           <dl class="mt-2 space-y-2">
             <div>
               <dt class="text-micro text-fg-subtle">Authority</dt>
-              <dd class="text-fg">
+              <dd class="break-words text-fg">
                 {sourceLabel(work.source)}{#if work.source?.native_id}
                   <span class="text-fg-subtle"> · </span><span
                     class="font-mono text-fg-muted"

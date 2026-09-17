@@ -185,6 +185,11 @@
     if (tab === "secondary" || tab === "messages") {
       onSideTabChange?.(tab);
     }
+    // The panel owner loads its data lazily; an already-open drawer switching
+    // tabs needs that too, not just the collapsed-rail shortcut below.
+    if (tab === "secondary") {
+      void Promise.resolve(prepareSecondaryPanel?.()).catch(() => {});
+    }
   }
 
   function openRailCollapsed(/** @type {DiscussionSideTab} */ tab) {
@@ -195,7 +200,6 @@
   function openRailCollapsedSecondary() {
     setOpen(true);
     pickSideTab("secondary");
-    void Promise.resolve(prepareSecondaryPanel?.()).catch(() => {});
   }
 
   let collapsibleEff = $derived(collapsible ?? layout !== "primary");

@@ -251,7 +251,7 @@
       {/if}
       <div class="min-w-0">
         <h1 class="flex items-center gap-2 text-display text-fg">
-          <span class="truncate">
+          <span class="min-w-0 truncate">
             {activeOrg
               ? activeOrg.display_name || activeOrg.slug
               : "Welcome to Agent Nexus"}
@@ -300,7 +300,7 @@
   {#if createdWorkspaceNotice && !loadingWorkspaces && !wsError}
     {@const createdWorkspace = workspaceById(createdWorkspaceNotice.id)}
     <div
-      class="rounded-md border border-line bg-panel px-4 py-3 text-body text-fg"
+      class="rounded-md border border-line bg-panel px-4 py-3 text-body text-fg [overflow-wrap:anywhere]"
     >
       <p class="text-subtitle text-fg">
         {createdWorkspace?.display_name ||
@@ -416,8 +416,11 @@
             {@const isReady =
               String(ws.status ?? "").toLowerCase() === "ready" && ws.slug}
             {@const hint = statusHint(ws.status)}
+            <!-- min-w-0: a grid item's automatic minimum size is its
+                 min-content width, which a long unbroken workspace name would
+                 otherwise push past the viewport. -->
             <article
-              class="flex flex-col rounded-md border border-line bg-bg-soft px-4 py-3"
+              class="flex min-w-0 flex-col rounded-md border border-line bg-bg-soft px-4 py-3"
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="flex min-w-0 items-start gap-2.5">

@@ -97,6 +97,29 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     await route.continue();
   });
 
+  // The threads list (diagnostic view) reads backing threads, not topics.
+  await page.route(/\/threads(\?.*)?$/, async (route) => {
+    const request = route.request();
+    if (request.method() !== "GET" || request.resourceType() === "document") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        threads: [
+          {
+            id: "thread-onboarding",
+            title: "Customer Onboarding Workflow",
+            status: "active",
+            updated_at: "2026-03-03T11:00:00.000Z",
+          },
+        ],
+      }),
+    });
+  });
+
   await page.route(/\/threads\/thread-onboarding$/, async (route) => {
     const request = route.request();
     if (request.method() === "GET" && request.resourceType() === "document") {
@@ -236,9 +259,10 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
     page.getByText("Approve onboarding exception handling", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "Topics", exact: true }).click();
+  // Threads are inspection, not primary navigation: open the list directly.
+  await page.goto("/o/local/w/local/threads");
   await expect(
-    page.getByRole("heading", { name: "Topics", exact: true }),
+    page.getByRole("heading", { name: "Threads", exact: true }),
   ).toBeVisible();
   const threadLink = page.getByRole("link", {
     name: /Customer Onboarding Workflow/,
@@ -259,7 +283,7 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
 
   await page.getByRole("tab", { name: "Messages" }).click();
   await page.locator("#message-text").fill("Posted from headless smoke flow");
-  await page.getByRole("button", { name: "Post" }).click();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
 
   await expect.poll(() => postedCount).toBe(1);
   expect(timeline[0]?.thread_ref).toBe("thread:thread-onboarding");

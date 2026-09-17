@@ -78,15 +78,17 @@
 
 <div class="mx-auto max-w-7xl space-y-4 px-4 py-5">
   <header class="flex flex-wrap items-end justify-between gap-3">
-    <div>
+    <div class="min-w-0">
       <a class="text-micro text-accent-text" href="/hosted/admin/accounts"
         >Accounts</a
       >
-      <h1 class="mt-1 text-display text-fg">
+      <h1 class="mt-1 text-display text-fg [overflow-wrap:anywhere]">
         {account?.display_name || account?.email || "Account"}
       </h1>
       {#if account}
-        <p class="mt-1 font-mono text-micro text-fg-subtle">
+        <p
+          class="mt-1 font-mono text-micro text-fg-subtle [overflow-wrap:anywhere]"
+        >
           {account.email} · {account.id}
         </p>
       {/if}
@@ -210,7 +212,7 @@
               <span class="min-w-0 truncate text-fg"
                 >{eventLabel(event.event_type)}</span
               >
-              <span class="font-mono text-fg-subtle"
+              <span class="min-w-0 truncate font-mono text-fg-subtle"
                 >{event.organization_id || event.workspace_id || event.id}</span
               >
             </li>

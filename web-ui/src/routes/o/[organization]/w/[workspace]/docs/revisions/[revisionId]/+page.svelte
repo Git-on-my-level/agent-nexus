@@ -110,7 +110,7 @@
     <p class="text-meta text-fg-muted">Resolving document revision…</p>
   {:else if error}
     <div class="space-y-3">
-      <p class="text-meta text-danger-text">{error}</p>
+      <p class="text-meta text-danger-text [overflow-wrap:anywhere]">{error}</p>
       <a
         class="inline-flex rounded-md border border-line bg-bg-soft px-3 py-1.5 text-micro font-medium text-fg transition-colors hover:bg-line-subtle"
         href={workspaceHref("/docs")}

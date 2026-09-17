@@ -32,6 +32,7 @@ import {
   QA_BOARDS,
   filterByQuery,
 } from "../tests/fixtures/qa-seed.js";
+import { auditLayout, formatViolations } from "../tests/helpers/layoutAudit.js";
 import { getExpectedCommandRegistryDigest } from "../src/lib/commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION } from "../src/lib/config.js";
 
@@ -39,6 +40,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 const DEFAULT_VIEWPORT = { width: 1440, height: 900 };
+const QA_AUDIT_MOBILE_VIEWPORT = { width: 375, height: 812 };
 const DEFAULT_PORT = Number(process.env.QA_VISUAL_PORT ?? 4273);
 const DEFAULT_CORE_PORT = Number(process.env.QA_VISUAL_CORE_PORT ?? 8000);
 /** Baselines are often captured on macOS; CI runs Linux Chromium. Shared shell/font drift on dense pages landed ~1.6% in CI, so keep the bar above that and reserve a higher cap for access. */
@@ -74,7 +76,7 @@ const QA_HOME_FEED_TYPES = new Set([
   "document_revised",
 ]);
 
-const QA_SCENES = [
+export const QA_SCENES = [
   {
     name: "hosted-signin",
     path: "/hosted/signin",
@@ -281,7 +283,10 @@ const QA_SCENES = [
       // Desktop (1440px) uses the document rail; the dock header is lg:hidden.
       // Do not use text=Discussion: it matches the hidden settings hint
       // "Workspace projects and discussions" first and never becomes visible.
-      await page.waitForSelector("aside.dd-rail");
+      // Below lg the rail is replaced by the discussion dock.
+      if ((page.viewportSize()?.width ?? 1440) >= 1024) {
+        await page.waitForSelector("aside.dd-rail");
+      }
       await page.waitForSelector("text=Check the OAuth callback copy");
       await page.waitForSelector("text=Keep this wording exact");
     },
@@ -317,7 +322,12 @@ const QA_SCENES = [
     workspaceMode: "inbox-populated",
     waitFor: async (page) => {
       await page.waitForSelector('[data-testid="inbox-row-inbox-ask-auth"]');
-      await page.click(".shell-search-trigger");
+      // The sidebar trigger only exists on wide layouts; the shortcut works everywhere.
+      if (await page.locator(".shell-search-trigger").isVisible()) {
+        await page.click(".shell-search-trigger");
+      } else {
+        await page.keyboard.press("ControlOrMeta+k");
+      }
       await page.fill(".cmd-input", "launch");
       await page.waitForSelector(".cmd-result-row");
     },
@@ -898,12 +908,12 @@ async function startBuiltUiServer(port) {
   };
 }
 
-function buildSceneUrl(baseUrl, scenePath) {
+export function buildSceneUrl(baseUrl, scenePath) {
   const separator = scenePath.includes("?") ? "&" : "?";
   return `${baseUrl}${scenePath}${separator}qa=1`;
 }
 
-async function installQaEnvironment(page, scene) {
+export async function installQaEnvironment(page, scene) {
   await page.addInitScript(
     ({ fixedNowIso, sceneLocalStorage }) => {
       const fixedNowMs = Date.parse(fixedNowIso);
@@ -953,7 +963,7 @@ async function installQaEnvironment(page, scene) {
   );
 }
 
-async function installQaRoutes(page, scene) {
+export async function installQaRoutes(page, scene) {
   const hostedScenario = createHostedScenario(scene.hostedMode);
   const workspaceScenario = createWorkspaceScenario(scene.workspaceMode);
 
@@ -1430,7 +1440,25 @@ async function captureScene(browser, baseUrl, scene, outDir) {
       fullPage: false,
       animations: "disabled",
     });
-    return { scene: scene.name, path: outputPath, status: "ok" };
+
+    // Geometry audit of the same state, at the capture size and at phone
+    // width (screenshots only cover desktop).
+    const layoutViolations = [];
+    for (const viewport of [DEFAULT_VIEWPORT, QA_AUDIT_MOBILE_VIEWPORT]) {
+      await page.setViewportSize(viewport);
+      const { violations } = await auditLayout(page);
+      if (violations.length > 0) {
+        layoutViolations.push(
+          formatViolations(`${scene.name} @${viewport.width}px`, violations),
+        );
+      }
+    }
+    return {
+      scene: scene.name,
+      path: outputPath,
+      status: "ok",
+      layoutViolations,
+    };
   } finally {
     await context.close();
   }
@@ -1443,7 +1471,11 @@ async function captureAllScenes({ outDir, port }) {
 
   const core = await startMockCoreServer();
   const preview = await startBuiltUiServer(port);
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    // Opt-in: use an installed browser (e.g. PLAYWRIGHT_CHANNEL=chrome).
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
+  });
 
   try {
     const results = [];
@@ -1534,7 +1566,7 @@ export async function runQaVisualCommand(options) {
     return 0;
   }
 
-  await captureAllScenes({
+  const captures = await captureAllScenes({
     outDir: options.outDir,
     port: options.port,
   });
@@ -1544,6 +1576,15 @@ export async function runQaVisualCommand(options) {
 
   const failures = [];
   const matches = [];
+
+  for (const capture of captures) {
+    for (const report of capture.layoutViolations ?? []) {
+      failures.push({
+        scene: capture.scene,
+        reason: `layout audit\n${report}`,
+      });
+    }
+  }
 
   for (const scene of QA_SCENES) {
     const baselinePath = path.join(QA_BASELINE_DIR, `${scene.name}.png`);

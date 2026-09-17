@@ -25,7 +25,15 @@
   {#if title}
     <p class="text-subtitle font-medium text-danger-text">{title}</p>
   {/if}
-  <p class="text-body text-danger-text {title ? 'mt-1' : ''}">{message}</p>
+  <!-- Error text carries refs, ids and URLs with no break opportunity; without
+       this they run straight out of the box. -->
+  <p
+    class="text-body text-danger-text [overflow-wrap:anywhere] {title
+      ? 'mt-1'
+      : ''}"
+  >
+    {message}
+  </p>
   {#if supportHint}
     <p class="mt-2 text-meta text-danger-text">
       Need help? <a

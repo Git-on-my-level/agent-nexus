@@ -51,11 +51,12 @@
     return "Unavailable";
   }
 
-  async function loadData() {
+  async function loadData({ keepActionMessage = false } = {}) {
     if (!orgId) return;
     loadError = "";
     inviteError = "";
-    actionMessage = "";
+    // A reload that follows a successful action must not wipe its message.
+    if (!keepActionMessage) actionMessage = "";
     phase = "loading";
     try {
       const [memRes, invRes] = await Promise.all([
@@ -214,7 +215,7 @@
       } else {
         actionMessage = "Invitation created.";
       }
-      await loadData();
+      await loadData({ keepActionMessage: true });
     } catch (e) {
       inviteError = e instanceof Error ? e.message : "Invite failed.";
     } finally {
@@ -268,7 +269,7 @@
   {#if actionMessage}
     <p
       role="status"
-      class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text"
+      class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text [overflow-wrap:anywhere]"
     >
       {actionMessage}
     </p>
@@ -363,7 +364,7 @@
             <li
               class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
+              <div class="min-w-0 [overflow-wrap:anywhere]">
                 <div class="text-subtitle text-fg">
                   {m.account_display_name || m.account_email || m.account_id}
                 </div>
@@ -431,7 +432,7 @@
             <li
               class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
+              <div class="min-w-0 [overflow-wrap:anywhere]">
                 <div class="text-subtitle text-fg">{inv.email}</div>
                 <div class="text-micro text-fg-subtle">Role: {inv.role}</div>
               </div>

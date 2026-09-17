@@ -233,8 +233,10 @@
               onclick={() => navigate(item)}
               disabled={item.kind === "hint"}
             >
-              <span class="min-w-0 truncate text-fg">{item.label}</span>
-              <span class="shrink-0 text-micro text-fg-subtle">{item.hint}</span
+              <span class="min-w-0 flex-1 truncate text-fg">{item.label}</span>
+              <span
+                class="min-w-0 max-w-[55%] shrink-0 truncate text-micro text-fg-subtle"
+                >{item.hint}</span
               >
             </button>
           </li>

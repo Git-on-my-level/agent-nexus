@@ -10,6 +10,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
+  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import { coreClient } from "$lib/coreClient";
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
@@ -93,6 +94,9 @@
     return refs;
   });
 
+  let notifyTargetPopupOpen = $derived(
+    notifyTargetMenuOpen && notifyTargetResults.length > 0,
+  );
   let isCompleted = $derived(String(item?.status ?? "").trim() === "completed");
   let workspaceHref = $derived(
     bindWorkspaceHref(organizationSlug, workspaceSlug),
@@ -450,7 +454,7 @@
               {item.severity}
             </span>
           {/if}
-          <span class="text-fg-muted">
+          <span class="min-w-0 text-fg-muted [overflow-wrap:anywhere]">
             from <span class="font-mono text-mono text-fg"
               >{requesterLabel(item)}</span
             >
@@ -501,7 +505,7 @@
             </p>
           {/if}
           {#if item.responding_actor_id}
-            <p class="text-micro text-fg-muted">
+            <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
               Responder{" "}
               <span class="font-mono text-fg">{item.responding_actor_id}</span>
             </p>
@@ -512,7 +516,9 @@
             >
               Final response
             </div>
-            <p class="mt-1 whitespace-pre-wrap text-meta text-fg">
+            <p
+              class="mt-1 whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
+            >
               {item.response_text ?? ""}
             </p>
           </div>
@@ -690,7 +696,8 @@
             <div
               class="flex flex-wrap items-center gap-x-3 gap-y-2 max-md:block"
             >
-              <span class="text-fg-muted max-md:block max-md:text-micro"
+              <span
+                class="min-w-0 text-fg-muted [overflow-wrap:anywhere] max-md:block max-md:text-micro"
                 >{notifyDescription()}</span
               >
               <div
@@ -745,7 +752,7 @@
                     class="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1.5"
                   >
                     <span
-                      class="inline-flex items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-micro text-accent"
+                      class="inline-flex min-w-0 items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-micro text-accent [overflow-wrap:anywhere]"
                     >
                       @{notifyTargetSelected.display_name ||
                         notifyTargetSelected.id}
@@ -763,18 +770,37 @@
                     class="w-full rounded border border-line bg-panel px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent"
                     type="text"
                     placeholder="Search people or agents…"
+                    role="combobox"
+                    aria-label="Notify someone else"
+                    aria-controls={notifyTargetPopupOpen
+                      ? "notify-target-results"
+                      : undefined}
+                    aria-expanded={notifyTargetPopupOpen}
+                    aria-autocomplete="list"
                     value={notifyTargetQuery}
                     oninput={handleNotifyTargetInput}
                     onfocus={() => (notifyTargetMenuOpen = true)}
                   />
-                  {#if notifyTargetMenuOpen && notifyTargetResults.length > 0}
+                  {#if notifyTargetPopupOpen}
+                    <!-- A results list that floats over the composer: mark it
+                         as a listbox so it reads (and is dismissed) as a
+                         popup rather than as chrome covering Send response. -->
                     <div
+                      id="notify-target-results"
+                      role="listbox"
+                      aria-label="Notification targets"
                       class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-line bg-panel shadow-lg"
+                      use:dismissOnEscape={{
+                        enabled: true,
+                        onDismiss: () => (notifyTargetMenuOpen = false),
+                      }}
                     >
                       {#each notifyTargetResults as actor (actor.id)}
                         <button
                           class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-bg-soft"
                           type="button"
+                          role="option"
+                          aria-selected={false}
                           onclick={() => chooseNotifyTarget(actor)}
                         >
                           <span

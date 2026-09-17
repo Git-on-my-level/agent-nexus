@@ -5,7 +5,8 @@
 <div class="flex flex-wrap items-start justify-between gap-3">
   <div class="min-w-0">
     {#if title}
-      <h1 class="text-title text-fg">{title}</h1>
+      <!-- Titles can come from a source and be one long unbroken token. -->
+      <h1 class="text-title text-fg [overflow-wrap:anywhere]">{title}</h1>
     {/if}
     {#if subtitle}
       <div class="mt-0.5 text-meta text-fg-muted">{@render subtitle()}</div>

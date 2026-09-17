@@ -493,7 +493,7 @@
   <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
-    class="overflow-x-auto rounded-md border border-line"
+    class="wide-scroll overflow-x-auto rounded-md border border-line"
     role="region"
     aria-label="Task table"
     tabindex="0"
@@ -555,18 +555,24 @@
                 >{boardLabel(work)}</span
               >
             </td>
-            <td class="whitespace-nowrap px-3 py-1.5">
+            <!-- A source can report a status of any length; capped and
+                 truncated so one verbose one cannot push Last checked off
+                 the right edge of the table for every row. -->
+            <td class="max-w-48 px-3 py-1.5">
               {#if tone}
                 <SignalBadge {tone}>{statusText(work)}</SignalBadge>
               {:else}
-                <span class="inline-flex items-center gap-1.5 text-fg-muted">
+                <span
+                  class="flex items-center gap-1.5 text-fg-muted"
+                  title={statusText(work)}
+                >
                   <span
                     class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass(
                       work.phase,
                     )}"
                     aria-hidden="true"
                   ></span>
-                  {statusText(work)}
+                  <span class="truncate">{statusText(work)}</span>
                 </span>
               {/if}
             </td>
@@ -646,23 +652,29 @@
   }
 
   /*
-   * The board's horizontal scrollbar is the only cue that columns continue off
-   * screen; the 6px overlay bar the rest of the app uses is invisible here.
+   * The horizontal scrollbar is the only cue that columns continue off screen
+   * — on the board, and on the table between 640px and the width where all
+   * five columns fit; the 6px overlay bar the rest of the app uses is
+   * invisible here.
    */
-  .board-scroll {
+  .board-scroll,
+  .wide-scroll {
     scrollbar-width: auto;
   }
 
-  .board-scroll::-webkit-scrollbar {
+  .board-scroll::-webkit-scrollbar,
+  .wide-scroll::-webkit-scrollbar {
     height: 10px;
   }
 
-  .board-scroll::-webkit-scrollbar-thumb {
+  .board-scroll::-webkit-scrollbar-thumb,
+  .wide-scroll::-webkit-scrollbar-thumb {
     background: var(--line-strong);
     border-radius: 999px;
   }
 
-  .board-scroll::-webkit-scrollbar-track {
+  .board-scroll::-webkit-scrollbar-track,
+  .wide-scroll::-webkit-scrollbar-track {
     background: var(--bg-soft);
     border-radius: 999px;
   }

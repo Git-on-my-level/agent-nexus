@@ -18,7 +18,12 @@
     <h2 class="text-subtitle text-fg">{title}</h2>
   {/if}
   {#if helper}
-    <p class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle">{helper}</p>
+    <!-- Helpers can quote user input (a search query): wrap, do not clip. -->
+    <p
+      class="mx-auto mt-1.5 max-w-md text-meta text-fg-subtle [overflow-wrap:anywhere]"
+    >
+      {helper}
+    </p>
   {/if}
   {#if actionLabel && (actionHref || onclick)}
     <div class="mt-4">

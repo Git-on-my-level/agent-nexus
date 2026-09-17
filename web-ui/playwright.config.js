@@ -8,6 +8,8 @@ const appBasePath = process.env.PLAYWRIGHT_APP_BASE_PATH ?? "/anx";
 const preview =
   process.env.PLAYWRIGHT_PREVIEW === "1" ||
   process.env.PLAYWRIGHT_PREVIEW === "true";
+// Opt-in: run against an installed browser (e.g. PLAYWRIGHT_CHANNEL=chrome) instead of the bundled Chromium download.
+const channel = process.env.PLAYWRIGHT_CHANNEL || undefined;
 const mockedCoreBaseUrl =
   process.env.PLAYWRIGHT_CORE_BASE_URL ?? `http://127.0.0.1:${corePort}`;
 
@@ -34,6 +36,10 @@ const defaultWorkspaceEnv = () => ({
   ANX_DEFAULT_WORKSPACE: process.env.ANX_DEFAULT_WORKSPACE ?? "local",
   ANX_UI_SKIP_CORE_SCHEMA_CHECK:
     process.env.ANX_UI_SKIP_CORE_SCHEMA_CHECK ?? "1",
+  // Parallel workers load the same URLs at once, which the per-URL
+  // navigation-loop guard would otherwise short-circuit.
+  ANX_UI_DISABLE_REQUEST_LOOP_GUARD:
+    process.env.ANX_UI_DISABLE_REQUEST_LOOP_GUARD ?? "1",
 });
 
 const webServer = preview
@@ -79,8 +85,11 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
+  // The dev server compiles routes on first hit; 5s is too tight for a cold page.
+  expect: { timeout: 10_000 },
   use: {
     headless: true,
+    channel,
     trace: "on-first-retry",
   },
   projects: [

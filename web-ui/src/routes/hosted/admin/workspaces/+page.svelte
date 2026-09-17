@@ -166,26 +166,26 @@
     class="grid gap-3 rounded-md border border-line bg-bg-soft p-4 md:grid-cols-4"
   >
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={q}
       placeholder="Org, slug, id"
     />
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={status}
       ><option value="">Any status</option>{#each statusOptions as value}<option
           {value}>{formatListValue(value)}</option
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={accessMode}
       ><option value="">Any access</option>{#each accessOptions as value}<option
           {value}>{formatListValue(value)}</option
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={restrictionReason}
       ><option value="">Any restriction</option
       >{#each restrictionOptions as value}<option {value}
@@ -193,14 +193,14 @@
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={host}
       ><option value="">Any host</option>{#each hostOptions as value}<option
           {value}>{value}</option
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={runtimeState}
       ><option value="">Any runtime</option
       >{#each runtimeOptions as value}<option {value}
@@ -208,7 +208,7 @@
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={heartbeat}
       ><option value="">Any heartbeat</option
       >{#each heartbeatOptions as value}<option {value}
@@ -216,7 +216,7 @@
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={backup}
       ><option value="">Any backup</option><option value="fresh"
         >Fresh backup</option
@@ -225,13 +225,13 @@
       ></select
     >
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={version}
       placeholder="Version/build"
     />
     <div class="grid grid-cols-2 gap-2 md:col-span-2">
       <select
-        class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+        class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
         bind:value={sortKey}
       >
         <option value="last_activity_at">Activity</option>
@@ -241,7 +241,7 @@
         <option value="listen_port">Listen port</option>
       </select>
       <select
-        class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+        class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
         bind:value={sortDirection}
         ><option value="desc">Desc</option><option value="asc">Asc</option
         ></select

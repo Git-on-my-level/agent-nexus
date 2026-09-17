@@ -237,7 +237,9 @@
     actionLabel={hasActiveFilters ? "Clear filters" : ""}
     onclick={hasActiveFilters ? resetFilters : undefined}
   />
-{:else}
+{:else if backingThreads.length > 0}
+  <!-- With an error and no rows the bordered container would render as a
+       stray 2px rule under the alert. -->
   <div
     class="space-y-px overflow-hidden rounded-md border border-line bg-bg-soft"
   >

@@ -453,13 +453,16 @@ test.describe("hosted admin overview", () => {
 
     await installAdminAnalyticsRoutes(page);
 
+    // The overview only lists events inside its 24h window; pin "now" to the
+    // fixture's generated_at so the test does not rot with the calendar.
+    await page.clock.setFixedTime(new Date(overview.generated_at));
     await page.goto("/hosted/admin");
 
     await expect(
       page.getByRole("heading", { name: "Admin overview" }),
     ).toBeVisible();
-    await expect(page.getByText("Heartbeat issues")).toBeVisible();
-    await expect(page.getByText("1 stale / 1 unknown")).toBeVisible();
+    await expect(page.getByText("Heartbeats", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 stale · 1 unknown")).toBeVisible();
     await expect(page.getByText("Fleet headroom")).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Host saturation" }),

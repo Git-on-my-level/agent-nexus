@@ -497,7 +497,10 @@
   </form>
 
   {#if scopedThreadId}
-    <p class="-mt-2 mb-1 hidden text-micro text-fg-muted sm:block">
+    <!-- Raw refs are unbroken; without this they are clipped by the shell. -->
+    <p
+      class="-mt-2 mb-1 hidden text-micro text-fg-muted [overflow-wrap:anywhere] sm:block"
+    >
       Scoped to backing thread
       <RefLink refValue={`thread:${scopedThreadId}`} humanize showRaw />
     </p>
@@ -621,7 +624,7 @@
 
       {#if createError}
         <div
-          class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+          class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
           role="alert"
         >
           {createError}
@@ -708,8 +711,10 @@
               Knowledge
             </span>
           {:else}
+            <!-- Tags are free text: a long one has to truncate, not spill the row. -->
             <span
-              class="inline-flex shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+              class="inline-block max-w-full truncate rounded bg-line px-1.5 py-0.5 align-middle text-micro font-medium text-fg-muted"
+              title={tag}
             >
               {tag}
             </span>

@@ -332,6 +332,8 @@
     color: var(--danger-text);
     padding: 0.5rem 0.625rem;
     font-size: 0.8125rem;
+    /* Core error strings carry raw ids; they must wrap, not widen the card. */
+    overflow-wrap: anywhere;
   }
 
   .actor-gate-list {
@@ -361,6 +363,9 @@
     display: flex;
     align-items: center;
     gap: 0.625rem;
+    /* A grid item defaults to min-content; a long identity name would widen
+       the card past the viewport instead of wrapping inside it. */
+    min-width: 0;
     border-radius: var(--radius);
     padding: 0.5rem 0.625rem;
     cursor: pointer;
@@ -392,6 +397,7 @@
   .actor-gate-name {
     font-weight: 500;
     font-size: 0.8125rem;
+    overflow-wrap: anywhere;
   }
 
   .actor-gate-id {
@@ -1376,8 +1382,26 @@
     margin-bottom: 0;
   }
 
+  /* Status surfaces (errors, warnings, confirmations) quote core messages that
+     embed raw ids, refs and URLs. Let those wrap instead of being clipped by
+     the shell, which hides horizontal overflow. */
+  .bg-danger-soft,
+  .bg-warn-soft,
+  .bg-ok-soft,
+  [role="alert"],
+  [role="status"] {
+    overflow-wrap: anywhere;
+  }
+
+  /* Rendered markdown is user/agent text: ids, tokens and URLs with no break
+     opportunity must wrap rather than run out of whatever box hosts them. */
+  .markdown-rendered {
+    overflow-wrap: anywhere;
+  }
+
   .markdown-rendered.markdown-rendered--bubble,
   .markdown-rendered.markdown-rendered--card-content,
+  .markdown-rendered.markdown-rendered--doc,
   .card-content-block {
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -1506,11 +1530,26 @@
     color: var(--fg-muted);
   }
 
+  /*
+   * A table cannot shrink below the width its columns need, so a wide one
+   * would otherwise spill out of the prose column (and under the outline rail
+   * or off the page). Scroll it inside its own box instead.
+   */
   .markdown-rendered table {
-    width: 100%;
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     margin: 0.5rem 0;
     font-size: 0.8125rem;
+  }
+
+  /* Cells keep whole words: a wide table scrolls (see above) rather than
+     breaking "VERIFICATION" across three lines to fit the prose column. */
+  .markdown-rendered th,
+  .markdown-rendered td {
+    overflow-wrap: normal;
   }
 
   .markdown-rendered thead th {

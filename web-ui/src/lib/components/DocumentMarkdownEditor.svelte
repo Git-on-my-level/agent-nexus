@@ -521,8 +521,10 @@
   </div>
 
   {#if saveError}
+    <!-- Core errors carry raw ids and urls; the editor's rounded shell clips
+         anything that does not wrap. -->
     <div
-      class="border-t border-danger bg-danger-soft px-3 py-2 text-micro text-danger-text"
+      class="border-t border-danger bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
       role="alert"
     >
       {saveError}

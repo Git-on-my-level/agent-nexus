@@ -375,7 +375,9 @@
   <p class="text-[13px] text-fg-muted">Loading...</p>
 {:else if topicError}
   <TopicDetailHeader {threadId} {detailAsTopic} dense />
-  <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
+  <p
+    class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text [overflow-wrap:anywhere]"
+  >
     {topicError}
   </p>
 {:else if !topic}

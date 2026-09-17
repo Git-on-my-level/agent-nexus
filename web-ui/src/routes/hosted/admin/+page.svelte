@@ -391,13 +391,13 @@
   {#if !isAuthed}
     <section class="rounded-md border border-line bg-bg-soft p-4">
       <form
-        class="grid gap-3 md:grid-cols-[1fr_18rem_auto]"
+        class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)_auto]"
         onsubmit={(e) => {
           e.preventDefault();
           void loadAll();
         }}
       >
-        <label class="grid gap-1 text-meta text-fg">
+        <label class="grid min-w-0 gap-1 text-meta text-fg">
           <span class="text-micro uppercase tracking-wide text-fg-subtle">
             Admin token
           </span>
@@ -405,18 +405,18 @@
             bind:value={token}
             type="password"
             autocomplete="off"
-            class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg outline-none focus:border-accent"
+            class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg outline-none focus:border-accent"
             placeholder="ANX_CONTROL_PLANE_ADMIN_TOKEN"
           />
         </label>
-        <label class="grid gap-1 text-meta text-fg">
+        <label class="grid min-w-0 gap-1 text-meta text-fg">
           <span class="text-micro uppercase tracking-wide text-fg-subtle">
             Actor label
           </span>
           <input
             bind:value={actor}
             autocomplete="off"
-            class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg outline-none focus:border-accent"
+            class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg outline-none focus:border-accent"
             placeholder="operator@example.com"
           />
         </label>
@@ -470,7 +470,7 @@
         </p>
         <ul class="mt-2 grid gap-2 md:grid-cols-2">
           {#each attentionItems as item, i (i)}
-            <li class="flex items-start gap-2 text-meta">
+            <li class="flex min-w-0 items-start gap-2 text-meta">
               <span
                 class="mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full {item.tone ===
                 'danger'
@@ -563,7 +563,7 @@
 
 {#snippet MetricCard({ label, value, subvalue, tone = "neutral" })}
   <div
-    class="rounded-md border border-line bg-bg-soft p-4 {tone === 'warn'
+    class="min-w-0 rounded-md border border-line bg-bg-soft p-4 {tone === 'warn'
       ? 'border-warn/40'
       : tone === 'ok'
         ? 'border-ok/40'
@@ -785,7 +785,7 @@
       {@const payload = expandedHostDetail.latest_snapshot.payload}
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {#each telemetryResourceCards(expandedHostDetail) as card (card.key)}
-          <div class="rounded border border-line bg-bg p-2">
+          <div class="min-w-0 rounded border border-line bg-bg p-2">
             <p class="text-micro uppercase tracking-wide text-fg-subtle">
               {card.label}
             </p>
@@ -797,9 +797,9 @@
       <div class="grid gap-3 md:grid-cols-2">
         {#each [{ label: "Workspace root", fs: payload.workspace_root_disk }, { label: "Docker root", fs: payload.docker_root_disk }] as mount (mount.label)}
           {@const fs = filesystemUsage(mount.fs)}
-          <div class="rounded border border-line bg-bg p-2 text-micro">
+          <div class="min-w-0 rounded border border-line bg-bg p-2 text-micro">
             <p class="font-medium text-fg">{mount.label}</p>
-            <p class="text-fg-subtle">{fs.path}</p>
+            <p class="text-fg-subtle [overflow-wrap:anywhere]">{fs.path}</p>
             <p class="mt-1 text-fg">{fs.byteLabel}</p>
             <p class="text-fg-subtle">
               Inodes: {fs.inodeLabel}
@@ -921,34 +921,40 @@
   detail,
   chips = [],
 })}
-  <button
-    type="button"
-    class="rounded-md border border-line bg-bg p-3 text-left transition hover:border-accent/60 {expandedOpsPanel ===
+  <!-- The chip links sit beside the toggle, not inside it: an <a> nested in a
+       <button> is invalid and steals clicks meant to expand the card. -->
+  <div
+    class="flex min-w-0 flex-col rounded-md border border-line bg-bg transition hover:border-accent/60 {expandedOpsPanel ===
     key
       ? 'border-accent'
       : ''}"
-    onclick={() => toggleOps(key)}
   >
-    <div class="flex items-center justify-between gap-2">
-      <span class="text-micro uppercase tracking-wide text-fg-subtle"
-        >{title}</span
-      >
-      {#if headlineTone === "danger"}
-        <span class="h-2 w-2 rounded-full bg-danger"></span>
-      {:else if headlineTone === "warn"}
-        <span class="h-2 w-2 rounded-full bg-warn"></span>
-      {:else if headlineTone === "ok"}
-        <span class="h-2 w-2 rounded-full bg-ok"></span>
-      {/if}
-    </div>
-    <p class="mt-1 text-heading text-fg">{headline}</p>
-    <p class="text-micro text-fg-muted">{subline}</p>
-    <p class="mt-2 text-micro text-fg-subtle">{detail}</p>
+    <button
+      type="button"
+      class="min-w-0 flex-1 p-3 text-left"
+      onclick={() => toggleOps(key)}
+    >
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-micro uppercase tracking-wide text-fg-subtle"
+          >{title}</span
+        >
+        {#if headlineTone === "danger"}
+          <span class="h-2 w-2 rounded-full bg-danger"></span>
+        {:else if headlineTone === "warn"}
+          <span class="h-2 w-2 rounded-full bg-warn"></span>
+        {:else if headlineTone === "ok"}
+          <span class="h-2 w-2 rounded-full bg-ok"></span>
+        {/if}
+      </div>
+      <p class="mt-1 text-heading text-fg">{headline}</p>
+      <p class="text-micro text-fg-muted">{subline}</p>
+      <p class="mt-2 text-micro text-fg-subtle">{detail}</p>
+    </button>
     {#if chips.length}
-      <div class="mt-2 flex flex-wrap gap-1">
+      <div class="flex flex-wrap gap-1 px-3 pb-3">
         {#each chips as chip (chip.label)}
           <a
-            class="rounded bg-bg-soft px-1.5 py-0.5 text-micro text-fg-muted hover:text-accent-text"
+            class="min-w-0 rounded bg-bg-soft px-1.5 py-0.5 text-micro text-fg-muted [overflow-wrap:anywhere] hover:text-accent-text"
             href={auditEventsHref(
               key === "provisioning"
                 ? "provisioning_failed"
@@ -962,7 +968,7 @@
         {/each}
       </div>
     {/if}
-  </button>
+  </div>
 {/snippet}
 
 {#snippet OpsExpansion(key)}
@@ -1064,7 +1070,7 @@
 {/snippet}
 
 {#snippet TopOrgsPanel()}
-  <div class="rounded-md border border-line bg-bg-soft">
+  <div class="min-w-0 rounded-md border border-line bg-bg-soft">
     <div
       class="flex items-center justify-between border-b border-line px-4 py-3"
     >
@@ -1178,7 +1184,7 @@
 {/snippet}
 
 {#snippet RecentEventsPanel()}
-  <div class="rounded-md border border-line bg-bg-soft">
+  <div class="min-w-0 rounded-md border border-line bg-bg-soft">
     <div
       class="flex items-center justify-between border-b border-line px-4 py-3"
     >
@@ -1191,7 +1197,7 @@
     {#if filteredHighSignalEvents.length}
       <ul class="divide-y divide-line">
         {#each filteredHighSignalEvents.slice(0, 10) as event (event.id)}
-          <li class="grid gap-1 px-4 py-2 text-micro">
+          <li class="grid min-w-0 gap-1 px-4 py-2 text-micro">
             <div class="flex items-center justify-between gap-2">
               <span class="truncate text-fg"
                 >{eventLabel(event.event_type)}</span
@@ -1219,7 +1225,7 @@
 {/snippet}
 
 {#snippet RollupCard(title, root, groups)}
-  <div class="rounded-md border border-line bg-bg-soft p-4">
+  <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
     <div class="mb-3 flex items-center justify-between">
       <h2 class="text-heading text-fg">{title}</h2>
       <span class="text-micro text-fg-subtle">
@@ -1228,7 +1234,7 @@
     </div>
     <div class="grid gap-3 sm:grid-cols-2">
       {#each groups as [label, counts] (label)}
-        <div>
+        <div class="min-w-0">
           <h3 class="mb-1 text-micro uppercase tracking-wide text-fg-subtle">
             {label}
           </h3>

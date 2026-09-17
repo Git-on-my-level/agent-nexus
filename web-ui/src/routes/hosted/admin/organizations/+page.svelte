@@ -160,12 +160,12 @@
     class="grid gap-3 rounded-md border border-line bg-bg-soft p-4 md:grid-cols-4"
   >
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={q}
       placeholder="Slug, name, id, plan"
     />
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={plan}
     >
       <option value="">Any plan</option>
@@ -174,7 +174,7 @@
       {/each}
     </select>
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={status}
     >
       <option value="">Any status</option>
@@ -183,7 +183,7 @@
       {/each}
     </select>
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={accessMode}
     >
       <option value="">Any access</option>
@@ -192,7 +192,7 @@
       {/each}
     </select>
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={restrictionReason}
     >
       <option value="">Any restriction</option>
@@ -201,7 +201,7 @@
       {/each}
     </select>
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={pressure}
     >
       <option value="">Any usage pressure</option>
@@ -210,14 +210,14 @@
       <option value="high">High</option>
     </select>
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={createdAfter}
       type="date"
       aria-label="Created after"
     />
     <div class="grid grid-cols-2 gap-2">
       <select
-        class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+        class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
         bind:value={sortKey}
       >
         <option value="usage.storage_bytes">Storage</option>
@@ -227,7 +227,7 @@
         <option value="created_at">Created</option>
       </select>
       <select
-        class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+        class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
         bind:value={sortDirection}
       >
         <option value="desc">Desc</option>

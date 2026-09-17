@@ -417,7 +417,12 @@ export async function handle({ event, resolve }) {
     event.request.headers.get("sec-fetch-user") === "?1";
 
   /** Narrow window for SSR loop throttle (real tabs + Kit data fetches). */
+  // The tracker is keyed by URL, not by client, so parallel e2e workers
+  // loading the same page look exactly like a loop. Test servers opt out.
+  const loopGuardDisabled =
+    privateEnv.ANX_UI_DISABLE_REQUEST_LOOP_GUARD === "1";
   const loopInterest =
+    !loopGuardDisabled &&
     loopTopLevel &&
     (isLikelyBrowserDocumentNavigation || isSvelteKitDataFetch(pathname));
 
