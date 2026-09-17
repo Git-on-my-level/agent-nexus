@@ -4,7 +4,7 @@
 
 Agent Nexus web UI is the operator interface for Agent Nexus.
 
-Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). Agent Nexus web UI provides visibility into the workspace maintained by anx-core and a surface for operator intervention: topics, boards, cards, documents, packets, and message posting. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
+Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). Agent Nexus web UI provides visibility into the workspace maintained by anx-core and a surface for operator intervention: Inbox triage, Tasks (work projection), Docs, Ask PM, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
 
 Agent Nexus web UI does **not**:
 
@@ -81,7 +81,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 
 `Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
 
-**Domain note:** A **thread** is a core primitive (durable event timeline, `thread_id`, backing streams). A **topic** is the operator-facing work item implemented on top of a thread. Cards, documents, and boards may also reference backing threads that are not the same as a navigable topic row; use **topic** in operator copy when the UI means the organizational unit, and **thread** when the meaning is the timeline primitive, a `thread:` ref, or a read-only inspection route.
+**Domain note:** A **thread** is a core primitive (durable event timeline, `thread_id`, backing streams). A **topic** is the discussion/context primitive implemented on top of a thread. Operator work is **Tasks** (`work.list` / `work.get` over cards). Use **topic** in operator copy when the UI means that discussion unit, and **thread** when the meaning is the timeline primitive, a `thread:` ref, or a read-only inspection route. `/threads` is inspection, not a nav primitive.
 
 ---
 
@@ -150,46 +150,47 @@ A dedicated surface showing items that need operator attention.
 
 - Inbox items grouped by generic **`kind`**. The current first-class UI affordances are `ask`, `review`, and `escalate`; unknown kinds MUST still appear in their own groups (forward compatibility).
 - Within each group, sorted by inferred **urgency** (from kind, optional severity, and trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
-- Each item shows: title, kind, requester context, and a link to the relevant topic/board/card/thread.
+- Each item shows: title, kind, requester context, and a link to the relevant task, document, thread, or artifact.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
 
 **Actions:**
 
-- Navigate to the relevant topic, board, card, thread, or artifact.
+- Navigate to the relevant inbox item, task, document, thread inspection route, or artifact.
 - Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
 - The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event: the first entry is the **recommended** response (highlighted); additional entries are optional fill-ins for the freeform response text. **`review`** items also expose local **Approve** / **Reject** actions that submit fixed response text without using those chips.
 - Record a response (creates a `human_attention_responded` event for inbox items, or a `message_posted` event for general notes) with notes and typed refs. The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). The operator may have arrived via a **topic** route, but durable follow-up events still attach to the backing thread; topic refs are optional context when present, not the anchor.
 
-### 3.2 Topic list
+### 3.2 Thread inspection list
 
-A filterable list of topics (the UI may still expose thread-indexed routes for inspection; the operator-facing noun is **topic**).
+`/threads` is a filterable inspection list of backing conversations (docs-as-rooms, inbox deep links, audit). It is not a fourth product primitive and MUST NOT appear in primary nav.
 
-Topic, document, and board list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
+Document and thread list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
 
 **Filters:** lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
 Each row shows: title, lifecycle state, summary, and last activity timestamp.
 
-### 3.3 Topic detail
+### 3.3 Thread / topic inspection detail
 
-The primary working surface. Combines the workspace-style current-state view and timeline described in §2.
+Inspection, not the primary working surface. Combines current-state and timeline as in §2.2 when the operator follows an inbox or doc deep link.
 
 **Must support:**
 
 - Viewing and editing topic current-state fields that remain canonical: title and summary. Topic lifecycle state is derived from archive/trash timestamps and is changed through dedicated archive/trash/restore actions, not a mutable state patch.
-- Viewing and editing card current-state fields through the card contract: title, summary, column, risk, assignees, related refs, document ref, and terminal resolution where evidence rules allow it.
-- Viewing linked evidence and packet outcomes with restricted transition enforcement where the schema requires it.
+- Viewing linked evidence with restricted transition enforcement where the schema requires it.
 - Viewing the full timeline with navigable typed-ref links.
 - Linking artifacts and documents through typed refs where the schema allows.
 - Posting messages (creates `message_posted` events on the backing thread).
 
-### 3.4 Receipts and reviews from boards (no thread detail Work tab)
+Card current-state edits (column, assignees, resolution) live on Tasks (`work` + `cards.move` / card patch), not a board card-detail modal.
 
-Receipt and review authoring is not a separate thread/topic detail tab. Operators create receipts and reviews from **card detail modals on boards**, where flows remain grounded in `card:<card_id>` subjects (see receipt and review packet contracts) and typed refs per reference conventions.
+### 3.4 Receipts and reviews from Inbox and Tasks
+
+Receipt and review authoring is not a card-detail modal on a `/boards` route. Decisions awaiting an answer are Inbox items. Tasks has no card-detail modal. Flows remain grounded in typed refs (`card:`, `inbox:`, `artifact:`) per reference conventions.
 
 **Actions:**
 
-- Open a card from a board, use the card detail modal to author receipts and reviews against that card.
+- Open an Inbox item or task and record the decision or review there.
 
 ### 3.5 Receipt viewer
 
@@ -201,16 +202,16 @@ A view for inspecting receipt artifacts.
 
 **Review action:** From a receipt, the operator can initiate a review — select outcome (accept / revise / escalate), write notes, attach evidence as typed refs. This creates a review artifact + `review_completed` event (with typed refs per reference conventions). If the outcome is `revise`, the UI SHOULD steer the operator back to the topic/card context for follow-up work.
 
-### 3.6 Boards and docs as canonical operator surfaces
+### 3.6 Tasks board and Docs
 
-Boards and docs are first-class operator surfaces, but they remain grounded in canonical core state.
+Docs are a first-class operator surface. Boards are the backing store Tasks writes through, not a separate destination.
 
-**Boards:**
+**Tasks:**
 
-- The UI MUST present boards as canonical organizing layers over work, not disposable kanban widgets.
-- Board detail MUST distinguish canonical board facts (board metadata, card membership, backing thread/doc refs) from derived scan data (counts, inbox aggregates, projection freshness badges).
-- When board projections are pending, missing, or errored, the UI MUST keep canonical board membership visible while clearly downgrading trust in derived summaries.
-- Primary board workflows (create board, edit board metadata, add card, update pinned document) SHOULD use searchable pickers backed by canonical list endpoints. Manual raw-ID entry MAY exist only as an advanced escape hatch.
+- The UI MUST present Tasks as the operator projection over work (`work.list` / `work.get`), as table or board.
+- Nexus-owned Tasks board drops MUST persist through `cards.move` with public `card:` refs. Source-owned drops MUST file a PM decision rather than silently mutating the source.
+- `/boards` is not an operator destination. `/work` redirects to `/tasks`.
+- There is no card-detail modal on a board workspace.
 
 **Docs:**
 
@@ -291,7 +292,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 - Unknown fields inside known types MUST render without breaking the UI.
 - Unknown fields on any object MUST be preserved on round-trip.
 - Unknown ref prefixes MUST be rendered as raw text, not hidden.
-- New detail types beyond the current topic/board/card/thread surfaces may be added in future versions. The UI SHOULD degrade gracefully if it encounters an unknown type (display raw fields).
+- New detail types beyond the current Inbox / Tasks / Docs / thread-inspection surfaces may be added in future versions. The UI SHOULD degrade gracefully if it encounters an unknown type (display raw fields).
 
 ---
 
@@ -299,11 +300,12 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 
 Agent Nexus web UI v0 is complete when it can:
 
-- Display the inbox grouped by category with navigation to relevant topics, boards, cards, or threads, and support acknowledgment that persists across inbox rebuilds.
-- List and filter topics.
-- Show topic and board detail with editable current state (patch/merge, respecting core-maintained fields) and full timeline with navigable typed-ref links.
+- Display Inbox grouped by category with navigation to relevant tasks, docs, or thread inspection, and support responses that persist across inbox rebuilds.
+- Show Tasks as table and board over `work.list`, including Nexus-owned drag via `cards.move`.
+- Show Docs list/detail with head vs revision lineage.
+- Inspect backing threads at `/threads` without making that a primary nav primitive.
 - View receipts and their evidence links as navigable typed refs.
-- Perform a lightweight review (outcome + notes + typed evidence refs).
+- Perform a lightweight review (outcome + notes + typed evidence refs) from Inbox / artifact detail — not a board card-detail modal.
 - Post messages on a thread or topic-backed timeline.
 - Render provenance with visual distinction between evidence-backed and inferred sources.
-- Parse and navigate typed reference strings across all surfaces.
+- Parse typed reference strings across all surfaces (`board:` refs may stay inert in the operator UI).
