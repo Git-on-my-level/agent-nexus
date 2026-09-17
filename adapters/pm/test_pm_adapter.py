@@ -66,6 +66,37 @@ print(json.dumps({'schema_version':'anx-bridge-adapter-response/v1','response_te
         with self.assertRaises(ValueError):
             pm.dispatch(self.request([sys.executable, "-c", code]))
 
+    def test_nonblocking_io_retries_eagain(self):
+        real_write = os.write
+        real_read = os.read
+        real_set_blocking = os.set_blocking
+        ready = {"value": False}
+        state = {"writes": 0, "reads": 0}
+
+        def set_blocking(fd, blocking):
+            result = real_set_blocking(fd, blocking)
+            ready["value"] = True
+            return result
+
+        def write(fd, data):
+            if ready["value"] and data and state["writes"] == 0:
+                state["writes"] += 1
+                raise BlockingIOError()
+            return real_write(fd, data)
+
+        def read(fd, n):
+            if ready["value"] and state["reads"] == 0:
+                state["reads"] += 1
+                raise BlockingIOError()
+            return real_read(fd, n)
+
+        code = """import json,sys
+print(json.dumps({'schema_version':'anx-bridge-adapter-response/v1','response_text':'recovered from eagain'}))
+"""
+        with patch.object(os, "set_blocking", set_blocking), patch.object(os, "write", write), patch.object(os, "read", read):
+            result = pm.dispatch(self.request([sys.executable, "-c", code]))
+        self.assertEqual(result["response_text"], "recovered from eagain")
+
     def test_descendant_is_terminated_on_timeout(self):
         with tempfile.TemporaryDirectory() as tmp:
             marker = str(Path(tmp) / "escaped")

@@ -51,13 +51,18 @@ def _bounded_process(command: list[str], payload: bytes, *, timeout: float,
                 if role == "stdin":
                     try:
                         written += os.write(pipe.fileno(), payload[written:written + 8192])
+                    except BlockingIOError:
+                        continue
                     except BrokenPipeError:
                         written = len(payload)
                     if written == len(payload):
                         selector.unregister(pipe)
                         pipe.close()
                     continue
-                data = os.read(pipe.fileno(), 8192)
+                try:
+                    data = os.read(pipe.fileno(), 8192)
+                except BlockingIOError:
+                    continue
                 if not data:
                     selector.unregister(pipe)
                     pipe.close()

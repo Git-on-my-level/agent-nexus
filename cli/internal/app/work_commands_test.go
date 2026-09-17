@@ -206,6 +206,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 		{[]string{"pm", "actions", "list"}, "GET", "/pm/actions", "", `{"items":[],"has_more":true}`},
 		{[]string{"pm", "actions", "get", "action-1"}, "GET", "/pm/actions/action-1", "", `{"id":"action-1","status":"source_reported","receipt":{"independently_verified":false}}`},
 		{[]string{"pm", "actions", "reconcile", "action-1"}, "POST", "/pm/actions/action-1/reconcile", `{}`, `{"id":"action-1","status":"unknown","receipt":{"independently_verified":false}}`},
+		{[]string{"pm", "bindings", "create", "--from-file", "-"}, "POST", "/pm/bindings", `{"actor_id":"actor:human","origin":{"kind":"channel","id":"slack:U123"}}`, `{"id":"binding-1","actor_id":"actor:human","enabled":true}`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
