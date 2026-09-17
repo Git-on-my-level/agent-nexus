@@ -14,4 +14,5 @@
 **/*_test.go
 **/*_integration_test.go
 **/tests
+!tests/channels/go.mod
 runbooks

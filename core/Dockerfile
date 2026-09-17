@@ -4,6 +4,7 @@
 FROM golang:1.23-bookworm AS builder
 WORKDIR /src
 COPY core/go.mod core/go.sum ./core/
+COPY tests/channels/go.mod ./tests/channels/go.mod
 RUN cd core && go mod download
 COPY contracts ./contracts
 COPY core ./core
