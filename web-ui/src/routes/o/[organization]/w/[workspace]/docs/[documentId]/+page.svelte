@@ -867,11 +867,16 @@
   /**
    * The pill is viewport-fixed, so it has to follow the selection when the
    * page moves under it. The body scrolls inside the shell rather than the
-   * window, hence the capture-phase listener.
+   * window, hence the capture-phase listener. Listen while a selection is
+   * stashed — not only while the pill has coordinates — because
+   * `computeSelectionPillPosition` returns null when the highlight leaves
+   * the viewport, and `selectionchange` does not fire on scroll.
    */
-  let docSelectionPillVisible = $derived(Boolean(docSelectionPillPos));
+  let docSelectionTracked = $derived(
+    Boolean(String(docStashedSelection ?? "").trim()),
+  );
   $effect(() => {
-    if (typeof window === "undefined" || !docSelectionPillVisible) return;
+    if (typeof window === "undefined" || !docSelectionTracked) return;
     function onViewportChange() {
       refreshStashedDocSelection();
     }
