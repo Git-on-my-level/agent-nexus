@@ -126,6 +126,20 @@
     }
   }
 
+  /**
+   * Only one header popover at a time: they overlap, and neither is modal, so
+   * the account menu would otherwise cover the organization list.
+   */
+  function toggleOrgPicker() {
+    orgPickerOpen = !orgPickerOpen;
+    menuOpen = false;
+  }
+
+  function toggleAccountMenu() {
+    menuOpen = !menuOpen;
+    orgPickerOpen = false;
+  }
+
   function pickOrg(orgId) {
     setActiveOrg(orgId);
     orgPickerOpen = false;
@@ -140,12 +154,12 @@
     <div
       class="mx-auto flex h-12 max-w-6xl items-center justify-between gap-4 px-4"
     >
-      <div class="flex items-center gap-6">
+      <div class="flex min-w-0 items-center gap-6">
         <a
           href={isPublic && session.phase !== "authed"
             ? "/hosted/start"
             : "/hosted/dashboard"}
-          class="flex items-center gap-2 text-meta font-semibold text-fg whitespace-nowrap"
+          class="flex shrink-0 items-center gap-2 text-meta font-semibold text-fg whitespace-nowrap"
         >
           <span
             class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent-soft text-micro font-bold uppercase text-accent-text"
@@ -174,16 +188,24 @@
         {/if}
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex min-w-0 items-center gap-2">
         {#if session.phase === "authed"}
           {#if orgs.length > 0}
-            <div class="relative">
+            <div
+              class="relative min-w-0"
+              use:dismissOnEscape={{
+                enabled: orgPickerOpen,
+                onDismiss: () => {
+                  orgPickerOpen = false;
+                },
+              }}
+            >
               <button
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={orgPickerOpen}
-                onclick={() => (orgPickerOpen = !orgPickerOpen)}
-                class="flex max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
+                onclick={() => toggleOrgPicker()}
+                class="flex w-full min-w-0 max-w-[16rem] items-center gap-2 rounded-md border border-line bg-bg-soft px-2 py-1.5 text-micro text-fg transition-colors hover:bg-panel-hover"
               >
                 {#if activeOrg}
                   <Avatar
@@ -279,8 +301,8 @@
               aria-label={account?.email ??
                 account?.display_name ??
                 "Account menu"}
-              onclick={() => (menuOpen = !menuOpen)}
-              class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
+              onclick={() => toggleAccountMenu()}
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-panel-hover text-micro text-fg transition-colors hover:bg-line-strong"
               title={account?.email ?? account?.display_name ?? "Account"}
             >
               {initialsFor(account)}

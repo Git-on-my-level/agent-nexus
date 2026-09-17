@@ -92,15 +92,17 @@
 
 <div class="mx-auto max-w-7xl space-y-4 px-4 py-5">
   <header class="flex flex-wrap items-end justify-between gap-3">
-    <div>
+    <div class="min-w-0">
       <a class="text-micro text-accent-text" href="/hosted/admin/organizations"
         >Organizations</a
       >
-      <h1 class="mt-1 text-display text-fg">
+      <h1 class="mt-1 text-display text-fg [overflow-wrap:anywhere]">
         {organization?.display_name || organization?.slug || "Organization"}
       </h1>
       {#if organization}
-        <p class="mt-1 font-mono text-micro text-fg-subtle">
+        <p
+          class="mt-1 font-mono text-micro text-fg-subtle [overflow-wrap:anywhere]"
+        >
           {organization.slug} · {organization.id}
         </p>
       {/if}

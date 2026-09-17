@@ -117,7 +117,9 @@
   {#if loading}
     <p class="text-micro text-fg-muted">Loading…</p>
   {:else if loadError}
-    <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+    <div
+      class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text [overflow-wrap:anywhere]"
+    >
       {loadError}
     </div>
     <a class="mt-4 inline-block text-micro text-accent-text" href={docsHref()}
@@ -137,7 +139,7 @@
     {:else}
       {#if saveError}
         <div
-          class="mb-4 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text"
+          class="mb-4 rounded-md bg-warn-soft px-3 py-2 text-meta text-warn-text [overflow-wrap:anywhere]"
         >
           {saveError}
         </div>

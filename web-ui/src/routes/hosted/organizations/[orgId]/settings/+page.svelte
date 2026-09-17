@@ -214,7 +214,7 @@
   {:else if org}
     <section class="rounded-md border border-line bg-bg-soft px-4 py-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div class="min-w-0 [overflow-wrap:anywhere]">
           <h2 class="text-subtitle text-fg">{org.display_name || org.slug}</h2>
           <p class="mt-1 font-mono text-mono text-fg-subtle">{org.slug}</p>
         </div>
@@ -263,7 +263,7 @@
       {:else}
         <div class="mt-4 max-w-xl space-y-3">
           <label
-            class="block text-micro font-medium text-danger-text"
+            class="block text-micro font-medium text-danger-text [overflow-wrap:anywhere]"
             for="confirm-org">Type {expectedConfirmation}</label
           >
           <input

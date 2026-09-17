@@ -870,11 +870,15 @@
           {@const taskItem = selected.item}
           {@const blockers = taskBlockers(taskItem)}
           <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle text-fg">{selected.title}</h2>
+            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+              {selected.title}
+            </h2>
             {#if blockers.length}
               <div>
                 <p class="ui-label">Blocked by</p>
-                <ul class="space-y-1 text-meta text-fg">
+                <ul
+                  class="space-y-1 text-meta text-fg [overflow-wrap:anywhere]"
+                >
                   {#each blockers as blocker}
                     <li>{blocker}</li>
                   {/each}
@@ -882,13 +886,13 @@
               </div>
             {/if}
             {#if taskItem?.next_action}
-              <p class="text-meta text-fg">
+              <p class="text-meta text-fg [overflow-wrap:anywhere]">
                 {#if taskItem.next_actor}<span class="text-fg-muted"
                     >{taskItem.next_actor} —
                   </span>{/if}{taskItem.next_action}
               </p>
             {/if}
-            <p class="text-micro text-fg-muted">
+            <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
               Last checked {taskLastChecked(
                 taskItem,
               )}{#if taskItem?.refresh?.last_error?.message}
@@ -924,14 +928,19 @@
                 >
               {/if}
               {#if selected.requesterLabel}
-                <span class="text-micro text-fg-muted"
+                <span
+                  class="min-w-0 text-micro text-fg-muted [overflow-wrap:anywhere]"
                   >from {selected.requesterLabel}</span
                 >
               {/if}
             </div>
-            <h2 class="text-subtitle text-fg">{selected.title}</h2>
+            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+              {selected.title}
+            </h2>
             {#if selected.body}
-              <p class="whitespace-pre-wrap text-meta leading-relaxed text-fg">
+              <p
+                class="whitespace-pre-wrap text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+              >
                 {selected.body}
               </p>
             {/if}
@@ -942,7 +951,7 @@
                   <div class="flex flex-wrap gap-2">
                     {#each selected.responseProposals as proposal}
                       <button
-                        class="ui-btn-secondary"
+                        class="ui-btn-secondary max-w-full [overflow-wrap:anywhere]"
                         onclick={() => respondInbox(selected.item, proposal)}
                         disabled={busy}
                         type="button">{proposal}</button
@@ -996,8 +1005,10 @@
           </div>
         {:else if selected?.kind === "update"}
           <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle text-fg">{selected.title}</h2>
-            <p class="text-meta text-fg-muted">
+            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+              {selected.title}
+            </h2>
+            <p class="text-meta text-fg-muted [overflow-wrap:anywhere]">
               {selected.count || 0} updates since you last looked{#if selected.item?.newest_event?.summary}.
                 Newest: {selected.item.newest_event.summary}{/if}
             </p>

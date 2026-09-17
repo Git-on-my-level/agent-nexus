@@ -175,7 +175,7 @@
         {@const counts = runtimeCountsForHost(workspaces, host)}
         {@const warning = hostWarning(host, counts)}
         <button
-          class="rounded-md border bg-bg-soft p-4 text-left transition hover:border-accent {selectedHost?.id ===
+          class="min-w-0 rounded-md border bg-bg-soft p-4 text-left transition hover:border-accent {selectedHost?.id ===
           host.id
             ? 'border-accent'
             : 'border-line'}"
@@ -239,11 +239,13 @@
       {@const dockerFs = filesystemUsage(payload?.docker_root_disk)}
       <section class="rounded-md border border-line bg-bg-soft p-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="text-title text-fg">
+          <div class="min-w-0">
+            <h2 class="text-title text-fg [overflow-wrap:anywhere]">
               {selectedHost.label || selectedHost.id}
             </h2>
-            <p class="mt-1 font-mono text-micro text-fg-subtle">
+            <p
+              class="mt-1 font-mono text-micro text-fg-subtle [overflow-wrap:anywhere]"
+            >
               {selectedHost.id}
             </p>
           </div>
@@ -263,7 +265,7 @@
 
         <div class="mt-4 grid gap-3 md:grid-cols-4">
           {#each telemetryResourceCards(selectedHost) as card (card.key)}
-            <div class="rounded-md border border-line bg-bg p-3">
+            <div class="min-w-0 rounded-md border border-line bg-bg p-3">
               <p class="text-micro uppercase tracking-wide text-fg-subtle">
                 {card.label}
               </p>
@@ -276,7 +278,7 @@
         </div>
 
         <div class="mt-4 grid gap-3 lg:grid-cols-3">
-          <section class="rounded-md border border-line bg-bg p-3">
+          <section class="min-w-0 rounded-md border border-line bg-bg p-3">
             <h3 class="text-meta font-semibold text-fg">Runtime counts</h3>
             <div class="mt-3 grid grid-cols-2 gap-2 text-micro">
               {@render Metric({
@@ -306,7 +308,7 @@
             </div>
           </section>
 
-          <section class="rounded-md border border-line bg-bg p-3">
+          <section class="min-w-0 rounded-md border border-line bg-bg p-3">
             <h3 class="text-meta font-semibold text-fg">Docker health</h3>
             <div class="mt-3 space-y-2 text-micro text-fg">
               <div class="flex justify-between gap-3">
@@ -340,7 +342,7 @@
             {/if}
           </section>
 
-          <section class="rounded-md border border-line bg-bg p-3">
+          <section class="min-w-0 rounded-md border border-line bg-bg p-3">
             <h3 class="text-meta font-semibold text-fg">Filesystems</h3>
             <div class="mt-3 space-y-3 text-micro">
               {@render FilesystemRow({
@@ -353,15 +355,16 @@
         </div>
 
         <div class="mt-4 grid gap-3 lg:grid-cols-2">
-          <section class="rounded-md border border-line bg-bg p-3">
+          <section class="min-w-0 rounded-md border border-line bg-bg p-3">
             <h3 class="text-meta font-semibold text-fg">Image tags</h3>
             {#if selectedCounts.imageTags.length}
               <div class="mt-3 flex flex-wrap gap-1">
                 {#each selectedCounts.imageTags as image (image.reference)}
-                  <StatusPill
-                    status="neutral"
-                    label={`${image.reference} (${formatNumber(image.count)})`}
-                  />
+                  <span
+                    class="min-w-0 rounded bg-panel-hover px-1.5 py-0.5 text-micro text-fg-subtle [overflow-wrap:anywhere]"
+                  >
+                    {image.reference} ({formatNumber(image.count)})
+                  </span>
                 {/each}
               </div>
             {:else}
@@ -371,7 +374,7 @@
             {/if}
           </section>
 
-          <section class="rounded-md border border-line bg-bg p-3">
+          <section class="min-w-0 rounded-md border border-line bg-bg p-3">
             <h3 class="text-meta font-semibold text-fg">
               Recent failures by host
             </h3>

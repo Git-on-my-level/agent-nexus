@@ -57,6 +57,7 @@
   let messageCopied = $state(false);
   let tokenCopied = $state(false);
   let tokenDismissed = $state(false);
+  let tokenBannerEl = $state(null);
   let createdInviteCommandHasPlaceholders = $derived(!createdInviteUsername);
 
   let revokingInviteId = $state("");
@@ -71,7 +72,6 @@
   let principalRevokeConfirming = $state(false);
   let principalRevokeForcing = $state(false);
   let principalRevokeError = $state("");
-  let principalRevokeTypedConfirmation = $state("");
   let principalRevokeHumanLockoutReason = $state("");
   let principalRevokeRequiresHumanLockout = $state(false);
 
@@ -82,6 +82,15 @@
   let principalsState = $state({ status: SECTION_IDLE, error: "" });
   let invitesState = $state({ status: SECTION_IDLE, error: "" });
   let auditState = $state({ status: SECTION_IDLE, error: "" });
+
+  // Only the first load replaces content with a loading row; refreshes keep
+  // the current sections in place so the page does not jump.
+  let initialLoading = $derived(
+    loading &&
+      principalsState.status === SECTION_IDLE &&
+      invitesState.status === SECTION_IDLE &&
+      auditState.status === SECTION_IDLE,
+  );
 
   let canManageAccess = $derived(Boolean($authenticatedAgent));
   let authenticatedAgentId = $derived($authenticatedAgent?.agent_id ?? "");
@@ -264,12 +273,26 @@
       newInviteAgentName = "";
       newInviteUsername = "";
       newInviteUsernameManuallyEdited = false;
+      void revealTokenBanner();
       await loadAccessData();
     } catch (error) {
       inviteError = extractErrorMessage(error, "Failed to create invite");
     } finally {
       creatingInvite = false;
     }
+  }
+
+  // The token is shown once, so make sure it is on screen (the form's submit
+  // button can be below the banner on small viewports).
+  async function revealTokenBanner() {
+    await tick();
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    tokenBannerEl?.scrollIntoView?.({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
   }
 
   async function handleRevokeInvite(inviteId) {
@@ -295,7 +318,6 @@
     principalRevokeConfirming = false;
     principalRevokeForcing = false;
     principalRevokeError = "";
-    principalRevokeTypedConfirmation = "";
     principalRevokeHumanLockoutReason = "";
     principalRevokeRequiresHumanLockout = isLastActiveHumanPrincipal(principal);
   }
@@ -305,7 +327,6 @@
     principalRevokeConfirming = false;
     principalRevokeForcing = false;
     principalRevokeError = "";
-    principalRevokeTypedConfirmation = "";
     principalRevokeHumanLockoutReason = "";
     principalRevokeRequiresHumanLockout = false;
   }
@@ -338,13 +359,9 @@
 
   async function forcePrincipalRevoke() {
     if (!principalRevokeTarget || !principalRevokeRequiresHumanLockout) return;
-    if (
-      principalRevokeTypedConfirmation.trim() !==
-        principalRevokeTarget.agent_id ||
-      principalRevokeHumanLockoutReason.trim() === ""
-    ) {
+    if (principalRevokeHumanLockoutReason.trim() === "") {
       principalRevokeError =
-        "Type the agent ID and provide a human-lockout reason before using break-glass revoke.";
+        "Provide a human-lockout reason before using break-glass revoke.";
       return;
     }
 
@@ -405,8 +422,11 @@
   function extractErrorMessage(error, fallback) {
     if (!error) return fallback;
     if (typeof error === "string") return error || fallback;
+    // Core's reason reads better than the transport-level message around it.
+    if (typeof error.details === "string" && error.details.trim()) {
+      return error.details;
+    }
     if (error instanceof Error) return error.message || fallback;
-    if (error.details) return error.details;
     return fallback;
   }
 
@@ -463,21 +483,15 @@
     return `${kind} via ${method}`;
   }
 
+  let principalRevokeTargetLabel = $derived(
+    principalRevokeTarget?.username || principalRevokeTarget?.agent_id || "",
+  );
+
   function isLastActiveHumanPrincipal(principal) {
     return Boolean(
       principal?.principal_kind === "human" &&
       !principal?.revoked &&
       activeHumanPrincipalCount === 1,
-    );
-  }
-
-  function principalRevokeBreakGlassReady() {
-    return Boolean(
-      principalRevokeRequiresHumanLockout &&
-      principalRevokeTarget &&
-      principalRevokeTypedConfirmation.trim() ===
-        principalRevokeTarget.agent_id &&
-      principalRevokeHumanLockoutReason.trim() !== "",
     );
   }
 
@@ -717,12 +731,17 @@
           Manage workspace access, principals, and invitations
         </p>
       </div>
-      <Button variant="secondary" size="compact" onclick={loadAccessData}>
-        Refresh
+      <Button
+        variant="secondary"
+        size="compact"
+        disabled={loading}
+        onclick={loadAccessData}
+      >
+        {loading && !initialLoading ? "Refreshing…" : "Refresh"}
       </Button>
     </div>
 
-    {#if loading}
+    {#if initialLoading}
       <div class="flex items-center gap-2 py-6 text-meta text-fg-muted">
         <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle
@@ -744,11 +763,15 @@
     {/if}
 
     {#if createdToken && !tokenDismissed}
+      <!-- In flow on purpose: a floating layer here covers the invite form. -->
       <div
-        class="fixed inset-x-3 top-16 z-40 mx-auto max-w-3xl rounded-md border border-ok bg-ok-soft px-4 py-3 lg:top-20"
+        bind:this={tokenBannerEl}
+        class="scroll-mt-20 rounded-md border border-ok bg-ok-soft px-4 py-3"
+        role="status"
+        data-testid="invite-token-banner"
       >
         <div class="flex items-start gap-3">
-          <div class="flex-1">
+          <div class="min-w-0 flex-1">
             <p class="text-meta font-medium text-ok-text">
               Invite created successfully
             </p>
@@ -890,16 +913,10 @@
       <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
         {#if inviteError}
           <p
-            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
+            role="alert"
           >
             {inviteError}
-          </p>
-        {/if}
-        {#if revokeError}
-          <p
-            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
-          >
-            {revokeError}
           </p>
         {/if}
         <form
@@ -1041,6 +1058,14 @@
           </button>
         {/if}
       </div>
+      {#if revokeError}
+        <p
+          class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
+          role="alert"
+        >
+          {revokeError}
+        </p>
+      {/if}
       {#if invitesState.status === SECTION_ERROR}
         <p
           class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
@@ -1349,136 +1374,6 @@
       {/if}
     </section>
 
-    {#if principalRevokeTarget}
-      <div
-        class="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-3xl rounded-md border border-danger bg-danger-soft px-4 py-3 lg:bottom-6"
-        role="alert"
-      >
-        <div class="flex items-start gap-3">
-          <div class="flex-1">
-            {#if principalRevokeRequiresHumanLockout}
-              <p class="text-meta font-medium text-danger-text">
-                Warning: this is the last active human principal
-              </p>
-              <p class="mt-1 text-micro text-fg-muted">
-                Revoking it will lock every human principal out of this
-                workspace. Type the agent ID and provide a reason before the
-                break-glass path becomes available.
-              </p>
-              <p class="mt-1 text-micro text-fg-muted">
-                Principal: <strong
-                  >{principalRevokeTarget.username ||
-                    principalRevokeTarget.agent_id}</strong
-                >
-              </p>
-              <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label
-                    class="mb-1 block text-micro font-medium text-fg-muted"
-                    for="principal-lockout-confirmation"
-                  >
-                    Type agent ID to confirm
-                  </label>
-                  <input
-                    bind:value={principalRevokeTypedConfirmation}
-                    class="w-full rounded-md border border-line bg-bg px-2 py-1.5 font-mono text-micro text-fg"
-                    id="principal-lockout-confirmation"
-                    placeholder={principalRevokeTarget.agent_id}
-                    type="text"
-                  />
-                </div>
-                <div>
-                  <label
-                    class="mb-1 block text-micro font-medium text-fg-muted"
-                    for="principal-lockout-reason"
-                  >
-                    Human lockout reason
-                  </label>
-                  <input
-                    bind:value={principalRevokeHumanLockoutReason}
-                    class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-micro text-fg"
-                    id="principal-lockout-reason"
-                    placeholder="Explain the recovery path"
-                    type="text"
-                  />
-                </div>
-              </div>
-            {:else}
-              <p class="text-meta font-medium text-danger-text">
-                Confirm revoke principal?
-              </p>
-              <p class="mt-1 text-micro text-fg-muted">
-                This will revoke access for <strong
-                  >{principalRevokeTarget.username ||
-                    principalRevokeTarget.agent_id}</strong
-                >. This action is audit-logged.
-              </p>
-            {/if}
-            {#if principalRevokeError}
-              <p
-                class="mt-2 rounded bg-danger-soft px-2 py-1 text-micro text-danger-text"
-              >
-                {principalRevokeError}
-              </p>
-            {/if}
-            <div class="mt-3 flex items-center gap-2">
-              {#if principalRevokeRequiresHumanLockout}
-                <Button
-                  variant="destructive"
-                  size="compact"
-                  class="bg-danger text-white hover:bg-danger"
-                  disabled={principalRevokeForcing ||
-                    !principalRevokeBreakGlassReady()}
-                  onclick={forcePrincipalRevoke}
-                >
-                  {principalRevokeForcing
-                    ? "Revoking..."
-                    : "Allow human lockout and revoke"}
-                </Button>
-              {:else}
-                <Button
-                  variant="destructive"
-                  size="compact"
-                  class="bg-danger text-white hover:bg-danger"
-                  disabled={principalRevokeConfirming}
-                  onclick={confirmPrincipalRevoke}
-                >
-                  {principalRevokeConfirming ? "Revoking..." : "Confirm revoke"}
-                </Button>
-              {/if}
-              <Button
-                variant="secondary"
-                size="compact"
-                onclick={cancelPrincipalRevoke}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-          <button
-            aria-label="Dismiss confirmation"
-            class="shrink-0 cursor-pointer text-fg-muted hover:text-fg"
-            onclick={cancelPrincipalRevoke}
-            type="button"
-          >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    {/if}
-
     <section>
       <h2 class="mb-2 text-meta font-semibold text-fg">Recent auth events</h2>
       {#if auditState.status === SECTION_ERROR}
@@ -1519,17 +1414,19 @@
                           />
                         </span>
                       {:else}
-                        <span class="shrink-0 [overflow-wrap:anywhere]"
+                        <span class="min-w-0 [overflow-wrap:anywhere]"
                           >{part.value}</span
                         >
                       {/if}
                     {/each}
                   </p>
-                  <p class="text-micro text-fg-muted">
+                  <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
                     {auditEventSecondary(event)}
                   </p>
                 </div>
-                <span class="text-micro text-fg-muted">
+                <span
+                  class="shrink-0 whitespace-nowrap text-micro text-fg-muted"
+                >
                   {formatTimestamp(event.occurred_at)}
                 </span>
               </div>
@@ -1552,6 +1449,49 @@
     </section>
   </div>
 {/if}
+
+<ConfirmModal
+  open={Boolean(principalRevokeTarget)}
+  title={principalRevokeRequiresHumanLockout
+    ? "Last active human principal"
+    : "Revoke principal"}
+  message={principalRevokeRequiresHumanLockout
+    ? `Revoking ${principalRevokeTargetLabel} will lock every human out of this workspace. Type the agent ID and give a reason to continue. This action is audit-logged.`
+    : `This will revoke access for ${principalRevokeTargetLabel}. This action is audit-logged.`}
+  confirmLabel={principalRevokeRequiresHumanLockout
+    ? "Allow human lockout and revoke"
+    : "Confirm revoke"}
+  busyLabel="Revoking…"
+  variant="danger"
+  busy={principalRevokeConfirming || principalRevokeForcing}
+  typedConfirmation={principalRevokeRequiresHumanLockout
+    ? (principalRevokeTarget?.agent_id ?? "")
+    : ""}
+  confirmBlocked={principalRevokeRequiresHumanLockout &&
+    principalRevokeHumanLockoutReason.trim() === ""}
+  error={principalRevokeError}
+  onconfirm={() =>
+    principalRevokeRequiresHumanLockout
+      ? forcePrincipalRevoke()
+      : confirmPrincipalRevoke()}
+  oncancel={cancelPrincipalRevoke}
+>
+  {#if principalRevokeRequiresHumanLockout}
+    <label class="mt-3 block">
+      <span class="mb-1.5 block text-micro text-fg-muted">
+        Human lockout reason
+      </span>
+      <input
+        bind:value={principalRevokeHumanLockoutReason}
+        class="w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-meta text-fg"
+        id="principal-lockout-reason"
+        placeholder="Explain the recovery path"
+        type="text"
+        autocomplete="off"
+      />
+    </label>
+  {/if}
+</ConfirmModal>
 
 <ConfirmModal
   open={revokeInviteConfirm.open}

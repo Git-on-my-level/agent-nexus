@@ -61,7 +61,12 @@
   function syncUrl() {
     const url = new URL(page.url);
     url.search = filterParams().toString();
-    replaceState(url, page.state);
+    try {
+      replaceState(url, page.state);
+    } catch {
+      // On a hard load the router is not initialized yet; the address bar
+      // already carries the filters the page was opened with.
+    }
   }
 
   async function loadEvents(cursor = "") {
@@ -142,35 +147,35 @@
         void loadEvents("");
       }}
     >
-      <label class="grid gap-1 text-micro text-fg-muted">
+      <label class="grid min-w-0 gap-1 text-micro text-fg-muted">
         Organization id
         <input
           bind:value={organizationID}
-          class="rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
+          class="min-w-0 rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
           placeholder="org_..."
         />
       </label>
-      <label class="grid gap-1 text-micro text-fg-muted">
+      <label class="grid min-w-0 gap-1 text-micro text-fg-muted">
         Workspace id
         <input
           bind:value={workspaceID}
-          class="rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
+          class="min-w-0 rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
           placeholder="ws_..."
         />
       </label>
-      <label class="grid gap-1 text-micro text-fg-muted">
+      <label class="grid min-w-0 gap-1 text-micro text-fg-muted">
         Account id
         <input
           bind:value={accountID}
-          class="rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
+          class="min-w-0 rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
           placeholder="acct_..."
         />
       </label>
-      <label class="grid gap-1 text-micro text-fg-muted">
+      <label class="grid min-w-0 gap-1 text-micro text-fg-muted">
         Event types
         <input
           bind:value={eventTypes}
-          class="rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
+          class="min-w-0 rounded-md border border-line bg-bg px-3 py-2 font-mono text-micro text-fg"
           placeholder="type_a,type_b"
         />
       </label>

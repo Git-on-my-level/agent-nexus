@@ -407,12 +407,16 @@
           class="mt-3 divide-y divide-line rounded-md border border-line bg-bg"
         >
           {#each managers as m (m.id)}
-            <li class="flex items-center justify-between gap-3 px-3 py-2">
-              <span class="text-body font-medium text-fg"
+            <li
+              class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2 [overflow-wrap:anywhere]"
+            >
+              <span class="min-w-0 text-body font-medium text-fg"
                 >{managerDisplayName(m)}</span
               >
               {#if String(m.account_email ?? "").trim()}
-                <span class="text-micro text-fg-subtle">{m.account_email}</span>
+                <span class="min-w-0 text-micro text-fg-subtle"
+                  >{m.account_email}</span
+                >
               {/if}
             </li>
           {/each}
@@ -523,7 +527,7 @@
     {#if us.workspaces && us.workspaces.length > 0}
       <section class="overflow-hidden rounded-md border border-line bg-bg-soft">
         <div
-          class="flex items-center justify-between border-b border-line px-4 py-2.5"
+          class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5"
         >
           <h2 class="text-subtitle text-fg">Workspace usage</h2>
           <span class="text-micro text-fg-subtle">

@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { waitForAppReady } from "../helpers/pageReady.js";
+
 test("create document flow — POST /docs and navigate to new document", async ({
   page,
 }) => {
@@ -110,9 +112,9 @@ test("create document flow — POST /docs and navigate to new document", async (
 
   await page.goto("/o/local/w/local/docs");
   await expect(page).toHaveURL(/\/o\/local\/w\/local\/docs$/);
-  // Wait for network idle so the page is fully hydrated and client-side
-  // effects have completed before interacting with buttons.
-  await page.waitForLoadState("networkidle");
+  // Wait for hydration so client-side effects have completed before
+  // interacting with buttons.
+  await waitForAppReady(page);
   await expect(
     page.getByRole("heading", { name: "Docs", exact: true }),
   ).toBeVisible();
@@ -976,7 +978,7 @@ test("document outline — wide viewport shows a table of contents that scrolls 
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/o/local/w/local/docs/outline-doc");
-  await page.waitForLoadState("networkidle");
+  await waitForAppReady(page);
 
   const outline = page.getByRole("navigation", { name: "Document outline" });
   await expect(outline).toBeVisible();
@@ -1371,7 +1373,7 @@ test("doc with thread — compact viewport uses bottom dock, not side rail", asy
 
   await page.setViewportSize({ width: 820, height: 900 });
   await page.goto("/o/local/w/local/docs/threaded-doc");
-  await page.waitForLoadState("networkidle");
+  await waitForAppReady(page);
 
   await expect(
     page.locator(".shell-bottom-nav[aria-label='Primary navigation']"),

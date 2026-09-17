@@ -129,7 +129,7 @@
   <h1 class="mt-2 text-display text-fg">Create a workspace</h1>
   <p class="mt-1 text-meta text-fg-subtle">
     Create a separate workspace for each project or codebase in
-    <span class="text-fg"
+    <span class="text-fg [overflow-wrap:anywhere]"
       >{activeOrg?.display_name || activeOrg?.slug || "your organization"}</span
     >. Each workspace keeps its work and history separate.
   </p>
@@ -172,7 +172,7 @@
         disabled={busy}
         required
         placeholder="q3-launch"
-        pattern="[-a-z0-9]+"
+        pattern="[a-z0-9\-]+"
         class="mt-1 w-full rounded-md border border-line bg-bg px-3 py-1.5 font-mono text-mono text-fg placeholder:text-fg-subtle"
       />
       <span class="mt-1 block text-micro text-fg-subtle">

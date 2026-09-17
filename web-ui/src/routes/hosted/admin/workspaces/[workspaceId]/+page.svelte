@@ -80,15 +80,17 @@
 
 <div class="mx-auto max-w-7xl space-y-4 px-4 py-5">
   <header class="flex flex-wrap items-end justify-between gap-3">
-    <div>
+    <div class="min-w-0">
       <a class="text-micro text-accent-text" href="/hosted/admin/workspaces"
         >Workspaces</a
       >
-      <h1 class="mt-1 text-display text-fg">
+      <h1 class="mt-1 text-display text-fg [overflow-wrap:anywhere]">
         {workspace?.display_name || workspace?.slug || "Workspace"}
       </h1>
       {#if workspace}
-        <p class="mt-1 font-mono text-micro text-fg-subtle">
+        <p
+          class="mt-1 font-mono text-micro text-fg-subtle [overflow-wrap:anywhere]"
+        >
           {workspace.organization_slug}/{workspace.slug} · {workspace.id}
         </p>
       {/if}
@@ -107,18 +109,18 @@
     />
   {:else if workspace}
     <section class="grid gap-3 md:grid-cols-4">
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <div class="text-micro uppercase tracking-wide text-fg-subtle">
           Placement
         </div>
-        <div class="mt-2 text-heading text-fg">
+        <div class="mt-2 text-heading text-fg [overflow-wrap:anywhere]">
           {workspace.host_label || workspace.host_id || "Unknown"}
         </div>
         <div class="mt-1 font-mono text-micro text-fg-muted">
           :{workspace.listen_port || "unknown"}
         </div>
       </div>
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <div class="text-micro uppercase tracking-wide text-fg-subtle">
           Runtime
         </div>
@@ -132,7 +134,7 @@
           {workspace.runtime_image_tag || "Unknown image"}
         </div>
       </div>
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <div class="text-micro uppercase tracking-wide text-fg-subtle">
           Heartbeat
         </div>
@@ -145,12 +147,12 @@
             )}
           />
         </div>
-        <div class="mt-2 text-micro text-fg-muted">
+        <div class="mt-2 text-micro text-fg-muted [overflow-wrap:anywhere]">
           {workspace.heartbeat_version || "Unknown"}
           {workspace.heartbeat_build || ""}
         </div>
       </div>
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <div class="text-micro uppercase tracking-wide text-fg-subtle">
           Activity
         </div>
@@ -165,7 +167,7 @@
 
     <section class="grid gap-3 md:grid-cols-4">
       {#each usageCards as card (card.key)}
-        <div class="rounded-md border border-line bg-bg-soft p-4">
+        <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
           <div class="text-micro uppercase tracking-wide text-fg-subtle">
             {card.label}
           </div>

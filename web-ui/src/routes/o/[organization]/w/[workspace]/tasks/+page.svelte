@@ -684,40 +684,52 @@
         · {filterCount} active{/if}</summary
     >
     <div class="mt-2 flex flex-wrap items-end gap-2">
-      <label class="ui-label mb-0" for="task-filter-source">Source</label>
-      <select
-        id="task-filter-source"
-        class="ui-input w-auto"
-        value={filters.source}
-        onchange={(event) => setFilter("source", event.currentTarget.value)}
-      >
-        <option value="">All sources</option>
-        {#each SOURCES as [value, title]}<option {value}>{title}</option>{/each}
-      </select>
-      <label class="ui-label mb-0" for="task-filter-phase">Status</label>
-      <select
-        id="task-filter-phase"
-        class="ui-input w-auto"
-        value={filters.phase}
-        onchange={(event) => setFilter("phase", event.currentTarget.value)}
-      >
-        <option value="">All statuses</option>
-        {#each PHASES as phase}<option value={phase}>{label(phase)}</option
-          >{/each}
-      </select>
-      <label class="ui-label mb-0" for="task-filter-freshness">Freshness</label>
-      <select
-        id="task-filter-freshness"
-        class="ui-input w-auto"
-        value={filters.freshness}
-        onchange={(event) => setFilter("freshness", event.currentTarget.value)}
-      >
-        <option value="">Any freshness</option>
-        <option value="fresh">Checked recently</option>
-        <option value="stale">Not checked lately</option>
-        <option value="error">Read failing</option>
-        <option value="unknown">Never checked</option>
-      </select>
+      <!-- Each label stays with its own control: as loose siblings they wrapped
+           apart on a phone, leaving a label sitting beside the previous select. -->
+      <div class="flex items-end gap-2">
+        <label class="ui-label mb-0" for="task-filter-source">Source</label>
+        <select
+          id="task-filter-source"
+          class="ui-input w-auto"
+          value={filters.source}
+          onchange={(event) => setFilter("source", event.currentTarget.value)}
+        >
+          <option value="">All sources</option>
+          {#each SOURCES as [value, title]}<option {value}>{title}</option
+            >{/each}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <label class="ui-label mb-0" for="task-filter-phase">Status</label>
+        <select
+          id="task-filter-phase"
+          class="ui-input w-auto"
+          value={filters.phase}
+          onchange={(event) => setFilter("phase", event.currentTarget.value)}
+        >
+          <option value="">All statuses</option>
+          {#each PHASES as phase}<option value={phase}>{label(phase)}</option
+            >{/each}
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <label class="ui-label mb-0" for="task-filter-freshness"
+          >Freshness</label
+        >
+        <select
+          id="task-filter-freshness"
+          class="ui-input w-auto"
+          value={filters.freshness}
+          onchange={(event) =>
+            setFilter("freshness", event.currentTarget.value)}
+        >
+          <option value="">Any freshness</option>
+          <option value="fresh">Checked recently</option>
+          <option value="stale">Not checked lately</option>
+          <option value="error">Read failing</option>
+          <option value="unknown">Never checked</option>
+        </select>
+      </div>
       <form
         class="flex flex-wrap items-end gap-2"
         onsubmit={(event) => {
@@ -764,7 +776,11 @@
         void moveTask(evidenceFor.work, evidenceFor.phase);
       }}
     >
-      <label class="min-w-0 flex-1 text-micro text-fg-muted"
+      <!-- A wide enough minimum that the buttons wrap below on a phone instead
+           of squeezing the prompt and the field down to a few characters; the
+           task title comes from a source, so it can be one long token. -->
+      <label
+        class="min-w-56 flex-1 text-micro text-fg-muted [overflow-wrap:anywhere]"
         >Marking “{evidenceFor.work.title}” done needs evidence. Ref of the
         artifact or event that proves it<input
           class="ui-input mt-1"
@@ -796,9 +812,14 @@
       >
     </form>
   {/if}
+  <!--
+    In flow, like the evidence form above it. As a floating bar pinned near the
+    bottom of the viewport it sat on top of whatever board card happened to be
+    there, and stayed there until dismissed.
+  -->
   {#if moveNotice}
     <p
-      class="fixed inset-x-3 bottom-20 z-40 mx-auto flex max-w-3xl flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-line bg-panel px-3 py-2 text-meta text-fg outline-none lg:bottom-6"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-bg-soft px-3 py-2 text-meta text-fg outline-none"
       role="status"
       tabindex="-1"
       bind:this={moveNoticeElement}

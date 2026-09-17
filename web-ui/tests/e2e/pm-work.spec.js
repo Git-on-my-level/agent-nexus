@@ -380,7 +380,10 @@ test("a reply that proposes decisions shows answerable rows linked to Inbox", as
   await expect(list).toBeVisible();
   const row = list.getByRole("listitem");
   await expect(row).toContainText("Update the sample handoff note");
-  await expect(row.getByText("card:release")).toBeVisible();
+  // The row names the task it concerns and links to it, not the raw ref.
+  await expect(
+    row.getByRole("link", { name: "Release the sample workspace" }),
+  ).toHaveAttribute("href", "/o/local/w/local/tasks/card%3Arelease");
   await expect(row.getByRole("link", { name: "Answer" })).toHaveAttribute(
     "href",
     "/o/local/w/local/inbox?item=decision:decision-sample",
@@ -435,7 +438,8 @@ test("board pointer drag lifts the card, then moves it to another phase", async 
   });
   await expect(board).toBeVisible();
   const card = page.locator('[data-work-ref="card:release"]');
-  const target = page.getByRole("section", { name: "In progress" });
+  // A labelled <section> is exposed as a region.
+  const target = page.getByRole("region", { name: "In progress" });
   await expect(card).toBeVisible();
   await expect(target).toBeVisible();
   const from = await card.boundingBox();
@@ -462,7 +466,8 @@ test("board card click still opens the task after pointer-drag handlers are wire
   await setup(page);
   await page.goto(`${root}/tasks?view=board`);
   await page
-    .getByRole("link", { name: "Document the sample outcome", exact: true })
+    // The card link's name also carries its meta line.
+    .getByRole("link", { name: /^Document the sample outcome/ })
     .click();
   await expect(page).toHaveURL(/\/tasks\/card%3Adocs/);
 });

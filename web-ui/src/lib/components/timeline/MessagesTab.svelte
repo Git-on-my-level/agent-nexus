@@ -1013,7 +1013,7 @@
   >
     {#if postMessageError}
       <p
-        class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text"
+        class="mb-2 rounded bg-danger-soft px-3 py-1.5 text-micro text-danger-text [overflow-wrap:anywhere]"
       >
         {postMessageError}
       </p>
@@ -1155,7 +1155,12 @@
                   void insertMention(row.handle);
                 }}
               >
-                <span class="font-medium text-accent">@{row.handle}</span>
+                <!-- Handles can be long synthesized usernames; wrap rather
+                     than run out of the list. -->
+                <span
+                  class="min-w-0 font-medium text-accent [overflow-wrap:anywhere]"
+                  >@{row.handle}</span
+                >
                 <span class="truncate text-fg-muted">{row.displayLabel}</span>
                 <span
                   class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {row.presenceClass}"

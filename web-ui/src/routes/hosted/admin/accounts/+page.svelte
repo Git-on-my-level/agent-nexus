@@ -147,19 +147,19 @@
     class="grid gap-3 rounded-md border border-line bg-bg-soft p-4 md:grid-cols-4"
   >
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={q}
       placeholder="Email, name, id"
     />
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={status}
       ><option value="">Any status</option>{#each statusOptions as value}<option
           {value}>{formatListValue(value)}</option
         >{/each}</select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={provider}
       ><option value="">Any provider</option
       >{#each providerOptions as value}<option {value}
@@ -167,24 +167,24 @@
         >{/each}</select
     >
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={membership}
       placeholder="Org membership"
     />
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={createdAfter}
       type="date"
       aria-label="Created after"
     />
     <input
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={loginAfter}
       type="date"
       aria-label="Last login after"
     />
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={sortKey}
       ><option value="last_login_at">Last login</option><option
         value="created_at">Created</option
@@ -193,7 +193,7 @@
       ></select
     >
     <select
-      class="h-10 rounded-md border border-line bg-bg px-3 text-meta text-fg"
+      class="h-10 min-w-0 rounded-md border border-line bg-bg px-3 text-meta text-fg"
       bind:value={sortDirection}
       ><option value="desc">Desc</option><option value="asc">Asc</option
       ></select

@@ -134,7 +134,10 @@
           {#if summary}
             <div class="px-4 py-3">
               <p class="text-micro text-fg-muted">Description</p>
-              <p class="mt-0.5 text-meta text-fg whitespace-pre-wrap">
+              <!-- Summaries quote ids and URLs that have no break opportunity. -->
+              <p
+                class="mt-0.5 whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
+              >
                 {summary}
               </p>
             </div>
@@ -159,7 +162,9 @@
     {#if (topic.next_actions ?? []).length > 0}
       <div class="border-t border-line-subtle px-4 py-3">
         <p class="text-micro text-fg-muted">Next actions</p>
-        <ul class="mt-1 list-inside list-disc text-meta text-fg">
+        <ul
+          class="mt-1 list-inside list-disc text-meta text-fg [overflow-wrap:anywhere]"
+        >
           {#each topic.next_actions ?? [] as action (action)}<li>
               {action}
             </li>{/each}

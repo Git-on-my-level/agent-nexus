@@ -11,7 +11,11 @@
     cancelLabel = "Cancel",
     variant = "danger",
     busy = false,
+    busyLabel = "Working…",
     typedConfirmation = "",
+    confirmBlocked = false,
+    error = "",
+    children = undefined,
     onconfirm = () => {},
     oncancel = () => {},
   } = $props();
@@ -30,18 +34,34 @@
   let typedMatch = $derived(
     needsTyped && typedValue.trim() === typedConfirmation,
   );
-  let confirmDisabled = $derived(busy || (needsTyped && !typedMatch));
+  let confirmDisabled = $derived(
+    busy || confirmBlocked || (needsTyped && !typedMatch),
+  );
+
+  // Clear typed input only when the modal opens, never on other prop changes
+  // (an error arriving mid-flow must not wipe what the operator typed).
+  let wasOpen = false;
+  $effect(() => {
+    if (open && !wasOpen) typedValue = "";
+    wasOpen = open;
+  });
 
   $effect(() => {
     if (!open) return;
-    typedValue = "";
+    // Read synchronously so a modal that escalates to typed confirmation
+    // while open moves focus to the new input.
+    const focusTyped = needsTyped;
     void tick().then(() => {
-      if (needsTyped) {
+      if (focusTyped) {
         typedInputEl?.focus();
       } else {
         confirmActionWrapEl?.querySelector("button, a[role='button']")?.focus();
       }
     });
+  });
+
+  $effect(() => {
+    if (!open) return;
     function onKeydown(e) {
       if (e.key === "Escape" && !busy) {
         e.preventDefault();
@@ -60,7 +80,7 @@
   }
 
   function handleTypedKeydown(e) {
-    if (e.key === "Enter" && typedMatch && !busy) {
+    if (e.key === "Enter" && !confirmDisabled) {
       e.preventDefault();
       onconfirm();
     }
@@ -98,6 +118,10 @@
           />
         </label>
       {/if}
+      {@render children?.()}
+      {#if error}
+        <p class="confirm-error" role="alert">{error}</p>
+      {/if}
       <div class="confirm-actions">
         <Button
           variant="secondary"
@@ -116,7 +140,7 @@
             {busy}
             onclick={onconfirm}
           >
-            {busy ? "Working…" : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </Button>
         </span>
       </div>
@@ -145,6 +169,8 @@
     position: relative;
     width: 380px;
     max-width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
@@ -165,6 +191,18 @@
     font-size: 13px;
     color: var(--fg-muted);
     line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .confirm-error {
+    margin: 12px 0 0;
+    padding: 6px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--danger-text);
+    background: var(--danger-soft);
+    border-radius: var(--radius-md);
+    overflow-wrap: anywhere;
   }
 
   .confirm-typed {
@@ -182,6 +220,7 @@
   .confirm-typed-phrase {
     font-weight: 600;
     color: var(--fg);
+    overflow-wrap: anywhere;
   }
 
   .confirm-typed-input {
@@ -203,6 +242,7 @@
 
   .confirm-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 20px;

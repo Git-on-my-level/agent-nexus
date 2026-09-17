@@ -377,7 +377,7 @@
           {selected.answer || "No note recorded"}
         </p>
         {#if selected.answered_by}
-          <p class="mt-2 text-micro text-fg-subtle">
+          <p class="mt-2 text-micro text-fg-subtle [overflow-wrap:anywhere]">
             By {actorLabel(selected.answered_by)}
           </p>
         {/if}

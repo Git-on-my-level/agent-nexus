@@ -395,7 +395,10 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page.getByText("Latest workspace message", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator("#message-evt-1002")).toContainText("ops-ai");
+  // The actor registry's display name wins over the principal username.
+  await expect(page.locator("#message-evt-1002")).toContainText(
+    "Thread Detail Tester",
+  );
   await expect(
     page.getByText("Loading messages...", { exact: true }),
   ).toHaveCount(0);
@@ -457,7 +460,9 @@ test("thread detail separates messages from timeline and nests replies", async (
     page.getByText("Message: Reply message from e2e", { exact: true }),
   ).toBeVisible();
   await expect(page.locator("#event-evt-0999")).toContainText("m4-hermes");
-  await expect(page.locator("#event-event-new-1")).toContainText("ops-ai");
+  await expect(page.locator("#event-event-new-1")).toContainText(
+    "Thread Detail Tester",
+  );
 
   await page.reload();
 
@@ -484,7 +489,9 @@ test("thread detail separates messages from timeline and nests replies", async (
   );
 
   await page.goto("/o/local/w/local/threads/thread-onboarding#event-evt-1002");
-  await expect(page.locator("#message-evt-1002")).toContainText("ops-ai");
+  await expect(page.locator("#message-evt-1002")).toContainText(
+    "Thread Detail Tester",
+  );
   await expect(page.locator("#message-evt-1002")).toHaveClass(
     /anx-deep-link-target/,
   );

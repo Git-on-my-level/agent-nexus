@@ -126,9 +126,11 @@
   let docStashedSelection = $state("");
   /**
    * Position of the floating "Comment" pill while the operator has an
-   * active selection in the doc body. Coordinates are page-absolute
-   * (`window.scrollY/X` baked in) so the pill survives scrolling without
-   * jumping. Null when no usable selection — the pill is then hidden.
+   * active selection in the doc body. Coordinates are viewport-relative (the
+   * pill is `fixed`): the page body scrolls inside the shell, not the window,
+   * so page-absolute coordinates would strand the pill off-screen. A scroll
+   * listener keeps it glued to the selection. Null when no usable selection —
+   * the pill is then hidden.
    */
   let docSelectionPillPos = $state(
     /** @type {{ top: number, left: number } | null} */ (null),
@@ -746,7 +748,7 @@
   }
 
   /**
-   * Compute page-absolute coordinates for the floating "Comment" pill.
+   * Compute viewport coordinates for the floating "Comment" pill.
    *
    * For multi-line / wrapped selections, `range.getBoundingClientRect()`
    * returns the rectangle of the *widest* line, which made the pill leap
@@ -757,7 +759,9 @@
    * first on a backward one. This matches the Google Docs behaviour where
    * the pill follows the caret rather than the bounding box.
    *
-   * `window.scrollX/Y` is baked in so the pill stays put through scrolls.
+   * Coordinates stay viewport-relative (the pill is `fixed`) and are clamped
+   * to the viewport, so the pill is always reachable; a scroll listener
+   * recomputes them while the selection lives.
    */
   function computeSelectionPillPosition(sel) {
     if (!sel || sel.rangeCount === 0) return null;
@@ -794,23 +798,29 @@
       return null;
     }
     const PILL_GAP_Y = 6;
+    const PILL_HEIGHT = 32;
     const PILL_WIDTH_EST = 110;
-    const top = forward
-      ? anchorRect.bottom + window.scrollY + PILL_GAP_Y
-      : Math.max(0, anchorRect.top + window.scrollY - PILL_GAP_Y - 32);
-    const desiredLeft = forward
-      ? anchorRect.right + window.scrollX - 8
-      : anchorRect.left + window.scrollX - PILL_WIDTH_EST + 8;
     const viewportWidth =
-      window.document.documentElement?.clientWidth ?? window.innerWidth ?? 0;
-    const left =
-      viewportWidth > 0
-        ? Math.min(
-            window.scrollX + viewportWidth - PILL_WIDTH_EST - 8,
-            Math.max(window.scrollX + 8, desiredLeft),
-          )
-        : desiredLeft;
-    return { top, left };
+      window.document.documentElement?.clientWidth || window.innerWidth || 0;
+    const viewportHeight =
+      window.document.documentElement?.clientHeight || window.innerHeight || 0;
+    // Selection scrolled out of sight: a pill pinned to the viewport edge
+    // would point at nothing.
+    if (anchorRect.bottom < 0 || anchorRect.top > viewportHeight) {
+      return null;
+    }
+    const desiredTop = forward
+      ? anchorRect.bottom + PILL_GAP_Y
+      : anchorRect.top - PILL_GAP_Y - PILL_HEIGHT;
+    const desiredLeft = forward
+      ? anchorRect.right - 8
+      : anchorRect.left - PILL_WIDTH_EST + 8;
+    const clamp = (value, max) =>
+      max > 0 ? Math.min(max, Math.max(8, value)) : Math.max(8, value);
+    return {
+      top: clamp(desiredTop, viewportHeight - PILL_HEIGHT - 8),
+      left: clamp(desiredLeft, viewportWidth - PILL_WIDTH_EST - 8),
+    };
   }
 
   function refreshStashedDocSelection() {
@@ -851,6 +861,33 @@
     window.document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       window.document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  });
+
+  /**
+   * The pill is viewport-fixed, so it has to follow the selection when the
+   * page moves under it. The body scrolls inside the shell rather than the
+   * window, hence the capture-phase listener. Listen while a selection is
+   * stashed — not only while the pill has coordinates — because
+   * `computeSelectionPillPosition` returns null when the highlight leaves
+   * the viewport, and `selectionchange` does not fire on scroll.
+   */
+  let docSelectionTracked = $derived(
+    Boolean(String(docStashedSelection ?? "").trim()),
+  );
+  $effect(() => {
+    if (typeof window === "undefined" || !docSelectionTracked) return;
+    function onViewportChange() {
+      refreshStashedDocSelection();
+    }
+    window.addEventListener("scroll", onViewportChange, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("resize", onViewportChange);
+    return () => {
+      window.removeEventListener("scroll", onViewportChange, { capture: true });
+      window.removeEventListener("resize", onViewportChange);
     };
   });
 
@@ -1138,7 +1175,10 @@
     <span class="shrink-0 text-fg-subtle">/</span>
     <span class="min-w-0 truncate text-fg-muted">{documentId}</span>
   </nav>
-  <div class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text">
+  <!-- Core errors carry raw ids and urls: wrap them instead of clipping. -->
+  <div
+    class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text [overflow-wrap:anywhere]"
+  >
     {loadError}
   </div>
 {:else if document}
@@ -1152,7 +1192,9 @@
           <span>This document is in trash</span>
         </div>
         {#if document.trash_reason}
-          <p class="mt-2">Reason: {document.trash_reason}</p>
+          <p class="mt-2 [overflow-wrap:anywhere]">
+            Reason: {document.trash_reason}
+          </p>
         {/if}
         <p
           class="mt-1 flex flex-wrap items-center gap-x-1 text-micro text-danger-text"
@@ -1387,7 +1429,7 @@
         ? 'page-dock-scroll lg:pt-3 lg:pb-10'
         : ''}"
     >
-      <div class="doc-detail-content-row flex gap-4">
+      <div class="doc-detail-content-row flex gap-4 max-lg:flex-col">
         <div class="doc-detail-content min-w-0 flex-1">
           <WorkspaceResourceTopRow
             breadcrumbAriaLabel="Breadcrumb and document status"
@@ -1402,9 +1444,14 @@
                 href={workspaceHref("/docs")}>Docs</a
               >
               {#if parentTopic}
-                <span class="shrink-0 text-fg-subtle">/</span>
+                <!--
+                  Middle crumb collapses below `sm`: at phone width the action
+                  row leaves the breadcrumb too little space, and the status
+                  pill (which cannot shrink) ends up painted over the actions.
+                -->
+                <span class="hidden shrink-0 text-fg-subtle sm:inline">/</span>
                 <span
-                  class="min-w-0 max-w-[5.5rem] shrink truncate text-fg-muted sm:max-w-[12rem]"
+                  class="hidden min-w-0 shrink truncate text-fg-muted sm:inline sm:max-w-[12rem]"
                   title={parentTopic.title}
                 >
                   {parentTopic.title}
@@ -1443,12 +1490,19 @@
                   resourceLabel="document ref"
                 />
                 {#if documentCliHandle}
-                  <CopyButton
-                    value={`anx docs get ${documentCliHandle}`}
-                    label="Copy CLI command"
-                    size="sm"
-                    title="Command for agents to fetch this doc via the anx CLI"
-                  />
+                  <!--
+                    Agent affordance. Below `sm` the action row is already at
+                    the width of the viewport, and one more button squeezes the
+                    breadcrumb until its status pill paints over Share.
+                  -->
+                  <span class="hidden sm:contents">
+                    <CopyButton
+                      value={`anx docs get ${documentCliHandle}`}
+                      label="Copy CLI command"
+                      size="sm"
+                      title="Command for agents to fetch this doc via the anx CLI"
+                    />
+                  </span>
                 {/if}
                 {#if isTextEditable}
                   <Button
@@ -1607,12 +1661,17 @@
                 {/if}
               </button>
             {:else}
-              <h1 class="min-w-0 text-display font-semibold text-fg">
+              <h1
+                class="min-w-0 break-words text-display font-semibold text-fg"
+              >
                 {resourceDisplayLabel(document, documentId)}
               </h1>
             {/if}
             {#if titleError}
-              <p class="mt-1 text-micro text-danger-text" role="alert">
+              <p
+                class="mt-1 text-micro text-danger-text [overflow-wrap:anywhere]"
+                role="alert"
+              >
                 {titleError}
               </p>
             {/if}
@@ -1654,8 +1713,10 @@
                       Knowledge
                     </span>
                   {:else}
+                    <!-- Tags are free text: a long one has to truncate, not spill the header. -->
                     <span
-                      class="inline-flex shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+                      class="inline-block max-w-full truncate rounded bg-line px-1.5 py-0.5 align-middle text-micro font-medium text-fg-muted"
+                      title={tag}
                     >
                       {tag}
                     </span>
@@ -1770,9 +1831,12 @@
         </div>
 
         {#if historyOpen && !document.thread_id}
-          <aside
-            class="shrink-0 lg:w-72 max-lg:fixed max-lg:inset-x-3 max-lg:top-[5.75rem] max-lg:z-40 max-lg:w-auto"
-          >
+          <!--
+            Compact shell: the panel sits in flow above the body instead of
+            floating over it — a non-modal layer covered the document and the
+            "Return to current" banner underneath it.
+          -->
+          <aside class="shrink-0 lg:w-72 max-lg:order-first max-lg:w-full">
             <div
               class="rounded-md border border-line bg-bg-soft shadow-lg lg:sticky lg:top-4"
             >
@@ -1838,14 +1902,16 @@
   {#if !document.trashed_at && !editOpen && document.thread_id && docSelectionPillPos && String(docStashedSelection ?? "").trim()}
     <!--
       Google Docs–style floating "Comment" pill that follows the selection.
-      Page-absolute so it stays put through scroll; pointer-events-auto on
-      the button itself, none on the container so it never steals clicks
-      from surrounding text. The pill dismisses itself the next time
-      `selectionchange` fires with no usable selection (handled in the
-      effect that keeps `docSelectionPillPos` in sync).
+      Viewport-fixed and clamped to the viewport (the page body scrolls inside
+      the shell, so page-absolute coordinates would strand it); a scroll
+      listener re-pins it to the selection. pointer-events-auto on the button
+      itself, none on the container so it never steals clicks from surrounding
+      text. The pill dismisses itself the next time `selectionchange` fires
+      with no usable selection (handled in the effect that keeps
+      `docSelectionPillPos` in sync).
     -->
     <div
-      class="pointer-events-none absolute z-30"
+      class="pointer-events-none fixed z-30"
       style={`top: ${docSelectionPillPos.top}px; left: ${docSelectionPillPos.left}px;`}
     >
       <button

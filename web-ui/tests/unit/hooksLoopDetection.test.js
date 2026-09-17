@@ -15,8 +15,9 @@ vi.mock("$app/environment", () => ({
   dev: true,
 }));
 
+const privateEnv = vi.hoisted(() => ({}));
 vi.mock("$env/dynamic/private", () => ({
-  env: {},
+  env: privateEnv,
 }));
 
 vi.mock("$lib/coreRouteCatalog", () => ({
@@ -169,6 +170,24 @@ describe("hooks.server loop detection (dev mode)", () => {
       .find((line) => line.includes("ssr.request.loop_short_circuit"));
     expect(loopLog).toBeDefined();
     expect(loopLog).toMatch(/path="\/o\/my-org\/w\/my-ws\/login\/__data.json"/);
+  });
+
+  it("does not short-circuit when the guard is disabled for parallel e2e servers", async () => {
+    privateEnv.ANX_UI_DISABLE_REQUEST_LOOP_GUARD = "1";
+    try {
+      const event = makeDataFetch("/o/my-org/w/my-ws/login");
+      const resolve = vi.fn(async () => new Response("{}", { status: 200 }));
+
+      const responses = [];
+      for (let i = 0; i < 12; i += 1) {
+        responses.push(await handle({ event, resolve }));
+      }
+
+      expect(resolve).toHaveBeenCalledTimes(12);
+      expect(responses.every((response) => response.status === 200)).toBe(true);
+    } finally {
+      delete privateEnv.ANX_UI_DISABLE_REQUEST_LOOP_GUARD;
+    }
   });
 
   it("short-circuits duplicate browser navigations toward the SSR loop throttle", async () => {

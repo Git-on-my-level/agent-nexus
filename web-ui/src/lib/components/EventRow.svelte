@@ -38,7 +38,10 @@
       <span class="text-micro font-medium text-fg">{row?.label}</span>
     </div>
     {#if row?.detail}
-      <p class="mt-1 whitespace-pre-line text-meta leading-snug text-fg">
+      <!-- Summaries quote refs, ids and URLs with no break opportunity. -->
+      <p
+        class="mt-1 whitespace-pre-line text-meta leading-snug text-fg [overflow-wrap:anywhere]"
+      >
         {row.detail}
       </p>
     {/if}

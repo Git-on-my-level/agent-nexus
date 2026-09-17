@@ -241,10 +241,13 @@
             ? 'border-t border-line'
             : ''}"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-mono text-meta font-medium text-fg"
+          <!-- The actions carry a revealed value; below ~`sm` they take the
+               whole row instead of squeezing the name to one letter a line. -->
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-[10rem] flex-1">
+              <div class="flex min-w-0 items-center gap-2">
+                <span
+                  class="min-w-0 break-words font-mono text-meta font-medium text-fg"
                   >{secret.name}</span
                 >
               </div>
@@ -257,10 +260,12 @@
                 Updated {formatTimestamp(secret.updated_at)}
               </p>
             </div>
-            <div class="flex shrink-0 items-center gap-1.5">
+            <div
+              class="flex min-w-0 flex-wrap items-center justify-end gap-1.5"
+            >
               {#if revealed}
                 <div
-                  class="flex items-center gap-1.5 rounded-md border border-line bg-bg px-2 py-1"
+                  class="flex min-w-0 items-center gap-1.5 rounded-md border border-line bg-bg px-2 py-1"
                 >
                   <code
                     class="max-w-[200px] truncate font-mono text-micro text-fg"

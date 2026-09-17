@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { waitForAppReady } from "../helpers/pageReady.js";
+
 test("CSP header is present on document navigation requests", async ({
   page,
 }) => {
@@ -126,7 +128,7 @@ test("CSP does not interfere with legitimate resources", async ({ page }) => {
 
   await page.goto("/");
 
-  await page.waitForLoadState("networkidle");
+  await waitForAppReady(page);
 
   const legitimateFailures = failedRequests.filter(
     (req) => !req.url.includes("localhost") && !req.url.includes("127.0.0.1"),
