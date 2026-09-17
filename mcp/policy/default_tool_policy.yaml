@@ -66,6 +66,7 @@ hosted_default_commands:
   - "pm.decisions.get"
   - "pm.decisions.list"
   - "pm.turns.context"
+  - "pm.turns.get"
   - "work.capabilities"
   - "work.get"
   - "work.list"
@@ -462,6 +463,9 @@ commands:
   "usage.summary.v1":
     classification: gated_admin
     reason: "versioned usage summary is quota/billing telemetry"
+  "pm.actions.acknowledge":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
   "pm.actions.get":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
@@ -519,6 +523,15 @@ commands:
   "pm.turns.context":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.heartbeat":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.release":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
   "pm.turns.decisions.create":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
