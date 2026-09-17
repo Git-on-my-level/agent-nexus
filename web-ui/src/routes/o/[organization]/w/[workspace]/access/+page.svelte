@@ -685,7 +685,7 @@
   <div class="space-y-4">
     <div class="flex items-baseline justify-between gap-4">
       <div>
-        <h1 class="text-subtitle font-semibold text-fg">Access</h1>
+        <h1 class="text-title text-fg">Access</h1>
         <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
           Manage workspace access and invitations
         </p>
@@ -712,7 +712,7 @@
       class="flex items-center justify-between gap-3 sm:items-baseline sm:gap-4"
     >
       <div>
-        <h1 class="text-subtitle font-semibold text-fg">Access</h1>
+        <h1 class="text-title text-fg">Access</h1>
         <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
           Manage workspace access, principals, and invitations
         </p>
@@ -744,7 +744,9 @@
     {/if}
 
     {#if createdToken && !tokenDismissed}
-      <div class="rounded-md border border-ok bg-ok-soft px-4 py-3">
+      <div
+        class="fixed inset-x-3 top-16 z-40 mx-auto max-w-3xl rounded-md border border-ok bg-ok-soft px-4 py-3 lg:top-20"
+      >
         <div class="flex items-start gap-3">
           <div class="flex-1">
             <p class="text-meta font-medium text-ok-text">
@@ -1349,7 +1351,7 @@
 
     {#if principalRevokeTarget}
       <div
-        class="rounded-md border border-danger bg-danger-soft px-4 py-3"
+        class="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-3xl rounded-md border border-danger bg-danger-soft px-4 py-3 lg:bottom-6"
         role="alert"
       >
         <div class="flex items-start gap-3">

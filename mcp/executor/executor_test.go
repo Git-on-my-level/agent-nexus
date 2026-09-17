@@ -168,7 +168,7 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 		{
 			name:          "cards write",
 			commandID:     "cards.create",
-			arguments:     map[string]any{"body": map[string]any{"board_id": "board-1", "card.title": "Do it"}},
+			arguments:     map[string]any{"body": map[string]any{"board_id": "board-1", "card": map[string]any{"title": "Do it"}}},
 			wantMethod:    http.MethodPost,
 			wantPath:      "/cards",
 			wantBodyField: map[string]any{"board_id": "board-1", "card.title": "Do it"},
@@ -176,7 +176,7 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 		{
 			name:          "card revisions write",
 			commandID:     "cards.revisions.create",
-			arguments:     map[string]any{"path": map[string]any{"card_id": "card-1"}, "body": map[string]any{"revision.summary": "Updated", "revision.title": "Card v2", "if_base_revision": "rev-1"}},
+			arguments:     map[string]any{"path": map[string]any{"card_id": "card-1"}, "body": map[string]any{"revision": map[string]any{"summary": "Updated", "title": "Card v2"}, "if_base_revision": "rev-1"}},
 			wantMethod:    http.MethodPost,
 			wantPath:      "/cards/card-1/revisions",
 			wantBodyField: map[string]any{"revision.summary": "Updated"},
@@ -192,7 +192,7 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 		{
 			name:          "events bounded write",
 			commandID:     "events.create",
-			arguments:     map[string]any{"body": map[string]any{"event.actor_id": "actor-1", "event.provenance.sources": []any{}, "event.refs": []any{}, "event.summary": "noted", "event.type": "custom"}},
+			arguments:     map[string]any{"body": map[string]any{"event": map[string]any{"actor_id": "actor-1", "provenance": map[string]any{"sources": []any{}}, "refs": []any{}, "summary": "noted", "type": "custom"}}},
 			wantMethod:    http.MethodPost,
 			wantPath:      "/events",
 			wantBodyField: map[string]any{"event.type": "custom"},
@@ -263,7 +263,12 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 						t.Fatalf("decode body: %v", err)
 					}
 					for key, want := range tt.wantBodyField {
-						if got := body[key]; got != want {
+						var got any = body
+						for _, part := range strings.Split(key, ".") {
+							object, _ := got.(map[string]any)
+							got = object[part]
+						}
+						if got != want {
 							t.Fatalf("body.%s = %#v, want %#v; body=%#v", key, got, want, body)
 						}
 					}
@@ -667,4 +672,52 @@ func mustJSON(t *testing.T, payload any) []byte {
 		t.Fatalf("marshal request: %v", err)
 	}
 	return encoded
+}
+
+func TestUnifiedObservationIdempotencyUsesCanonicalNestedField(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	tool, ok := cat.Lookup(catalog.ToolName("work.observations.submit"))
+	if !ok {
+		t.Fatal("missing observation tool")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		observation, _ := body["observation"].(map[string]any)
+		if observation["idempotency_key"] != "report-1" {
+			t.Errorf("canonical observation key missing: %#v", body)
+		}
+		if _, invented := body["request_key"]; invented {
+			t.Errorf("invented root request key: %#v", body)
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"duplicate": true, "observation": map[string]any{"id": "observation-1"}})
+	}))
+	defer server.Close()
+	executor := NewWorkspaceExecutor(server.URL, Options{})
+	result, err := executor.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"path": map[string]any{"card_ref": "card:fixture"}, "body": map[string]any{"observation": map[string]any{"reader_id": "synthetic", "reader_revision": "v1", "observed_at": "2026-09-08T00:00:00Z", "status": "reported"}}, "idempotency_key": "report-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Result.(map[string]any)["duplicate"] != true {
+		t.Errorf("duplicate lost: %#v", result)
+	}
+	_, err = executor.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"path": map[string]any{"card_ref": "card:fixture"}, "body": map[string]any{"observation": map[string]any{"idempotency_key": "different"}}, "idempotency_key": "report-1"}})
+	if err == nil {
+		t.Fatal("conflicting replay key accepted")
+	}
+}
+
+func TestUnifiedPMDoesNotInventRequestKeysForCASActions(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	for _, id := range []string{"work.create", "work.patch", "work.refresh.request", "pm.actions.reconcile", "pm.turns.complete"} {
+		tool, ok := cat.Lookup(catalog.ToolName(id))
+		if !ok {
+			t.Fatalf("missing %s", id)
+		}
+		if _, advertised := tool.InputSchema["properties"].(map[string]any)["idempotency_key"]; advertised {
+			t.Errorf("unsupported replay key advertised for %s", id)
+		}
+	}
 }

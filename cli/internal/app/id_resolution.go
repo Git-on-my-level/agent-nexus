@@ -61,6 +61,7 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 		"cards.patch",
 		"cards.move",
 		"docs.create",
+		"docs.put",
 		"docs.update",
 		"docs.revisions.create",
 		"events.create",
@@ -76,23 +77,6 @@ func commandSupportsMutationIDResolution(commandID string) bool {
 func nestedMutationMap(root map[string]any, key string) map[string]any {
 	value, _ := root[key].(map[string]any)
 	return value
-}
-
-// effectiveCardMoveMutationMap returns the map holding move fields: either the
-// legacy nested `move` object (when root column_key is not set) or the root
-// body for flat requests aligned with OpenAPI MoveCardRequest.
-func effectiveCardMoveMutationMap(body map[string]any) map[string]any {
-	if body == nil {
-		return nil
-	}
-	nested := nestedMutationMap(body, "move")
-	if nested != nil && strings.TrimSpace(anyString(body["column_key"])) == "" {
-		return nested
-	}
-	if strings.TrimSpace(anyString(body["column_key"])) != "" {
-		return body
-	}
-	return nested
 }
 
 func (a *App) normalizeMutationFields(ctx context.Context, cfg config.Resolved, target map[string]any, specs []mutationFieldSpec) error {

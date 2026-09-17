@@ -25,6 +25,47 @@
   import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
   import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
+
+  /**
+   * Agent-written comments are frequently "Update on <document title>". A row
+   * that already shows the title gains nothing from a second line repeating
+   * it, so a comment that is the title plus filler is not shown.
+   */
+  const COMMENT_FILLER = new Set([
+    "a",
+    "about",
+    "an",
+    "change",
+    "changed",
+    "changes",
+    "comment",
+    "for",
+    "new",
+    "note",
+    "on",
+    "re",
+    "the",
+    "to",
+    "update",
+    "updated",
+    "updates",
+  ]);
+  function commentRestatesTitle(body, title) {
+    const normalizedTitle = String(title ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedTitle) return false;
+    const normalizedBody = String(body ?? "")
+      .trim()
+      .toLowerCase();
+    if (!normalizedBody.includes(normalizedTitle)) return false;
+    const remainder = normalizedBody
+      .replace(normalizedTitle, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    if (!remainder) return true;
+    return remainder.split(/\s+/).every((word) => COMMENT_FILLER.has(word));
+  }
   import { absoluteUrl } from "$lib/absoluteUrl.js";
   import {
     resourceDisplayLabel,
@@ -42,6 +83,9 @@
   };
 
   let documents = $state([]);
+  // Search pages followed beyond the first before the list says "more".
+  const SEARCH_PAGE_CEILING = 5;
+  let searchTruncated = $state(false);
   let loading = $state(false);
   let error = $state("");
   let retrying = $state(false);
@@ -67,6 +111,15 @@
   let createOpen = $state(false);
   let creating = $state(false);
   let createError = $state("");
+  // The search lives in the URL (?q=) so a result page can be shared and
+  // the back button restores it; the input holds the draft until submit.
+  let searchQueryTrimmed = $derived(
+    String($page.url.searchParams.get("q") ?? "").trim(),
+  );
+  let searchDraft = $state("");
+  $effect(() => {
+    searchDraft = searchQueryTrimmed;
+  });
 
   let draft = $state({
     title: "",
@@ -81,6 +134,7 @@
   $effect(() => {
     workspaceSlug;
     scopedThreadId;
+    searchQueryTrimmed;
     if (scopedThreadId && createOpen) {
       createOpen = false;
       createError = "";
@@ -152,6 +206,15 @@
     const segment = resourceRouteSegment(documents[i], "document");
     return workspaceHref(`/docs/${encodeURIComponent(segment)}`);
   }
+  /** Truncate to a quiet single-line preview (adds an ellipsis when cut). */
+  function previewText(value, max = 80) {
+    const text = String(value ?? "").trim();
+    return text.length <= max ? text : `${text.slice(0, max).trimEnd()}…`;
+  }
+
+  function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value ?? "").trim());
+  }
 
   async function loadDocuments(isRetry = false) {
     const loadToken = ++activeDocumentListLoadToken;
@@ -161,13 +224,35 @@
     error = "";
     retrying = isRetry;
     try {
-      const f = docFiltersApplied;
-      const filters = {
-        state: f.states ?? ["active"],
-      };
-      const threadFromUrl = String(scopedThreadId ?? "").trim();
-      if (threadFromUrl) filters.thread_id = threadFromUrl;
-      const data = await coreClient.listDocuments(filters);
+      const q = searchQueryTrimmed;
+      let data;
+      if (q) {
+        // /docs/search takes q/knowledge/tag/cursor/limit only (no state or
+        // thread_id per contracts/anx-openapi.yaml), so the lifecycle filter
+        // and thread scope are dropped while searching.
+        // Search pages at 50; follow the cursor so a common word does not
+        // quietly show only its first page.
+        data = await coreClient.searchDocuments({ q });
+        let cursor = data?.next_cursor || "";
+        for (let pages = 0; cursor && pages < SEARCH_PAGE_CEILING; pages += 1) {
+          const more = await coreClient.searchDocuments({ q, cursor });
+          data = {
+            ...data,
+            documents: [...(data.documents || []), ...(more?.documents || [])],
+            next_cursor: more?.next_cursor || "",
+          };
+          cursor = data.next_cursor;
+        }
+        searchTruncated = Boolean(cursor);
+      } else {
+        const filters = {
+          state: docFiltersApplied.states ?? ["active"],
+        };
+        const threadFromUrl = String(scopedThreadId ?? "").trim();
+        if (threadFromUrl) filters.thread_id = threadFromUrl;
+        data = await coreClient.listDocuments(filters);
+        searchTruncated = false;
+      }
       if (
         loadToken !== activeDocumentListLoadToken ||
         loadWorkspaceSlug !== workspaceSlug ||
@@ -312,7 +397,7 @@
   let confirmModalBusy = $derived(lifecycle.confirmBusy());
 </script>
 
-<WorkspacePageShell>
+<WorkspacePageShell data-tour="docs">
   <WorkspacePageHeader title="Docs">
     {#snippet actions()}
       <button
@@ -383,6 +468,33 @@
       </button>
     {/snippet}
   </WorkspacePageHeader>
+
+  <form
+    class="flex max-w-md gap-2"
+    onsubmit={(event) => {
+      event.preventDefault();
+      const q = String(searchDraft ?? "").trim();
+      const params = new URLSearchParams($page.url.search);
+      if (q) params.set("q", q);
+      else params.delete("q");
+      const search = params.toString();
+      void goto(workspaceHref(`/docs${search ? `?${search}` : ""}`), {
+        replaceState: true,
+        keepFocus: true,
+        noScroll: true,
+      });
+    }}
+  >
+    <label class="sr-only" for="docs-search">Search documents</label>
+    <input
+      id="docs-search"
+      class="ui-input min-w-0 flex-1"
+      type="search"
+      bind:value={searchDraft}
+      placeholder="Search documents…"
+    />
+    <button class="ui-btn-secondary" type="submit">Search</button>
+  </form>
 
   {#if scopedThreadId}
     <p class="-mt-2 mb-1 hidden text-micro text-fg-muted sm:block">
@@ -547,11 +659,82 @@
       class="mb-4"
     />
   {:else if documents.length === 0}
-    <StateEmpty
-      title="No docs yet"
-      helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
-    />
+    {#if searchQueryTrimmed}
+      <StateEmpty
+        title="No matching docs"
+        helper={`No documents match "${searchQueryTrimmed}". Search covers titles, bodies, and comments.`}
+      />
+    {:else}
+      <StateEmpty
+        title="No docs yet"
+        helper="Documents capture decisions, runbooks, and reference material. Each one keeps a full revision history."
+      />
+    {/if}
   {/if}
+
+  {#snippet docEnrichment(doc, sourceAsLink)}
+    {@const source = String(doc?.source ?? "").trim()}
+    {@const tags = (Array.isArray(doc?.tags) ? doc.tags : [])
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean)}
+    {#if source || tags.length > 0}
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+        {#if source}
+          {#if sourceAsLink && isHttpUrl(source)}
+            <a
+              class="inline-flex min-w-0 max-w-[20rem] items-center gap-1 font-mono text-micro text-fg-muted transition-colors hover:text-accent-text"
+              href={source}
+              target="_blank"
+              rel="noreferrer"
+              title={source}
+            >
+              <span aria-hidden="true">↗</span>
+              <span class="truncate">{source}</span>
+            </a>
+          {:else}
+            <span
+              class="min-w-0 max-w-[20rem] truncate font-mono text-micro text-fg-subtle"
+              title={source}
+            >
+              {source}
+            </span>
+          {/if}
+        {/if}
+        {#each tags as tag (tag)}
+          {#if tag === "knowledge"}
+            <span
+              class="inline-flex shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-micro font-semibold text-accent-text"
+            >
+              Knowledge
+            </span>
+          {:else}
+            <span
+              class="inline-flex shrink-0 rounded bg-line px-1.5 py-0.5 text-micro font-medium text-fg-muted"
+            >
+              {tag}
+            </span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+  {/snippet}
+
+  {#snippet docLastComment(doc)}
+    {@const comment = doc?.last_comment}
+    {@const commentBody = String(comment?.body ?? "").trim()}
+    {#if commentBody && !commentRestatesTitle(commentBody, resourceDisplayLabel(doc))}
+      <p class="mt-1 flex min-w-0 items-baseline gap-1.5 text-micro">
+        <span class="shrink-0 text-fg-subtle">Last comment</span>
+        <span class="min-w-0 truncate text-fg-muted" title={commentBody}>
+          {previewText(commentBody)}
+        </span>
+        <span aria-hidden="true" class="shrink-0 text-fg-subtle">·</span>
+        <span class="shrink-0 tabular-nums text-fg-muted">
+          {formatTimestamp(comment.created_at) || "—"}
+        </span>
+      </p>
+    {/if}
+  {/snippet}
 
   {#snippet docRow(doc, index, showBorderTop)}
     {@const selected = docSel.selectedIds.has(doc.id)}
@@ -605,15 +788,17 @@
                   {/if}
                 {/snippet}
               </WorkspaceResourceListRow>
-              <div
-                class="flex shrink-0 items-center gap-1.5 self-start pt-0.5 text-micro"
+              <span
+                class="hidden w-14 shrink-0 self-start pt-0.5 text-right text-micro text-fg-muted sm:inline"
+                >{formatTimestamp(doc.updated_at) || "—"}</span
               >
-                <span class="w-14 text-right text-fg-muted"
-                  >{formatTimestamp(doc.updated_at) || "—"}</span
-                >
-              </div>
             </div>
+            <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
+              Updated {formatTimestamp(doc.updated_at) || "—"}
+            </p>
+            {@render docEnrichment(doc, false)}
             <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
+            {@render docLastComment(doc)}
           </div>
         </div>
       </div>
@@ -634,53 +819,71 @@
         ]}
       >
         {#snippet row()}
-          <a
-            class="flex min-w-0 flex-1 items-start gap-3 px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
-            href={workspaceHref(
-              `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
-            )}
+          <div
+            class="min-w-0 flex-1 px-3 py-2.5 transition-colors hover:bg-panel-hover sm:px-4"
           >
-            <div class="min-w-0 flex-1">
-              <WorkspaceResourceListRow
-                title={resourceDisplayLabel(doc)}
-                description={doc.summary ?? ""}
-                titleClass="group-hover/row:text-accent-text transition-colors"
+            <div class="flex min-w-0 items-start justify-between gap-2">
+              <a
+                class="block min-w-0 flex-1"
+                href={workspaceHref(
+                  `/docs/${encodeURIComponent(resourceRouteSegment(doc, "document"))}`,
+                )}
               >
-                {#snippet badges()}
-                  <LifecycleBadge
-                    state={doc.state}
-                    label={DOC_STATE_LABELS[doc.state]}
-                    forceShow={docsHaveMixedLifecycle}
-                  />
-                  {#if doc.head_revision_number != null}
-                    <span
-                      class="font-mono text-micro tabular-nums text-fg-subtle"
-                      title="Head revision"
-                    >
-                      v{doc.head_revision_number}
-                    </span>
-                  {/if}
-                {/snippet}
-              </WorkspaceResourceListRow>
-              <InlineWorkspaceMetricStrip
-                items={documentListMetricItems(doc)}
-              />
+                <WorkspaceResourceListRow
+                  title={resourceDisplayLabel(doc)}
+                  description={doc.summary ?? ""}
+                  titleClass="group-hover/row:text-accent-text transition-colors"
+                >
+                  {#snippet badges()}
+                    <LifecycleBadge
+                      state={doc.state}
+                      label={DOC_STATE_LABELS[doc.state]}
+                      forceShow={docsHaveMixedLifecycle}
+                    />
+                    {#if doc.head_revision_number != null}
+                      <span
+                        class="font-mono text-micro tabular-nums text-fg-subtle"
+                        title="Head revision"
+                      >
+                        v{doc.head_revision_number}
+                      </span>
+                    {/if}
+                  {/snippet}
+                </WorkspaceResourceListRow>
+              </a>
+              <div class="shrink-0 sm:hidden">
+                <CopyButton
+                  value={docLink}
+                  iconOnly
+                  icon="link"
+                  label="Copy document link"
+                  size="sm"
+                />
+              </div>
             </div>
-          </a>
+            <p class="mt-0.5 text-micro text-fg-muted sm:hidden">
+              Updated {formatTimestamp(doc.updated_at) || "—"}
+            </p>
+            {@render docEnrichment(doc, true)}
+            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
+            {@render docLastComment(doc)}
+          </div>
         {/snippet}
         {#snippet meta()}
-          <span class="w-14 text-right text-fg-muted"
+          <span class="hidden w-14 text-right text-fg-muted sm:inline"
             >{formatTimestamp(doc.updated_at) || "—"}</span
           >
         {/snippet}
         {#snippet actions()}
-          <CopyButton
-            value={docLink}
-            iconOnly
-            icon="link"
-            label="Copy document link"
-            size="sm"
-          />
+          <div class="hidden sm:block">
+            <CopyButton
+              value={docLink}
+              iconOnly
+              icon="link"
+              label="Copy document link"
+              size="sm"
+            />
+          </div>
         {/snippet}
       </WorkspaceListRowShell>
     {/if}
@@ -720,6 +923,12 @@
         {@render docRow(doc, i, i > 0)}
       {/each}
     </div>
+    {#if searchTruncated}
+      <p class="mt-2 text-micro text-fg-muted" role="status">
+        Showing the first {documents.length} matches. Narrow the search to see the
+        rest.
+      </p>
+    {/if}
   {/if}
 
   <ConfirmModal

@@ -43,3 +43,19 @@ endpoints:
       Infrastructure wake-queue mutation endpoint used by bridge runtimes; wake
       delivery state is intentionally not part of the user-facing command/event contract.
     expected_clients: server-only
+  - method: POST
+    path_pattern: /pm/ingress/telegram
+    owner: core
+    reason: >
+      Telegram webhook ingress authenticates with X-Telegram-Bot-Api-Secret-Token,
+      not workspace bearer tokens. It does not register webhooks, poll getUpdates,
+      or appear as a user-facing CLI command.
+    expected_clients: server-only
+  - method: POST
+    path_pattern: /pm/ingress/discord
+    owner: core
+    reason: >
+      Discord interaction ingress authenticates with Ed25519 request signatures,
+      not workspace bearer tokens. It does not open a gateway and is not a
+      user-facing CLI command.
+    expected_clients: server-only

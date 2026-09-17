@@ -46,6 +46,15 @@ export const GAME_DEV_STUDIO_PERSONAS = [
     default: false,
     dev_bridge: false,
   },
+  {
+    persona_id: "pm",
+    actor_id: "actor-gds-pm",
+    auth_username: "dev.pm",
+    display_label: "Studio PM",
+    principal_kind: "agent",
+    default: false,
+    dev_bridge: false,
+  },
 ];
 
 const actors = [
@@ -78,6 +87,12 @@ const actors = [
     display_name: "Priya Shah",
     tags: ["agent", "qa", "release"],
     created_at: "2026-04-12T15:04:00.000Z",
+  },
+  {
+    id: "actor-gds-pm",
+    display_name: "Studio PM",
+    tags: ["agent", "pm"],
+    created_at: "2026-04-12T15:05:00.000Z",
   },
 ];
 
@@ -585,10 +600,11 @@ function buildHumanAttentionSeedEvents() {
         "Escalation: P0 retail crashes vs slice scope — need a call before capture candidate",
       payload: {
         kind: "escalate",
-        title: "Bug-bash triage: lock P0 bar before the capture candidate build",
-        body:
-          "QA has two retail-only crashes. Gameplay wants them deferred to keep the slice on schedule; release policy says retail crashes stay P0. Maya — we need your decision before we tag the capture build.",
+        title:
+          "Bug-bash triage: lock P0 bar before the capture candidate build",
+        body: "QA has two retail-only crashes. Gameplay wants them deferred to keep the slice on schedule; release policy says retail crashes stay P0. Maya — we need your decision before we tag the capture build.",
         subject_ref: "card:card-gds-bug-bash",
+        subject_title: "Run QA bug bash and triage release blockers",
         requester_actor_id: "actor-gds-qa",
         requester_label: "Priya Shah",
         severity: "critical",
@@ -618,13 +634,16 @@ function buildHumanAttentionSeedEvents() {
       payload: {
         kind: "ask",
         title: "Confirm 20-minute quest path for vertical slice capture",
-        body:
-          "Omar — the courier quest can either emphasize the combat tutorial beats or the hub intro. Trailer wants one cohesive story; we need you to pick the default path for Friday capture.",
+        body: "Omar — the courier quest can either emphasize the combat tutorial beats or the hub intro. Trailer wants one cohesive story; we need you to pick the default path for Friday capture.",
         subject_ref: "topic:gds-vertical-slice",
+        subject_title: "Vertical Slice: Combat + Hub Demo",
         requester_actor_id: "actor-gds-narrative",
         requester_label: "Omar Reed",
         severity: "high",
-        related_refs: ["document:gds-narrative-bible", "board:board-gds-creative"],
+        related_refs: [
+          "document:gds-narrative-bible",
+          "board:board-gds-creative",
+        ],
         response_proposals: [
           "Lead with combat tutorial → hub intro; fastest path for press-friendly pacing.",
           "Lead with hub intro → combat beats; stronger narrative hook for first-time players.",
@@ -649,9 +668,9 @@ function buildHumanAttentionSeedEvents() {
       payload: {
         kind: "ask",
         title: "Approve parry buffer window for capture build",
-        body:
-          "Leo — accessibility wants +20ms buffer for controller fatigue; combat feel wants the spec’s 120ms strict. Pick a number for the capture candidate so QA can freeze tuning.",
+        body: "Leo — accessibility wants +20ms buffer for controller fatigue; combat feel wants the spec’s 120ms strict. Pick a number for the capture candidate so QA can freeze tuning.",
         subject_ref: "card:card-gds-core-loop",
+        subject_title: "Tune core combat loop for vertical slice",
         requester_actor_id: "actor-gds-gameplay",
         requester_label: "Leo Park",
         related_refs: ["document:gds-combat-spec"],
@@ -674,13 +693,14 @@ function buildHumanAttentionSeedEvents() {
         "document:gds-launch-checklist",
         "topic:gds-launch",
       ],
-      summary: "Review: launch checklist rollback language before community post",
+      summary:
+        "Review: launch checklist rollback language before community post",
       payload: {
         kind: "review",
         title: "Sign off rollback + smoke matrix wording in launch checklist",
-        body:
-          "Maya — comms is ready to paste checklist bullets into the store page FAQ. Please confirm the rollback section matches the demo-day runbook you approved with IT.",
+        body: "Maya — comms is ready to paste checklist bullets into the store page FAQ. Please confirm the rollback section matches the demo-day runbook you approved with IT.",
         subject_ref: "document:gds-launch-checklist",
+        subject_title: "Launch Readiness and QA Checklist",
         requester_actor_id: "actor-gds-producer",
         requester_label: "Maya Chen",
         severity: "high",
@@ -709,9 +729,9 @@ function buildHumanAttentionSeedEvents() {
       payload: {
         kind: "review",
         title: "HDR capture pass on tactical command bar contrast",
-        body:
-          "Nina — focus rings read great in SDR, but HDR trailer capture blows out the cyan edge on bright hubs. Need human sign-off on the desat rule or we push capture to SDR.",
+        body: "Nina — focus rings read great in SDR, but HDR trailer capture blows out the cyan edge on bright hubs. Need human sign-off on the desat rule or we push capture to SDR.",
         subject_ref: "card:card-gds-ui-kit",
+        subject_title: "Finalize tactical command UI kit for capture build",
         requester_actor_id: "actor-gds-art",
         requester_label: "Nina Vale",
         related_refs: ["topic:gds-art-pipeline", "board:board-gds-creative"],
@@ -727,9 +747,7 @@ function buildHumanAttentionSeedEvents() {
 }
 
 function isoMinutesFromBase(offsetMinutes) {
-  return new Date(
-    baseTime + Number(offsetMinutes) * 60 * 1000,
-  ).toISOString();
+  return new Date(baseTime + Number(offsetMinutes) * 60 * 1000).toISOString();
 }
 
 /**
@@ -820,7 +838,8 @@ function buildHomeFeedDiversityEvents() {
       actor_id: "actor-gds-producer",
       thread_id: "",
       refs: ["board:board-gds-launch", "card:card-gds-photo-mode-backlog"],
-      summary: "Photo-mode wishlist card promoted to ready on Launch Readiness Board",
+      summary:
+        "Photo-mode wishlist card promoted to ready on Launch Readiness Board",
       payload: {
         board_id: "board-gds-launch",
         card_id: "card-gds-photo-mode-backlog",

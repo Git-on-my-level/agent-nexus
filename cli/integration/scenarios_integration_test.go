@@ -428,6 +428,20 @@ func TestProvenanceWalkScenario(t *testing.T) {
 
 func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	t.Helper()
+	return newLiveCoreHarnessEnv(t, nil)
+}
+
+func newPasskeyLiveCoreHarness(t *testing.T) *liveCoreHarness {
+	t.Helper()
+	return newLiveCoreHarnessEnv(t, []string{
+		"ANX_HOSTED_DEV_MODE=1",
+		"ANX_ENABLE_DEV_ACTOR_MODE=1",
+		"ANX_ALLOW_PASSKEY_DEV_BYPASS=1",
+	})
+}
+
+func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
+	t.Helper()
 
 	root := repoRoot(t)
 	cliBin, coreBin := buildBinaries(t)
@@ -438,6 +452,9 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 	// ANX_BOOTSTRAP_TOKEN, causing `invalid_token` on register.
 	if mkErr := os.MkdirAll(workspace, 0o755); mkErr != nil {
 		t.Fatalf("create workspace %s: %v", workspace, mkErr)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".anx-dev-insecure-auth"), nil, 0o600); err != nil {
+		t.Fatalf("write passkey bypass marker: %v", err)
 	}
 
 	homeDir := filepath.Join(tempDir, "home")
@@ -468,6 +485,7 @@ func newLiveCoreHarness(t *testing.T) *liveCoreHarness {
 		"ANX_BOOTSTRAP_TOKEN="+bootstrapToken,
 		"ANX_PROJECTION_MODE=manual",
 	)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -520,8 +538,102 @@ func (h *liveCoreHarness) registerAgentInvite(t *testing.T, agent string, userna
 
 func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) string {
 	t.Helper()
-	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", "agent")
+	return h.createInviteTokenKind(t, issuerAgent, "agent")
+}
+
+func (h *liveCoreHarness) createInviteTokenKind(t *testing.T, issuerAgent, kind string) string {
+	t.Helper()
+	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", kind)
 	return mustStringPath(t, res.Payload, "data.token")
+}
+
+func (h *liveCoreHarness) actorID(t *testing.T, agent string) string {
+	t.Helper()
+	res := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
+	return mustStringPath(t, res.Payload, "data.profile.actor_id")
+}
+
+func (h *liveCoreHarness) selectPMAgent(t *testing.T, agent string) {
+	t.Helper()
+	who := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
+	actor := mustStringPath(t, who.Payload, "data.profile.actor_id")
+	handle := mustStringPath(t, who.Payload, "data.profile.username")
+	restartCoreForWorkTest(t, h, "ANX_PM_AGENT_ACTOR_ID="+actor, "ANX_PM_AGENT_HANDLE="+handle)
+}
+
+func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName, inviteToken string) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"display_name": displayName, "invite_token": inviteToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(h.baseURL+"/auth/passkey/dev/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("passkey register: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("passkey register status %d: %s", resp.StatusCode, raw)
+	}
+	var payload struct {
+		Agent struct {
+			AgentID  string `json:"agent_id"`
+			ActorID  string `json:"actor_id"`
+			Username string `json:"username"`
+		} `json:"agent"`
+		Tokens struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+			TokenType    string `json:"token_type"`
+			ExpiresIn    int64  `json:"expires_in"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode passkey register: %v", err)
+	}
+	if payload.Agent.AgentID == "" || payload.Tokens.AccessToken == "" {
+		t.Fatalf("passkey register missing fields: %s", raw)
+	}
+	dir := filepath.Join(h.homeDir, ".config", "anx", "profiles")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	expires := time.Now().UTC().Add(time.Duration(payload.Tokens.ExpiresIn) * time.Second).Format(time.RFC3339Nano)
+	if payload.Tokens.ExpiresIn <= 0 {
+		expires = time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339Nano)
+	}
+	profile := map[string]any{
+		"version":                 1,
+		"agent":                   agent,
+		"base_url":                h.baseURL,
+		"username":                payload.Agent.Username,
+		"agent_id":                payload.Agent.AgentID,
+		"actor_id":                payload.Agent.ActorID,
+		"access_token":            payload.Tokens.AccessToken,
+		"refresh_token":           payload.Tokens.RefreshToken,
+		"token_type":              firstNonEmpty(payload.Tokens.TokenType, "Bearer"),
+		"access_token_expires_at": expires,
+	}
+	encoded, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, agent+".json"), append(encoded, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (h *liveCoreHarness) runCLIExpectOK(t *testing.T, agent string, stdin any, args ...string) cliResult {
@@ -604,7 +716,16 @@ func buildBinaries(t *testing.T) (string, string) {
 			binaries.err = err
 			return
 		}
-		if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/anx-core", corePath); err != nil {
+		if supplied := strings.TrimSpace(os.Getenv("ANX_INTEGRATION_CORE_BINARY")); supplied != "" {
+			// Explicit cross-lane integration artifact. The default always builds
+			// this checkout's real core; never substitute an HTTP fixture server.
+			absolute, err := filepath.Abs(supplied)
+			if err != nil {
+				binaries.err = err
+				return
+			}
+			corePath = absolute
+		} else if err := buildGoBinary(filepath.Join(root, "core"), "./cmd/anx-core", corePath); err != nil {
 			binaries.err = err
 			return
 		}

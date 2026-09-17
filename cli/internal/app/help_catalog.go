@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -188,6 +189,16 @@ func runtimeHelpDocTopics() []runtimeHelpDocTopic {
 			Kind:    "local-helper",
 			Summary: strings.TrimSpace(helper.Summary),
 		})
+	}
+	// Local composed reads also have offline documentation even when they are
+	// intentionally not single-endpoint entries in the generated API registry.
+	names := make([]string, 0, len(workCommands))
+	for name := range workCommands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		addTopic(runtimeHelpDocTopic{Path: name, Kind: "command", Summary: workCommands[name].summary})
 	}
 	return topics
 }

@@ -280,3 +280,54 @@ func fixturePolicy() Policy {
 		},
 	}
 }
+
+func TestUnifiedWorkPolicyPreservesApprovalBoundary(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(file))
+	registryFile, err := os.Open(filepath.Join(root, "..", "contracts", "gen", "meta", "commands.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registryFile.Close()
+	registry, err := LoadCommandRegistry(registryFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyFile, err := os.Open(filepath.Join(root, "policy", "default_tool_policy.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer policyFile.Close()
+	policy, err := LoadPolicy(policyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := Build(registry, policy, BuildOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"work.list", "work.get", "work.observations.list", "work.observations.submit", "work.refresh.get", "work.refresh.request", "pm.context", "pm.decisions.get", "pm.actions.get", "pm.actions.reconcile"} {
+		if _, ok := cat.Lookup(ToolName(id)); !ok {
+			t.Errorf("missing supported work/receipt tool %s", id)
+		}
+	}
+	for _, id := range []string{"pm.decisions.answer", "pm.decisions.dispatch", "pm.bindings.create"} {
+		if _, ok := cat.Lookup(ToolName(id)); ok {
+			t.Errorf("approval/source action exposed by default: %s", id)
+		}
+	}
+	hosted, err := Build(registry, policy, BuildOptions{AllowedClassifications: DefaultAllowedClassifications(), AllowedCommandIDs: HostedDefaultCommandIDs(policy)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"work.list", "work.get", "work.observations.list", "pm.decisions.get", "pm.actions.get"} {
+		if _, ok := hosted.Lookup(ToolName(id)); !ok {
+			t.Errorf("missing hosted scoped read %s", id)
+		}
+	}
+	for _, id := range []string{"work.observations.submit", "work.refresh.request", "pm.actions.reconcile", "pm.decisions.answer"} {
+		if _, ok := hosted.Lookup(ToolName(id)); ok {
+			t.Errorf("hosted read-only default widened: %s", id)
+		}
+	}
+}

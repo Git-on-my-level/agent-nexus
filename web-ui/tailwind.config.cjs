@@ -28,9 +28,6 @@ module.exports = {
       "ok-text": "var(--ok-text)",
       "ok-soft": "var(--ok-soft)",
       info: "var(--info)",
-      orange: {
-        400: "#fb923c",
-      },
       blue: {
         400: "#60a5fa",
       },
@@ -47,14 +44,17 @@ module.exports = {
       white: "#fff",
       black: "#000",
     },
+    // One type scale. Sizes carry no baked-in weight except the two heading
+    // steps: a size token that also sets weight cannot be reused for a label
+    // and a value, and every caller then fights it with `font-medium`.
     fontSize: {
-      micro: ["12px", { lineHeight: "1.3", fontWeight: "500" }],
-      meta: ["13px", { lineHeight: "1.4" }],
-      mono: ["14px", { lineHeight: "1.4" }],
-      body: ["15px", { lineHeight: "1.5" }],
-      subtitle: ["17px", { lineHeight: "1.35", fontWeight: "600" }],
-      title: ["20px", { lineHeight: "1.3", fontWeight: "600" }],
-      display: ["28px", { lineHeight: "1.25", fontWeight: "600" }],
+      micro: ["11px", { lineHeight: "16px" }],
+      meta: ["13px", { lineHeight: "18px" }],
+      mono: ["12px", { lineHeight: "18px" }],
+      body: ["15px", { lineHeight: "22px" }],
+      subtitle: ["17px", { lineHeight: "24px", fontWeight: "600" }],
+      title: ["20px", { lineHeight: "26px", fontWeight: "600" }],
+      display: ["28px", { lineHeight: "34px", fontWeight: "600" }],
     },
     borderRadius: {
       sm: "4px",

@@ -25,7 +25,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -110,6 +110,13 @@ scenario-validate: ## Validate seeded scenario counts against a running core
 
 dev-profile-homes: ## Materialize local CLI HOME dirs for seeded dev personas
 	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ./scripts/anx-dev-profile-homes
+
+PM_HOME ?= $(CURDIR)/.tmp/anx-dev-profile-homes/pm
+PM_WORK_DIR ?= $(CURDIR)/.tmp/pm-runner
+PM_RUNNER ?= omp -p --mode json --model zai/glm-5.3 --auto-approve
+
+pm-serve: cli-build ## Run anx pm serve against the local seeded PM persona (requires make serve)
+	HOME="$(PM_HOME)" $(CURDIR)/$(CLI_DIR)/anx --agent pm pm serve --work-dir "$(PM_WORK_DIR)" --runner '$(PM_RUNNER)'
 
 http-record-test: ## Run tests for the local HTTP recording proxy
 	cd $(HTTP_RECORD_DIR) && go test ./...

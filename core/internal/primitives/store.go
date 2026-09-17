@@ -33,6 +33,7 @@ var ErrArtifactInUse = errors.New("artifact is referenced by document revisions"
 var ErrOwnedArtifactLifecycle = errors.New("artifact lifecycle is owned by its parent resource")
 var ErrInvalidArtifactID = errors.New("invalid artifact id")
 var ErrInvalidDocumentRequest = errors.New("invalid document request")
+var ErrForbidden = errors.New("forbidden")
 var ErrInvalidCursor = errors.New("invalid cursor")
 
 const provenanceEventIDPlaceholder = "<event_id>"
@@ -55,10 +56,12 @@ type ArtifactListFilter struct {
 type DocumentListFilter struct {
 	States []string
 
-	ThreadID string
-	Query    string
-	Limit    *int
-	Cursor   string
+	ThreadID  string
+	Query     string
+	Tag       string
+	Knowledge bool
+	Limit     *int
+	Cursor    string
 }
 
 type ThreadListFilter struct {
@@ -115,6 +118,7 @@ type HomeUnreadGroup struct {
 var HomeFeedEventTypes = []string{
 	"message_posted",
 	"card_created",
+	"card_updated",
 	"card_moved",
 	"card_resolved",
 	"card_archived",

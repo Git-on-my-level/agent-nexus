@@ -1,0 +1,52 @@
+{
+  "targets": [
+    {
+      "work_ref": "card:card-anx-github-208",
+      "source_native_id": "Git-on-my-level/agent-nexus#208",
+      "target": {
+        "connection_id": "github-main",
+        "source": "github",
+        "kind": "issue",
+        "native_id": "208",
+        "repository": "Git-on-my-level/agent-nexus"
+      },
+      "base_url": "https://api.github.com",
+      "interval_seconds": 15,
+      "stale_after_seconds": 60,
+      "timeout_seconds": 30,
+      "max_backoff_seconds": 300
+    },
+    {
+      "work_ref": "card:card-anx-github-208-jit",
+      "source_native_id": "Git-on-my-level/agent-nexus#208",
+      "target": {
+        "connection_id": "github-jit",
+        "source": "github",
+        "kind": "issue",
+        "native_id": "208",
+        "repository": "Git-on-my-level/agent-nexus"
+      },
+      "transport": "jit",
+      "base_url": "https://api.github.com",
+      "jit_state_root": "../.anx-workspace-jit",
+      "jit_adapter_id": "github-issue-transform",
+      "jit_policy": {
+        "max_artifact_bytes": 16777216,
+        "limits": {
+          "timeout": 30000000000,
+          "memory_bytes": 134217728,
+          "output_bytes": 65536,
+          "input_bytes": 1048576,
+          "cpu_seconds": 5,
+          "processes": 8,
+          "file_bytes": 1048576
+        },
+        "failure_threshold": 2
+      },
+      "interval_seconds": 15,
+      "stale_after_seconds": 60,
+      "timeout_seconds": 30,
+      "max_backoff_seconds": 300
+    }
+  ]
+}

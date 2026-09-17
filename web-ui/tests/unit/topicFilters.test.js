@@ -5,7 +5,6 @@ import {
   buildThreadFilterQueryString,
   buildThreadFilterQueryParams,
   buildTopicListSearchString,
-  buildTopicListApiQueryParams,
   parseTopicListSearchParams,
 } from "../../src/lib/topicFilters.js";
 
@@ -92,20 +91,5 @@ describe("thread filter query builders", () => {
         q: "find",
       }),
     ).toEqual({ state: ["active", "archived"], q: "find" });
-  });
-
-  it("buildTopicListApiQueryParams mirrors listTopics contract", () => {
-    expect(
-      buildTopicListApiQueryParams({
-        states: ["archived"],
-        q: "",
-      }),
-    ).toEqual({ state: ["archived"] });
-  });
-
-  it("buildTopicListApiQueryParams defaults to active", () => {
-    expect(buildTopicListApiQueryParams({ q: "" })).toEqual({
-      state: ["active"],
-    });
   });
 });

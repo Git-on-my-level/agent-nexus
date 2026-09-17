@@ -1,5 +1,26 @@
 import { sveltekit } from "@sveltejs/kit/vite";
-import { defineConfig } from "vite";
+import { realpathSync } from "node:fs";
+import path from "node:path";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
+
+function linkedPackageRoots() {
+  const roots = new Set();
+  for (const spec of ["@sveltejs/kit", "@fontsource/inter"]) {
+    try {
+      let dir = realpathSync(path.resolve("node_modules", spec));
+      while (dir !== path.dirname(dir)) {
+        if (path.basename(dir) === ".pnpm") {
+          roots.add(path.dirname(dir));
+          break;
+        }
+        dir = path.dirname(dir);
+      }
+    } catch {
+      // Local install or missing optional package.
+    }
+  }
+  return [...roots];
+}
 
 export default defineConfig(() => {
   // `pnpm exec vite dev` / IDE runners skip `scripts/dev`. Universal
@@ -14,5 +35,10 @@ export default defineConfig(() => {
 
   return {
     plugins: [sveltekit()],
+    server: {
+      fs: {
+        allow: [searchForWorkspaceRoot(process.cwd()), ...linkedPackageRoots()],
+      },
+    },
   };
 });

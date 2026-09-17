@@ -5423,6 +5423,42 @@ func TestArtifactsCreateFromFilePreservesAdvancedJSONPath(t *testing.T) {
 	assertEnvelopeOK(t, raw)
 }
 
+func TestArtifactsCreateFromFileBareDashReadsStdin(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/artifacts" {
+			http.NotFound(w, r)
+			return
+		}
+		var got map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if got["content"] != "from-stdin" {
+			t.Fatalf("expected stdin JSON body, got %#v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"artifact":{"id":"artifact_stdin","kind":"note"}}`))
+	}))
+	defer server.Close()
+
+	command, err := preflightConfigIndependentUsage([]string{"artifacts", "create", "--from-file", "-"})
+	if err != nil {
+		t.Fatalf("preflight --from-file -: %v", err)
+	}
+	if command != "artifacts create" {
+		t.Fatalf("command %q", command)
+	}
+
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{}, strings.NewReader(`{"artifact":{"kind":"note","refs":["topic:topic_1"]},"content_type":"text","content":"from-stdin"}`), []string{
+		"--json", "--base-url", server.URL,
+		"artifacts", "create", "--from-file", "-",
+	})
+	assertEnvelopeOK(t, raw)
+}
+
 func TestArtifactsContentUnknownFlagFailsBeforeNetwork(t *testing.T) {
 	t.Parallel()
 

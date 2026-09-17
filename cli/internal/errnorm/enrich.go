@@ -55,14 +55,25 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	var hint string
 
 	switch code {
+	case "lease_required", "lease_mismatch", "turn_not_claimed":
+		hint, recovery = enrichLease(code, msg)
 	case "conflict":
-		hint, recovery = enrichConflict(msg)
+		hint, recovery = enrichLease(code, msg)
+		if hint == "" && recovery == nil {
+			hint, recovery = enrichConflict(msg)
+		}
 	case "invalid_request":
 		hint, recovery = enrichInvalidRequest(msg)
 	case "key_mismatch":
 		hint, recovery = enrichKeyMismatch(httpStatus, msg)
 	case "agent_revoked":
 		hint, recovery = enrichAgentRevoked()
+	case "human_proposal_pending":
+		hint, recovery = enrichHumanProposalPending(e)
+	case "busy":
+		if strings.EqualFold(lookupErrorDetail(e, "reason"), "queue") {
+			hint, recovery = enrichPMBusy(e)
+		}
 	}
 
 	if hint == "" && recovery == nil {
@@ -82,11 +93,462 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	}
 }
 
+// EnrichForCommand replaces generic recovery text with command-specific guidance.
+// FromHTTPFailure does not know the CLI command; call this once the command id is known.
+func EnrichForCommand(e *Error, commandID string) {
+	if e == nil {
+		return
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return
+	}
+	hint, recovery := enrichPMCommandError(commandID, e)
+	if hint == "" && recovery == nil {
+		hint, recovery = enrichConcurrencyCommandError(commandID, e)
+	}
+	if hint == "" && recovery == nil {
+		return
+	}
+	if hint != "" {
+		e.Hint = hint
+	}
+	details, ok := e.Details.(map[string]any)
+	if !ok || details == nil {
+		details = map[string]any{}
+		e.Details = details
+	}
+	if recovery != nil {
+		mergeRecovery(details, recovery)
+	}
+	if strings.TrimSpace(e.Hint) != "" {
+		details["hint"] = strings.TrimSpace(e.Hint)
+	}
+}
+
+func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
+	code := strings.TrimSpace(e.Code)
+	switch commandID {
+	case "pm.conversations.message", "pm.conversations.messages.create", "pm.ask":
+		var hint string
+		var recovery map[string]any
+		if code == "busy" {
+			hint, recovery = enrichPMBusy(e)
+		}
+		if commandID == "pm.ask" {
+			hint, recovery = enrichPMAskConversation(e, hint, recovery)
+		}
+		return hint, recovery
+	case "pm.turns.decisions.create":
+		if code == "human_proposal_pending" {
+			return enrichHumanProposalPending(e)
+		}
+		return "", nil
+	case "pm.actions.acknowledge":
+		if code == "conflict" {
+			return "This action is not in a state that can be acknowledged. Reconcile first if a read-back can still advance it (`anx pm actions reconcile <id>`).",
+				map[string]any{
+					"kind":        "action_state_conflict",
+					"refresh_cli": "anx pm actions reconcile <id>",
+				}
+		}
+		return "", nil
+	case "pm.turns.complete", "pm.turns.fail":
+		return enrichPMTurnTerminalLease(e)
+	case "pm.turns.release":
+		return enrichPMTurnReleaseLease(e)
+	case "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.create", "pm.actions.reconcile":
+	default:
+		return "", nil
+	}
+	existingID := lookupErrorDetail(e, "existing_decision_id")
+	switch code {
+	case "human_proposal_pending":
+		return enrichHumanProposalPending(e)
+	case "invalid_request":
+		if commandID == "pm.actions.reconcile" && strings.Contains(strings.ToLower(strings.TrimSpace(e.Message)), "nothing has been delivered yet") {
+			return "This action is already acknowledged or was never delivered, so there is nothing to read back. Inspect it with `anx pm actions get <id>`.",
+				map[string]any{
+					"kind":        "nothing_delivered",
+					"refresh_cli": "anx pm actions get <id>",
+				}
+		}
+		return "", nil
+	case "source_revision_changed":
+		if commandID == "pm.decisions.answer" {
+			return enrichDecisionAnswerStale(lookupErrorDetail(e, "reason"))
+		}
+		return enrichStaleSourceRevision(commandID, e)
+	case "conflict":
+		if existingID != "" {
+			return fmt.Sprintf("This request key already names an existing decision. `error.details.existing_decision_id` is %s; inspect it with `anx pm decisions get %s` instead of creating a duplicate.", existingID, existingID),
+				map[string]any{
+					"kind":                 "resource_exists",
+					"resource":             "decision",
+					"existing_decision_id": existingID,
+					"refresh_cli":          "anx pm decisions get " + existingID,
+				}
+		}
+		if commandID == "pm.decisions.answer" || commandID == "pm.decisions.dispatch" {
+			if replaced := lookupErrorDetail(e, "superseded_by"); replaced != "" {
+				recovery := map[string]any{
+					"kind":          "decision_superseded",
+					"superseded_by": replaced,
+					"refresh_cli":   "anx pm decisions get " + replaced,
+				}
+				if status := lookupErrorDetail(e, "status"); status != "" {
+					recovery["status"] = status
+				}
+				return fmt.Sprintf("This decision was replaced by %s. Inspect the replacement with `anx pm decisions get %s`; retrying this decision cannot succeed.", replaced, replaced),
+					recovery
+			}
+			return "Re-read the decision with `anx pm decisions get <id>` and check `status` before retrying.",
+				map[string]any{
+					"kind":        "decision_state_conflict",
+					"refresh_cli": "anx pm decisions get <id>",
+				}
+		}
+		return "Re-read the decision with `anx pm decisions get <id>` and retry using its current `revision`.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "revision",
+				"refresh_cli": "anx pm decisions get <id>",
+			}
+	default:
+		return "", nil
+	}
+}
+
+func enrichStaleSourceRevision(commandID string, e *Error) (string, map[string]any) {
+	reason := lookupErrorDetail(e, "reason")
+	origin := strings.ToLower(strings.TrimSpace(lookupErrorDetail(e, "origin_kind")))
+	proposedBy := lookupErrorDetail(e, "proposed_by")
+	rec := map[string]any{
+		"kind":        "stale_source_revision",
+		"refresh_cli": "anx pm decisions get <id>",
+	}
+	if reason != "" {
+		rec["reason"] = reason
+	}
+	if origin != "" {
+		rec["origin_kind"] = origin
+	}
+	if proposedBy != "" {
+		rec["proposed_by"] = proposedBy
+	}
+	reconcile := commandID == "pm.actions.reconcile"
+	noun := "approval"
+	retry := "the previous answer"
+	if reconcile {
+		noun = "read-back"
+		retry = "this read-back"
+	}
+	again := staleProposeAgain(origin)
+	switch reason {
+	case "work_missing":
+		actionID := lookupErrorDetail(e, "action_id")
+		if actionID == "" {
+			actionID = "<id>"
+		}
+		ackCLI := "anx pm actions acknowledge " + actionID
+		rec["refresh_cli"] = ackCLI
+		if actionAlreadyAcknowledged(e, commandID) {
+			rec["refresh_cli"] = "anx pm actions get " + actionID
+			return "This action is already acknowledged; nothing further is needed.", rec
+		}
+		task := "this approval"
+		if reconcile {
+			task = "this read-back"
+		}
+		return "The task " + task + " refers to no longer exists; nothing was sent. Acknowledge the failed action with `" + ackCLI + "`.", rec
+	case "already_at_target":
+		what := "deliver"
+		if reconcile {
+			what = "read back"
+		}
+		return "The task is already where this proposal asks, so there is nothing to " + what + ".", rec
+	default:
+		return "This " + noun + " is stale because the source revision changed. " + again + "; do not retry " + retry + ".", rec
+	}
+}
+
+func staleProposeAgain(originKind string) string {
+	switch originKind {
+	case "human":
+		return "Propose it again from the board (or `anx pm decisions create`)"
+	case "pm_turn":
+		return "The PM must propose the decision again"
+	default:
+		return "Propose the decision again"
+	}
+}
+
+func enrichDecisionAnswerStale(reason string) (string, map[string]any) {
+	decline := "Decline it with `anx pm decisions answer <id> --from-file -` (set `approve` to false)"
+	rec := map[string]any{
+		"kind":        "stale_source_revision",
+		"refresh_cli": "anx pm decisions get <id>",
+	}
+	if reason != "" {
+		rec["reason"] = reason
+	}
+	switch reason {
+	case "already_at_target":
+		return "The task is already where this proposal asks, so there is nothing to approve. " + decline + ".", rec
+	case "work_missing":
+		return "The task no longer exists, so this proposal cannot be approved. " + decline + ".", rec
+	case "revision_changed":
+		return "The task changed after this proposal, so approving it would have failed at delivery. " + decline + ", or ask for a fresh proposal (`anx pm turns propose` from the PM, or a board move for a human).", rec
+	default:
+		return "This proposal is no longer valid to approve. " + decline + ", or re-read it with `anx pm decisions get <id>`.", rec
+	}
+}
+
+func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[string]any) {
+	if e == nil || strings.TrimSpace(e.Code) != "conflict" {
+		return "", nil
+	}
+	details, _ := e.Details.(map[string]any)
+	if rec, _ := details["anx_cli_recovery"].(map[string]any); rec != nil {
+		switch rec["kind"] {
+		case "stale_concurrency_token", "resource_exists", "lease_required", "lease_mismatch", "turn_not_claimed":
+			return "", nil
+		}
+	}
+	switch {
+	case strings.HasPrefix(commandID, "cards."):
+		return "Reload current state and retry with a fresh `if_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_updated_at",
+				"refresh_cli": "anx cards get <card-ref-or-handle> --json",
+			}
+	case strings.HasPrefix(commandID, "boards."):
+		return "Reload current state and retry with a fresh `if_board_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_board_updated_at",
+				"refresh_cli": "anx boards get <board-ref-or-handle> --json",
+			}
+	case strings.HasPrefix(commandID, "docs."):
+		return "Reload current state and retry with a fresh `if_document_updated_at` value.",
+			map[string]any{
+				"kind":        "stale_concurrency_token",
+				"field":       "if_document_updated_at",
+				"refresh_cli": "anx docs get <doc-ref-or-handle> --json",
+			}
+	default:
+		return "", nil
+	}
+}
+
+func enrichPMBusy(e *Error) (string, map[string]any) {
+	reason := strings.ToLower(lookupErrorDetail(e, "reason"))
+	if reason == "conversation" || reason == "queue" || reason == "capacity" || reason == "" {
+		rec := true
+		e.Recoverable = &rec
+	}
+	switch reason {
+	case "conversation":
+		return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
+			map[string]any{
+				"kind":        "busy",
+				"reason":      "conversation",
+				"refresh_cli": "anx pm conversations get <id>",
+			}
+	case "queue":
+		return "The PM queue for this workspace is full; try again in a moment or ask a runner operator to attach more capacity.",
+			map[string]any{
+				"kind":   "busy",
+				"reason": "queue",
+			}
+	default:
+		return "The PM is at its in-flight limit for this workspace; wait for another turn to finish or expire, or release a stuck runner",
+			map[string]any{
+				"kind":   "busy",
+				"reason": "capacity",
+			}
+	}
+}
+
+func enrichHumanProposalPending(e *Error) (string, map[string]any) {
+	id := lookupErrorDetail(e, "pending_decision_id")
+	rec := map[string]any{"kind": "human_proposal_pending"}
+	proposal := "A human proposal"
+	if id != "" {
+		rec["pending_decision_id"] = id
+		rec["refresh_cli"] = "anx pm decisions get " + id
+		proposal = "A human proposal " + id
+	}
+	return proposal + " is already waiting on this task. It must be answered or declined before the PM can propose something different; an identical proposal is accepted as the same decision.", rec
+}
+
+func enrichPMAskConversation(e *Error, hint string, recovery map[string]any) (string, map[string]any) {
+	convID := lookupErrorDetail(e, "conversation_id")
+	if convID == "" {
+		return hint, recovery
+	}
+	retry := fmt.Sprintf("Conversation %s: the message was not sent and can be retried into that conversation with `anx pm conversations message %s ...`.", convID, convID)
+	if strings.TrimSpace(hint) != "" {
+		hint = retry + " " + hint
+	} else {
+		hint = retry
+	}
+	if recovery == nil {
+		recovery = map[string]any{}
+	}
+	recovery["conversation_id"] = convID
+	if _, ok := recovery["refresh_cli"]; !ok {
+		recovery["refresh_cli"] = "anx pm conversations message " + convID
+	}
+	return hint, recovery
+}
+
+func actionAlreadyAcknowledged(e *Error, commandID string) bool {
+	if strings.EqualFold(lookupErrorDetail(e, "status"), "acknowledged") {
+		return true
+	}
+	if lookupErrorDetail(e, "acknowledged_at") != "" {
+		return true
+	}
+	if commandID != "pm.actions.reconcile" || e == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(e.Message), "already acknowledged")
+}
+
+func lookupErrorDetail(e *Error, key string) string {
+	if e == nil || strings.TrimSpace(key) == "" {
+		return ""
+	}
+	details, _ := e.Details.(map[string]any)
+	parsed, _ := details["parsed"].(map[string]any)
+	errObj, _ := parsed["error"].(map[string]any)
+	nested, _ := errObj["details"].(map[string]any)
+	parsedDetails, _ := parsed["details"].(map[string]any)
+	roots := []map[string]any{nested, errObj, parsedDetails, parsed}
+	for _, root := range roots {
+		if value := nestedString(root, key); value != "" {
+			return value
+		}
+	}
+	for _, root := range []map[string]any{nested, errObj, parsedDetails, parsed, details} {
+		for _, child := range []string{"decision", "action"} {
+			if value := nestedString(nestedObject(root, child), key); value != "" {
+				return value
+			}
+		}
+	}
+	// FromHTTPFailure stores the HTTP status at details.status; never treat that
+	// integer as API error.details.status.
+	if key == "status" {
+		return ""
+	}
+	return nestedString(details, key)
+}
+
+func nestedObject(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	typed, _ := m[key].(map[string]any)
+	return typed
+}
+
+func nestedString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch typed := v.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
 func mergeRecovery(details map[string]any, rec map[string]any) {
 	if len(rec) == 0 {
 		return
 	}
 	details["anx_cli_recovery"] = rec
+}
+
+func enrichLease(code, msg string) (string, map[string]any) {
+	code = strings.TrimSpace(code)
+	lmsg := strings.ToLower(strings.TrimSpace(msg))
+	switch code {
+	case "lease_required":
+		return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`).",
+			map[string]any{"kind": "lease_required", "field": "lease_token"}
+	case "lease_mismatch":
+		if leaseReplayAlreadyTerminal(lmsg) {
+			return "This turn is already delivered and no retry is needed.",
+				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+		}
+		return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	case "turn_not_claimed":
+		return "This turn is not claimed; there is nothing to release.",
+			map[string]any{"kind": "turn_not_claimed"}
+	case "conflict":
+		if strings.Contains(lmsg, "this turn is not claimed") || strings.Contains(lmsg, "lease") {
+			if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "released") || strings.Contains(lmsg, "re-claim") || strings.Contains(lmsg, "reclaim") {
+				return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
+					map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+			}
+			return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`). If the lease was released or re-claimed, claim the turn again.",
+				map[string]any{"kind": "lease_required", "field": "lease_token"}
+		}
+	}
+	return "", nil
+}
+
+func leaseReplayAlreadyTerminal(msg string) bool {
+	return strings.Contains(msg, "already delivered") || strings.Contains(msg, "no retry is needed") || strings.Contains(msg, "no retry needed")
+}
+
+func enrichPMTurnTerminalLease(e *Error) (string, map[string]any) {
+	if e == nil {
+		return "", nil
+	}
+	code := strings.TrimSpace(e.Code)
+	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
+	if (code == "lease_mismatch" || code == "lease_required" || code == "conflict") && leaseReplayAlreadyTerminal(lmsg) {
+		return "This turn is already delivered and no retry is needed.",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	}
+	return "", nil
+}
+
+func enrichPMTurnReleaseLease(e *Error) (string, map[string]any) {
+	if e == nil {
+		return "", nil
+	}
+	code := strings.TrimSpace(e.Code)
+	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
+	switch code {
+	case "turn_not_claimed":
+		return "This turn is not claimed; there is nothing to release.",
+			map[string]any{"kind": "turn_not_claimed"}
+	case "lease_mismatch":
+		return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
+			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+	case "conflict":
+		if strings.Contains(lmsg, "not claimed") {
+			return "This turn is not claimed; there is nothing to release.",
+				map[string]any{"kind": "turn_not_claimed"}
+		}
+		if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "lease") {
+			return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
+				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
+		}
+	}
+	return "", nil
 }
 
 // enrichConflict maps core conflict messages (boards_handlers.go, cards_handlers.go, …) to hints.

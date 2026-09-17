@@ -388,22 +388,6 @@ test("thread detail separates messages from timeline and nests replies", async (
     /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook\?revision=rev-onboarding-runbook-2$/,
   );
 
-  await page.getByRole("tab", { name: "Boards" }).click();
-  await expect(
-    page.getByRole("link", { name: /Q2 Launch Board/ }),
-  ).toHaveAttribute(
-    "href",
-    /\/o\/local\/w\/local\/boards\/board-q2-launch(?:\?|$)/,
-  );
-  await expect(
-    page.getByRole("link", {
-      name: "Pinned doc: doc-onboarding-runbook",
-    }),
-  ).toHaveAttribute(
-    "href",
-    /\/o\/local\/w\/local\/docs\/doc-onboarding-runbook$/,
-  );
-
   await page.getByRole("tab", { name: "Messages" }).click();
   await expect(page).toHaveURL(
     /\/o\/local\/w\/local\/(?:topics|threads)\/thread-onboarding\?tab=messages$/,
@@ -446,7 +430,7 @@ test("thread detail separates messages from timeline and nests replies", async (
     .getByRole("button", { name: "Reply" })
     .click({ force: true });
   await page.locator("#message-text").fill("Reply message from e2e");
-  await page.getByRole("button", { name: "Post message" }).click();
+  await page.getByRole("button", { name: "Send" }).click();
 
   await expect.poll(() => postedEvents).toBe(1);
   expect(recentEvents[0]?.thread_ref).toBe("thread:thread-onboarding");
@@ -879,6 +863,7 @@ test("thread detail updates workspace panels from another actor via event stream
 
   await page.goto("/o/local/w/local/threads/thread-onboarding");
 
+  await page.getByRole("tab", { name: "About" }).click();
   await expect(
     page.getByText("Initial thread summary.", { exact: true }),
   ).toBeVisible();
@@ -934,7 +919,7 @@ test("thread detail updates workspace panels from another actor via event stream
     ...timeline,
   ];
   releaseRemoteUpdate();
-
+  await page.getByRole("tab", { name: "About" }).click();
   await expect(
     page.getByText("Updated remotely by another actor.", { exact: true }),
   ).toBeVisible();

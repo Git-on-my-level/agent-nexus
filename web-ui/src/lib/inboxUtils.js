@@ -65,6 +65,31 @@ export function normalizeTypedRef(refValue) {
   return `${prefix}:${id}`;
 }
 
+/**
+ * Route and query values may arrive still percent-encoded (`%3A`). Decode
+ * once so callers encode for HTTP at most once.
+ */
+export function decodeInboxItemId(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Mailbox `?item=` key for an inbox-kind row. Typed ids already start with
+ * `inbox:` or `completed:`; unprefixed ids get an `inbox:` prefix.
+ */
+export function inboxItemMailboxId(item) {
+  const id = String(item?.id ?? "").trim();
+  if (!id) return "";
+  if (id.startsWith("inbox:") || id.startsWith("completed:")) return id;
+  return `inbox:${id}`;
+}
+
 export function getInboxSubjectRef(item) {
   const explicit = normalizeTypedRef(item?.subject_ref);
   if (explicit) return explicit;

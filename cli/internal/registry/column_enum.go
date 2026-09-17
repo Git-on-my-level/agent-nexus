@@ -25,7 +25,7 @@ func ColumnKeyEnumValues() []string {
 			fields := append(append([]BodyField{}, cmd.BodySchema.Required...), cmd.BodySchema.Optional...)
 			for _, f := range fields {
 				name := strings.TrimSpace(f.Name)
-				if name != "column_key" && name != "move.column_key" {
+				if name != "column_key" {
 					continue
 				}
 				for _, v := range f.EnumValues {

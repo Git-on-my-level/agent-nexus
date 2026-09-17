@@ -15,23 +15,16 @@
   import TopicDetailHeader from "$lib/components/topic-detail/TopicDetailHeader.svelte";
   import WorkspaceResourceTabList from "$lib/components/WorkspaceResourceTabList.svelte";
   import TopicOverviewTab from "$lib/components/topic-detail/TopicOverviewTab.svelte";
-  import TopicBoardsPanel from "$lib/components/topic-detail/TopicBoardsPanel.svelte";
   import TopicDocumentsPanel from "$lib/components/topic-detail/TopicDocumentsPanel.svelte";
   import DiscussionDrawer from "$lib/components/DiscussionDrawer.svelte";
   import { topicDiscussionSurface } from "$lib/discussionSurface";
   import TimelineTab from "$lib/components/timeline/TimelineTab.svelte";
 
-  const TOPIC_DETAIL_TABS = [
-    "messages",
-    "about",
-    "documents",
-    "boards",
-    "timeline",
-  ];
+  const TOPIC_DETAIL_TABS = ["messages", "about", "documents", "timeline"];
   const TOPIC_TAB_ALIASES = { overview: "about" };
 
   let { data } = $props();
-  /** Canonical id for the URL (topic id on /topics/…, else backing thread id on /threads/…). */
+  /** Canonical id for the URL (backing thread id on /threads/…). */
   let threadId = $derived(
     data?.topicId || $page.params.topicId || $page.params.threadId,
   );
@@ -85,16 +78,11 @@
   let activeTab = $derived(requestedTab || "messages");
 
   let documentCount = $derived($topicDetailStore.documents.length);
-  let boardCount = $derived(
-    $topicDetailStore.ownedBoards.length +
-      $topicDetailStore.boardMemberships.length,
-  );
 
   let topicTabItems = $derived([
     { id: "messages", label: "Messages" },
     { id: "about", label: "About" },
     { id: "documents", label: "Docs", badge: documentCount },
-    { id: "boards", label: "Boards", badge: boardCount },
     { id: "timeline", label: "Timeline" },
   ]);
 
@@ -383,15 +371,15 @@
   Other tabs render in normal page flow.
 -->
 {#if topicLoading}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense />
   <p class="text-[13px] text-fg-muted">Loading...</p>
 {:else if topicError}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense />
   <p class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text">
     {topicError}
   </p>
 {:else if !topic}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
+  <TopicDetailHeader {threadId} {detailAsTopic} dense />
   <p class="text-[13px] text-fg-muted">
     {detailAsTopic ? "Topic not found." : "Thread not found."}
   </p>
@@ -403,7 +391,7 @@
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head max-lg:px-4" : "contents"}>
-      <TopicDetailHeader {threadId} {detailAsTopic} dense showDesktop={false} />
+      <TopicDetailHeader {threadId} {detailAsTopic} dense />
 
       <WorkspaceResourceTabList
         ariaLabel="Topic sections"
@@ -430,13 +418,6 @@
         <TopicDocumentsPanel {threadId} />
       </div>
     {/if}
-
-    {#if activeTab === "boards"}
-      <div role="tabpanel" tabindex="0">
-        <TopicBoardsPanel {threadId} />
-      </div>
-    {/if}
-
     {#if activeTab === "messages"}
       <div class="page-dock-feed" role="tabpanel" tabindex="0">
         <DiscussionDrawer

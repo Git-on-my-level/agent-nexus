@@ -12,55 +12,8 @@ export function resolveBoardCardThreadIdField(row) {
   return String(r.thread_id ?? "").trim();
 }
 
-function encodeRouteSegment(value) {
-  return encodeURIComponent(String(value ?? "").trim());
-}
-
-export function topicDetailPathFromRef(refValue) {
-  const { prefix, id } = splitTypedRef(String(refValue ?? "").trim());
-  if (prefix === "topic" && id) {
-    return `/topics/${encodeRouteSegment(id)}`;
-  }
-  if (prefix === "thread" && id) {
-    return `/threads/${encodeRouteSegment(id)}`;
-  }
-  return "";
-}
-
-export function topicDetailPathFromSubject({
-  topicId,
-  topicRef,
-  subjectRef,
-  relatedRefs,
-  threadId,
-} = {}) {
-  const explicitTopicId = String(topicId ?? "").trim();
-  if (explicitTopicId) {
-    return `/topics/${encodeRouteSegment(explicitTopicId)}`;
-  }
-
-  const candidates = [
-    topicRef,
-    subjectRef,
-    ...(Array.isArray(relatedRefs) ? relatedRefs : []),
-  ];
-  for (const candidate of candidates) {
-    const path = topicDetailPathFromRef(candidate);
-    if (path) {
-      return path;
-    }
-  }
-
-  const explicitThreadId = String(threadId ?? "").trim();
-  if (explicitThreadId) {
-    return `/threads/${encodeRouteSegment(explicitThreadId)}`;
-  }
-
-  return "";
-}
-
 /**
- * Path segment for `/topics/:segment` from a backing-thread inspect payload.
+ * Topic id segment from a backing-thread inspect payload.
  * Returns a topic id only when `thread.topic_ref` is a `topic:` ref; backing-only
  * threads have no topic segment (empty string).
  */
@@ -99,47 +52,8 @@ export function boardOwnsTopicId(board, topicId) {
   return legacy.prefix === "topic" && legacy.id === tid;
 }
 
-export function topicRouteSegmentFromBoardCardRow(membership, backingThread) {
-  const nav = boardCardInspectNav(membership, backingThread);
-  return nav ? nav.segment : "";
-}
-
 /**
- * Navigation target for a board card title link: topic detail vs backing-thread detail.
- * @returns {{ kind: 'topic' | 'thread', segment: string } | null}
- */
-export function boardCardInspectNav(membership, backingThread) {
-  const m = membership && typeof membership === "object" ? membership : {};
-  const fromMembership = splitTypedRef(String(m.topic_ref ?? "").trim());
-  if (fromMembership.prefix === "topic" && fromMembership.id) {
-    return { kind: "topic", segment: fromMembership.id };
-  }
-
-  const refs = Array.isArray(m.related_refs) ? m.related_refs : [];
-  for (const raw of refs) {
-    const p = splitTypedRef(String(raw ?? "").trim());
-    if (p.prefix === "topic" && p.id) return { kind: "topic", segment: p.id };
-  }
-
-  const bt =
-    backingThread && typeof backingThread === "object" ? backingThread : null;
-  const topicRefOnThread = splitTypedRef(String(bt?.topic_ref ?? "").trim());
-  if (topicRefOnThread.prefix === "topic" && topicRefOnThread.id) {
-    return { kind: "topic", segment: topicRefOnThread.id };
-  }
-
-  const threadIdFromBacking = String(bt?.id ?? "").trim();
-  if (threadIdFromBacking)
-    return { kind: "thread", segment: threadIdFromBacking };
-
-  const threadIdFromRow = resolveBoardCardThreadIdField(m);
-  if (threadIdFromRow) return { kind: "thread", segment: threadIdFromRow };
-
-  return null;
-}
-
-/**
- * Board header / context line: canonical topic id for linking to `/topics/...`.
+ * Board header / context line: canonical topic id for topic refs.
  */
 export function topicRouteSegmentFromBoardWorkspace(workspace) {
   const nav = boardWorkspaceInspectNav(workspace);

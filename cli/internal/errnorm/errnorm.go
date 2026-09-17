@@ -79,6 +79,29 @@ func WithDetails(err *Error, details any) *Error {
 	return err
 }
 
+// AnnotateDetail records a CLI-known field on a remote error when the API body
+// omitted it. Existing values from the parsed API payload win.
+func AnnotateDetail(err error, key, value string) {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return
+	}
+	var typed *Error
+	if !errors.As(err, &typed) || typed == nil {
+		return
+	}
+	if lookupErrorDetail(typed, key) != "" {
+		return
+	}
+	details, _ := typed.Details.(map[string]any)
+	if details == nil {
+		details = map[string]any{}
+		typed.Details = details
+	}
+	details[key] = value
+}
+
 func ExitCode(err error) int {
 	if err == nil {
 		return 0
@@ -170,9 +193,10 @@ var defaultMetadataByCode = map[string]Metadata{
 	"agent_revoked":                 {Recoverable: false, Hint: "Create/register a new agent profile; revoked agents cannot be reactivated."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx auth register` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth whoami` to refresh credentials, then retry."},
+	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},
 	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, select a profile with --agent or ANX_AGENT (or `anx auth default <name>` when multiple profiles exist), then run `anx doctor` if connectivity is uncertain."},
-	"conflict":                      {Recoverable: true, Hint: "Reload current state and retry with a fresh `if_updated_at` value."},
+	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
 	"draft_not_found":               {Recoverable: true, Hint: "Run `anx draft list` to discover valid draft ids."},
 	"draft_validation_failed":       {Recoverable: true, Hint: "Fix the validation errors in the payload, then run `anx draft create` again."},
@@ -183,6 +207,8 @@ var defaultMetadataByCode = map[string]Metadata{
 	"invalid_request":               {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
 	"invalid_token":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth token-status` then `anx --agent <agent> auth rotate` if needed."},
 	"key_mismatch":                  {Recoverable: true, Hint: "Rotate the agent key (`anx --agent <agent> auth rotate`) and retry token minting."},
+	"lease_mismatch":                {Recoverable: true, Hint: "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN)."},
+	"lease_required":                {Recoverable: true, Hint: "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`)."},
 	"last_active_principal":         {Recoverable: true, Hint: "Retry only with `--allow-human-lockout --human-lockout-reason <why>` for explicit break-glass recovery; it can leave the workspace without any active human principal."},
 	"method_not_allowed":            {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
@@ -192,6 +218,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"stream_connect_failed":         {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
 	"stream_read_failed":            {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},
 	"timeout_exceeded":              {Recoverable: true, Hint: "Increase `--timeout` or reduce request scope."},
+	"turn_not_claimed":              {Recoverable: true, Hint: "This turn is not claimed; there is nothing to release."},
 	"unknown_actor_id":              {Recoverable: true, Hint: "Register/select a valid actor id before issuing writes."},
 	"unknown_command":               {Recoverable: true, Hint: "Run `anx help` to list available commands."},
 	"username_taken":                {Recoverable: true, Hint: "Choose a different username and retry."},

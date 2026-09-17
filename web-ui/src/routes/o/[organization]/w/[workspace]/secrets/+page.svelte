@@ -124,7 +124,7 @@
 
 <div class="mx-auto max-w-3xl sm:px-4 sm:py-6">
   <div class="mb-3 flex items-center justify-between gap-3 sm:mb-4">
-    <h1 class="text-subtitle font-semibold text-fg">Secrets</h1>
+    <h1 class="text-title text-fg">Secrets</h1>
     {#if isHuman}
       <Button
         variant="primary"

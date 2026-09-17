@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pageStore = vi.hoisted(() => {
   let value = {
-    url: new URL("http://localhost/o/local/w/local/topics?q=old"),
+    url: new URL("http://localhost/o/local/threads?q=old"),
     params: {
       organization: "local",
       workspace: "local",
@@ -23,7 +23,7 @@ const pageStore = vi.hoisted(() => {
     },
     reset() {
       this.set({
-        url: new URL("http://localhost/o/local/w/local/topics?q=old"),
+        url: new URL("http://localhost/o/local/threads?q=old"),
         params: {
           organization: "local",
           workspace: "local",
@@ -34,12 +34,7 @@ const pageStore = vi.hoisted(() => {
 });
 
 const coreClientMock = vi.hoisted(() => ({
-  archiveTopic: vi.fn(),
-  createTopic: vi.fn(),
   listThreads: vi.fn(),
-  listTopics: vi.fn(),
-  trashTopic: vi.fn(),
-  unarchiveTopic: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -60,7 +55,7 @@ vi.mock("$lib/coreClient", () => ({
   coreClient: coreClientMock,
 }));
 
-import TopicListPage from "../../src/routes/o/[organization]/w/[workspace]/topics/+page.svelte";
+import ThreadListPage from "../../src/routes/o/[organization]/w/[workspace]/threads/+page.svelte";
 
 function deferred() {
   let resolve;
@@ -68,16 +63,6 @@ function deferred() {
     resolve = done;
   });
   return { promise, resolve };
-}
-
-function topic(id, title) {
-  return {
-    id,
-    title,
-    current_summary: "",
-    state: "active",
-    updated_at: "2026-05-05T00:00:00Z",
-  };
 }
 
 function thread(id, title) {
@@ -88,16 +73,6 @@ function thread(id, title) {
     topic_ref: "",
     updated_at: "2026-05-05T00:00:00Z",
   };
-}
-
-function setTopicsSearch(q) {
-  pageStore.set({
-    url: new URL(`http://localhost/o/local/w/local/topics?q=${q}`),
-    params: {
-      organization: "local",
-      workspace: "local",
-    },
-  });
 }
 
 function setThreadsSearch(q) {
@@ -120,37 +95,7 @@ beforeEach(() => {
   pageStore.reset();
 });
 
-describe("topics and threads list stale loads", () => {
-  it("keeps newer topic rows when an older filter response resolves late", async () => {
-    const slowOldTopics = deferred();
-    coreClientMock.listTopics
-      .mockReturnValueOnce(slowOldTopics.promise)
-      .mockResolvedValueOnce({ topics: [topic("topic-new", "New topic row")] });
-
-    render(TopicListPage);
-
-    await waitFor(() => {
-      expect(coreClientMock.listTopics).toHaveBeenCalledTimes(1);
-    });
-
-    setTopicsSearch("new");
-
-    await waitFor(() => {
-      expect(coreClientMock.listTopics).toHaveBeenCalledTimes(2);
-    });
-    await waitFor(() => {
-      expect(screen.getByText("New topic row")).toBeTruthy();
-    });
-
-    slowOldTopics.resolve({
-      topics: [topic("topic-old", "Old topic row")],
-    });
-    await Promise.resolve();
-
-    expect(screen.getByText("New topic row")).toBeTruthy();
-    expect(screen.queryByText("Old topic row")).not.toBeTruthy();
-  });
-
+describe("threads list stale loads", () => {
   it("keeps newer thread rows when an older filter response resolves late", async () => {
     const slowOldThreads = deferred();
     coreClientMock.listThreads
@@ -160,7 +105,7 @@ describe("topics and threads list stale loads", () => {
       });
 
     setThreadsSearch("old");
-    render(TopicListPage);
+    render(ThreadListPage);
 
     await waitFor(() => {
       expect(coreClientMock.listThreads).toHaveBeenCalledTimes(1);

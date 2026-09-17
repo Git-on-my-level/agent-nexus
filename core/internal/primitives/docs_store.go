@@ -26,6 +26,10 @@ type documentRow struct {
 	ThreadID                 sql.NullString
 	Title                    sql.NullString
 	Summary                  string
+	Source                   string
+	TagsJSON                 string
+	HostsJSON                string
+	VerifiedAt               string
 	Slug                     sql.NullString
 	SupersedesJSON           string
 	RefsJSON                 string
@@ -47,6 +51,9 @@ type documentRow struct {
 	HeadCreatedBy            sql.NullString
 	ListRevisionCount        sql.NullInt64
 	ListTimelineMessageCount sql.NullInt64
+	ListLastCommentBody      sql.NullString
+	ListLastCommentAt        sql.NullString
+	ListLastCommentBy        sql.NullString
 }
 
 func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTarget {
@@ -55,7 +62,7 @@ func documentResourceRefEdgeTargets(threadID string, refs []string) []refEdgeTar
 }
 
 func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
-	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.slug, d.supersedes_json,
+	inner := `SELECT d.id, d.handle, d.thread_id, d.title, d.summary, d.source, d.tags_json, d.hosts_json, d.verified_at, d.slug, d.supersedes_json,
 		d.refs_json, d.provenance_json,
 		d.head_revision_id, d.head_revision_number, d.created_at, d.created_by, d.updated_at, d.updated_by,
 		d.trashed_at, d.trashed_by, d.trash_reason,
@@ -76,6 +83,10 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		conditions = append(conditions, "(LOWER(d.id) LIKE ? OR LOWER(COALESCE(d.handle, '')) LIKE ? OR LOWER('document:' || COALESCE(d.handle, '')) LIKE ? OR LOWER(d.title) LIKE ? OR LOWER(d.summary) LIKE ?)")
 		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
+	if tagConditions, tagArgs := documentTagFilterSQL("d.tags_json", filter.Tag, filter.Knowledge); len(tagConditions) > 0 {
+		conditions = append(conditions, tagConditions...)
+		args = append(args, tagArgs...)
+	}
 	if len(conditions) > 0 {
 		inner += ` WHERE ` + strings.Join(conditions, ` AND `)
 	}
@@ -95,7 +106,8 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 	query := `WITH doc_page AS (` + inner + `)
 SELECT dp.*,
 	COALESCE(rc.revision_cnt, 0),
-	COALESCE(tmc.timeline_msg_cnt, 0)
+	COALESCE(tmc.timeline_msg_cnt, 0),
+	tml.last_body, tml.last_at, tml.last_by
 FROM doc_page dp
 LEFT JOIN (
 	SELECT dr2.document_id, COUNT(*) AS revision_cnt FROM document_revisions dr2
@@ -111,7 +123,22 @@ LEFT JOIN (
 		SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
 	  )
 	GROUP BY tid
-) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid`
+) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid
+LEFT JOIN (
+	SELECT tid, last_body, last_at, last_by FROM (
+		SELECT trim(COALESCE(e.thread_id,'')) AS tid,
+			TRIM(COALESCE(NULLIF(json_extract(e.payload_json, '$.text'), ''), json_extract(e.payload_json, '$.summary'))) AS last_body,
+			e.ts AS last_at, e.actor_id AS last_by,
+			ROW_NUMBER() OVER (PARTITION BY trim(COALESCE(e.thread_id,'')) ORDER BY e.ts DESC, e.id DESC) AS rn
+		FROM events e
+		WHERE e.type = 'message_posted'
+		  AND COALESCE(trim(e.thread_id),'') <> ''
+		  AND COALESCE(trim(e.trashed_at),'') = ''
+		  AND trim(COALESCE(e.thread_id,'')) IN (
+			SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
+		  )
+	) ranked WHERE rn = 1
+) tml ON trim(COALESCE(dp.thread_id,'')) = tml.tid`
 	return query, args
 }
 
@@ -142,6 +169,10 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.ThreadID,
 			&row.Title,
 			&row.Summary,
+			&row.Source,
+			&row.TagsJSON,
+			&row.HostsJSON,
+			&row.VerifiedAt,
 			&row.Slug,
 			&row.SupersedesJSON,
 			&row.RefsJSON,
@@ -163,6 +194,9 @@ func (s *Store) ListDocuments(ctx context.Context, filter DocumentListFilter) ([
 			&row.HeadCreatedBy,
 			&row.ListRevisionCount,
 			&row.ListTimelineMessageCount,
+			&row.ListLastCommentBody,
+			&row.ListLastCommentAt,
+			&row.ListLastCommentBy,
 		); err != nil {
 			return nil, "", fmt.Errorf("scan document row: %w", err)
 		}
@@ -403,6 +437,31 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 	docSummary := strings.TrimSpace(anyStringValue(document["summary"]))
+	source, err := optionalStringField(document, "source")
+	if err != nil {
+		return nil, nil, err
+	}
+	tags, err := normalizeDocumentTags(document["tags"], document, "tags")
+	if err != nil {
+		return nil, nil, err
+	}
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	hosts, err := normalizeDocumentHosts(document["hosts"], document, "hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	hostsJSON, err := json.Marshal(hosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
+	}
+	verifiedAt, err := normalizeDocumentVerifiedAt(document["verified_at"], document, "verified_at")
+	if err != nil {
+		return nil, nil, err
+	}
+	requestedHandle := strings.TrimSpace(anyStringValue(document["handle"]))
 	if _, exists := document["labels"]; exists {
 		return nil, nil, invalidDocumentRequest("document.labels is not supported")
 	}
@@ -421,6 +480,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
+	searchText := documentSearchText(title, docSummary, source, tags, encodedContent, contentType)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	revisionNumber := 1
@@ -519,7 +579,7 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document artifact handle: %w", err)
 	}
-	documentHandle, err := uniqueHandleTx(ctx, tx, "document", firstNonEmpty(slug, title), "document-"+documentID)
+	documentHandle, err := allocateDocumentHandleTx(ctx, tx, requestedHandle, firstNonEmpty(slug, title), "document-"+documentID)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, nil, fmt.Errorf("allocate document handle: %w", err)
@@ -558,16 +618,21 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO documents(
-			id, handle, thread_id, title, summary, slug, supersedes_json,
+			id, handle, thread_id, title, summary, source, tags_json, hosts_json, verified_at, search_text, slug, supersedes_json,
 			refs_json, provenance_json,
 			head_revision_id, head_revision_number,
 			created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		documentID,
 		documentHandle,
 		nullableString(threadID),
 		nullableString(title),
 		docSummary,
+		source,
+		string(tagsJSON),
+		string(hostsJSON),
+		verifiedAt,
+		searchText,
 		nullableString(slug),
 		string(supersedesJSON),
 		string(docRefsJSON),
@@ -654,6 +719,13 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		return nil, nil, err
 	}
 
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, title, string(encodedContent), docSummary, source, tags, threadID); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return nil, nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -674,6 +746,10 @@ func (s *Store) CreateDocument(ctx context.Context, actorID string, document map
 		ThreadID:        nullableString(threadID),
 		Title:           nullableString(title),
 		Summary:         docSummary,
+		Source:          source,
+		TagsJSON:        string(tagsJSON),
+		HostsJSON:       string(hostsJSON),
+		VerifiedAt:      verifiedAt,
 		Slug:            nullableString(slug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docRefsJSON),
@@ -743,13 +819,11 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if patch == nil || len(patch) == 0 {
 		return nil, nil, invalidDocumentRequest("patch is required")
 	}
+	allowedPatch := map[string]struct{}{"summary": {}, "source": {}, "tags": {}, "title": {}, "hosts": {}, "verified_at": {}}
 	for k := range patch {
-		if k != "summary" {
+		if _, ok := allowedPatch[k]; !ok {
 			return nil, nil, invalidDocumentRequest("unsupported document patch field: " + k)
 		}
-	}
-	if _, ok := patch["summary"]; !ok {
-		return nil, nil, invalidDocumentRequest("patch.summary is required")
 	}
 	documentID = strings.TrimSpace(documentID)
 	doc, err := s.loadDocumentRow(ctx, documentID)
@@ -759,12 +833,63 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	if err := ensureUpdatedAtMatches(doc.UpdatedAt, ifUpdatedAt); err != nil {
 		return nil, nil, err
 	}
-	nextSummary := strings.TrimSpace(anyStringValue(patch["summary"]))
+	nextTitle := nullStringValue(doc.Title)
+	nextSummary := strings.TrimSpace(doc.Summary)
+	nextSource := strings.TrimSpace(doc.Source)
+	nextTags, err := decodeStoredJSONList(doc.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextHosts, err := decodeStoredJSONList(doc.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextVerifiedAt := strings.TrimSpace(doc.VerifiedAt)
+	if value, exists := patch["title"]; exists {
+		nextTitle = strings.TrimSpace(anyStringValue(value))
+	}
+	if value, exists := patch["summary"]; exists {
+		nextSummary = strings.TrimSpace(anyStringValue(value))
+	}
+	if value, exists := patch["source"]; exists {
+		nextSource = strings.TrimSpace(anyStringValue(value))
+	}
+	if _, exists := patch["tags"]; exists {
+		nextTags, err = normalizeDocumentTags(patch["tags"], patch, "tags")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if _, exists := patch["hosts"]; exists {
+		nextHosts, err = normalizeDocumentHosts(patch["hosts"], patch, "hosts")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if _, exists := patch["verified_at"]; exists {
+		nextVerifiedAt, err = normalizeDocumentVerifiedAt(patch["verified_at"], patch, "verified_at")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	tagsJSON, err := json.Marshal(nextTags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	hostsJSON, err := json.Marshal(nextHosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(
 		ctx,
-		`UPDATE documents SET summary = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		`UPDATE documents SET title = ?, summary = ?, source = ?, tags_json = ?, hosts_json = ?, verified_at = ?, updated_at = ?, updated_by = ? WHERE id = ? AND updated_at = ?`,
+		nullableString(nextTitle),
 		nextSummary,
+		nextSource,
+		string(tagsJSON),
+		string(hostsJSON),
+		nextVerifiedAt,
 		now,
 		actorID,
 		documentID,
@@ -779,6 +904,9 @@ func (s *Store) PatchDocument(ctx context.Context, actorID, documentID string, p
 	}
 	if affected == 0 {
 		return nil, nil, ErrConflict
+	}
+	if err := s.rebuildDocumentFTS(ctx, documentID); err != nil {
+		return nil, nil, err
 	}
 	return s.GetDocument(ctx, documentID)
 }
@@ -825,6 +953,16 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	nextTitle := nullStringValue(doc.Title)
 	nextSlug := nullStringValue(doc.Slug)
 	nextSummary := strings.TrimSpace(doc.Summary)
+	nextSource := strings.TrimSpace(doc.Source)
+	nextTags, err := decodeStoredJSONList(doc.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextHosts, err := decodeStoredJSONList(doc.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, nil, err
+	}
+	nextVerifiedAt := strings.TrimSpace(doc.VerifiedAt)
 	nextSupersedes, err := decodeStoredJSONList(doc.SupersedesJSON, "document.supersedes")
 	if err != nil {
 		return nil, nil, err
@@ -837,6 +975,13 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if nextDocProvJSON == "" {
 		nextDocProvJSON = inferredProvenanceJSON()
 	}
+
+	origTitle := nextTitle
+	origSummary := nextSummary
+	origSource := nextSource
+	origVerifiedAt := nextVerifiedAt
+	origTags := append([]string(nil), nextTags...)
+	origHosts := append([]string(nil), nextHosts...)
 
 	if documentPatch != nil {
 		if _, exists := documentPatch["id"]; exists {
@@ -857,6 +1002,30 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		}
 		if value, exists := documentPatch["summary"]; exists {
 			nextSummary = strings.TrimSpace(anyStringValue(value))
+		}
+		if value, exists := documentPatch["source"]; exists {
+			nextSource = strings.TrimSpace(anyStringValue(value))
+		}
+		if _, exists := documentPatch["tags"]; exists {
+			parsed, tagErr := normalizeDocumentTags(documentPatch["tags"], documentPatch, "tags")
+			if tagErr != nil {
+				return nil, nil, tagErr
+			}
+			nextTags = parsed
+		}
+		if _, exists := documentPatch["hosts"]; exists {
+			parsed, hostErr := normalizeDocumentHosts(documentPatch["hosts"], documentPatch, "hosts")
+			if hostErr != nil {
+				return nil, nil, hostErr
+			}
+			nextHosts = parsed
+		}
+		if _, exists := documentPatch["verified_at"]; exists {
+			parsed, verifiedErr := normalizeDocumentVerifiedAt(documentPatch["verified_at"], documentPatch, "verified_at")
+			if verifiedErr != nil {
+				return nil, nil, verifiedErr
+			}
+			nextVerifiedAt = parsed
 		}
 		if value, exists := documentPatch["slug"]; exists {
 			nextSlug = strings.TrimSpace(anyStringValue(value))
@@ -903,12 +1072,49 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 	if err != nil {
 		return nil, nil, invalidDocumentRequestError(err)
 	}
+	nextTagsJSON, err := json.Marshal(nextTags)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document tags: %w", err)
+	}
+	nextHostsJSON, err := json.Marshal(nextHosts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal document hosts: %w", err)
+	}
+	searchText := documentSearchText(nextTitle, nextSummary, nextSource, nextTags, encodedContent, contentType)
+
+	contentHash := sha256Hex(encodedContent)
+	var currentHash, currentType string
+	hashErr := s.db.QueryRowContext(ctx,
+		`SELECT TRIM(a.content_hash), TRIM(a.content_type)
+		 FROM artifacts a
+		 JOIN document_revisions dr ON dr.artifact_id = a.id
+		 WHERE dr.document_id = ? AND dr.revision_id = ?`,
+		documentID, doc.HeadRevisionID,
+	).Scan(&currentHash, &currentType)
+	if hashErr == nil &&
+		currentHash == contentHash &&
+		currentType == contentType &&
+		origTitle == nextTitle &&
+		origSummary == nextSummary &&
+		origSource == nextSource &&
+		origVerifiedAt == nextVerifiedAt &&
+		stringSlicesEqual(origTags, nextTags) &&
+		stringSlicesEqual(origHosts, nextHosts) {
+		docMap, mapErr := doc.toMap()
+		if mapErr != nil {
+			return nil, nil, mapErr
+		}
+		revision, loadErr := s.loadDocumentRevision(ctx, documentID, doc.HeadRevisionID, true)
+		if loadErr != nil {
+			return nil, nil, loadErr
+		}
+		return docMap, revision, nil
+	}
 
 	nextRevisionNumber := doc.HeadRevisionNum + 1
 	artifactID := uuid.NewString()
 	revisionID := artifactID
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	contentHash := sha256Hex(encodedContent)
 	blobPlan, err := s.prepareBlobLedgerWritePlan(ctx, contentHash, int64(len(encodedContent)))
 	if err != nil {
 		return nil, nil, err
@@ -1083,6 +1289,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 			thread_id = ?,
 			title = ?,
 			summary = ?,
+			source = ?,
+			tags_json = ?,
+			hosts_json = ?,
+			verified_at = ?,
+			search_text = ?,
 			slug = ?,
 			supersedes_json = ?,
 			refs_json = ?,
@@ -1095,6 +1306,11 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		nullableString(nextThreadID),
 		nullableString(nextTitle),
 		nextSummary,
+		nextSource,
+		string(nextTagsJSON),
+		string(nextHostsJSON),
+		nextVerifiedAt,
+		searchText,
 		nullableString(nextSlug),
 		string(supersedesJSON),
 		string(docResourceRefsJSON),
@@ -1147,6 +1363,13 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		return nil, nil, err
 	}
 
+	if err := upsertDocumentFTSTx(ctx, tx, documentID, nextTitle, string(encodedContent), nextSummary, nextSource, nextTags, nextThreadID); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return nil, nil, err
+	}
+
 	if err := stagedContent.Promote(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1167,6 +1390,10 @@ func (s *Store) UpdateDocument(ctx context.Context, actorID string, documentID s
 		ThreadID:        nullableString(nextThreadID),
 		Title:           nullableString(nextTitle),
 		Summary:         nextSummary,
+		Source:          nextSource,
+		TagsJSON:        string(nextTagsJSON),
+		HostsJSON:       string(nextHostsJSON),
+		VerifiedAt:      nextVerifiedAt,
 		Slug:            nullableString(nextSlug),
 		SupersedesJSON:  string(supersedesJSON),
 		RefsJSON:        string(docResourceRefsJSON),
@@ -1704,7 +1931,7 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 	var row documentRow
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, handle, thread_id, title, summary, slug, supersedes_json,
+		`SELECT id, handle, thread_id, title, summary, source, tags_json, hosts_json, verified_at, slug, supersedes_json,
 			 refs_json, provenance_json,
 			 head_revision_id, head_revision_number, created_at, created_by, updated_at, updated_by,
 			 trashed_at, trashed_by, trash_reason,
@@ -1717,6 +1944,10 @@ func (s *Store) loadDocumentRow(ctx context.Context, documentID string) (documen
 		&row.ThreadID,
 		&row.Title,
 		&row.Summary,
+		&row.Source,
+		&row.TagsJSON,
+		&row.HostsJSON,
+		&row.VerifiedAt,
 		&row.Slug,
 		&row.SupersedesJSON,
 		&row.RefsJSON,
@@ -1918,6 +2149,20 @@ func (r documentRow) toMap() (map[string]any, error) {
 		out["title"] = r.Title.String
 	}
 	out["summary"] = strings.TrimSpace(r.Summary)
+	out["source"] = strings.TrimSpace(r.Source)
+	tags, err := decodeStoredJSONList(r.TagsJSON, "document.tags")
+	if err != nil {
+		return nil, err
+	}
+	out["tags"] = tags
+	hosts, err := decodeStoredJSONList(r.HostsJSON, "document.hosts")
+	if err != nil {
+		return nil, err
+	}
+	out["hosts"] = hosts
+	if verifiedAt := strings.TrimSpace(r.VerifiedAt); verifiedAt != "" {
+		out["verified_at"] = verifiedAt
+	}
 	if r.Slug.Valid && strings.TrimSpace(r.Slug.String) != "" {
 		out["slug"] = r.Slug.String
 	}
@@ -1953,6 +2198,16 @@ func (r documentRow) toMap() (map[string]any, error) {
 	}
 	if r.ThreadID.Valid && strings.TrimSpace(r.ThreadID.String) != "" && r.ListTimelineMessageCount.Valid {
 		out["timeline_message_count"] = int(r.ListTimelineMessageCount.Int64)
+	}
+	if body := strings.TrimSpace(r.ListLastCommentBody.String); body != "" && r.ListLastCommentAt.Valid {
+		lastComment := map[string]any{
+			"body":       body,
+			"created_at": r.ListLastCommentAt.String,
+		}
+		if by := strings.TrimSpace(r.ListLastCommentBy.String); by != "" {
+			lastComment["created_by"] = by
+		}
+		out["last_comment"] = lastComment
 	}
 
 	return out, nil
@@ -2387,6 +2642,18 @@ func setDocumentContentValue(out map[string]any, content []byte, contentType str
 	default:
 		out["content"] = string(content)
 	}
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func sortStringsStable(values []string) {

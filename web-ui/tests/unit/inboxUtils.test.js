@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   decisionGroundingRefForInboxItem,
+  decodeInboxItemId,
   deriveInboxUrgency,
   enrichInboxItem,
   formatInboxItemBoardPanelResourceLine,
   getInboxSubjectRef,
   getInboxUrgencyLabel,
   groupInboxItems,
+  inboxItemMailboxId,
   summarizeInboxUrgency,
 } from "../../src/lib/inboxUtils.js";
 import { resolveRefLink } from "../../src/lib/refLinkModel.js";
@@ -330,5 +332,28 @@ describe("inbox typed-ref rendering targets", () => {
       isLink: false,
       label: "mystery:opaque",
     });
+  });
+});
+
+describe("inbox item ids", () => {
+  it("decodes a percent-encoded route id once", () => {
+    expect(
+      decodeInboxItemId("inbox%3Aescalate%3Athread-gds-launch%3Aevt%3Aevt"),
+    ).toBe("inbox:escalate:thread-gds-launch:evt:evt");
+    expect(decodeInboxItemId("inbox:escalate:thread-gds-launch:evt:evt")).toBe(
+      "inbox:escalate:thread-gds-launch:evt:evt",
+    );
+  });
+
+  it("does not prefix typed inbox ids again for mailbox rows", () => {
+    expect(
+      inboxItemMailboxId({
+        id: "inbox:escalate:thread-gds-launch:evt:evt",
+      }),
+    ).toBe("inbox:escalate:thread-gds-launch:evt:evt");
+    expect(inboxItemMailboxId({ id: "in-1" })).toBe("inbox:in-1");
+    expect(inboxItemMailboxId({ id: "completed:evt-9" })).toBe(
+      "completed:evt-9",
+    );
   });
 });

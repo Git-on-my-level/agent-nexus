@@ -214,6 +214,9 @@ primitives:
         card_created:
           family: card_created
           required_payload_fields: [card_id]
+        card_updated:
+          family: card_updated
+          required_payload_fields: [card_id]
         card_moved:
           family: card_moved
           required_payload_fields: [card_id, from_column_key, column_key]
@@ -391,7 +394,13 @@ resources:
       Canonical mutable document lineage anchored to a typed subject ref. The
       contract surface is `subject_ref`, `head_revision_ref`, `state`, and
       `refs` plus standard lifecycle/provenance fields. `state` is the sole
-      document lifecycle field and uses enums.lifecycle_state.
+      document lifecycle field and uses enums.lifecycle_state. Docs are the
+      cross-machine knowledge base for agents: `source` points at the canonical
+      origin when a doc aggregates, and `tags` (including `knowledge`) mark
+      agent-facing entries. Comments are the backing-thread discussion, exposed
+      with stable event refs (`event:<handle>`) that survive document revisions.
+      Threaded replies use `reply_to`. Authors may edit or delete their own comments.
+      Git-repo ingest/sync is a follow-up, not this contract.
     fields:
       ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
       handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
@@ -403,6 +412,31 @@ resources:
         description: >
           Optional short blurb for list and detail headers; stored on the document row
           (distinct from per-revision artifact summary).
+      source:
+        type: string
+        required: false
+        description: >
+          Canonical origin this document aggregates: a URL or typed ref. Empty when
+          the document itself is the source of truth. Knowledge docs should always set this.
+      tags:
+        type: "list<string>"
+        required: false
+        description: >
+          Operator/agent labels. Tag `knowledge` marks docs meant for agents
+          (see `GET /docs?knowledge=true` and `tag=`).
+      hosts:
+        type: "list<string>"
+        required: false
+        description: >
+          Host names this knowledge fact applies to (machine hostname or operator alias).
+          Empty means unspecified. `GET /docs/search?host=` matches documents whose
+          `hosts` list contains that name.
+      verified_at:
+        type: datetime
+        required: false
+        description: >
+          When an agent last verified this knowledge fact on the recorded hosts.
+          Omitted when never verified.
       subject_ref: { type: typed_ref, required: true }
       head_revision_ref: { type: typed_ref, required: true }
       state:
@@ -437,6 +471,16 @@ resources:
           Derived `/documents` list enrichment when backing `thread_id` is present (`message_posted`
           timeline, excluding trashed events). Not returned from document-by-id payloads; clients treat
           omission as zero for list rows.
+      last_comment:
+        type: object
+        required: false
+        description: >
+          Derived `/documents` list enrichment: the most recent `message_posted` comment on the
+          backing thread (excluding trashed events). Omitted when the document has no comments.
+        fields:
+          body: { type: string, required: true }
+          created_at: { type: datetime, required: true }
+          created_by: { type: string, required: false }
 
   document_revision:
     description: >
@@ -748,3 +792,83 @@ staleness:
     core does not infer staleness from backing-thread bodies. Operators may still
     record `exception_raised` with subtype `stale_topic` manually; derived inbox
     treats that like other risk exceptions.
+
+# Unified work tracking extends cards, never a second commitment identity.
+work_tracking:
+  version: "1"
+  canonical_entity: card
+  project_entity: topic
+  source_identity: [authority, connection_id, native_id]
+  source_authority_immutable: true
+  decision_revision: nonempty external source.revision, otherwise <work_metadata.version>.<head_revision_number> (decimal components; metadata and card content mutations both change the fence)
+  phase: [backlog, ready, in_progress, blocked, review, done, cancelled, unknown]
+  freshness: [unknown, fresh, stale, error]
+  observation_status: [reported, verified, uncertain, error]
+  refresh_error: [policy_denied, rate_limited, permission, unavailable, not_found, configuration, invalid_output, resource_limit, isolation_unavailable]
+  remote_verification: reported
+  local_annotations: [project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions]
+  invariants:
+    - External workflow fields can only be projected from attributed observations.
+    - Observation timestamps do not imply source activity or meaningful progress.
+    - Failed refreshes retain the last good observation with its age and error.
+    - refresh.last_error and freshness.last_error share {code, message}; code is the collector kind, not a generic read_failed.
+    - Replay keys bind content; conflicting reuse is rejected.
+    - Source sequence wins over observer clocks; older observations remain in history.
+    - Native completion requires existing non-trashed workspace resolution refs, checked in the canonical write transaction.
+    - Source completion is an attributed claim, not independent acceptance verification.
+    - Queued refresh is not a successful read.
+
+conversational_pm:
+  storage: workspace_sqlite
+  work_identity: card
+  conversation_scope: [workspace_id, actor_id]
+  decision_read_scope: workspace
+  decision_answer_scope: actor_id
+  decision_dispatch_scope: actor_id
+  action_acknowledgement_scope: actor_id
+  undeliverable_pending_acknowledgement: preserves_approval_and_detail_requires_fresh_proposal_to_deliver
+  action_acknowledgement_fields: [acknowledged_by, acknowledged_at, closed_without_delivery]
+  turn_lease_error_codes: [lease_required, lease_mismatch]
+  turn_failure_kind: [expired]
+  decision_provenance: [proposed_by, origin_kind, turn_id]
+  decision_origin_kind: [human, pm_turn, channel]
+  phase_action_target: payload.phase
+  decision_status: [awaiting_answer, answered, declined, superseded]
+  action_status: [pending_delivery, sending, delivered, acknowledged, source_reported, verified, failed, unknown]
+  channel_identity: [transport, tenant_id, channel_id, thread_id, external_user_id]
+  invariants:
+    - All work.phase proposals validate payload shape before persistence using the dispatch validation sentence.
+    - Identical request-key proposal replays return HTTP 200 with response-only replayed true; non-awaiting decisions also expose replayed_terminal_status without creating another request.
+    - Decision deliverable and delivery_path are read-only projections of the action executor registry; absent delivery routes project none.
+    - Closing an undeliverable pending action records closed_without_delivery and a human-readable receipt naming the actor and stating nothing was sent.
+    - Done proposals validate every resolution ref; decision payload.resolution is read-only and derived at response time.
+    - Runner leases use ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Token-authenticated heartbeat renews the lease; runners renew at a cadence strictly less than TTL/2. Expired leases are reclaimable without failing the turn or clearing history.
+    - Same-runner claims recover the existing unexpired lease before allocating; owner release requires runner_id and lease_token and returns sending with claimed false.
+    - Expired turns carry failure_kind expired; turn_closed errors expose the reason and name the deadline.
+    - Human acknowledgement preserves later read-only reconciliation and its acknowledgement metadata; it never enables reconciliation for unsent failures.
+    - Human acknowledgement handles failed or unresolvable unknown actions without modifying receipt history; it is not proof of delivery.
+    - PM authentication failures use the core 401 auth error contract; authorization failures remain 403.
+    - PM turn response operations require the configured PM actor; an empty identity fails closed.
+    - Identical turn proposals reuse the awaiting decision for workspace, actor, work_ref, scope, target revision, payload and instruction; changed intent supersedes it atomically with superseded_by and superseded_reason.
+    - Reusing a request key with a changed target revision conflicts with existing_decision_id in error details; source revisions are opaque and cannot be ordered.
+    - Direct proposals require a human; agents propose through turns addressed to a requesting human. Human channel proposals retain origin_kind human and store channel identity in origin.
+    - A different non-human proposal is blocked by an awaiting human-origin decision only on the same approver actor, work, and scope in the workspace.
+    - Claim returns 429 busy with reason capacity, in_flight, limit and waiting when eligible waiting work exists at the workspace lease cap; runners sleep one poll interval. No waiting work returns 204 even at capacity; owned lease recovery remains allowed.
+    - Open turns expire on reads and periodic maintenance even without a runner.
+    - Action deliverable reflects configured executors; unavailable dispatch records no attempt and leaves the action unchanged.
+    - Pending actions and failed actions with no sent attempt have nothing to reconcile and return invalid_request.
+    - Failed action status never regresses to unknown during read-back.
+    - attempts.sent_at records entry into executor handoff, not confirmed delivery; preflight failures and confirmed native failures before commit omit it; native commit uncertainty is resolved by canonical read-back when possible.
+    - New decisions record proposed_by and origin_kind; PM turn proposals also record turn_id. Supersession preserves each record's proposer.
+    - Rejected decisions are declined; legacy superseded records without superseded_by are read as declined. Superseded is reserved for replacements.
+    - Superseded decisions persist superseded_by_proposed_by and superseded_by_origin_kind from their replacement when known.
+    - Native post-commit canonical store read-back is independently verified in dispatch; external reports remain source_reported.
+    - Open turn complete, fail, propose and context require an active lease; release or lease expiry requires claiming first.
+    - Replacement proposals persist supersedes with the replaced decision ID and supersedes_proposed_by / supersedes_origin_kind when known; create/propose responses, replays and reads expose this attribution.
+    - Human approval and scope-specific authority are required for downstream actions.
+    - Answer and durable delivery intent are atomic; an answer is not an applied outcome.
+    - Revalidate source revision before dispatch; source tools must enforce the same precondition.
+    - Unknown remote sends require reconciliation and cannot be blindly replayed.
+    - Read-back evidence is required for independent verification.
+    - Channel mappings are exact and do not inherit personal credentials or permission.
+    - Missing PM provider or action executor returns unavailable, never fabricated success.

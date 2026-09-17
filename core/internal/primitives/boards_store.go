@@ -190,6 +190,8 @@ type BoardListItem struct {
 }
 
 type AddBoardCardInput struct {
+	// WorkMetadata is the optional one-to-one commitment extension, inserted atomically.
+	WorkMetadata     map[string]any
 	CardID           string
 	Title            string
 	Body             string
@@ -224,6 +226,8 @@ type UpdateBoardCardInput struct {
 }
 
 type MoveBoardCardInput struct {
+	// IfWorkVersion binds PM authorization to the canonical work revision.
+	IfWorkVersion    *int64
 	ColumnKey        string
 	BeforeCardID     string
 	AfterCardID      string
@@ -523,6 +527,11 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 }
 
 func (s *Store) execBoardCardInsert(ctx context.Context, tx *sql.Tx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, blob.StagedWrite, error) {
+	if prep.ColumnKey == "done" {
+		if err := validateResolutionRefs(ctx, tx, prep.ResolutionRefs); err != nil {
+			return boardRow, boardCardRow{}, nil, err
+		}
+	}
 	cardID := prep.CardID
 	columnKey := prep.ColumnKey
 	sourceThreadID := prep.SourceThreadID
@@ -1523,6 +1532,15 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, err
 	}
+	if input.WorkMetadata != nil {
+		if err := insertWorkMetadata(ctx, tx, cardRow.CardID, actorID, input.WorkMetadata); err != nil {
+			_ = tx.Rollback()
+			if stagedContent != nil {
+				_ = stagedContent.Cleanup()
+			}
+			return BoardCardMutationResult{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		if stagedContent != nil {
 			_ = stagedContent.Cleanup()
@@ -1687,6 +1705,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 		return BoardCardMutationResult{}, err
 	}
 	var boardRow boardRow
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := ensureBoardCardMutable(cardRow); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -1824,6 +1846,10 @@ func (s *Store) UpdateBoardCard(ctx context.Context, actorID, boardID, identifie
 				log.Printf("tx rollback failed: %v", rbErr)
 			}
 			return BoardCardMutationResult{}, invalidBoardRequest("done column requires resolution_refs")
+		}
+		if err := validateResolutionRefs(ctx, tx, refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
 		}
 		if !containsTypedRefPrefix(refs, "artifact") && !containsTypedRefPrefix(refs, "event") {
 			if rbErr := tx.Rollback(); rbErr != nil {
@@ -2056,6 +2082,29 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		}
 		return BoardCardMutationResult{}, err
 	}
+	// Every board move advances the work revision, including ordinary UI moves.
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_metadata(card_id,authority,metadata_json,version,updated_at,updated_by) VALUES(?,'nexus','{"source":{"authority":"nexus"}}',0,?,?) ON CONFLICT(card_id) DO NOTHING`, cardRow.CardID, time.Now().UTC().Format(time.RFC3339Nano), actorID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	var expected any
+	if input.IfWorkVersion != nil {
+		expected = *input.IfWorkVersion
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE work_metadata SET version=version+1,updated_at=?,updated_by=? WHERE card_id=? AND (? IS NULL OR version=?)`, time.Now().UTC().Format(time.RFC3339Nano), actorID, cardRow.CardID, expected, expected)
+	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed != 1 {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, ErrConflict
+	}
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := ensureBoardCardMutable(cardRow); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
@@ -2090,6 +2139,18 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, err
+	}
+
+	if columnKey == "done" {
+		var refs []string
+		if err := json.Unmarshal([]byte(nextResolutionRefsJSON), &refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
+		}
+		if err := validateResolutionRefs(ctx, tx, refs); err != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, err
+		}
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -2146,16 +2207,16 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
-		return BoardCardMutationResult{}, fmt.Errorf("commit board card move transaction: %w", err)
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card move transaction: %w", err)}
 	}
 
 	boardMap, err := boardRowToAPI(ctx, s.db, boardRow)
 	if err != nil {
-		return BoardCardMutationResult{}, err
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: err}
 	}
 	cardMap, err := cardRow.toMap()
 	if err != nil {
-		return BoardCardMutationResult{}, err
+		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: err}
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, nil
 }
@@ -2725,6 +2786,10 @@ func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, 
 	}
 	cardRow, err := s.loadBoardCardByGlobalID(ctx, tx, cardID, true)
 	if err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, nil, err
+	}
+	if err := ensureNativeWorkMutation(ctx, tx, cardRow.CardID); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
@@ -3736,9 +3801,34 @@ func ensureBoardCardParentThreadAvailable(ctx context.Context, rower queryRower,
 }
 
 func resolveBoardPlacementAnchors(ctx context.Context, rower queryRower, boardID, beforeCardID, afterCardID string) (string, string, error) {
-	beforeCardID = strings.TrimSpace(beforeCardID)
-	afterCardID = strings.TrimSpace(afterCardID)
-	return beforeCardID, afterCardID, nil
+	before, err := resolveBoardPlacementAnchor(ctx, rower, beforeCardID)
+	if err != nil {
+		return "", "", err
+	}
+	after, err := resolveBoardPlacementAnchor(ctx, rower, afterCardID)
+	if err != nil {
+		return "", "", err
+	}
+	return before, after, nil
+}
+
+func resolveBoardPlacementAnchor(ctx context.Context, rower queryRower, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	resolved, err := resolveResourceRef(ctx, rower, ResourceRefInput{Type: "card", Ref: raw})
+	if err != nil {
+		if errors.Is(err, ErrNotFound) || errors.Is(err, ErrInvalidResourceRef) {
+			return "", invalidBoardRequest("placement anchor must reference a card already on the board")
+		}
+		return "", err
+	}
+	id := strings.TrimSpace(resolved.ID)
+	if id == "" {
+		return "", invalidBoardRequest("placement anchor must reference a card already on the board")
+	}
+	return id, nil
 }
 
 func loadThreadTitleForBoardCard(ctx context.Context, rower queryRower, threadID string) (string, error) {

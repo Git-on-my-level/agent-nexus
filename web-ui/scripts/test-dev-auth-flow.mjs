@@ -125,7 +125,9 @@ async function main() {
       headers: { [WORKSPACE_HEADER]: WORKSPACE_SLUG },
     });
     if (!res.ok && res.status !== 401) {
-      console.error(`Cannot reach web-ui at ${WEB_UI_BASE} (status ${res.status}). Is \`make serve\` running?`);
+      console.error(
+        `Cannot reach web-ui at ${WEB_UI_BASE} (status ${res.status}). Is \`make serve\` running?`,
+      );
       process.exit(1);
     }
   } catch (error) {
@@ -136,31 +138,45 @@ async function main() {
 
   // ── Step 1: GET /auth/dev/default-persona ───────────────────────────────
   let personaId;
-  await runTest("GET /auth/dev/default-persona returns human persona", async () => {
-    const { status, payload } = await request("GET", "/auth/dev/default-persona");
-    assert(status === 200, `expected 200, got ${status}`);
-    if (payload?.persona?.persona_id) {
-      personaId = payload.persona.persona_id;
-      log("persona_id:", personaId, "actor_id:", payload.persona.actor_id);
-    } else {
-      log("WARNING: default-persona returned null — `default` field likely missing from local-identities.json");
-      log("Falling back to /auth/dev/identities to find first human persona");
-    }
-  });
+  await runTest(
+    "GET /auth/dev/default-persona returns human persona",
+    async () => {
+      const { status, payload } = await request(
+        "GET",
+        "/auth/dev/default-persona",
+      );
+      assert(status === 200, `expected 200, got ${status}`);
+      if (payload?.persona?.persona_id) {
+        personaId = payload.persona.persona_id;
+        log("persona_id:", personaId, "actor_id:", payload.persona.actor_id);
+      } else {
+        log(
+          "WARNING: default-persona returned null — `default` field likely missing from local-identities.json",
+        );
+        log("Falling back to /auth/dev/identities to find first human persona");
+      }
+    },
+  );
 
   // ── Step 1b: Fallback — find first human persona from identities ───────
   if (!personaId) {
-    await runTest("GET /auth/dev/identities fallback for human persona", async () => {
-      const { status, payload } = await request("GET", "/auth/dev/identities");
-      assert(status === 200, `expected 200, got ${status}`);
-      const personas = payload?.personas ?? [];
-      const human = personas.find(
-        (p) => String(p.principal_kind ?? "").toLowerCase() === "human",
-      );
-      assert(human, `no human persona found in ${personas.length} personas`);
-      personaId = human.persona_id;
-      log("persona_id:", personaId, "(fallback, missing default field)");
-    });
+    await runTest(
+      "GET /auth/dev/identities fallback for human persona",
+      async () => {
+        const { status, payload } = await request(
+          "GET",
+          "/auth/dev/identities",
+        );
+        assert(status === 200, `expected 200, got ${status}`);
+        const personas = payload?.personas ?? [];
+        const human = personas.find(
+          (p) => String(p.principal_kind ?? "").toLowerCase() === "human",
+        );
+        assert(human, `no human persona found in ${personas.length} personas`);
+        personaId = human.persona_id;
+        log("persona_id:", personaId, "(fallback, missing default field)");
+      },
+    );
   }
 
   if (!personaId) {
@@ -175,7 +191,10 @@ async function main() {
       "/auth/dev/session",
       { body: { persona_id: personaId }, withCookies: false },
     );
-    assert(status === 200, `expected 200, got ${status}: ${JSON.stringify(payload)}`);
+    assert(
+      status === 200,
+      `expected 200, got ${status}: ${JSON.stringify(payload)}`,
+    );
     assert(payload?.ok === true, `response not ok: ${JSON.stringify(payload)}`);
     assert(payload?.agent, `no agent in response`);
 
@@ -208,7 +227,10 @@ async function main() {
       withCookies: true,
     });
     assert(status === 200, `expected 200, got ${status}`);
-    assert(payload?.authenticated === true, `not authenticated: ${JSON.stringify(payload)}`);
+    assert(
+      payload?.authenticated === true,
+      `not authenticated: ${JSON.stringify(payload)}`,
+    );
     assert(payload?.agent?.actor_id, `no actor_id: ${JSON.stringify(payload)}`);
     log("agent:", payload.agent.username, "actor:", payload.agent.actor_id);
   });
@@ -218,45 +240,69 @@ async function main() {
     const { status, payload } = await request("GET", "/topics", {
       withCookies: true,
     });
-    assert(status === 200, `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 200)}`);
-    log("topics:", Array.isArray(payload?.topics) ? payload.topics.length : "?");
+    assert(
+      status === 200,
+      `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 200)}`,
+    );
+    log(
+      "topics:",
+      Array.isArray(payload?.topics) ? payload.topics.length : "?",
+    );
   });
 
   // ── Step 5: GET /auth/principals (authenticated-principal) ─────────────
-  await runTest("GET /auth/principals (authenticated-principal) succeeds", async () => {
-    const { status, payload } = await request("GET", "/auth/principals", {
-      withCookies: true,
-    });
-    assert(
-      status === 200,
-      `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
-    );
-    log("principals:", Array.isArray(payload?.principals) ? payload.principals.length : "?");
-  });
+  await runTest(
+    "GET /auth/principals (authenticated-principal) succeeds",
+    async () => {
+      const { status, payload } = await request("GET", "/auth/principals", {
+        withCookies: true,
+      });
+      assert(
+        status === 200,
+        `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
+      );
+      log(
+        "principals:",
+        Array.isArray(payload?.principals) ? payload.principals.length : "?",
+      );
+    },
+  );
 
   // ── Step 6: GET /auth/invites ──────────────────────────────────────────
-  await runTest("GET /auth/invites (authenticated-principal) succeeds", async () => {
-    const { status, payload } = await request("GET", "/auth/invites", {
-      withCookies: true,
-    });
-    assert(
-      status === 200,
-      `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
-    );
-    log("invites:", Array.isArray(payload?.invites) ? payload.invites.length : "?");
-  });
+  await runTest(
+    "GET /auth/invites (authenticated-principal) succeeds",
+    async () => {
+      const { status, payload } = await request("GET", "/auth/invites", {
+        withCookies: true,
+      });
+      assert(
+        status === 200,
+        `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
+      );
+      log(
+        "invites:",
+        Array.isArray(payload?.invites) ? payload.invites.length : "?",
+      );
+    },
+  );
 
   // ── Step 7: GET /auth/audit ────────────────────────────────────────────
-  await runTest("GET /auth/audit (authenticated-principal) succeeds", async () => {
-    const { status, payload } = await request("GET", "/auth/audit", {
-      withCookies: true,
-    });
-    assert(
-      status === 200,
-      `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
-    );
-    log("audit events:", Array.isArray(payload?.events) ? payload.events.length : "?");
-  });
+  await runTest(
+    "GET /auth/audit (authenticated-principal) succeeds",
+    async () => {
+      const { status, payload } = await request("GET", "/auth/audit", {
+        withCookies: true,
+      });
+      assert(
+        status === 200,
+        `expected 200, got ${status}: ${JSON.stringify(payload)?.slice(0, 300)}`,
+      );
+      log(
+        "audit events:",
+        Array.isArray(payload?.events) ? payload.events.length : "?",
+      );
+    },
+  );
 
   // ── Step 8: GET /secrets ───────────────────────────────────────────────
   await runTest("GET /secrets (authenticated-principal) succeeds", async () => {
@@ -270,19 +316,24 @@ async function main() {
   });
 
   // ── Step 9: GET /auth/principals WITHOUT cookies → expect 401 ──────────
-  await runTest("GET /auth/principals WITHOUT cookies fails with 401", async () => {
-    const url = `${WEB_UI_BASE}/auth/principals`;
-    const response = await fetch(url, {
-      headers: { [WORKSPACE_HEADER]: WORKSPACE_SLUG },
-    });
-    assert(
-      response.status === 401,
-      `expected 401 without cookies, got ${response.status}`,
-    );
-  });
+  await runTest(
+    "GET /auth/principals WITHOUT cookies fails with 401",
+    async () => {
+      const url = `${WEB_UI_BASE}/auth/principals`;
+      const response = await fetch(url, {
+        headers: { [WORKSPACE_HEADER]: WORKSPACE_SLUG },
+      });
+      assert(
+        response.status === 401,
+        `expected 401 without cookies, got ${response.status}`,
+      );
+    },
+  );
 
   // ── Summary ─────────────────────────────────────────────────────────────
-  console.log("\n── Summary ──────────────────────────────────────────────────");
+  console.log(
+    "\n── Summary ──────────────────────────────────────────────────",
+  );
   const passed = results.filter((r) => r.pass).length;
   const failed = results.filter((r) => !r.pass).length;
   console.log(`  ${passed} passed, ${failed} failed\n`);

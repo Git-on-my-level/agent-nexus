@@ -50,7 +50,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatNamedList(body, "cards", "Cards", "card", renderCardListItem)
 	case "artifacts.list":
 		return formatNamedList(body, "artifacts", "Artifacts", "artifact", renderArtifactListItem)
-	case "docs.list":
+	case "docs.list", "docs.search":
 		return formatNamedList(body, "documents", "Documents", "document", renderDocumentListItem)
 	case "events.list":
 		return formatEventsList(body)
@@ -109,7 +109,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatArtifactInspect(body)
 	case "events.get", "events.create", "events.archive", "events.unarchive", "events.trash", "events.restore":
 		return formatEventRecord(extractNestedMap(body, "event"))
-	case "docs.get", "docs.create", "docs.update", "docs.revisions.create", "docs.trash", "docs.archive", "docs.unarchive", "docs.restore":
+	case "docs.get", "docs.create", "docs.put", "docs.update", "docs.revisions.create", "docs.trash", "docs.archive", "docs.unarchive", "docs.restore":
 		return formatDocumentRecord(body)
 	case "docs.update.propose", "docs.revisions.create.propose":
 		return formatProposalPreview(body)
@@ -128,6 +128,10 @@ func formatCommandSummary(commandID string, body any) string {
 		return messageWriteText(body, "Document")
 	case "docs.messages":
 		return formatDocMessages(body)
+	case "docs.comments.list":
+		return formatDocsComments(body)
+	case "docs.comments.create", "docs.comments.reply":
+		return formatDocsComment(body)
 	case "topics.message", "topics.reply":
 		return messageWriteText(body, "Topic")
 	case "topics.messages":
@@ -656,6 +660,10 @@ func formatDocumentRecord(body any) string {
 	revision := extractNestedMap(root, "revision")
 	lines := []string{"Document " + displayPublicIdentity(document, "document")}
 	lines = appendScalar(lines, "title", document, "title")
+	lines = appendScalar(lines, "source", document, "source")
+	if tags := stringList(document["tags"]); len(tags) > 0 {
+		lines = append(lines, "tags: "+strings.Join(tags, ", "))
+	}
 	lines = appendScalar(lines, "kind", document, "kind")
 	lines = appendScalar(lines, "head_revision_id", document, "head_revision_id")
 	lines = appendScalar(lines, "revision_id", revision, "revision_id")
@@ -702,15 +710,7 @@ func formatDocsComments(body any) string {
 		return formatPrettyBody(body)
 	}
 	comments := asSlice(root["comments"])
-	docID := strings.TrimSpace(anyString(root["document_id"]))
-	lines := []string{
-		fmt.Sprintf("Document text comments (%d)%s", len(comments), func() string {
-			if docID == "" {
-				return ""
-			}
-			return " for " + docID
-		}()),
-	}
+	lines := []string{fmt.Sprintf("Document comments (%d)", len(comments))}
 	if len(comments) == 0 {
 		lines = append(lines, "(none)")
 		return strings.Join(lines, "\n")
@@ -720,42 +720,36 @@ func formatDocsComments(body any) string {
 		if m == nil {
 			continue
 		}
-		c := asMap(m["comment"])
-		if c == nil {
-			c = map[string]any{}
-		}
-		evID := strings.TrimSpace(anyString(c["event_id"]))
-		quote := strings.TrimSpace(anyString(c["selected_quote"]))
-		if len(quote) > 200 {
-			quote = quote[:200] + "…"
-		}
-		text := strings.TrimSpace(anyString(c["text"]))
-		revID := strings.TrimSpace(anyString(c["revision_id"]))
-		h := strings.TrimSpace(anyString(c["content_hash"]))
-		if len(h) > 12 {
-			h = h[:12] + "…"
-		}
-		lines = append(lines, fmt.Sprintf("%d) event %s", i+1, evID))
-		if quote != "" {
-			lines = append(lines, "   quote: "+quote)
-		}
-		if text != "" {
-			lines = append(lines, "   text: "+text)
-		}
-		if revID != "" {
-			lines = append(lines, "   revision: "+revID)
-		}
-		if h != "" {
-			lines = append(lines, "   content_hash: "+h)
-		}
-		lines = append(lines, "   actor: "+strings.TrimSpace(anyString(c["actor_id"])))
-		lines = append(lines, "   ts: "+strings.TrimSpace(anyString(c["ts"])))
-		if s := strings.TrimSpace(anyString(c["anchor_status"])); s != "" {
-			lines = append(lines, "   anchor: "+s)
-		}
-		lines = append(lines, "")
+		lines = append(lines, formatDocsCommentLine(i+1, m))
 	}
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+func formatDocsComment(body any) string {
+	root := asMap(body)
+	comment := extractNestedMap(root, "comment")
+	if comment == nil {
+		return formatPrettyBody(body)
+	}
+	return strings.TrimRight(formatDocsCommentLine(1, comment), "\n")
+}
+
+func formatDocsCommentLine(index int, comment map[string]any) string {
+	id := firstNonEmpty(anyString(comment["ref"]), anyString(comment["handle"]), anyString(comment["id"]))
+	lines := []string{fmt.Sprintf("%d) %s", index, id)}
+	if parent := strings.TrimSpace(anyString(comment["parent_id"])); parent != "" {
+		lines = append(lines, "   parent: "+parent)
+	}
+	if body := strings.TrimSpace(anyString(comment["body"])); body != "" {
+		lines = append(lines, "   body: "+body)
+	}
+	if actor := strings.TrimSpace(anyString(comment["created_by"])); actor != "" {
+		lines = append(lines, "   actor: "+actor)
+	}
+	if ts := strings.TrimSpace(anyString(comment["created_at"])); ts != "" {
+		lines = append(lines, "   ts: "+ts)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatArtifactInspect(body any) string {

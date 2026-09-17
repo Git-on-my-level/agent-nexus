@@ -68,11 +68,14 @@ describe("AttachmentChip", () => {
       resolved,
       size: "inline",
     });
-    const link = container.querySelector("a.attachment-chip-link");
-    expect(link).toBeTruthy();
-    expect(link?.textContent ?? "").toContain("notes.md");
-    expect(link?.textContent ?? "").toContain("MD");
-    expect(link?.getAttribute("aria-label") ?? "").toMatch(/Attachment/i);
+    // Artifact detail pages are gone; ready chips render inert text + download.
+    const chip = container.querySelector('span[aria-label^="Attachment:"]');
+    expect(chip).toBeTruthy();
+    expect(chip?.textContent ?? "").toContain("notes.md");
+    // Type badge/size moved out of the DOM into the aria-label on inert chips.
+    expect(chip?.getAttribute("aria-label") ?? "").toMatch(/MD/);
+    expect(chip?.getAttribute("aria-label") ?? "").toMatch(/Attachment/i);
+    expect(container.querySelector("a.attachment-chip-link")).toBeNull();
   });
 
   it("shows missing state when unrouted and there is no artifact link", () => {
@@ -87,25 +90,6 @@ describe("AttachmentChip", () => {
     });
     const { container } = render(AttachmentChip, { resolved, size: "inline" });
     expect(container.textContent ?? "").toMatch(/unavailable/i);
-  });
-
-  it("does not show unavailable when unrouted but artifact href resolves", () => {
-    const aid = "67a6bdba-51b2-4f3a-9c7d-ef1234567890";
-    const resolved = resolveRefLink(`artifact:${aid}`, {
-      threadId: "t1",
-      boardId: "",
-      humanize: true,
-      artifactRoutesById: {},
-      eventRoutesById: {},
-      workspaceSlug: "ws",
-      organizationSlug: "org",
-    });
-    expect(resolved.routed).toBeFalsy();
-    expect(resolved.isLink).toBe(true);
-    const { container } = render(AttachmentChip, { resolved, size: "inline" });
-    expect(container.textContent ?? "").not.toMatch(/unavailable/i);
-    const link = container.querySelector("a.attachment-chip-link");
-    expect(link?.getAttribute("href") ?? "").toContain(encodeURIComponent(aid));
   });
 
   it("omits sidebar download control in tight size", () => {
@@ -125,8 +109,8 @@ describe("AttachmentChip", () => {
     expect(
       container.querySelector("button[aria-label^='Download']"),
     ).toBeFalsy();
-    const link = container.querySelector("a.attachment-chip-link");
-    expect(link?.className ?? "").toMatch(/text-\[11px\]/);
+    const chip = container.querySelector('span[aria-label^="Attachment:"]');
+    expect(chip?.className ?? "").toMatch(/text-\[11px\]/);
   });
 
   it("renders nothing when trashed_at is set on merged metadata", () => {

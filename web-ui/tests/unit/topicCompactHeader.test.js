@@ -20,10 +20,11 @@ const topRowPath = resolve(
 );
 
 describe("topic detail header", () => {
-  it("TopicDetailHeader uses breadcrumb shell without lifecycle badge", () => {
+  it("TopicDetailHeader uses breadcrumb shell with an h1 title", () => {
     const src = readFileSync(headerPath, "utf8");
     expect(src).toContain("WorkspaceResourceTopRow");
-    expect(src).toContain("showDesktop");
+    expect(src).toContain("showDesktop={false}");
+    expect(src).toContain("<h1");
     expect(src).not.toContain("compact = false");
     expect(src).not.toContain('aria-label="Topic channel"');
     expect(src).not.toContain("BOARD_LIFECYCLE_STATE_LABELS");
@@ -33,8 +34,8 @@ describe("topic detail header", () => {
   it("WorkspaceTopicThreadDetailPage uses shared tab list and compact header", () => {
     const src = readFileSync(pagePath, "utf8");
     expect(src).toContain("WorkspaceResourceTabList");
-    expect(src).toContain("dense showDesktop={false}");
-    expect(src).toContain("dense");
+    expect(src).toContain("{detailAsTopic} dense");
+    expect(src).not.toContain("showDesktop");
     expect(src).not.toContain("dense={isMessagesTab}");
     expect(src).not.toContain("showDesktop={!isMessagesTab}");
     expect(src).not.toContain("compact={isMessagesTab}");

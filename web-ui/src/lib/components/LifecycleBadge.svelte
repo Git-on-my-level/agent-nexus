@@ -22,9 +22,9 @@
   } = $props();
 
   const TONE = {
-    active: "text-ok-text bg-ok-soft",
-    archived: "text-warn-text bg-warn-soft",
-    trashed: "text-slate-300 bg-slate-500/10",
+    active: "ui-badge--ok",
+    archived: "ui-badge--warn",
+    trashed: "ui-badge--danger",
   };
 
   let normalized = $derived(
@@ -35,7 +35,7 @@
   let visible = $derived(
     Boolean(normalized) && (forceShow || normalized !== "active"),
   );
-  let tone = $derived(TONE[normalized] ?? "text-fg-muted bg-line");
+  let tone = $derived(TONE[normalized] ?? "ui-badge--neutral");
   let text = $derived(
     label ||
       (normalized ? normalized[0].toUpperCase() + normalized.slice(1) : ""),
@@ -43,9 +43,7 @@
 </script>
 
 {#if visible}
-  <span
-    class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold {tone} {extraClass}"
-  >
+  <span class="ui-badge {tone} shrink-0 {extraClass}">
     {text}
   </span>
 {/if}

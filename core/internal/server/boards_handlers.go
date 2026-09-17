@@ -1007,7 +1007,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		Resolution       *string  `json:"resolution"`
 		ResolutionRefs   []string `json:"resolution_refs"`
 	}
-	if !decodeMoveCardHTTPPayload(w, r, &req) {
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.IfBoardUpdatedAt == nil {

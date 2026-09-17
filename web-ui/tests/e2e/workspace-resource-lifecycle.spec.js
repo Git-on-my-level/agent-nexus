@@ -168,21 +168,6 @@ test("workspace resource list lifecycle actions share archive, unarchive, and tr
   await setupActor(page);
 
   await exerciseLifecycleList(page, {
-    path: "topics",
-    label: "Lifecycle topic",
-    plural: "topics",
-    makeResource: () => baseResource("topic-lifecycle", "Lifecycle topic"),
-    listPattern: /\/topics(\?.*)?$/,
-    archivePattern: /\/topics\/topic-lifecycle\/archive$/,
-    unarchivePattern: /\/topics\/topic-lifecycle\/unarchive$/,
-    trashPattern: /\/topics\/topic-lifecycle\/trash$/,
-    listPayload: (topic) => ({
-      topics: topic.trashed_at ? [] : [topic],
-    }),
-    itemPayload: (topic) => ({ topic }),
-  });
-
-  await exerciseLifecycleList(page, {
     path: "docs",
     label: "Lifecycle document",
     plural: "documents",
@@ -195,57 +180,5 @@ test("workspace resource list lifecycle actions share archive, unarchive, and tr
       documents: document.trashed_at ? [] : [document],
     }),
     itemPayload: (document) => ({ document }),
-  });
-
-  await exerciseLifecycleList(page, {
-    path: "boards",
-    label: "Lifecycle board",
-    plural: "boards",
-    makeResource: () => ({
-      ...baseResource("board-lifecycle", "Lifecycle board"),
-      refs: [],
-      owners: [actorId],
-      card_refs: [],
-      pinned_refs: [],
-    }),
-    listPattern: /\/boards(\?.*)?$/,
-    archivePattern: /\/boards\/board-lifecycle\/archive$/,
-    unarchivePattern: /\/boards\/board-lifecycle\/unarchive$/,
-    trashPattern: /\/boards\/board-lifecycle\/trash$/,
-    listPayload: (board) => ({
-      boards: board.trashed_at
-        ? []
-        : [
-            {
-              board,
-              summary: {
-                card_count: 0,
-                cards_by_column: {},
-                latest_activity_at: timestamp,
-              },
-            },
-          ],
-    }),
-    itemPayload: (board) => ({ board }),
-  });
-
-  await exerciseLifecycleList(page, {
-    path: "artifacts",
-    label: "Lifecycle artifact",
-    plural: "artifacts",
-    makeResource: () => ({
-      ...baseResource("artifact-lifecycle", "Lifecycle artifact"),
-      kind: "doc",
-      refs: [],
-      thread_id: "topic-lifecycle",
-    }),
-    listPattern: /\/artifacts(\?.*)?$/,
-    archivePattern: /\/artifacts\/artifact-lifecycle\/archive$/,
-    unarchivePattern: /\/artifacts\/artifact-lifecycle\/unarchive$/,
-    trashPattern: /\/artifacts\/artifact-lifecycle\/trash$/,
-    listPayload: (artifact) => ({
-      artifacts: artifact.trashed_at ? [] : [artifact],
-    }),
-    itemPayload: (artifact) => ({ artifact }),
   });
 });

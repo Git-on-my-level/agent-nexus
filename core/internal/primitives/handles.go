@@ -42,6 +42,10 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 	if s == nil || s.db == nil {
 		return ResolvedResourceRef{}, fmt.Errorf("primitives store database is not initialized")
 	}
+	return resolveResourceRef(ctx, s.db, input)
+}
+
+func resolveResourceRef(ctx context.Context, q queryRower, input ResourceRefInput) (ResolvedResourceRef, error) {
 	typ := strings.TrimSpace(input.Type)
 	value := strings.TrimSpace(input.Ref)
 	if value == "" {
@@ -59,7 +63,7 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		value = suffix
 	}
 	if typ == "document_revision" || typ == "card_revision" {
-		return resolveRevisionResourceRef(ctx, s.db, typ, value)
+		return resolveRevisionResourceRef(ctx, q, typ, value)
 	}
 	table := resourceTables[typ]
 	if table == "" {
@@ -68,7 +72,7 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 
 	normalized := handles.Normalize(value)
 	if normalized != "" {
-		resolved, err := resolveResourceByColumn(ctx, s.db, typ, table, "handle", normalized)
+		resolved, err := resolveResourceByColumn(ctx, q, typ, table, "handle", normalized)
 		if err == nil {
 			return resolved, nil
 		}
@@ -77,12 +81,12 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		}
 
 		var id, canonical string
-		aliasErr := s.db.QueryRowContext(ctx,
+		aliasErr := q.QueryRowContext(ctx,
 			`SELECT resource_id, canonical_handle FROM resource_handle_aliases WHERE resource_type = ? AND alias_handle = ?`,
 			typ, normalized,
 		).Scan(&id, &canonical)
 		if aliasErr == nil {
-			resolved, err = resolveResourceByColumn(ctx, s.db, typ, table, "id", id)
+			resolved, err = resolveResourceByColumn(ctx, q, typ, table, "id", id)
 			if err != nil {
 				return ResolvedResourceRef{}, err
 			}
@@ -98,8 +102,8 @@ func (s *Store) ResolveResourceRef(ctx context.Context, input ResourceRefInput) 
 		}
 	}
 
-	if handles.IsUUIDLike(value) || rowExistsByID(ctx, s.db, table, value) {
-		resolved, err := resolveResourceByColumn(ctx, s.db, typ, table, "id", value)
+	if handles.IsUUIDLike(value) || rowExistsByID(ctx, q, table, value) {
+		resolved, err := resolveResourceByColumn(ctx, q, typ, table, "id", value)
 		if err == nil {
 			return resolved, nil
 		}
@@ -208,10 +212,10 @@ func revisionHandle(parentHandle string, revisionNumber int) string {
 	return strings.TrimSpace(parentHandle) + "-r" + fmt.Sprintf("%d", revisionNumber)
 }
 
-func resolveResourceByColumn(ctx context.Context, db *sql.DB, typ, table, column, value string) (ResolvedResourceRef, error) {
+func resolveResourceByColumn(ctx context.Context, q queryRower, typ, table, column, value string) (ResolvedResourceRef, error) {
 	var id string
 	var handle sql.NullString
-	err := db.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE `+column+` = ?`, value).Scan(&id, &handle)
+	err := q.QueryRowContext(ctx, `SELECT id, handle FROM `+table+` WHERE `+column+` = ?`, value).Scan(&id, &handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ResolvedResourceRef{}, ErrNotFound
 	}
@@ -226,9 +230,9 @@ func resolveResourceByColumn(ctx context.Context, db *sql.DB, typ, table, column
 	return ResolvedResourceRef{Type: typ, ID: id, Handle: h, CanonicalRef: canonical}, nil
 }
 
-func rowExistsByID(ctx context.Context, db *sql.DB, table, id string) bool {
+func rowExistsByID(ctx context.Context, q queryRower, table, id string) bool {
 	var one int
-	return db.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE id = ?`, strings.TrimSpace(id)).Scan(&one) == nil
+	return q.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE id = ?`, strings.TrimSpace(id)).Scan(&one) == nil
 }
 
 func uniqueHandleTx(ctx context.Context, q queryRower, typ, desired, fallbackSeed string) (string, error) {

@@ -134,6 +134,7 @@ describe("dev seed scenarios", () => {
       "actor-gds-art",
       "actor-gds-narrative",
       "actor-gds-qa",
+      "actor-gds-pm",
     ]);
     expect(scenario.personas[0]).toMatchObject({
       principal_kind: "human",

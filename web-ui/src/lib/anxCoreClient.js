@@ -91,8 +91,10 @@ function parseGeneratedFailure(error, commandId) {
     payloadStart >= 0 ? remainder.slice(payloadStart) : remainder;
   const details =
     extractErrorMessage(payloadText) || extractErrorMessage(remainder);
+  const body = parseErrorBody(payloadText) || parseErrorBody(remainder);
 
   return {
+    body,
     status: Number.isFinite(status) ? status : undefined,
     details,
   };
@@ -237,6 +239,7 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
     );
     requestError.status = generatedFailure.status;
     requestError.details = generatedFailure.details;
+    requestError.body = generatedFailure.body;
     return requestError;
   }
 
@@ -246,7 +249,10 @@ function normalizeRequestError(error, { target, commandId, method, path }) {
   );
 }
 
-function buildRawRequestError({ status, details }, { target, method, path }) {
+function buildRawRequestError(
+  { status, details, body },
+  { target, method, path },
+) {
   const detailSuffix = details ? ` - ${details}` : "";
   const guidanceSuffix =
     status >= 500
@@ -257,7 +263,19 @@ function buildRawRequestError({ status, details }, { target, method, path }) {
   );
   requestError.status = status;
   requestError.details = details;
+  // The parsed error body keeps structured details (for example the id of
+  // an existing decision on a 409) that the message text flattens.
+  requestError.body = body;
   return requestError;
+}
+
+function parseErrorBody(text) {
+  try {
+    const parsed = JSON.parse(String(text ?? ""));
+    return parsed && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function parseRawErrorResponse(response) {
@@ -266,6 +284,7 @@ async function parseRawErrorResponse(response) {
   return {
     status: response.status,
     details,
+    body: parseErrorBody(rawDetails),
   };
 }
 
@@ -273,6 +292,24 @@ function pathParams(entries) {
   return Object.fromEntries(
     Object.entries(entries).map(([name, value]) => [name, String(value)]),
   );
+}
+
+function renderCommandPath(path, params = {}) {
+  return String(path ?? "").replace(/\{([^}]+)\}/g, (match, name) => {
+    const value = params[name];
+    if (value === undefined || value === null || value === "") return match;
+    return encodeURIComponent(String(value));
+  });
+}
+
+function decodePathParam(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 const q = (query) => ({ query });
@@ -285,6 +322,90 @@ const pb = (pathParams, body) => ({
 const p = (pathParams) => ({ pathParams });
 
 const adapterCommandTable = [
+  ["listWork", "work.list", (filters) => ({ options: q(filters) })],
+  ["getWork", "work.get", (ref) => p(pathParams({ card_ref: ref }))],
+  ["createWork", "work.create", (payload) => ({ options: b(payload) }), true],
+  [
+    "patchWork",
+    "work.patch",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
+  [
+    "listWorkObservations",
+    "work.observations.list",
+    (ref, filters) => pq(pathParams({ card_ref: ref }), filters),
+  ],
+  [
+    "getWorkRefresh",
+    "work.refresh.get",
+    (ref) => p(pathParams({ card_ref: ref })),
+  ],
+  [
+    "requestWorkRefresh",
+    "work.refresh.request",
+    (ref) => pb(pathParams({ card_ref: ref }), {}),
+    true,
+  ],
+  ["getWorkCapabilities", "work.capabilities"],
+  [
+    "listPmConversations",
+    "pm.conversations.list",
+    (filters) => ({ options: q(filters) }),
+  ],
+  [
+    "createPmConversation",
+    "pm.conversations.create",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
+    "getPmConversation",
+    "pm.conversations.get",
+    (id, filters) => pq(pathParams({ conversation_id: id }), filters),
+  ],
+  [
+    "sendPmMessage",
+    "pm.conversations.messages.create",
+    (id, payload) => pb(pathParams({ conversation_id: id }), payload),
+  ],
+  ["getPmContext", "pm.context", (filters) => ({ options: q(filters) })],
+  [
+    "listPmDecisions",
+    "pm.decisions.list",
+    (filters) => ({ options: q(filters) }),
+  ],
+  [
+    "createPmDecision",
+    "pm.decisions.create",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
+    "getPmDecision",
+    "pm.decisions.get",
+    (id) => p(pathParams({ decision_id: id })),
+  ],
+  [
+    "answerPmDecision",
+    "pm.decisions.answer",
+    (id, payload) => pb(pathParams({ decision_id: id }), payload),
+  ],
+  [
+    "dispatchPmDecision",
+    "pm.decisions.dispatch",
+    (id) => pb(pathParams({ decision_id: id }), {}),
+  ],
+  ["listPmActions", "pm.actions.list", (filters) => ({ options: q(filters) })],
+  ["getPmAction", "pm.actions.get", (id) => p(pathParams({ action_id: id }))],
+  [
+    "reconcilePmAction",
+    "pm.actions.reconcile",
+    (id) => pb(pathParams({ action_id: id }), {}),
+  ],
+  [
+    "acknowledgePmAction",
+    "pm.actions.acknowledge",
+    (id) => pb(pathParams({ action_id: id }), {}),
+  ],
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],
   ["createActor", "actors.create", (payload) => ({ options: b(payload) })],
@@ -511,6 +632,7 @@ const adapterCommandTable = [
     (payload) => ({ options: b(payload), injectActor: true }),
   ],
   ["listDocuments", "docs.list", (filters) => ({ options: q(filters) })],
+  ["searchDocuments", "docs.search", (filters) => ({ options: q(filters) })],
   [
     "getDocument",
     "docs.get",
@@ -821,7 +943,7 @@ export function createAnxCoreClient(options = {}) {
     return command;
   }
 
-  async function invokeJSON(commandId, invokeFn) {
+  async function invokeJSON(commandId, invokeFn, pathParams = {}) {
     const command = commandInfo(commandId);
 
     try {
@@ -836,7 +958,7 @@ export function createAnxCoreClient(options = {}) {
         target,
         commandId,
         method: command.method,
-        path: command.path,
+        path: renderCommandPath(command.path, pathParams),
       });
     }
   }
@@ -939,16 +1061,17 @@ export function createAnxCoreClient(options = {}) {
     const command = commandInfo(commandId);
     const requestOptions = { ...(request.options ?? {}) };
 
-    return invokeJSON(commandId, () => {
-      if (request.injectActor && command.method !== "GET") {
-        requestOptions.body = withActorId(requestOptions.body ?? {});
-      }
-      return callGeneratedCommand(
-        command,
-        request.pathParams ?? {},
-        requestOptions,
-      );
-    });
+    const pathParams = request.pathParams ?? {};
+    return invokeJSON(
+      commandId,
+      () => {
+        if (request.injectActor && command.method !== "GET") {
+          requestOptions.body = withActorId(requestOptions.body ?? {});
+        }
+        return callGeneratedCommand(command, pathParams, requestOptions);
+      },
+      pathParams,
+    );
   }
 
   const tableDrivenClient = Object.fromEntries(
@@ -1100,16 +1223,17 @@ export function createAnxCoreClient(options = {}) {
         injectActor: true,
       }),
     getInboxItem: (inboxItemId, filters) => {
-      if (!inboxItemId) {
+      const id = decodePathParam(inboxItemId);
+      if (!id) {
         throw new Error("getInboxItem requires inboxItemId.");
       }
       return invokeCommand("inbox.get", {
-        pathParams: pathParams({ inbox_id: inboxItemId }),
+        pathParams: pathParams({ inbox_id: id }),
         options: { query: filters ?? {} },
       });
     },
     respondInboxItem: async (inboxItemId, payload) => {
-      const id = String(inboxItemId ?? "").trim();
+      const id = decodePathParam(inboxItemId);
       if (!id) {
         throw new Error("respondInboxItem requires inboxItemId.");
       }

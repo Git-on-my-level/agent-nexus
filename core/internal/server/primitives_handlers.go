@@ -156,6 +156,13 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	threadID := anyString(stored["thread_id"])
 	enqueueTopicProjectionsBestEffort(r.Context(), opts, []string{threadID}, time.Now().UTC())
+	if opts.pmRuntime != nil {
+		if store, ok := opts.primitiveStore.(*primitives.Store); ok {
+			if err := opts.pmRuntime.SyncBridgeReply(r.Context(), store, stored); err != nil {
+				log.Printf("pm bridge reply sync failed (event=%s): %v", anyString(stored["id"]), err)
+			}
+		}
+	}
 	if strings.TrimSpace(anyString(stored["type"])) == "human_attention_requested" && opts.projectionMaintainer != nil {
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
 			log.Printf("best-effort human inbox projection refresh failed (thread=%s): %v", threadID, err)
@@ -199,6 +206,9 @@ func handleGetEvent(w http.ResponseWriter, r *http.Request, opts handlerOptions,
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load event")
+		return
+	}
+	if !requireAccessibleEvent(w, r, opts, event) {
 		return
 	}
 
@@ -556,6 +566,9 @@ func handleGetArtifact(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load artifact")
 		return
 	}
+	if !requireAccessibleArtifact(w, r, opts, artifact) {
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"artifact": artifact})
 }
@@ -690,6 +703,18 @@ func handleGetArtifactContent(w http.ResponseWriter, r *http.Request, opts handl
 	if !ok {
 		return
 	}
+	artifact, err := opts.primitiveStore.GetArtifact(r.Context(), resolvedID)
+	if err != nil {
+		if errors.Is(err, primitives.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "artifact content not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load artifact content")
+		return
+	}
+	if !requireAccessibleArtifact(w, r, opts, artifact) {
+		return
+	}
 	delivery, err := opts.primitiveStore.GetArtifactContentHTTP(r.Context(), resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -789,6 +814,9 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		}
 		threadID = resolved.ID
 		threadIDs = resolvedRefStorageCandidates(resolved)
+		if !requireAccessibleThreadFilter(w, r, opts, threadID, "thread") {
+			return
+		}
 	}
 
 	var artifactIDs []string
@@ -856,6 +884,7 @@ func handleListArtifacts(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list artifacts")
 		return
 	}
+	artifacts = filterAccessibleArtifacts(r, opts, artifacts)
 
 	writeJSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
 }

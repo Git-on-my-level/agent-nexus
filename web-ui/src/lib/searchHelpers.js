@@ -18,56 +18,6 @@ export function backingThreadIdFromTopicRecord(topic) {
   return String(topic.id ?? "").trim();
 }
 
-/** Option shape for SearchableEntityPicker when listing topics as thread anchors. */
-export function topicSearchResultToPickerOption(topic) {
-  const id =
-    String(
-      topic?.thread_ref ??
-        topic?.backing_thread_ref ??
-        topic?.thread_handle ??
-        "",
-    ).trim() || backingThreadIdFromTopicRecord(topic);
-  const topicRef = String(topic?.ref ?? topic?.topic_ref ?? "").trim();
-  return {
-    id,
-    title: topic.title || id,
-    subtitle: [topic.state, topicRef || topic?.handle]
-      .filter(Boolean)
-      .join(" · "),
-    keywords: [],
-  };
-}
-
-/**
- * Option shape for linking a board to a topic via typed ref (`topic:<id>`).
- * Prefer this for board create; do not use the topic's thread_id as board.thread_id.
- */
-export function topicSearchResultToBoardRefOption(topic) {
-  if (!topic || typeof topic !== "object") {
-    return { id: "", title: "", subtitle: "", keywords: [] };
-  }
-  const publicRef = String(topic.ref ?? topic.topic_ref ?? "").trim();
-  const handle = String(topic.handle ?? "").trim();
-  const rawValue = publicRef || handle || String(topic.id ?? "").trim();
-  if (!rawValue) {
-    return {
-      id: "",
-      title: String(topic.title ?? "").trim() || "",
-      subtitle: "",
-      keywords: [],
-    };
-  }
-  const typedRef = rawValue.includes(":") ? rawValue : `topic:${rawValue}`;
-  const topicRef = publicRef || typedRef;
-  const subtitleParts = [topic.state, topicRef || topic?.handle];
-  return {
-    id: typedRef,
-    title: topic.title || typedRef,
-    subtitle: subtitleParts.filter(Boolean).join(" · "),
-    keywords: [],
-  };
-}
-
 export async function searchTopics(query, limit = 20) {
   const response = await coreClient.listTopics({
     q: query,
@@ -84,6 +34,14 @@ export async function searchDocuments(query, limit = 20) {
   return filterTopLevelDocuments(response.documents);
 }
 
+export async function searchWork(query, limit = 20) {
+  const response = await coreClient.listWork({
+    q: query,
+    limit,
+  });
+  return Array.isArray(response.work) ? response.work : [];
+}
+
 /** Subtitle line for document rows in search pickers (state, summary, backing thread). */
 export function documentSearchPickerSubtitle(document) {
   if (!document || typeof document !== "object") {
@@ -97,14 +55,8 @@ export function documentSearchPickerSubtitle(document) {
   if (summary) {
     parts.push(summary);
   }
-  const publicRef =
-    String(document.ref ?? "").trim() ||
-    (resourceRouteSegment(document, "document")
-      ? `document:${resourceRouteSegment(document, "document")}`
-      : "");
-  if (publicRef) {
-    parts.push(publicRef);
-  }
+  // The row's title already names the document; its ref is an identifier
+  // for machines, not a subtitle for readers.
   return parts.join(" · ");
 }
 

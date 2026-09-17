@@ -261,10 +261,7 @@ func (a *App) parseThreadMessageInput(ctx context.Context, args []string, cfg co
 	if err != nil {
 		return nil, messageTarget{}, false, err
 	}
-	resolvedThreadID, err := a.resolveMaybeThreadID(ctx, cfg, threadID)
-	if err != nil {
-		return nil, messageTarget{}, false, err
-	}
+	resolvedThreadID := threadID
 	target := messageTarget{
 		SubjectKind: "thread",
 		SubjectID:   resolvedThreadID,

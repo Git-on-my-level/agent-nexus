@@ -228,4 +228,25 @@ describe("inbox detail route state", () => {
 
     expect(searchActorsMock).not.toHaveBeenCalled();
   });
+
+  it("decodes a percent-encoded route id before GET and names a 404 without a template path", async () => {
+    const encoded = "inbox%3Aescalate%3Athread-gds-launch%3Aevt%3Aevt";
+    const decoded = "inbox:escalate:thread-gds-launch:evt:evt";
+    const notFound = new Error("anx-core request failed");
+    notFound.status = 404;
+    coreClientMock.getInboxItem.mockRejectedValue(notFound);
+    setInboxRoute(encoded);
+
+    const { getByRole } = render(InboxDetailPage);
+
+    await waitFor(() => {
+      expect(coreClientMock.getInboxItem).toHaveBeenCalledWith(decoded);
+    });
+    await waitFor(() => {
+      expect(getByRole("alert").textContent).toContain(
+        "This item is no longer in the open inbox.",
+      );
+    });
+    expect(getByRole("alert").textContent).not.toContain("{inbox_id}");
+  });
 });

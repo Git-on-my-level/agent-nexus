@@ -368,7 +368,11 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 		t.Fatalf("expected terminal move without evidence ErrInvalidBoardRequest, got %v", err)
 	}
 
-	evidenceRefs := []string{"event:card-completion-1"}
+	evidence, err := store.AppendEvent(ctx, "actor-3", map[string]any{"type": "completion_evidence", "refs": []string{}, "summary": "Card completion checked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidenceRefs := []string{"event:" + evidence["id"].(string)}
 	for _, resolution := range []string{"completed", "superseded", "unresolved"} {
 		_, err = store.AddBoardCard(ctx, "actor-3", boardID, primitives.AddBoardCardInput{
 			ParentThreadID:   cardThreadB,
@@ -414,7 +418,7 @@ func TestBoardStoreMoveCardResolutionTransitions(t *testing.T) {
 	if movedDone.Card["column_key"] != "done" || res != "done" {
 		t.Fatalf("unexpected terminal move result: %#v", movedDone.Card)
 	}
-	if got := movedDone.Card["resolution_refs"]; !reflect.DeepEqual(got, []any{"event:card-completion-1"}) && !reflect.DeepEqual(got, []string{"event:card-completion-1"}) {
+	if got := movedDone.Card["resolution_refs"]; !reflect.DeepEqual(got, []any{evidenceRefs[0]}) && !reflect.DeepEqual(got, evidenceRefs) {
 		t.Fatalf("unexpected resolution refs after done move: %#v", got)
 	}
 	afterDoneBoardUpdatedAt := movedDone.Board["updated_at"].(string)
@@ -803,6 +807,123 @@ func TestBoardStoreRejectsMixedPlacementAnchorTypes(t *testing.T) {
 		IfBoardUpdatedAt: &updatedAt,
 	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
 		t.Fatalf("expected mixed-anchor move ErrInvalidBoardRequest, got %v", err)
+	}
+}
+
+func TestBoardStorePlacementAnchorsResolvePublicIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := primitives.NewStore(workspace.DB(), blob.NewFilesystemBackend(workspace.Layout().ArtifactContentDir), workspace.Layout().ArtifactContentDir)
+
+	primaryThreadID := createBoardTestThread(t, ctx, store, "Anchor primary thread")
+	cardThreadA := createBoardTestThread(t, ctx, store, "Anchor card A")
+	cardThreadB := createBoardTestThread(t, ctx, store, "Anchor card B")
+	cardThreadC := createBoardTestThread(t, ctx, store, "Anchor card C")
+
+	board, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":     "Public anchor board",
+		"thread_id": primaryThreadID,
+	})
+	if err != nil {
+		t.Fatalf("create board: %v", err)
+	}
+	boardID := board["id"].(string)
+
+	addedA, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		Title:          "Card A",
+		ParentThreadID: cardThreadA,
+		ColumnKey:      "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add card A: %v", err)
+	}
+	addedB, err := store.AddBoardCard(ctx, "actor-2", boardID, primitives.AddBoardCardInput{
+		Title:          "Card B",
+		ParentThreadID: cardThreadB,
+		ColumnKey:      "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add card B: %v", err)
+	}
+	handleB := addedB.Card["handle"].(string)
+	if handleB == "" {
+		t.Fatal("card B missing handle")
+	}
+
+	updatedAt := addedB.Board["updated_at"].(string)
+	sleepBoardTick()
+	moved, err := store.MoveBoardCard(ctx, "actor-3", boardID, addedB.Card["id"].(string), primitives.MoveBoardCardInput{
+		ColumnKey:        "backlog",
+		BeforeCardID:     addedA.Card["handle"].(string),
+		IfBoardUpdatedAt: &updatedAt,
+	})
+	if err != nil {
+		t.Fatalf("move with handle anchor: %v", err)
+	}
+	cards, err := store.ListBoardCards(ctx, boardID)
+	if err != nil {
+		t.Fatalf("list after handle move: %v", err)
+	}
+	if got := boardCardThreadIDs(cards); !reflect.DeepEqual(got, []string{cardThreadB, cardThreadA}) {
+		t.Fatalf("unexpected order after handle anchor: %#v", got)
+	}
+
+	updatedAt = moved.Board["updated_at"].(string)
+	sleepBoardTick()
+	moved, err = store.MoveBoardCard(ctx, "actor-3", boardID, addedA.Card["id"].(string), primitives.MoveBoardCardInput{
+		ColumnKey:        "backlog",
+		BeforeCardID:     "card:" + addedB.Card["handle"].(string),
+		IfBoardUpdatedAt: &updatedAt,
+	})
+	if err != nil {
+		t.Fatalf("move with typed-ref anchor: %v", err)
+	}
+	cards, err = store.ListBoardCards(ctx, boardID)
+	if err != nil {
+		t.Fatalf("list after typed-ref move: %v", err)
+	}
+	if got := boardCardThreadIDs(cards); !reflect.DeepEqual(got, []string{cardThreadA, cardThreadB}) {
+		t.Fatalf("unexpected order after typed-ref anchor: %#v", got)
+	}
+
+	otherBoard, err := store.CreateBoard(ctx, "actor-1", map[string]any{
+		"title":     "Other board",
+		"thread_id": createBoardTestThread(t, ctx, store, "Other primary"),
+	})
+	if err != nil {
+		t.Fatalf("create other board: %v", err)
+	}
+	addedC, err := store.AddBoardCard(ctx, "actor-2", otherBoard["id"].(string), primitives.AddBoardCardInput{
+		Title:          "Off-board card",
+		ParentThreadID: cardThreadC,
+		ColumnKey:      "backlog",
+	})
+	if err != nil {
+		t.Fatalf("add off-board card: %v", err)
+	}
+
+	updatedAt = moved.Board["updated_at"].(string)
+	sleepBoardTick()
+	if _, err := store.MoveBoardCard(ctx, "actor-3", boardID, addedA.Card["id"].(string), primitives.MoveBoardCardInput{
+		ColumnKey:        "backlog",
+		BeforeCardID:     "missing-handle",
+		IfBoardUpdatedAt: &updatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected missing handle ErrInvalidBoardRequest, got %v", err)
+	}
+	if _, err := store.MoveBoardCard(ctx, "actor-3", boardID, addedA.Card["id"].(string), primitives.MoveBoardCardInput{
+		ColumnKey:        "backlog",
+		BeforeCardID:     addedC.Card["handle"].(string),
+		IfBoardUpdatedAt: &updatedAt,
+	}); !errors.Is(err, primitives.ErrInvalidBoardRequest) {
+		t.Fatalf("expected off-board handle ErrInvalidBoardRequest, got %v", err)
 	}
 }
 

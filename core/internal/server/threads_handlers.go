@@ -41,6 +41,9 @@ func handleGetThread(w http.ResponseWriter, r *http.Request, opts handlerOptions
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load thread")
 		return
 	}
+	if !requireAccessibleThreadMap(w, r, opts, thread, "thread") {
+		return
+	}
 	primitives.StripThreadPlanningFieldsForAPI(thread)
 
 	writeJSON(w, http.StatusOK, map[string]any{"thread": thread})
@@ -85,6 +88,7 @@ func handleListThreads(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list threads")
 		return
 	}
+	threads = filterAccessibleThreads(r, opts, threads)
 
 	threadIDs := make([]string, 0, len(threads))
 	for _, thread := range threads {
@@ -239,6 +243,9 @@ func handleThreadTimeline(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !ok {
 		return
 	}
+	if !requireAccessibleThreadID(w, r, opts, resolvedID, "thread") {
+		return
+	}
 	exp, err := expandThreadTimeline(r.Context(), opts, resolvedID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
@@ -270,6 +277,9 @@ func handleThreadContext(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 	resolvedID, ok := resolveHTTPResourceID(w, r, opts, "thread", threadID, "thread")
 	if !ok {
+		return
+	}
+	if !requireAccessibleThreadID(w, r, opts, resolvedID, "thread") {
 		return
 	}
 

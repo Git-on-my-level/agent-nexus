@@ -93,3 +93,55 @@ export const ICONS = {
     stroke: true,
   },
 };
+
+/**
+ * Shell navigation glyphs — one registry for the sidebar, the mobile bottom
+ * bar and the /more hub. Drawn on a 24 viewBox at stroke 1.5 with round caps
+ * and rendered at 16px. Every destination gets a distinct silhouette: two of
+ * these used to share a path, so Integrations and Audit were the same icon.
+ */
+export const NAV_ICONS = {
+  search: "M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z",
+  askPm:
+    "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
+  inbox:
+    "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4",
+  tasks: "M4 6h.01M8 6h8M4 12h.01M8 12h8M4 18h.01M8 18h8",
+  docs: "M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8m-5-5l5 5m-5-5v5h5M9 13h6M9 17h4",
+  access:
+    "M16 19v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1M9 4a3 3 0 110 6 3 3 0 010-6zm13 15v-1a4 4 0 00-3-3.87M16 4.13a4 4 0 010 7.75",
+  secrets:
+    "M13 10.5a5.5 5.5 0 11-7.78 7.78A5.5 5.5 0 0113 10.5zM21 2l-9.6 9.6M15.5 7.5l3 3L22 7l-3-3",
+  integrations: "M9 3v4M15 3v4M6 7h12v4a6 6 0 01-12 0V7zM12 17v4",
+  audit: "M3 3v5h5M3.05 13A9 9 0 106 5.3L3 8M12 7.5V12l3 2",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  account:
+    "M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5M19.5 3v6m0 0h-6m6 0l-9 9",
+  persona:
+    "M12 12a4 4 0 100-8 4 4 0 000 8zM4 21v-1a6 6 0 016-6h2.5M16 18l2 2 4-4",
+  signOut:
+    "M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9",
+};
+
+/**
+ * Path data for a shell nav glyph.
+ *
+ * An unknown key used to fall back to the inbox tray in silence, so a typo in
+ * a nav entry shipped as "two destinations with the same icon". In dev the
+ * miss is reported; the fallback still renders so the shell never breaks.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+export function navIconPath(key) {
+  const path = NAV_ICONS[key];
+  if (path) {
+    return path;
+  }
+  if (import.meta.env?.DEV) {
+    console.error(
+      `navIconPath: unknown icon key ${JSON.stringify(key)}. Add it to NAV_ICONS in src/lib/icons.js.`,
+    );
+  }
+  return NAV_ICONS.inbox;
+}

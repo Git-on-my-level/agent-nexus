@@ -256,6 +256,7 @@ func handleGetCompletedInbox(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load completed inbox history")
 		return
 	}
+	events = filterAccessibleEvents(r, opts, events)
 
 	hasMore := len(events) > requestedLimit
 	if hasMore {
@@ -308,6 +309,9 @@ func handleGetCompletedInboxItem(w http.ResponseWriter, r *http.Request, opts ha
 	}
 	if strings.TrimSpace(anyString(ev["trashed_at"])) != "" {
 		writeError(w, http.StatusNotFound, "not_found", "completed inbox item not found")
+		return
+	}
+	if !requireAccessibleEvent(w, r, opts, ev) {
 		return
 	}
 

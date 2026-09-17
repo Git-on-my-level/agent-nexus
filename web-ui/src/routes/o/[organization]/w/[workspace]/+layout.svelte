@@ -18,7 +18,7 @@
     <code class="rounded bg-panel px-1 py-0.5 font-mono text-fg-muted"
       >controlplane/</code
     >). API calls may fail until anx-core is up.
-    <span class="mt-1 block font-mono text-[11px] text-fg-subtle">
+    <span class="mt-1 block font-mono text-[11px] opacity-90">
       {data.coreSchemaCheckWarning}
     </span>
   </div>

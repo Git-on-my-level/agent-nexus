@@ -23,6 +23,7 @@ type App struct {
 	UserHomeDir func() (string, error)
 	ReadFile    func(string) ([]byte, error)
 	StdinIsTTY  func() bool
+	pmTurns     *pmTurnMemory
 }
 
 func isAPICallHelpOnly(remaining []string) bool {
@@ -68,6 +69,7 @@ func New() *App {
 		Getenv:      os.Getenv,
 		UserHomeDir: os.UserHomeDir,
 		ReadFile:    os.ReadFile,
+		pmTurns:     newPMTurnMemory(),
 	}
 	app.StdinIsTTY = func() bool {
 		file, ok := app.Stdin.(*os.File)
@@ -125,7 +127,8 @@ func (a *App) Run(args []string) int {
 		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
 		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||
 		isAPICallHelpOnly(remaining) ||
-		isTrailingHelpOnlyInvocation(remaining)
+		isTrailingHelpOnlyInvocation(remaining) ||
+		isWorkCommandGroup(strings.Join(remaining, " "))
 
 	preflightCommandName, usageErr := preflightConfigIndependentUsage(remaining)
 	if usageErr != nil {
@@ -192,6 +195,7 @@ type commandResult struct {
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {
 	normalized := errnorm.Normalize(err)
+	errnorm.EnrichForCommand(normalized, identity.CommandID)
 	if jsonMode {
 		envelope := output.Envelope{
 			OK:        false,

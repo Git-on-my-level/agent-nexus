@@ -361,7 +361,7 @@ func locatorFromCommandBody(commandID string, body map[string]any) (resourceLoca
 		topic := extractNestedMap(body, "topic")
 		id := publicLocatorID(topic, "topic")
 		return resourceLocator{Kind: "topic", ID: id}, id != ""
-	case "docs.create":
+	case "docs.create", "docs.put":
 		document := extractNestedMap(body, "document")
 		id := publicLocatorID(document, "document")
 		return resourceLocator{Kind: "document", ID: id}, id != ""

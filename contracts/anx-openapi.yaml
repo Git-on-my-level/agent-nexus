@@ -27,6 +27,1625 @@ x-anx-extension-vocabulary:
   x-anx-surface: canonical | projection | diagnostic | utility
   x-anx-agent-notes: Idempotency, retries, and protocol caveats.
 paths:
+  /pm/conversations:
+    get:
+      operationId: pmConversationsList
+      summary: List PM conversations
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.list
+      x-anx-cli-path: pm conversations list
+      x-anx-why: List PM conversations.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversationListResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      responses:
+        '200':
+          description: List PM conversations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversationListResponse'
+    post:
+      operationId: pmConversationsCreate
+      summary: Create a durable PM conversation
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.create
+      x-anx-cli-path: pm conversations create
+      x-anx-why: Create a durable PM conversation.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversation`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMConversationCreateRequest'
+      responses:
+        '201':
+          description: Create a durable PM conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversation'
+  /pm/conversations/{conversation_id}:
+    get:
+      operationId: pmConversationsGet
+      summary: Read PM conversation and turns
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.get
+      x-anx-cli-path: pm conversations get
+      x-anx-why: Read PM conversation and turns.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMConversationDetailResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 200}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      responses:
+        '200':
+          description: Read PM conversation and turns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMConversationDetailResponse'
+  /pm/conversations/{conversation_id}/messages:
+    post:
+      operationId: pmConversationsMessagesCreate
+      summary: Queue a contextual PM turn
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.conversations.messages.create
+      x-anx-cli-path: pm conversations messages create
+      x-anx-why: Queue a contextual PM turn.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMMessageCreateRequest'
+      responses:
+        '202':
+          description: Queue a contextual PM turn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+        '429':
+          description: Busy; details.reason is conversation with details.turn_id, or queue with details.queued and details.limit. Unclaimed turns do not consume runner capacity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/context:
+    get:
+      operationId: pmContext
+      summary: Read bounded authorized PM context
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.context
+      x-anx-cli-path: pm context
+      x-anx-why: Read bounded authorized PM context.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMContextResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: work_ref
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '400':
+          description: 'Invalid context request. Cursor errors distinguish cursor is not valid for a work-scoped context from cursor is malformed or from another scope.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+        '200':
+          description: Read bounded authorized PM context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMContextResponse'
+  /pm/decisions:
+    get:
+      operationId: pmDecisionsList
+      summary: List durable PM decisions
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.list
+      x-anx-cli-path: pm decisions list
+      x-anx-why: List durable PM decisions.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecisionListResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      responses:
+        '200':
+          description: List durable PM decisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecisionListResponse'
+    post:
+      operationId: pmDecisionsCreate
+      description: Proposals require live work; missing, trashed, or archived work returns 404 not_found after principal authorization. For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values.
+      summary: Propose a scoped PM decision
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.create
+      x-anx-cli-path: pm decisions create
+      x-anx-why: Propose a scoped PM decision.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - human_proposal_pending
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMDecisionCreateRequest'
+      responses:
+        '200':
+          description: Existing identical proposal; replayed is true. Terminal decisions also include replayed_terminal_status and do not create another awaiting request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+        '201':
+          description: Propose a scoped PM decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+        '409':
+          description: Request key intent conflicts include error.details.existing_decision_id. Non-human proposals blocked by an awaiting human proposal on the same approver actor, work, and scope return human_proposal_pending with error.details.pending_decision_id; a human must decline or answer it first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/turns/{turn_id}:
+    get:
+      operationId: pmTurnsGet
+      summary: Read a PM conversation turn
+      description: The requesting actor with conversation read permission or the configured PM actor with pm.respond permission may read the turn in its workspace. Active lease_owner is the runner ID; lease_token is returned only by claim.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.get
+      x-anx-cli-path: pm turns get
+      x-anx-why: Read a PM conversation turn.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Only the requesting conversation actor can read this turn. Past-deadline open turns are failed before returning.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a PM conversation turn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+  /pm/decisions/{decision_id}:
+    get:
+      operationId: pmDecisionsGet
+      summary: Read a PM decision
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.get
+      x-anx-cli-path: pm decisions get
+      x-anx-why: Read a PM decision.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a PM decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/decisions/{decision_id}/answer:
+    post:
+      operationId: pmDecisionsAnswer
+      summary: Answer and authorize a scoped decision
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies human, channel, or pm_turn proposals and proposed_by identifies the proposing actor, so clients can direct reproposal to the board or the PM truthfully. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.answer
+      x-anx-cli-path: pm decisions answer
+      x-anx-why: Answer and authorize a scoped decision.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMDecisionAnswerRequest'
+      responses:
+        '409':
+          description: source_revision_changed for fresh approval of stale, missing, moot, or unreadable work includes revision and reason details. Decision state conflicts on superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+        '200':
+          description: Answer and authorize a scoped decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/decisions/{decision_id}/dispatch:
+    post:
+      operationId: pmDecisionsDispatch
+      description: Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, current_revision null, and origin_kind and proposed_by copied from the decision before any source call. A changed revision returns the same typed details with reason revision_changed and the observed current_revision. For a pending action with no sent attempt, dispatch durably records a failed attempt without sent_at and advances the action to failed, making it acknowledgeable. Receipt detail is "The task this approval refers to no longer exists (trashed or purged); nothing was sent". Transient work_read_failed errors leave durable state unchanged. Executor availability is independent of work lifecycle. Only the authorized decision owner receives this diagnosis; cross-principal access remains forbidden.
+      summary: Hand off an authorized source action
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.decisions.dispatch
+      x-anx-cli-path: pm decisions dispatch
+      x-anx-why: Hand off an authorized source action.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: decision_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMEmptyRequest'
+      responses:
+        '409':
+          description: Decision state conflict; superseded decisions include error.details.status and error.details.superseded_by (replacement ID, when present).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+        '200':
+          description: Hand off an authorized source action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+        '503':
+          description: No executor is configured for this scope and source. The approved pending action is unchanged and no attempt is recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/actions:
+    get:
+      operationId: pmActionsList
+      summary: List action receipts and attempts
+      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor. Legacy actions without created_at use their decision creation time.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.list
+      x-anx-cli-path: pm actions list
+      x-anx-why: List action receipts and attempts.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMActionListResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      responses:
+        '200':
+          description: List action receipts and attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMActionListResponse'
+  /pm/actions/{action_id}:
+    get:
+      operationId: pmActionsGet
+      summary: Read an action and its receipts
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.get
+      x-anx-cli-path: pm actions get
+      x-anx-why: Read an action and its receipts.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read an action and its receipts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+  /pm/actions/{action_id}/reconcile:
+    post:
+      operationId: pmActionsReconcile
+      description: 'Missing work (including trashed or archived work) returns 409 source_revision_changed with reason work_missing, approved_revision, current_revision null, and origin_kind and proposed_by copied from the decision before any source call. The missing-work message is "Nothing was delivered for this approval: the task it refers to no longer exists, so there is nothing to read back." Other unsent failed actions retain the existing "Nothing has been delivered yet, so there is nothing to read back" refusal. Human acknowledgement does not stop read-only reconciliation. Advancing source results update action status and receipt while retaining acknowledged_by, acknowledged_at, and attempts. Missing work never changes durable state during reconciliation or resurrects an action failed before send. Unsent failed actions and acknowledged undeliverable pending actions remain unreconcilable.'
+      summary: Read back an action outcome without resending
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.reconcile
+      x-anx-cli-path: pm actions reconcile
+      x-anx-why: Read back an action outcome without resending.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMEmptyRequest'
+      responses:
+        '200':
+          description: Read back an action outcome without resending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+        '400':
+          description: A pending action has never been delivered, so there is nothing to read back.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/actions/{action_id}/acknowledge:
+    post:
+      operationId: pmActionsAcknowledge
+      summary: Acknowledge a failed, unresolvable, or undeliverable action
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.actions.acknowledge
+      x-anx-cli-path: pm actions acknowledge
+      x-anx-why: Acknowledge a failed, unresolvable, or undeliverable action.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMAction`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      description: >-
+        Only the decision actor may acknowledge a failed action, an unknown action whose current read-back cannot advance, or a pending_delivery action with deliverable false. Acknowledging an undeliverable action retains the approval and no-delivery-path detail, places it under Handled, and prevents delivery even if routing later becomes available; a fresh proposal and approval are required. Idempotent. Human acknowledgement does not block later read-only reconciliation; advancing source results update status and receipt while preserving acknowledged_by and acknowledged_at. Failed actions without a sent attempt remain unreconcilable after acknowledgement. Sets acknowledged_by and acknowledged_at and visible status acknowledged preserving existing receipts and attempts; undeliverable pending actions set closed_without_delivery true and receipt.detail to "Closed without delivery: no delivery path is configured for <source>; nothing was sent.". Other states return 409; other actors return 403.
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMEmptyRequest'
+      responses:
+        '200':
+          description: Acknowledge a failed, unresolvable, or undeliverable action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMAction'
+        '403':
+          description: Only the decision actor may acknowledge.
+        '409':
+          description: Action is not failed or unresolvable unknown.
+  /pm/bindings:
+    get:
+      operationId: pmBindingsList
+      summary: List channel identity bindings in the workspace
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.bindings.list
+      x-anx-cli-path: pm bindings list
+      x-anx-why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMBindingListResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the
+        channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
+      parameters:
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+      - name: cursor
+        in: query
+        schema: {type: string}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMBindingListResponse'
+    post:
+      operationId: pmBindingsCreate
+      summary: Bind an exact channel identity to a workspace principal
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.bindings.create
+      x-anx-cli-path: pm bindings create
+      x-anx-why: Bind an exact channel identity to a workspace principal.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMBinding`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMBinding'
+      responses:
+        '201':
+          description: Bind an exact channel identity to a workspace principal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMBinding'
+  /pm/turns/claim:
+    post:
+      operationId: pmTurnsClaim
+      summary: Claim or recover a PM turn with an exclusive runner lease
+      description: 'New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is "Workspace PM capacity reached (N in flight; limit M)". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Leases last ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Runners must POST heartbeat with the token at a cadence strictly less than TTL/2. Expired leases are reclaimable with a fresh token until the turn deadline; the same open turn becomes unclaimed and waiting again, preserving its history rather than failing. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.'
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.claim
+      x-anx-cli-path: pm turns claim
+      x-anx-why: Claim one queued turn for the selected PM agent so two runners never answer it.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMClaimedTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - source_revision_changed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval.
+        Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are
+        expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMClaimRequest'
+      responses:
+        '200':
+          description: Claimed queued turn with a runner lease
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMClaimedTurn'
+        '204':
+          description: No waiting turn for the selected PM actor and no owned lease to recover, including at capacity
+        '429':
+          description: Waiting work exists but workspace runner lease capacity is reached; busy with reason capacity, in_flight, limit, and waiting. Retry after one poll interval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+  /pm/turns/{turn_id}/fail:
+    post:
+      operationId: pmTurnsFail
+      summary: Mark a claimed PM turn failed
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.fail
+      x-anx-cli-path: pm turns fail
+      x-anx-why: Record a selected PM agent failure reason without inventing a reply.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - turn_closed
+      - lease_required
+      - lease_mismatch
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMFailRequest'
+      responses:
+        '200':
+          description: Mark a claimed PM turn failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+  /pm/turns/{turn_id}/release:
+    post:
+      operationId: pmTurnsRelease
+      summary: Release a claimed PM turn back to the queue
+      description: The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.release
+      x-anx-cli-path: pm turns release
+      x-anx-why: Return interrupted work to the queue for another claim.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - lease_mismatch
+      - turn_not_claimed
+      - turn_closed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMReleaseRequest'
+      responses:
+        '200':
+          description: Release a claimed PM turn back to the queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+        '403':
+          description: Caller is not the selected PM actor or runner_id and lease_token do not match the lease.
+        '409':
+          description: No active lease or turn is closed; expired turns report failure_kind expired and the deadline.
+  /pm/turns/{turn_id}/heartbeat:
+    post:
+      operationId: pmTurnsHeartbeat
+      summary: Renew a claimed PM turn lease
+      description: Selected PM actor only. Requires the current lease_token. Extends lease_expires_at to min(now + ANX_PM_LEASE_TTL, turn deadline). ANX_PM_LEASE_TTL defaults to 60s (valid range 1s to 10m); runners must renew at a cadence strictly less than TTL/2. Missing tokens return 409 lease_required; expired, released, or foreign tokens return 409 lease_mismatch. Terminal turns return 409 turn_closed. Returns PMHeartbeatTurn without exposing the token; preserves status, claimed_at, and existing history.
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.heartbeat
+      x-anx-cli-path: pm turns heartbeat
+      x-anx-why: Keep an active runner lease alive during execution.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMHeartbeatTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - lease_mismatch
+      - lease_required
+      - turn_closed
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMHeartbeatRequest'
+      responses:
+        '200':
+          description: Renew a claimed PM turn lease
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMHeartbeatTurn'
+        '403':
+          description: Caller is not the selected PM actor.
+        '409':
+          description: Missing lease token, lease mismatch, or closed turn.
+  /pm/turns/{turn_id}/context:
+    post:
+      operationId: pmTurnsContext
+      description: Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      summary: Read requesting principal context as selected PM agent
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.context
+      x-anx-cli-path: pm turns context
+      x-anx-why: Read requesting principal context as selected PM agent.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMContextResponse`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - turn_closed
+      - lease_required
+      - lease_mismatch
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMTurnContextRequest'
+      responses:
+        '200':
+          description: Read requesting principal context as selected PM agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMContextResponse'
+  /pm/turns/{turn_id}/decisions:
+    post:
+      operationId: pmTurnsDecisionsCreate
+      description: For work.annotate, instruction must be a nonempty JSON object containing only project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
+      summary: Record a selected PM agent proposal
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.decisions.create
+      x-anx-cli-path: pm turns decisions create
+      x-anx-why: Record a selected PM agent proposal.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMDecision`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - human_proposal_pending
+      - turn_closed
+      - lease_required
+      - lease_mismatch
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMTurnProposeRequest'
+      responses:
+        '409':
+          description: Lease or request-key conflict, or human_proposal_pending with error.details.pending_decision_id; a human must decline or answer the pending human proposal on the same approver actor, work, and scope first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
+        '200':
+          description: Record or replay a selected PM agent proposal. Replays include replayed true and terminal replays also include replayed_terminal_status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMDecision'
+  /pm/turns/{turn_id}/complete:
+    post:
+      operationId: pmTurnsComplete
+      description: Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.
+      summary: Record a selected PM agent response
+      tags:
+      - pm
+      x-anx-surface: canonical
+      x-anx-command-id: pm.turns.complete
+      x-anx-cli-path: pm turns complete
+      x-anx-why: Record a selected PM agent response.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `PMTurn`.
+      x-anx-error-codes:
+      - auth_required
+      - invalid_token
+      - invalid_request
+      - forbidden
+      - not_found
+      - conflict
+      - turn_closed
+      - lease_required
+      - lease_mismatch
+      - busy
+      - unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
+        source reports, and independent verification. Unknown sends must not be blindly retried.
+      parameters:
+      - name: turn_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PMCompleteRequest'
+      responses:
+        '200':
+          description: Record a selected PM agent response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMTurn'
+  /work:
+    get:
+      operationId: workList
+      summary: List heterogeneous commitments
+      description: Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.list
+      x-anx-cli-path: work list
+      x-anx-why: List heterogeneous commitments.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: project_ref
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: owner
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: phase
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: freshness
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List heterogeneous commitments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkListResponse'
+    post:
+      operationId: workCreate
+      summary: Register a card-backed commitment
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.create
+      x-anx-cli-path: work create
+      x-anx-why: Register a card-backed commitment.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCreateRequest'
+      responses:
+        '201':
+          description: Register a card-backed commitment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+  /work/capabilities:
+    get:
+      operationId: workCapabilities
+      summary: Inspect work tracking capabilities
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.capabilities
+      x-anx-cli-path: work capabilities
+      x-anx-why: Inspect work tracking capabilities.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkCapabilitiesResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      responses:
+        '200':
+          description: Inspect work tracking capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkCapabilitiesResponse'
+  /work/{card_ref}:
+    get:
+      operationId: workGet
+      summary: Read a commitment and its evidence
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.get
+      x-anx-cli-path: work get
+      x-anx-why: Read a commitment and its evidence.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Read a commitment and its evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+    patch:
+      operationId: workPatch
+      summary: Update local commitment annotations
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.patch
+      x-anx-cli-path: work patch
+      x-anx-why: Update local commitment annotations.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkPatchRequest'
+      responses:
+        '200':
+          description: Update local commitment annotations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkResponse'
+  /work/{card_ref}/observations:
+    get:
+      operationId: workObservationsList
+      summary: List append-only work observations
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.observations.list
+      x-anx-cli-path: work observations list
+      x-anx-why: List append-only work observations.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkObservationListResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: List append-only work observations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkObservationListResponse'
+    post:
+      operationId: workObservationsSubmit
+      summary: Submit an attributed source observation
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.observations.submit
+      x-anx-cli-path: work observations submit
+      x-anx-why: Submit an attributed source observation.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkObservationResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkObservationRequest'
+      responses:
+        '200':
+          description: Submit an attributed source observation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkObservationResponse'
+  /work/{card_ref}/refresh:
+    get:
+      operationId: workRefreshGet
+      summary: Inspect durable refresh lifecycle
+      tags:
+      - work
+      x-anx-surface: projection
+      x-anx-command-id: work.refresh.get
+      x-anx-cli-path: work refresh get
+      x-anx-why: Inspect durable refresh lifecycle.
+      x-anx-input-mode: none
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkRefreshResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Inspect durable refresh lifecycle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRefreshResponse'
+    post:
+      operationId: workRefreshRequest
+      summary: Queue or coalesce a read-only refresh
+      tags:
+      - work
+      x-anx-surface: canonical
+      x-anx-command-id: work.refresh.request
+      x-anx-cli-path: work refresh request
+      x-anx-why: Queue or coalesce a read-only refresh.
+      x-anx-input-mode: json-body
+      x-anx-streaming:
+        mode: none
+      x-anx-output-envelope: Returns `WorkRefreshResponse`.
+      x-anx-error-codes:
+      - invalid_request
+      - not_found
+      - conflict
+      - work_unavailable
+      x-anx-concepts:
+      - cards
+      - evidence
+      x-anx-stability: beta
+      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
+        acceptance is not a successful read.
+      parameters:
+      - name: card_ref
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkRefreshRequest'
+      responses:
+        '202':
+          description: Queue or coalesce a read-only refresh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkRefreshResponse'
   /health:
     get:
       operationId: healthCheck
@@ -725,12 +2344,27 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: List knowledge docs
+          command: anx docs list --knowledge
       parameters:
         - name: q
           in: query
           required: false
           schema: { type: string }
           description: Search documents by public ref, handle, or title substring.
+        - name: tag
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents that include this tag (exact match).
+        - name: knowledge
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: >
+            When true, only documents tagged `knowledge` (docs meant for agents).
+            Equivalent to tag=knowledge when tag is omitted.
         - name: thread_id
           in: query
           required: false
@@ -786,6 +2420,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Create from a local file
+          command: anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md
       requestBody:
         required: true
         content:
@@ -799,6 +2436,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/search:
+    get:
+      operationId: searchDocuments
+      summary: Search documents
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.search
+      x-anx-cli-path: docs search
+      x-anx-why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ documents, next_cursor? }`. Each document may include `search_rank` (higher is better)."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-concepts: [docs]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Search knowledge
+          command: anx docs search "runbook" --knowledge --limit 20
+      x-anx-agent-notes: >
+        SQLite FTS5 over title, body, summary, source, tags, and backing-thread comments.
+        Query terms are AND-matched; punctuation is tokenized. Prefer this over
+        `docs.list?q=` when matching body or comments. `search_rank` is higher for stronger
+        matches (title weighted above body, then summary/source/tags, then comments).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+          description: Search query over title, body, and comments.
+        - name: knowledge
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: When true, only documents tagged `knowledge`.
+        - name: tag
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents that include this tag.
+        - name: host
+          in: query
+          required: false
+          schema: { type: string }
+          description: Restrict results to documents whose `hosts` list includes this host name.
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque pagination cursor from a previous search response.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+          description: Page size; omit to return up to 50 hits.
+      responses:
+        '200':
+          description: Ranked document search hits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentsResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -819,6 +2525,12 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Print markdown body
+          command: anx docs get kb-shared --format md
+      x-anx-agent-notes: >
+        Returns `{ document, revision }` including the head revision body. CLI `--format md`
+        prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -846,6 +2558,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write, concurrency]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Patch knowledge hosts
+          command: anx docs patch kb-shared --from-file patch.json
       requestBody:
         required: true
         content:
@@ -869,6 +2584,55 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '409':
           $ref: '#/components/responses/ErrorResponse'
+    put:
+      operationId: putDocument
+      summary: Create or replace a document by handle
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.put
+      x-anx-cli-path: docs put
+      x-anx-why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document, revision }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Publish from stdin
+          command: anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md --hosts m4-air --verified-at 2026-09-08T12:00:00Z
+      x-anx-agent-notes: >
+        Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists,
+        a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does
+        not exist, the document is created with that handle. Visibility/lifecycle is unchanged.
+        CLI `anx docs put -` reads the body from stdin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutDocumentRequest'
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Existing document updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithRevisionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
 
   /docs/{document_id}/archive:
     post:
@@ -885,6 +2649,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Archive a document
+          command: anx docs archive doc:runbook --reason "superseded"
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -924,6 +2691,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Unarchive a document
+          command: anx docs unarchive doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -963,6 +2733,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Trash a document
+          command: anx docs trash doc:runbook --reason "obsolete"
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -1002,6 +2775,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Restore a trashed document
+          command: anx docs restore doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -1041,6 +2817,9 @@ paths:
       x-anx-error-codes: [auth_required, human_only, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Purge a trashed document
+          command: anx docs purge doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -1080,6 +2859,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_token, not_found]
       x-anx-concepts: [docs, revisions]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: List revision history
+          command: anx docs history doc:runbook
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       responses:
@@ -1107,6 +2889,9 @@ paths:
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, conflict]
       x-anx-concepts: [docs, revisions, write]
       x-anx-stability: beta
+      x-anx-examples:
+        - title: Revise from a local file
+          command: anx docs revise doc:runbook --body-file runbook.md
       parameters:
         - $ref: '#/components/parameters/DocumentID'
       requestBody:
@@ -1156,6 +2941,222 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentRevisionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/comments:
+    get:
+      operationId: listDocumentComments
+      summary: List document comments
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.list
+      x-anx-cli-path: docs comments
+      x-anx-why: Read the document discussion thread with stable comment ids.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comments, next_cursor? }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [docs]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: List comments
+          command: anx docs comments doc:runbook
+      x-anx-agent-notes: >
+        Comments are the document backing-thread `message_posted` events, projected with stable
+        `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment
+        ref for threaded replies; `parent_id` is the same parent as an internal id.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+          description: Page size; omit to return the full matching set.
+      responses:
+        '200':
+          description: Document comment thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createDocumentComment
+      summary: Post a document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.create
+      x-anx-cli-path: docs comment
+      x-anx-why: Post a comment on a document so another agent can read it later.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Post a comment
+          command: anx docs comment doc:runbook "Host B found this"
+      x-anx-agent-notes: >
+        Posts a `message_posted` event on the document backing thread. Optional `reply_to` or
+        `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document
+        revisions and are the deep-link identity.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentCommentRequest'
+      responses:
+        '201':
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/comments/{comment_id}:
+    patch:
+      operationId: updateDocumentComment
+      summary: Edit one's own document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.update
+      x-anx-cli-path: docs comments edit
+      x-anx-why: Edit a comment you authored without changing its stable ref.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Edit own comment
+          command: anx docs comments edit doc:runbook event:note --body "Corrected"
+      x-anx-agent-notes: >
+        Updates the comment body in place. Only the original author may edit. The comment
+        `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/CommentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDocumentCommentRequest'
+      responses:
+        '200':
+          description: Comment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      operationId: deleteDocumentComment
+      summary: Delete one's own document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.delete
+      x-anx-cli-path: docs comments delete
+      x-anx-why: Remove a comment you authored from the document discussion.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }` with the trashed comment."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found, forbidden]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Delete own comment
+          command: anx docs comments delete doc:runbook event:note
+      x-anx-agent-notes: >
+        Trashes the backing `message_posted` event. Only the original author may delete.
+        The comment ref stays stable; list omits trashed comments.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/CommentID'
+      responses:
+        '200':
+          description: Comment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /docs/{document_id}/comments/{comment_id}/replies:
+    post:
+      operationId: replyDocumentComment
+      summary: Reply to a document comment
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.comments.reply
+      x-anx-cli-path: docs comments reply
+      x-anx-why: Reply in a document comment thread without leaving the docs surface.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ comment }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-examples:
+        - title: Reply in thread
+          command: anx docs comments reply doc:runbook event:note --body "Acknowledged"
+      x-anx-agent-notes: >
+        Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`.
+        Prefer `docs comment --reply-to` from the CLI.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+        - $ref: '#/components/parameters/CommentID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentCommentRequest'
+      responses:
+        '201':
+          description: Reply created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentCommentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -2913,16 +4914,6 @@ paths:
             type: string
             enum: [open, completed]
             default: open
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Open inbox reads always return the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation. Ignored when status=completed.
-          schema:
-            type: integer
-            minimum: 0
         - name: limit
           in: query
           required: false
@@ -4037,16 +6028,6 @@ paths:
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/InboxID'
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Inbox item reads always return the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation.
-          schema:
-            type: integer
-            minimum: 0
       responses:
         '200':
           description: Inbox item
@@ -4075,16 +6056,6 @@ paths:
       x-anx-concepts: [inbox]
       x-anx-stability: beta
       parameters:
-        - name: risk_horizon_days
-          in: query
-          required: false
-          description: >
-            Deprecated compatibility parameter. Inbox streams emit changes from the
-            configured materialized inbox projection; this value is validated but
-            does not trigger read-time recomputation.
-          schema:
-            type: integer
-            minimum: 0
         - name: last_event_id
           in: query
           required: false
@@ -4481,6 +6452,12 @@ components:
       required: true
       schema: { type: string }
       description: Public revision ref (`document_revision:<handle>` or `card_revision:<handle>`) or revision handle. Internal UUID lookup is compatibility/debug-only.
+    CommentID:
+      in: path
+      name: comment_id
+      required: true
+      schema: { type: string }
+      description: Public comment/event ref (`event:<handle>`) or event handle/id.
     BoardID:
       in: path
       name: board_id
@@ -4517,6 +6494,1143 @@ components:
       schema: { type: string }
 
   schemas:
+    PMConversation:
+      type: object
+      additionalProperties: true
+      properties:
+        id: &id001
+          type: string
+        workspace_id: &id002
+          type: string
+        actor_id: &id003
+          type: string
+        work_ref: &id004
+          type: string
+        created_at: &id005
+          type: string
+        title:
+          type: string
+        thread_id:
+          type: string
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+    PMOrigin:
+      type: object
+      additionalProperties: true
+      properties:
+        transport:
+          type: string
+        tenant_id:
+          type: string
+        channel_id:
+          type: string
+        thread_id:
+          type: string
+        external_user_id:
+          type: string
+    PMTurn:
+      required: [deadline, claimed]
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        conversation_id:
+          type: string
+        text:
+          type: string
+        response:
+          type: string
+        wakeup_id:
+          type: string
+        agent_actor_id:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+          description: Turn completion deadline; open turns expire to failed on reads and periodic maintenance.
+        status:
+          type: string
+          enum:
+          - pending_delivery
+          - sending
+          - delivered
+          - unknown
+          - failed
+        revision:
+          type: integer
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        decision_ids:
+          type: array
+          items:
+            type: string
+        failure:
+          type: string
+        failure_kind:
+          type: string
+          readOnly: true
+          description: Machine-readable failure reason; expired means the turn deadline elapsed. Absent for failures without a classified reason. Also returned in error.details for turn_closed 409 responses; expiry messages say expired at followed by the RFC3339 deadline.
+        claimed:
+          type: boolean
+          readOnly: true
+          description: True while a runner holds an unexpired lease. Only the runner ID is exposed as lease_owner; no lease token is exposed on public turn responses.
+        lease_owner:
+          type: string
+          readOnly: true
+          description: Runner ID of the active lease, visible to the requesting actor and configured PM actor. Never a lease token; absent after release or expiry.
+        claimed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Time of the most recent runner claim, if recorded; retained after completion or expiry.
+        max_output_bytes:
+          type: integer
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+    PMHeartbeatTurn:
+      description: Renewal response with the new expiry and no lease token.
+      allOf:
+      - $ref: '#/components/schemas/PMTurn'
+      - type: object
+        required:
+        - lease_expires_at
+        properties:
+          lease_expires_at:
+            type: string
+            format: date-time
+            description: Renewed lease expiry, never later than the turn deadline.
+    PMClaimedTurn:
+      description: Authenticated runner claim response; lease credentials are returned only by the claim endpoint.
+      allOf:
+      - $ref: '#/components/schemas/PMTurn'
+      - type: object
+        properties:
+          lease_token:
+            type: string
+          lease_owner:
+            type: string
+          lease_expires_at:
+            type: string
+            format: date-time
+    PMActionPayload:
+      type: object
+      additionalProperties: false
+      description: Exact action parameters bound to approval; work.phase requires phase. Instruction is prose and is never parsed for a phase. Done proposals require existing non-trashed workspace resolution refs and at least one artifact or event. Dispatch revalidates before the canonical write; missing evidence fails without sent_at and names the ref in receipt.detail.
+      properties:
+        phase:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        resolution_refs:
+          type: array
+          items:
+            type: string
+        resolution:
+          type: array
+          readOnly: true
+          description: Omitted when empty. Derived on decision responses only, never accepted as input or stored approval parameters. Missing, trashed, or unavailable refs have exists false and an empty title_or_summary; summaries are bounded to 240 characters plus an ellipsis.
+          items:
+            type: object
+            additionalProperties: false
+            required: [ref, kind, title_or_summary, exists]
+            properties:
+              ref: {type: string}
+              kind: {type: string}
+              title_or_summary: {type: string}
+              exists: {type: boolean}
+    PMDecision:
+      required: [deliverable, delivery_path]
+      description: Workspace-visible for reading; only the human actor_id may answer or dispatch. Clients must show answer controls only to that human.
+      type: object
+      additionalProperties: true
+      properties:
+        source_authority:
+          type: string
+          readOnly: true
+          description: Trusted source authority captured at proposal and copied to the action for executor routing even after work is purged. Absent on legacy records; live work supplies the legacy fallback.
+        replayed:
+          type: boolean
+          readOnly: true
+          description: Response-only; true when a proposal reuses an existing decision. Absent on new proposals and ordinary reads.
+        replayed_terminal_status:
+          type: string
+          readOnly: true
+          description: Response-only status of a replayed decision that is no longer awaiting_answer. Absent on awaiting replays and ordinary reads.
+        deliverable:
+          type: boolean
+          nullable: true
+          readOnly: true
+          description: Derived on every response from the same configured scope/source executor registry as action deliverable. Availability is independent of work lifecycle and does not imply approval, delivery, or a valid source revision. Null means a legacy record has lost both its work and source authority; delivery_path is unknown, never an unconfigured-executor diagnosis.
+        delivery_path:
+          type: string
+          readOnly: true
+          description: Configured executor route (for example nexus or github); none when no route is available. Open string for future integrations; configured denotes a legacy unnamed executor. Unknown denotes a legacy record whose source cannot be recovered after work purge; deliverable is null.
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        proposed_by:
+          type: string
+          readOnly: true
+          description: Actor ID of the proposing principal, distinct from actor_id (the human approver). Absent on legacy decisions whose proposer was not recorded.
+        origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Human principal proposals retain human even through a channel; the existing origin field records the validated channel identity. PM turn proposals use pm_turn. The channel value is retained for legacy records. Absent on legacy decisions without provenance.
+        turn_id:
+          type: string
+          readOnly: true
+          description: Originating PM turn ID, present for pm_turn proposals.
+        work_ref: *id004
+        created_at: *id005
+        instruction:
+          type: string
+        payload:
+          $ref: '#/components/schemas/PMActionPayload'
+        scope:
+          type: string
+        target_revision:
+          type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+        work_missing:
+          type: boolean
+          readOnly: true
+          description: Derived on every response; true when the referenced work no longer resolves or is trashed or archived. Such decisions remain visible in lists and pages and can be declined or their actions acknowledged or closed by the owner, but cannot be approved or dispatched.
+        target_current:
+          type: boolean
+          nullable: true
+          readOnly: true
+          description: Derived on every response; true when target_revision equals the referenced work's current decision_revision. False when the work is missing or the revision differs. Null when current work cannot be read or the work reader is unavailable.
+        already_at_target:
+          type: boolean
+          nullable: true
+          readOnly: true
+          description: Derived on every response; true when a nonempty payload.phase equals the referenced work's current phase. False without a phase payload, when work is missing, or the phase differs. Null when current work cannot be read or the work reader is unavailable.
+        can_answer:
+          type: boolean
+          readOnly: true
+          description: Derived for the current reader; true only for the awaiting decision owner with human approval authority and readable existing work. False for missing work; the owner may still decline.
+        answer:
+          type: string
+        superseded_by:
+          type: string
+          description: Replacement decision ID when a changed proposal supersedes this awaiting decision.
+        superseded_by_proposed_by:
+          type: string
+          readOnly: true
+          description: Proposing actor ID of the replacement decision; absent for legacy records with unknown attribution.
+        superseded_by_origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Origin kind of the replacement decision; absent for legacy records with unknown attribution.
+        superseded_reason:
+          type: string
+        supersedes:
+          type: string
+          readOnly: true
+          description: ID of the awaiting decision replaced by this proposal. Persisted on the replacement and returned on create/propose, replay, and reads; absent when nothing was replaced.
+        supersedes_proposed_by:
+          type: string
+          readOnly: true
+          description: Proposing actor ID recorded on the replaced decision; absent when no decision was replaced or its legacy provenance is unknown.
+        supersedes_origin_kind:
+          type: string
+          readOnly: true
+          enum: [human, pm_turn, channel]
+          description: Origin kind recorded on the replaced decision; absent when no decision was replaced or its legacy provenance is unknown.
+        answered_by:
+          type: string
+        action_id:
+          type: string
+        status:
+          type: string
+          enum:
+          - awaiting_answer
+          - answered
+          - declined
+          - superseded
+          description: Declined means the human rejected the proposal; superseded is reserved for replacement. Legacy superseded decisions without superseded_by are returned as declined.
+        revision:
+          type: integer
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+    PMReceipt:
+      description: Successful native execution followed by canonical Nexus store read-back is verified with independently_verified true in the dispatch response. External executor reports remain source_reported until independently verified.
+      type: object
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+        external_id:
+          type: string
+        url:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        independently_verified:
+          type: boolean
+        detail:
+          type: string
+    PMAction:
+      required: [deliverable]
+      type: object
+      additionalProperties: true
+      properties:
+        delivery_path:
+          type: string
+          readOnly: true
+          description: Configured scope/source executor route independent of work lifecycle; none when unconfigured. Uses the trusted source_authority snapshot, with live-work fallback for legacy records. If a legacy source cannot be recovered after purge, delivery_path is unknown and deliverable is null.
+        source_authority:
+          type: string
+          readOnly: true
+          description: Trusted source authority captured at proposal and copied to the action for executor routing even after work is purged. Absent on legacy records; live work supplies the legacy fallback.
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        decision_id:
+          type: string
+        instruction:
+          type: string
+        payload:
+          $ref: '#/components/schemas/PMActionPayload'
+        scope:
+          type: string
+        target_revision:
+          type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+        authorization_basis:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending_delivery
+          - sending
+          - delivered
+          - acknowledged
+          - source_reported
+          - verified
+          - failed
+          - unknown
+        acknowledged_by:
+          type: string
+          readOnly: true
+          description: Decision actor who dismissed a failed, unresolvable unknown, or undeliverable pending action; this is not source acknowledgement.
+        acknowledged_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_without_delivery:
+          type: boolean
+          readOnly: true
+          description: True when the decision actor closed an undeliverable pending request without sending it. Receipt detail names the actor and delivery limitation. This is not an acknowledged source failure.
+        deliverable:
+          type: boolean
+          nullable: true
+          description: Derived from configured executors for this scope and source on every read, except acknowledged unsent actions always remain false. For pending actions, false means dispatch returns unavailable (503) without recording an attempt. Acknowledging an undeliverable pending action prevents later delivery; a fresh proposal and approval are required.
+        reconciliation_conflict:
+          type: boolean
+          description: Latest read-back could not advance the action status. Receipt preserves that evidence even when its status is lower.
+        receipt:
+          $ref: '#/components/schemas/PMReceipt'
+        attempts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              started_at:
+                type: string
+              sent_at:
+                type: string
+                format: date-time
+                readOnly: true
+                description: Core entered the executor handoff boundary; this is not proof of source delivery. Absent for preflight failures, confirmed native failures before commit, and legacy attempts. Native commit uncertainty is read back before choosing unknown; confirmed local failures include their cause in receipt.detail.
+              finished_at:
+                type: string
+              status:
+                type: string
+              receipt:
+                $ref: '#/components/schemas/PMReceipt'
+        revision:
+          type: integer
+    PMBinding:
+      type: object
+      additionalProperties: true
+      properties:
+        id: *id001
+        workspace_id: *id002
+        actor_id: *id003
+        work_ref: *id004
+        created_at: *id005
+        origin:
+          $ref: '#/components/schemas/PMOrigin'
+        can_approve:
+          type: boolean
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+    PMConversationCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_key:
+          type: string
+        title:
+          type: string
+        work_ref:
+          type: string
+      required:
+      - request_key
+      - title
+    PMMessageCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        request_key:
+          type: string
+        text:
+          type: string
+      required:
+      - request_key
+      - text
+    PMErrorResponse:
+      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or queue with queued and limit for the workspace (ANX_PM_MAX_QUEUED, default 20). Waiting turns are open, before their deadline, and have no unexpired runner lease, including unknown wakeup outcomes. Conversation serialization takes precedence when both limits apply. Capacity means claimed turns with unexpired leases (ANX_PM_MAX_CONCURRENT, default 2); it is enforced atomically at claim time with HTTP 204, not at message admission. The capacity reason remains reserved for compatibility.
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            recoverable:
+              type: boolean
+              description: Standard core auth error retry classification.
+            hint:
+              type: string
+              description: Standard core auth error guidance.
+            details:
+              type: object
+              properties:
+                turn_id:
+                  type: string
+                  description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
+                reason:
+                  type: string
+                  enum: [conversation, capacity, queue, revision_changed, work_missing, already_at_target, work_read_failed, conversation_owner_not_human]
+                  description: Turn admission constraint, approval/source preflight refusal, or conversation_owner_not_human for a turn proposal whose owner is an agent principal. That 403 message is "Proposals need a human approver; this conversation belongs to an agent principal".
+                queued:
+                  type: integer
+                  description: Current workspace waiting turns for queue errors.
+                waiting:
+                  type: integer
+                  description: Eligible unleased turns for the selected PM actor before their deadline, for claim capacity errors.
+                in_flight:
+                  type: integer
+                  description: Current workspace claimed turns with unexpired runner leases for capacity errors.
+                limit:
+                  type: integer
+                  description: Workspace queue limit for queue errors, or runner lease limit for capacity errors.
+                pending_decision_id:
+                  type: string
+                  description: Awaiting human decision blocking a different non-human proposal on the same approver actor, work, and scope.
+                approved_revision:
+                  type: string
+                  description: Decision target_revision that the refused approval would authorize.
+                current_revision:
+                  type: string
+                  nullable: true
+                  description: Current Work.decision_revision, or null when work is missing or unreadable.
+                existing_decision_id:
+                  type: string
+                  description: Existing proposal for a conflicting request key.
+                status:
+                  type: string
+                  description: Current decision status for a superseded answer or dispatch conflict.
+                superseded_by:
+                  type: string
+                  description: Replacement decision ID for a superseded answer or dispatch conflict; empty if no replacement exists.
+    PMActionRequestPayload:
+      type: object
+      additionalProperties: false
+      description: Mutation inputs only. payload.resolution is read-only; send payload.resolution_refs.
+      properties:
+        phase:
+          type: string
+          enum: [backlog, ready, in_progress, blocked, review, done]
+        resolution_refs:
+          type: array
+          items:
+            type: string
+    PMTurnContextRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_token]
+      properties:
+        lease_token:
+          type: string
+          minLength: 1
+        query:
+          type: string
+        cursor:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+    PMDecisionCreateRequest:
+      description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
+      type: object
+      additionalProperties: false
+      properties:
+        request_key:
+          type: string
+        work_ref:
+          type: string
+        instruction:
+          type: string
+        payload:
+          $ref: '#/components/schemas/PMActionRequestPayload'
+        scope:
+          type: string
+        target_revision:
+          type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+      required:
+      - request_key
+      - work_ref
+      - instruction
+      - scope
+      - target_revision
+    PMTurnProposeRequest:
+      description: Selected PM agents must supply the current lease token; stale tokens return 409. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
+      type: object
+      additionalProperties: false
+      properties:
+        lease_token:
+          type: string
+          minLength: 1
+        request_key:
+          type: string
+        work_ref:
+          type: string
+        instruction:
+          type: string
+        payload:
+          $ref: '#/components/schemas/PMActionRequestPayload'
+        scope:
+          type: string
+        target_revision:
+          type: string
+          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
+      required:
+      - lease_token
+      - request_key
+      - work_ref
+      - instruction
+      - scope
+      - target_revision
+    PMDecisionAnswerRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        revision:
+          type: integer
+        approve:
+          type: boolean
+        text:
+          type: string
+      required:
+      - revision
+      - approve
+      - text
+    PMCompleteRequest:
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
+      type: object
+      additionalProperties: true
+      properties:
+        text:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        lease_token:
+          type: string
+      required:
+      - lease_token
+      - text
+    PMClaimRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        runner_id:
+          type: string
+          description: Stable identity for one serial worker; defaults to the authenticated actor ID when omitted. Reuse on restart to recover its existing lease.
+    PMHeartbeatRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - lease_token
+      properties:
+        lease_token:
+          type: string
+          minLength: 1
+    PMReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [runner_id, lease_token]
+      properties:
+        runner_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+        lease_token:
+          type: string
+          minLength: 1
+    PMFailRequest:
+      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
+      type: object
+      additionalProperties: true
+      properties:
+        reason:
+          type: string
+        lease_token:
+          type: string
+      required:
+      - lease_token
+      - reason
+    PMEmptyRequest:
+      type: object
+      additionalProperties: true
+      properties: &id006 {}
+    PMContextResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: *id006
+        next_cursor:
+          type: string
+        limitations:
+          type: array
+          items:
+            type: string
+      required:
+      - items
+    PMConversationDetailResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        has_more: {type: boolean}
+        next_cursor: {type: string}
+        conversation:
+          $ref: '#/components/schemas/PMConversation'
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMTurn'
+      required:
+      - conversation
+      - turns
+    PMConversationListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        next_cursor: {type: string}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMConversation'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    PMDecisionListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        next_cursor: {type: string}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMDecision'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    PMBindingListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        next_cursor: {type: string}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMBinding'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    PMActionListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        next_cursor: {type: string}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PMAction'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    WorkSource:
+      type: object
+      additionalProperties: true
+      properties:
+        authority:
+          type: string
+        connection_id:
+          type: string
+        native_id:
+          type: string
+        url:
+          type: string
+        native_status:
+          type: string
+        revision:
+          type: string
+      required:
+      - authority
+    WorkObservation:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        idempotency_key:
+          type: string
+        reader_id:
+          type: string
+        reader_revision:
+          type: string
+        observed_at:
+          type: string
+        received_at:
+          type: string
+        source_revision:
+          type: string
+        source_activity_at:
+          type: string
+        meaningful_progress_at:
+          type: string
+        actor_id:
+          type: string
+        work_ref:
+          type: string
+        status:
+          type: string
+          enum:
+          - reported
+          - verified
+          - uncertain
+          - error
+        verification:
+          type: string
+          enum:
+          - reported
+        source_sequence:
+          type: integer
+          minimum: 0
+        facts:
+          type: object
+          additionalProperties: true
+          properties: &id001 {}
+        evidence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: *id001
+        uncertainty:
+          type: array
+          items:
+            type: string
+        coverage:
+          type: object
+          additionalProperties: true
+          properties: *id001
+        error:
+          type: object
+          additionalProperties: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        stale_after_seconds:
+          type: integer
+          minimum: 1
+          maximum: 2592000
+      required:
+      - idempotency_key
+      - reader_id
+      - reader_revision
+      - observed_at
+      - status
+    WorkRefresh:
+      type: object
+      additionalProperties: true
+      properties:
+        state:
+          type: string
+          enum:
+          - idle
+          - queued
+          - running
+          - succeeded
+          - failed
+        requested_at:
+          type: string
+        requested_by:
+          type: string
+        last_attempt_at:
+          type: string
+        last_success_at:
+          type: string
+        next_due_at:
+          type: string
+        last_error:
+          type: object
+          additionalProperties: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+      required:
+      - state
+    Work:
+      type: object
+      additionalProperties: true
+      properties:
+        decision_revision:
+          type: string
+          readOnly: true
+          description: Revision fence to copy into PM proposal target_revision. Uses nonempty source.revision for external authority; otherwise <work_metadata.version>.<head_revision_number> (decimal components). Canonical metadata mutations and card content revisions each change the fence; refresh attempts, failures, and freshness bookkeeping do not. Successful external observations with a new source.revision change the fence. Recomputed on every work response.
+        project_ref: &id002
+          type: string
+        priority: &id003
+          type: string
+        next_actor: &id004
+          type: string
+        next_action: &id005
+          type: string
+        wake_condition: &id006
+          type: string
+        start_at: &id007
+          type: string
+        due_at: &id008
+          type: string
+        blockers: &id009
+          type: array
+          items:
+            type: string
+        relations: &id010
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              kind:
+                type: string
+                enum:
+                - parent
+                - child
+                - depends_on
+                - related
+                - artifact
+              ref:
+                type: string
+            required:
+            - kind
+            - ref
+        executions: &id011
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              authority:
+                type: string
+              run_id:
+                type: string
+              host:
+                type: string
+              harness:
+                type: string
+              agent:
+                type: string
+              model:
+                type: string
+              url:
+                type: string
+              result_ref:
+                type: string
+            required:
+            - authority
+            - run_id
+        ref:
+          type: string
+        handle:
+          type: string
+        board_ref:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        owner:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        definition_of_done:
+          type: array
+          items:
+            type: string
+        source:
+          $ref: '#/components/schemas/WorkSource'
+        phase:
+          type: string
+          enum:
+          - backlog
+          - ready
+          - in_progress
+          - blocked
+          - review
+          - done
+          - cancelled
+          - unknown
+        column_key:
+          type: string
+          readOnly: true
+          description: Board column for the backing card. Matches phase for Nexus-owned work.
+        rank:
+          type: string
+          readOnly: true
+          description: Board membership rank within the backing card's column. Projected from the card; work.list remains updated_at order. Board-like clients sort within a phase by board_ref then rank.
+        version:
+          type: integer
+        freshness:
+          type: object
+          additionalProperties: true
+          properties:
+            status:
+              type: string
+              enum:
+              - unknown
+              - fresh
+              - stale
+              - error
+            last_observed_at:
+              type: string
+            source_activity_at:
+              type: string
+            meaningful_progress_at:
+              type: string
+            stale_after_seconds:
+              type: integer
+            last_error:
+              type: object
+              additionalProperties: true
+              properties:
+                code:
+                  type: string
+                message:
+                  type: string
+        refresh:
+          $ref: '#/components/schemas/WorkRefresh'
+        latest_observation:
+          nullable: true
+          type: object
+          additionalProperties: true
+          properties: *id001
+      required:
+      - decision_revision
+      - ref
+      - title
+      - source
+      - phase
+      - version
+      - freshness
+      - refresh
+    WorkResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        work:
+          $ref: '#/components/schemas/Work'
+      required:
+      - work
+    WorkListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        work:
+          type: array
+          items:
+            $ref: '#/components/schemas/Work'
+        next_cursor:
+          type: string
+      required:
+      - work
+    WorkCreateRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        board_ref:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        owner:
+          type: string
+        phase:
+          type: string
+        source:
+          $ref: '#/components/schemas/WorkSource'
+        definition_of_done:
+          type: array
+          items:
+            type: string
+        project_ref: *id002
+        priority: *id003
+        next_actor: *id004
+        next_action: *id005
+        wake_condition: *id006
+        start_at: *id007
+        due_at: *id008
+        blockers: *id009
+        relations: *id010
+        executions: *id011
+      required:
+      - board_ref
+      - title
+    WorkPatchRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        if_version:
+          type: integer
+          minimum: 0
+        patch:
+          type: object
+          additionalProperties: true
+          properties:
+            project_ref: *id002
+            priority: *id003
+            next_actor: *id004
+            next_action: *id005
+            wake_condition: *id006
+            start_at: *id007
+            due_at: *id008
+            blockers: *id009
+            relations: *id010
+            executions: *id011
+      required:
+      - if_version
+      - patch
+    WorkObservationRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+        observation:
+          $ref: '#/components/schemas/WorkObservation'
+      required:
+      - observation
+    WorkObservationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        observation:
+          $ref: '#/components/schemas/WorkObservation'
+        work:
+          $ref: '#/components/schemas/Work'
+        duplicate:
+          type: boolean
+      required:
+      - observation
+      - work
+      - duplicate
+    WorkObservationListResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkObservation'
+        next_cursor:
+          type: string
+      required:
+      - observations
+    WorkRefreshResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        refresh:
+          $ref: '#/components/schemas/WorkRefresh'
+      required:
+      - refresh
+    WorkRefreshRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        actor_id:
+          type: string
+    WorkCapabilitiesResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        capabilities:
+          type: object
+          additionalProperties: true
+          properties: *id001
+      required:
+      - capabilities
     Error:
       type: object
       properties:
@@ -4766,6 +7880,21 @@ components:
         summary:
           type: string
           description: Optional short blurb for lists and detail (resource-level; not revision body).
+        source:
+          type: string
+          description: Canonical origin this document aggregates (URL or typed ref). Empty when the document is itself the source of truth.
+        tags:
+          type: array
+          items: { type: string }
+          description: Operator/agent labels. Tag `knowledge` marks docs meant for agents.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Host names this knowledge fact applies to. Empty means unspecified.
+        verified_at:
+          type: string
+          format: date-time
+          description: When an agent last verified this knowledge fact. Omitted when never verified.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         head_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         state:
@@ -4795,6 +7924,21 @@ components:
           description: >
             List-only enrichment: timeline `message_posted` counts on backing `thread_id`,
             excluding trashed events (same derivation as `/topics`).
+        last_comment:
+          type: object
+          description: >
+            List-only enrichment: most recent `message_posted` comment on the backing thread,
+            excluding trashed events. Omitted when the document has no comments.
+          properties:
+            body: { type: string }
+            created_at: { type: string, format: date-time }
+            created_by: { type: string }
+          required: [body, created_at]
+        search_rank:
+          type: integer
+          description: >
+            Search-only enrichment from GET /docs/search: higher means a stronger FTS5 match
+            (title weighted above body, then summary/source/tags, then comments). Omitted on list/get.
       required:
         [ref, handle, title, subject_ref, head_revision_ref, state, refs, created_at, created_by, updated_at, updated_by, provenance]
 
@@ -5076,10 +8220,27 @@ components:
     DocumentCreateInput:
       type: object
       properties:
+        handle:
+          $ref: '#/components/schemas/ResourceHandle'
         title: { type: string }
         summary:
           type: string
           description: Optional resource-level blurb (list/detail); distinct from revision content.
+        source:
+          type: string
+          description: Canonical origin URL or typed ref this document aggregates.
+        tags:
+          type: array
+          items: { type: string }
+          description: Operator/agent labels. Include `knowledge` for agent-facing docs.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Host names this knowledge fact applies to.
+        verified_at:
+          type: string
+          format: date-time
+          description: When this knowledge fact was last verified.
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         refs:
           type: array
@@ -5229,10 +8390,10 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
         before_card_id:
           type: string
-          description: Insert immediately before this card ref or handle in column_key; mutually exclusive with after_card_id.
+          description: Insert immediately before this card ref or handle in column_key; mutually exclusive with after_card_id. Resolved like path `{card_id}` (typed `card:` ref, handle, or UUID).
         after_card_id:
           type: string
-          description: Insert immediately after this card ref or handle in column_key; mutually exclusive with before_card_id.
+          description: Insert immediately after this card ref or handle in column_key; mutually exclusive with before_card_id. Resolved like path `{card_id}` (typed `card:` ref, handle, or UUID).
         resolution:
           type: string
           enum: [done]
@@ -5291,16 +8452,66 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
       required: [document, content, content_type]
 
+    PutDocumentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        document:
+          type: object
+          properties:
+            title: { type: string }
+            summary: { type: string }
+            source: { type: string }
+            tags:
+              type: array
+              items: { type: string }
+            hosts:
+              type: array
+              items: { type: string }
+            verified_at:
+              type: string
+              format: date-time
+            subject_ref: { $ref: '#/components/schemas/TypedRef' }
+            refs:
+              type: array
+              items: { $ref: '#/components/schemas/TypedRef' }
+            provenance: { $ref: '#/components/schemas/Provenance' }
+        content: {}
+        content_type:
+          type: string
+          enum: [text, structured, binary]
+        refs:
+          type: array
+          items: { $ref: '#/components/schemas/TypedRef' }
+      required: [content, content_type]
+
     DocumentPatchInput:
       type: object
       description: >
-        Resource-only fields. Today `summary` is the only supported key; core rejects
-        unknown fields and requires `summary` to be present (empty string clears the blurb).
+        Resource-only fields. Omitted keys are preserved. Empty string on `summary` or `source`
+        clears that field. `tags` replaces the full tag list when present.
       properties:
+        title:
+          type: string
+          description: Resource-level title.
         summary:
           type: string
           description: Resource-level blurb for lists and detail (not revision body).
-      required: [summary]
+        source:
+          type: string
+          description: Canonical origin URL or typed ref; empty string clears.
+        tags:
+          type: array
+          items: { type: string }
+          description: Replaces the document tag list when present.
+        hosts:
+          type: array
+          items: { type: string }
+          description: Replaces the host list this knowledge fact applies to when present.
+        verified_at:
+          type: string
+          format: date-time
+          description: When this knowledge fact was last verified; empty string clears.
 
     PatchDocumentRequest:
       type: object
@@ -5492,9 +8703,8 @@ components:
 
     MoveCardRequest:
       description: >
-        Flat card move body aligned with refactor spec §8.1 (`column_key`, optional placement
-        hints, optional terminal resolution). Clients MAY also send a legacy nested
-        `move` object with the same fields; core flattens it when `column_key` is not set at the root.
+        Flat card move body (`column_key`, optional placement
+        hints, optional terminal resolution).
       allOf:
         - $ref: '#/components/schemas/MoveCardInput'
         - type: object
@@ -5502,10 +8712,6 @@ components:
             actor_id:
               type: string
               description: Optional actor performing the move (may also be supplied via auth headers).
-            move:
-              $ref: '#/components/schemas/MoveCardInput'
-              deprecated: true
-              description: Legacy envelope; prefer flat top-level fields. Ignored when `column_key` is set at the root.
 
     CreateEventRequest:
       type: object
@@ -5853,7 +9059,71 @@ components:
         documents:
           type: array
           items: { $ref: '#/components/schemas/Document' }
+        next_cursor: { type: string }
       required: [documents]
+
+    DocumentComment:
+      type: object
+      properties:
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        handle: { $ref: '#/components/schemas/ResourceHandle' }
+        id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Stable comment id (backing event id). The public deep-link is `ref`.
+        document_ref: { $ref: '#/components/schemas/TypedRef' }
+        parent_id:
+          type: string
+          description: Parent comment id when this row is a reply.
+        reply_to:
+          type: string
+          description: Parent comment public ref (`event:<handle>`) when this row is a reply.
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        edited_at:
+          type: string
+          format: date-time
+          description: Set when the author edited the comment body.
+        edited_by:
+          type: string
+          description: Actor who last edited the comment.
+      required: [ref, handle, document_ref, body, created_at, created_by]
+
+    DocumentCommentsResponse:
+      type: object
+      properties:
+        comments:
+          type: array
+          items: { $ref: '#/components/schemas/DocumentComment' }
+        next_cursor: { type: string }
+      required: [comments]
+
+    DocumentCommentResponse:
+      type: object
+      properties:
+        comment: { $ref: '#/components/schemas/DocumentComment' }
+      required: [comment]
+
+    CreateDocumentCommentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        text: { type: string }
+        parent_id:
+          type: string
+          description: Optional parent comment id when posting a reply on create.
+        reply_to:
+          type: string
+          description: Optional parent comment ref (`event:<handle>`) or id; alias of `parent_id`.
+      required: [text]
+
+    UpdateDocumentCommentRequest:
+      type: object
+      properties:
+        actor_id: { type: string }
+        text: { type: string }
+      required: [text]
 
     DocumentWithRevisionResponse:
       type: object

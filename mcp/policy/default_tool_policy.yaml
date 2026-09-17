@@ -29,6 +29,8 @@ hosted_default_commands:
   - "cards.timeline"
   - "docs.get"
   - "docs.list"
+  - "docs.search"
+  - "docs.comments.list"
   - "docs.revisions.get"
   - "docs.revisions.list"
   - "events.get"
@@ -55,6 +57,20 @@ hosted_default_commands:
   - "topics.list"
   - "topics.timeline"
   - "topics.workspace"
+  - "pm.actions.get"
+  - "pm.actions.list"
+  - "pm.bindings.list"
+  - "pm.context"
+  - "pm.conversations.get"
+  - "pm.conversations.list"
+  - "pm.decisions.get"
+  - "pm.decisions.list"
+  - "pm.turns.context"
+  - "work.capabilities"
+  - "work.get"
+  - "work.list"
+  - "work.observations.list"
+  - "work.refresh.get"
 commands:
   "actors.create":
     classification: unsupported_bootstrap_auth
@@ -245,6 +261,21 @@ commands:
   "docs.archive":
     classification: exposed_write
     reason: "ordinary reversible document lifecycle write"
+  "docs.comments.create":
+    classification: exposed_write
+    reason: "ordinary document comment write for cross-host knowledge"
+  "docs.comments.list":
+    classification: exposed_read
+    reason: "document comment thread read"
+  "docs.comments.reply":
+    classification: exposed_write
+    reason: "ordinary document comment reply write"
+  "docs.comments.update":
+    classification: exposed_write
+    reason: "author edit of a document comment"
+  "docs.comments.delete":
+    classification: exposed_write
+    reason: "author delete of a document comment"
   "docs.create":
     classification: exposed_write
     reason: "ordinary document creation"
@@ -257,6 +288,9 @@ commands:
   "docs.patch":
     classification: exposed_write
     reason: "ordinary document update with concurrency controls"
+  "docs.put":
+    classification: exposed_write
+    reason: "idempotent document create-or-replace by handle"
   "docs.purge":
     classification: gated_sensitive
     reason: "permanent deletion is destructive"
@@ -272,6 +306,9 @@ commands:
   "docs.revisions.list":
     classification: exposed_read
     reason: "document revision inventory read"
+  "docs.search":
+    classification: exposed_read
+    reason: "document full-text search over title, body, and comments"
   "docs.trash":
     classification: exposed_write
     reason: "ordinary reversible document lifecycle write"
@@ -425,3 +462,90 @@ commands:
   "usage.summary.v1":
     classification: gated_admin
     reason: "versioned usage summary is quota/billing telemetry"
+  "pm.actions.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.actions.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.actions.reconcile":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.bindings.list":
+    classification: exposed_read
+    reason: "Read which exact channel identities are bound to workspace principals; an operator check that sends nothing."
+  "pm.bindings.create":
+    classification: gated_admin
+    reason: "Binds an external channel user to a workspace principal; requires explicit human administration."
+  "pm.context":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.conversations.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.conversations.messages.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.decisions.answer":
+    classification: gated_sensitive
+    reason: "Human approval or consequential source handoff; explicit exposure never bypasses core authorization."
+  "pm.decisions.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.decisions.dispatch":
+    classification: gated_sensitive
+    reason: "Human approval or consequential source handoff; explicit exposure never bypasses core authorization."
+  "pm.decisions.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.decisions.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.complete":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.claim":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.fail":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "pm.turns.context":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "pm.turns.decisions.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.capabilities":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.create":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.observations.list":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.observations.submit":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.patch":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.refresh.get":
+    classification: exposed_read
+    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.refresh.request":
+    classification: exposed_write
+    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."

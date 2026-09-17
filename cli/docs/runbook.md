@@ -362,3 +362,381 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
 - omit `--follow` (default drains and exits)
 
 1. Verify server-side poll cadence and stream health in core logs.
+
+## Unified work and remote observations
+
+`anx work` reads the central work projection of existing cards. Projects are
+existing topics (`anx topics list`); boards and native card workflow commands keep
+their existing meaning. Select the workspace with the existing `--agent` profile
+and `--base-url`; reports reuse its key/token identity. No local tracker store or
+remote daemon is required.
+
+```sh
+anx work capabilities
+anx work list --project-ref topic:launch --source github --freshness stale --limit 50
+anx --json work list --limit 50 --cursor '<opaque next_cursor>'
+anx work get card:launch
+anx work context card:launch --limit 10
+anx work freshness card:launch
+anx work observations list card:launch --limit 10
+anx work observations submit card:launch --from-file report.json
+anx work refresh request card:launch
+anx work refresh get card:launch
+```
+
+Lists return a single bounded page and preserve `next_cursor`. Pass the cursor
+unchanged with the same filters; the CLI does not silently crawl all projects.
+`context` performs three read-only calls (work, observations, refresh), preserving
+the observation page boundary. This is a composed view, not an atomic snapshot.
+Freshness distinguishes last observation, source activity and meaningful progress.
+A queued refresh is not a successful read; failed reads retain their error status.
+
+Observation input is the API request object:
+
+```json
+{
+  "observation": {
+    "idempotency_key": "synthetic-report-42",
+    "reader_id": "approved-reader",
+    "reader_revision": "v1",
+    "observed_at": "2026-09-08T00:00:00Z",
+    "source_sequence": 42,
+    "status": "reported",
+    "facts": {"native_status": "in_progress"},
+    "evidence": [{"ref": "artifact:synthetic-check", "summary": "Synthetic example only"}],
+    "uncertainty": ["Deployment not verified"],
+    "coverage": {"complete": false}
+  }
+}
+```
+
+Preserve the idempotency key and original observation on retry. Core owns duplicate
+and out-of-order handling; the CLI prints the actual server result without hiding
+`duplicate`, uncertainty, coverage or freshness. The server supplies received time
+and authenticated actor; remote claims cannot grant themselves verified authority.
+The CLI never retries a failed observation write automatically.
+
+`work create --from-file <path|->` registers work using an existing `board_ref`.
+`work patch <ref> --from-file <path|->` requires the API's `if_version` and `patch`
+object. Read the version with `work get`; external source status/title/owner remain
+source-owned and update through observations. These commands do not mutate the
+external source.
+
+All commands are noninteractive and support the existing single `--json` envelope.
+Malformed flags and resource selectors fail with exit 2 before profile resolution.
+API denial/conflict/rate-limit errors retain the shared machine-readable error
+contract. `anx help work` and `anx help work observations submit` work offline.
+
+### PM decisions and receipt reporting
+
+```sh
+anx pm context --work-ref card:launch --limit 20
+anx pm conversations list
+anx pm conversations create --from-file conversation.json
+anx pm conversations message <conversation-id> --from-file message.json
+anx pm decisions list
+anx pm decisions get <decision-id>
+anx pm decisions create --from-file instruction.json
+anx pm decisions answer <decision-id> --from-file answer.json
+anx pm decisions dispatch <decision-id>
+anx pm actions list
+anx pm actions get <action-id>
+anx pm actions reconcile <action-id>
+```
+
+An instruction body contains `request_key`, `work_ref`, `instruction`, `scope` and
+`target_revision`. An answer body contains the current decision `revision`,
+`approve` and `text`. Agent keys may propose, but cannot inherit human approval
+permissions; core enforces the current principal and scope. A successful answer
+records intent, not delivery. `pm actions get` reports the actual action attempts
+and receipt, including `source_reported`, `unknown` and
+`receipt.independently_verified`. `reconcile` requests read-back, never a resend.
+There is no client command to manufacture a verified receipt.
+
+Conversation creation uses `request_key`, `title` and optional `work_ref`; messages
+use `request_key` and `text`. Preserve request keys on retry. A queued turn is not
+an assistant response or completed work. Status vocabulary is `sending`,
+`unknown`, `failed`, or completed with `response` (`delivered`).
+
+The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
+`pm turns propose <turn-id> --from-file ...`, `pm turns complete <turn-id>
+--from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
+cannot impersonate it. Claim is lease-based and idempotent for the same
+`runner_id`; HTTP 204 means no claimable turn. `--runner-id` defaults to the
+authenticated actor id. Text output prints `runner_id` and `lease_token` so
+the same runner can release later:
+
+```sh
+anx --agent pm pm turns claim --runner-id "$RUNNER_ID"
+# turn-1  status=in progress  runner_id=runner-1  lease_token=...
+anx --agent pm pm turns release turn-1 --from-file - <<'EOF'
+{"runner_id":"runner-1","lease_token":"<lease_token from claim>"}
+EOF
+```
+
+Channel ingress (Telegram and Discord) creates conversations with `origin` and
+posts through the same `/pm/conversations/{id}/messages` pipeline; those turns
+are claimed, completed, and failed identically. The channels lane owns
+transport authentication.
+
+### PM runner (`anx pm serve`)
+
+The PM is an external agent. Do not call a model in-process. `make serve` seeds
+persona `pm` (`actor-gds-pm` / `dev.pm`) for the default game-dev-studio
+scenario, writes CLI profile homes from registration tokens (no refresh
+exchange), and prints the exact command. Wake routing and
+`ANX_PM_BRIDGE_ENABLED` are not required.
+
+Export `ZAI_API_KEY` in the shell that launches `pm serve`. The runner does not
+read `~/.hermes/auth.json` or inject the key. If the harness argv names `zai`
+and that variable is unset, the turn fails with a sentence that names
+`ZAI_API_KEY`.
+
+The harness child receives the **full parent environment**, then `HOME` is
+reset to the login account home from passwd (`user.Current().HomeDir`). That
+is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
+`HOME=.tmp/anx-dev-profile-homes/pm` applies to the `anx` process (CLI
+profiles), not to the child harness. After a successful claim the runner also
+sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
+`anx pm turns context` send it when `--lease-token` is omitted, so the harness
+does not have to copy the token into `--from-file`. The lease token is in the
+runner process environment: any same-uid process can read it. A stolen token
+only lets its holder complete, fail, or release that one turn until the
+deadline. Ctrl-C / SIGTERM kills the direct harness process group (SIGTERM,
+then SIGKILL after a short grace). A harness's detached children (those that
+have left that process group) survive a successful run; only Ctrl-C /
+SIGTERM of `pm serve` cleans up an in-flight group — find leftovers with
+`ps -o pid,pgid,command`. An `agentctl` background execution outlives the
+runner; the log prints its execution id so you can `agentctl cancel <id>`.
+
+Seatbelt on this OS cannot hide another same-uid process's environment, so
+run the harness as a different uid or on a different host from core's JIT
+generated-reader process. The runner's `ANX_PM_LEASE_TOKEN` is in that same
+unprotected environment; a stolen token is limited to complete/fail/release
+of that one turn until the deadline. Example, separate uid:
+
+```sh
+sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
+  HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
+```
+
+Example, separate host: start core locally, then on the runner machine
+`ANX_BASE_URL=http://core-host:8000 ZAI_API_KEY=... ./cli/anx --agent pm pm serve ...`.
+
+```sh
+make cli-build
+export ZAI_API_KEY
+ANX_DEV_BLOB_BACKEND=filesystem make serve
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
+HOME=.tmp/anx-dev-profile-homes/maya ./cli/anx --agent maya pm ask --wait \
+  "What needs my decision?"
+```
+
+`--runner` is the native harness argv. Two forms:
+
+- Without `{prompt}`: argv after `agentctl run --`. Example:
+  `omp -p --mode json --model zai/glm-5.3 --auto-approve`
+- With `{prompt}`: argv is executed directly. `{prompt}` is replaced with the
+  absolute prompt file path. `agentctl` is not required.
+
+omp may silently substitute models; every omp run must show
+`"provider":"zai","model":"glm-5.3"` in the harness JSON
+(`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models never go through
+omp. The prompt stays small: the PM loads tracker context through
+`anx work list|get` and `anx pm context`, never from a stuffed dump. Proposed
+decisions must bind `work_ref` to a task. To attach evidence, the harness must
+end its answer with a `---evidence---` block (one typed ref per line: `card:`,
+`work:`, `artifact:`, `event:`, `decision:`, `topic:`, `document:`) or a JSON
+`evidence_refs` array on the same object as the assistant text. Nested tool
+output is not harvested. Mentions in prose are not recorded. `pm serve`
+verifies each attached ref against core (`topics get` / `docs get` included)
+and drops unresolvable ones instead of failing the turn.
+
+Turn text is capped at the claimed turn's `max_output_bytes`. When the turn
+omits that field, the runner uses 64000 (core's maximum accepted turn text)
+minus room for a truncation marker. Evidence is parsed from the full harness
+output first; if the stored reply is cut, the runner appends
+`[reply truncated by anx pm serve at <N> bytes; <M> bytes were dropped]` and
+logs a stderr warning with those sizes. The marker is included in the byte
+budget so core still accepts the text.
+
+`complete` and `fail` are retried on network errors, HTTP 5xx, and 429, with
+bounded exponential backoff (1s, 2s, 4s, 8s, 16s; at most about one minute or
+until the turn deadline). Identical terminal replays are idempotent, so a
+retry after a lost response is safe. `lease_required` is not retried. If the
+lease was lost (`lease_mismatch`, `turn_closed`, `turn_not_claimed`), the
+runner reads the turn: already terminal logs `turn already <status>; nothing
+to do` and moves on. A lost `complete` counts as one delivery attempt; the
+process does not release-and-reclaim that turn, and the next poll claims it
+again. A saved reply is delivered on that claim (never followed by a harness
+run). After 3 failed `complete` calls for the same turn (including the first
+delivery that wrote the file), the runner fails the turn with the
+reader-facing reason `The PM produced a reply but it could not be delivered.
+Ask again, or check that a runner is attached.` Core error `code` and
+`message` stay on stderr (`pm serve: turn … undeliverable: <code>: <message>`).
+The next poll can then claim a later waiting turn. A turn is given up after 3
+harness runs in this process. If no saved reply exists, the runner fails the
+turn with `The PM could not produce a deliverable reply after several
+attempts.` (technical detail stays on stderr).
+
+While a harness run is in progress, the runner renews the lease with
+`POST /pm/turns/{turn_id}/heartbeat`. The interval is half the remaining time from
+claim `lease_expires_at` when present, otherwise every 20s (for a 60s core
+lease TTL). A transient failure (network error, HTTP 5xx, timeout) retries
+after 2s, then 4s, capped at 8s, until a successful renewal or the lease
+expires. Only a 409 `lease_mismatch` / `turn_closed` heartbeat cancels that
+harness, logs `lease lost`, and follows lease-loss recovery (read the turn;
+still pending and claimable re-claims and retries). A 404 heartbeat (older
+core) disables heartbeats for the process and is logged once.
+
+If `complete` cannot be delivered after retries for a reason other than lease
+loss, the runner writes the reply to `turn-<id>.reply.md` (0600) in
+`--work-dir`, releases the lease (`released turn … : undeliverable terminal
+call`), and logs that the turn stays claimable until its deadline. The next
+claim of that turn in this process retries `complete` from the saved reply
+with the same bounded budget and does **not** run the harness while that file
+exists. After 3 failed `complete` calls the runner fails the turn as above so
+the queue is not starved. The reply file is then deleted and the turn is
+forgotten. If `fail` itself is refused with `lease_mismatch` or
+`turn_closed`, the runner treats the turn as no longer ours, logs why,
+deletes the file, and moves on. The file is also deleted after a successful
+complete or when the turn is already terminal. If the saved reply is
+unreadable or corrupt, the runner logs and falls back to the harness.
+Runner-internal failures (harness crash, timeout, missing secret) still fail
+the turn with a reader-facing reason; technical detail stays on stderr.
+Shutdown releases log `released turn … : shutdown`.
+
+`--max-concurrent N` (default 1) runs up to N turns in this process. Each
+worker claims with a distinct runner id `<runner_id>-<slot>` (slots 1..N),
+so core treats them as N runners. Capacity counts leases: N must be ≤
+`ANX_PM_MAX_CONCURRENT`.
+
+Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
+2 minutes; core accepts `ANX_PM_MAX_OUTPUT_BYTES` up to 64000). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
+tools before the lease expires. `ANX_PM_MAX_CONCURRENT` (default 2) bounds
+workspace sending turns. `make pm-serve` runs the seeded PM persona.
+
+When stderr is not a TTY, runner logs are flushed immediately and harness
+stdout/stderr are copied to stderr. On restart, `pm turns claim` with the same
+worker runner ids (`<runner_id>-<slot>`) recovers in-flight leases;
+past-deadline sending turns expire to `failed` with a visible reason.
+
+Hermes and Codex are the same runner with a `{prompt}` argv (do not run Hermes
+from this checkout unless asked):
+
+```sh
+# Hermes (direct)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'
+
+# Codex (direct)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'codex exec --skip-git-repo-check -- {prompt}'
+
+# Same harnesses through agentctl (no {prompt} placeholder)
+HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  --work-dir .tmp/pm-runner \
+  --runner 'hermes -p --provider zai --model glm-5.3'
+```
+
+PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
+`--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are
+bound to the current workspace, principal and record kind; do not reuse one after
+switching profiles. Lists do not support server-side project filtering; use
+`work list --project-ref` for project-scoped work queries.
+
+For cross-lane validation only, the real-binary harness accepts
+`ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the
+harness builds this checkout's core. This is not a mock backend; record the core
+source revision when using the override.
+
+### PM channels (`anx pm channels doctor`)
+
+Telegram and Discord ingress are webhook/interaction only. Bind a channel
+identity before the PM will accept messages:
+
+```sh
+anx pm bindings create --from-file binding.json
+anx pm channels doctor \
+  --telegram-webhook-url http://127.0.0.1:8000/pm/ingress/telegram \
+  --discord-webhook-url http://127.0.0.1:8000/pm/ingress/discord
+```
+
+Doctor reads env (never prints token values), probes those URLs with GET, and
+lists `/pm/bindings`. It does not POST an update, send a Bot API message, or
+open a Discord gateway.
+
+Core env (set on `anx-core`, not in Git):
+
+| Env | Role |
+|---|---|
+| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters |
+| `ANX_PM_TELEGRAM_BOT_ID` | Expected bot / tenant id |
+| `ANX_PM_TELEGRAM_BOT_TOKEN` | Outbound `sendMessage` |
+| `ANX_PM_DISCORD_PUBLIC_KEY` | 32-byte hex Ed25519 public key |
+| `ANX_PM_DISCORD_APPLICATION_ID` | Expected application id |
+| `ANX_PM_DISCORD_BOT_TOKEN` | Outbound REST `Bot` token |
+| `ANX_PM_TELEGRAM_API_BASE` | Test-only Bot API base (local fake) |
+| `ANX_PM_DISCORD_API_BASE` | Test-only Discord REST base (local fake, include `/api/v10`) |
+| `ANX_PM_TELEGRAM_WEBHOOK_URL` | Optional doctor GET target |
+| `ANX_PM_DISCORD_WEBHOOK_URL` | Optional doctor GET target |
+
+When dedicated bots exist: create the bots, set the env vars, register the
+webhook/interactions URL at core ingress, bind each human identity, then run
+doctor. Do not point existing production bot streams at this workspace. Local
+proof uses `tests/channels/` fakes, not live Telegram or Discord.
+
+## Docs as a cross-host knowledge base
+
+Docs are the workspace knowledge base. An agent on a host with no other access
+publishes what that host can see, then other hosts search and comment. Tag those
+documents `knowledge` and always set:
+
+- `--source` — canonical URL or `host://<hostname>/...` pointer
+- `--hosts` — which hosts the fact applies to
+- `--verified-at` — RFC3339 time of last verification
+
+```bash
+# Publish from this host (stdin body; handle is the idempotency key)
+printf 'SSH to proxmox is keyed in ~/.ssh/id_ed25519_proxmox\n' | \
+  anx docs put - \
+    --handle kb-proxmox-ssh \
+    --title "Proxmox SSH" \
+    --tags knowledge \
+    --source "host://$(hostname)/ssh" \
+    --hosts "$(hostname)" \
+    --verified-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Find and read knowledge another host wrote
+anx docs search "proxmox" --knowledge --host "$(hostname)" --limit 20
+anx docs get kb-proxmox-ssh --format md
+
+# Discussion survives later document revisions; comment refs are UI deep-links
+anx docs comment kb-proxmox-ssh "Verified from $(hostname)"
+anx docs comments kb-proxmox-ssh
+anx docs comments edit kb-proxmox-ssh event:<handle> --body "Corrected"
+
+# Publish a git markdown tree (read the files; do not write the repo)
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+anx docs search "NOW.md" --knowledge --limit 20
+```
+
+`anx docs search` is SQLite FTS5 over title, body, summary, source, tags, and
+comments. `--tag`, `--limit`, and `--cursor` paginate. `anx docs put -` reads
+stdin. `anx docs get <handle> --format md` prints the body only.
+
+Publish a markdown tree (idempotent by relative path; a second run creates no
+new revisions):
+
+```bash
+anx docs ingest /path/to/knowledge-base \
+  --source https://github.com/example/knowledge-base/blob/main
+anx docs search "NOW.md" --knowledge --limit 20
+```

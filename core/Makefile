@@ -1,4 +1,4 @@
-.PHONY: help serve build-prod run-prod fmt fmt-check vet test check check-ci lint ci-smoke smoke
+.PHONY: help serve build-prod run-prod fmt fmt-check vet test check check-ci lint ci-smoke smoke check-linux-observation
 
 HOST ?= 127.0.0.1
 PORT ?= 8000
@@ -67,12 +67,17 @@ fmt-check:
 vet:
 	@go vet ./...
 
+check-linux-observation:
+	@echo "GOOS=linux observation build (no Linux host available to run isolation)"
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /dev/null ./internal/observation
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./internal/observation
+
 test:
 	@go test ./...
 
-check: fmt vet test check-offline
+check: fmt vet test check-offline check-linux-observation
 
-check-ci: fmt-check vet test check-offline
+check-ci: fmt-check vet test check-offline check-linux-observation
 
 lint:
 	@./scripts/lint

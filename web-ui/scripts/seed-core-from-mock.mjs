@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,8 +13,15 @@ import {
   sleep,
   waitForCore,
 } from "../../scripts/seed-core-lib.mjs";
-import { listDevSeedThreadRefViolations } from "../src/lib/devWorkspaceFixtures.js";
+import {
+  listDevSeedInboxSubjectRefViolations,
+  listDevSeedThreadRefViolations,
+} from "../src/lib/devWorkspaceFixtures.js";
 import { getDevSeedScenarioConfig } from "./dev-seed-scenarios.mjs";
+import {
+  listResolutionEvidenceViolations,
+  resolutionEvidenceToCreateBeforeCard,
+} from "./seed-resolution-evidence.mjs";
 
 const coreBaseUrl = normalizeBaseUrl(
   process.env.ANX_CORE_BASE_URL ?? "http://127.0.0.1:8000",
@@ -71,6 +79,22 @@ if (threadRefViolations.length > 0) {
   );
 }
 
+const inboxSubjectRefViolations = listDevSeedInboxSubjectRefViolations(seed);
+if (inboxSubjectRefViolations.length > 0) {
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `dev seed inbox subject ref integrity:\n${inboxSubjectRefViolations.join("\n")}`,
+  );
+}
+
+const resolutionEvidenceViolations = listResolutionEvidenceViolations(seed);
+if (resolutionEvidenceViolations.length > 0) {
+  failWithPrefix(
+    "seed-core-from-mock failed",
+    `dev seed resolution evidence order:\n${resolutionEvidenceViolations.join("\n")}`,
+  );
+}
+
 function normalizeSeedCardResolution(raw) {
   const s = String(raw ?? "").trim();
   if (!s || s === "unresolved" || s === "superseded") {
@@ -90,6 +114,8 @@ const topicIdMap = new Map();
 const documentIdMap = new Map();
 const boardIdMap = new Map();
 const cardIdMap = new Map();
+const postedEventIds = new Set();
+const seededArtifactIds = new Set();
 
 main().catch((error) => {
   const reason = error instanceof Error ? error.message : String(error);
@@ -116,10 +142,12 @@ async function main() {
     await seedActors();
     await seedTopics();
     await seedDocuments();
-    await seedBoards();
-    await applySeedTopicAndBoardLifecycle();
+    // Artifacts (and packets) that done cards cite as resolution evidence must
+    // exist before those cards are created.
     await seedPackets();
     await seedArtifacts();
+    await seedBoards();
+    await applySeedTopicAndBoardLifecycle();
     // Register seeded agent principals before posting mention-heavy events so
     // @handle routing resolves against durable auth principals during seeding.
     if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
@@ -556,6 +584,10 @@ async function seedPackets() {
     };
 
     await request("POST", path, payload);
+    const artifactId = String(sourceArtifact.id ?? "").trim();
+    if (artifactId) {
+      seededArtifactIds.add(artifactId);
+    }
   }
 }
 
@@ -772,6 +804,10 @@ async function seedArtifacts() {
   const sourceArtifacts = Array.isArray(seed.artifacts) ? seed.artifacts : [];
 
   for (const sourceArtifact of sourceArtifacts) {
+    const artifactId = String(sourceArtifact.id ?? "").trim();
+    if (artifactId && seededArtifactIds.has(artifactId)) {
+      continue;
+    }
     const kind = String(sourceArtifact.kind ?? "").trim();
     if (packetKinds.has(kind)) {
       continue;
@@ -803,10 +839,16 @@ async function seedArtifacts() {
         content_type: contentType,
         content,
       });
+      if (artifactId) {
+        seededArtifactIds.add(artifactId);
+      }
       await trashSeedArtifactIfNeeded(sourceArtifact);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isAlreadyExistsConflict(msg)) {
+        if (artifactId) {
+          seededArtifactIds.add(artifactId);
+        }
         await trashSeedArtifactIfNeeded(sourceArtifact);
         continue;
       }
@@ -881,6 +923,7 @@ async function seedBoards() {
         );
         continue;
       }
+      await seedResolutionEvidenceForCard(sourceCard);
       if (
         linkedThreadId &&
         linkedThreadId === String(currentBoard?.thread_id ?? "").trim()
@@ -1032,7 +1075,8 @@ async function seedBoards() {
       const createdCardThreadId = String(created?.thread_id ?? "").trim();
       const sourceCardId = String(sourceCard.id ?? "").trim();
       if (sourceCardId && createdCardId) {
-        cardIdMap.set(sourceCardId, createdCardId);
+        const publicValue = publicRefValue(created, "card", createdCardId);
+        cardIdMap.set(sourceCardId, publicValue);
       }
       for (const sourceThreadAlias of [
         sourceCardId,
@@ -1056,6 +1100,76 @@ async function seedBoards() {
   }
 }
 
+async function seedResolutionEvidenceForCard(sourceCard) {
+  for (const item of resolutionEvidenceToCreateBeforeCard(seed, sourceCard)) {
+    if (item.kind === "event") {
+      await seedEventById(item.id);
+      continue;
+    }
+    if (item.kind === "artifact") {
+      await seedArtifactById(item.id);
+    }
+  }
+}
+
+async function seedEventById(eventId) {
+  const id = String(eventId ?? "").trim();
+  if (!id || postedEventIds.has(id)) {
+    return;
+  }
+  const sourceEvent = (seed.events ?? []).find(
+    (event) => String(event?.id ?? "").trim() === id,
+  );
+  if (!sourceEvent) {
+    throw new Error(`resolution evidence event ${id} is not in the seed`);
+  }
+  if (!shouldSeedLegacyEvent(sourceEvent)) {
+    throw new Error(
+      `resolution evidence event ${id} is skipped by the seed runner`,
+    );
+  }
+  await postSeedEvent(sourceEvent);
+}
+
+async function seedArtifactById(artifactId) {
+  const id = String(artifactId ?? "").trim();
+  if (!id || seededArtifactIds.has(id)) {
+    return;
+  }
+  throw new Error(
+    `resolution evidence artifact ${id} is not in the seed or was not created before cards`,
+  );
+}
+
+async function postSeedEvent(sourceEvent) {
+  const sourceId = String(sourceEvent.id ?? "").trim();
+  if (sourceId && postedEventIds.has(sourceId)) {
+    return;
+  }
+  const actorId = pickActorId(sourceEvent.actor_id);
+  const mappedThreadId = mapThreadId(sourceEvent.thread_id);
+  const payload = mapInboxSubjectInPayload(
+    normalizeEventPayload(sourceEvent.type, sourceEvent.payload),
+  );
+  const refs = mapRefs(sourceEvent.refs);
+  const eventPayload = {
+    type: sourceEvent.type,
+    thread_id: mappedThreadId,
+    refs,
+    summary: sourceEvent.summary,
+    payload,
+    provenance: sourceEvent.provenance,
+    ...(sourceId ? { id: sourceId } : {}),
+  };
+  await requestRetryOnServerError("POST", "/events", {
+    actor_id: actorId,
+    event: eventPayload,
+  });
+  if (sourceId) {
+    postedEventIds.add(sourceId);
+  }
+}
+
 async function seedEvents() {
   let posted = 0;
   let skipped = 0;
@@ -1068,29 +1182,13 @@ async function seedEvents() {
     if (!shouldSeedLegacyEvent(sourceEvent)) {
       continue;
     }
-    const actorId = pickActorId(sourceEvent.actor_id);
-    const mappedThreadId = mapThreadId(sourceEvent.thread_id);
-    const payload = normalizeEventPayload(
-      sourceEvent.type,
-      sourceEvent.payload,
-    );
-    const refs = mapRefs(sourceEvent.refs);
     const sourceId = String(sourceEvent.id ?? "").trim();
-    const eventPayload = {
-      type: sourceEvent.type,
-      thread_id: mappedThreadId,
-      refs,
-      summary: sourceEvent.summary,
-      payload,
-      provenance: sourceEvent.provenance,
-      ...(sourceId ? { id: sourceId } : {}),
-    };
-
+    if (sourceId && postedEventIds.has(sourceId)) {
+      posted += 1;
+      continue;
+    }
     try {
-      await requestRetryOnServerError("POST", "/events", {
-        actor_id: actorId,
-        event: eventPayload,
-      });
+      await postSeedEvent(sourceEvent);
       posted += 1;
     } catch (error) {
       skipped += 1;
@@ -1176,6 +1274,33 @@ function mapOptionalDocumentId(documentId) {
     return "";
   }
   return documentIdMap.get(raw) ?? "";
+}
+
+function mapInboxSubjectInPayload(payload) {
+  const next = payload && typeof payload === "object" ? { ...payload } : {};
+  if (next.subject_ref) {
+    next.subject_ref = mapRef(next.subject_ref);
+  }
+  if (Array.isArray(next.related_refs)) {
+    next.related_refs = mapRefs(next.related_refs);
+  }
+  const title = String(next.subject_title ?? next.title ?? "").trim();
+  if (title) {
+    next.subject_title = title;
+  }
+  return next;
+}
+
+function publicRefValue(created, prefix, fallbackId) {
+  const ref = String(created?.ref ?? "").trim();
+  if (ref.startsWith(`${prefix}:`)) {
+    return ref.slice(prefix.length + 1);
+  }
+  const handle = String(created?.handle ?? "").trim();
+  if (handle) {
+    return handle;
+  }
+  return String(fallbackId ?? "").trim();
 }
 
 function mapRef(ref) {
@@ -1330,14 +1455,78 @@ function normalizeEventPayload(type, payload) {
   return next;
 }
 
-async function ed25519PublicKeyBase64() {
-  const pair = await globalThis.crypto.subtle.generateKey(
-    { name: "Ed25519" },
-    true,
-    ["sign", "verify"],
-  );
-  const raw = await globalThis.crypto.subtle.exportKey("raw", pair.publicKey);
-  return Buffer.from(raw).toString("base64");
+// CLI profiles store Go's ed25519.PrivateKey (seed||public, 64 bytes, base64).
+function generateCliEd25519KeyPair() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const spki = publicKey.export({ type: "spki", format: "der" });
+  const pkcs8 = privateKey.export({ type: "pkcs8", format: "der" });
+  if (spki.length < 32) {
+    throw new Error("ed25519 spki too short");
+  }
+  const pubRaw = spki.subarray(spki.length - 32);
+  const seed = ed25519SeedFromPkcs8(pkcs8);
+  const privRaw = Buffer.concat([seed, pubRaw]);
+  if (privRaw.length !== 64) {
+    throw new Error("ed25519 private key must be 64 bytes");
+  }
+  return {
+    publicKeyBase64: pubRaw.toString("base64"),
+    privateKeyBase64: privRaw.toString("base64"),
+  };
+}
+
+function ed25519SeedFromPkcs8(der) {
+  if (
+    der.length >= 34 &&
+    der[der.length - 34] === 0x04 &&
+    der[der.length - 33] === 0x20
+  ) {
+    return der.subarray(der.length - 32);
+  }
+  throw new Error("unexpected ed25519 pkcs8 encoding");
+}
+
+function pkcs8FromCliPrivateKey(privateKeyBase64) {
+  const raw = Buffer.from(privateKeyBase64, "base64");
+  if (raw.length !== 64) {
+    throw new Error("ed25519 private key must be 64 bytes");
+  }
+  return Buffer.concat([
+    Buffer.from("302e020100300506032b657004220420", "hex"),
+    raw.subarray(0, 32),
+  ]);
+}
+
+async function issueAssertionTokens(agentID, keyID, privateKeyBase64) {
+  const signedAt = new Date().toISOString();
+  const message = `anx-auth-token|${agentID}|${keyID}|${signedAt}`;
+  const key = createPrivateKey({
+    key: pkcs8FromCliPrivateKey(privateKeyBase64),
+    format: "der",
+    type: "pkcs8",
+  });
+  const signature = sign(null, Buffer.from(message), key).toString("base64");
+  const body = await requestJson(coreBaseUrl, "POST", "/auth/token", {
+    grant_type: "assertion",
+    agent_id: agentID,
+    key_id: keyID,
+    signed_at: signedAt,
+    signature,
+  });
+  const tokens = body?.tokens ?? {};
+  const accessToken = String(tokens.access_token ?? "").trim();
+  const refreshToken = String(tokens.refresh_token ?? "").trim();
+  if (!accessToken || !refreshToken) {
+    throw new Error(
+      "assertion token response missing access_token/refresh_token",
+    );
+  }
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: String(tokens.token_type ?? "Bearer").trim() || "Bearer",
+    expires_at: String(tokens.expires_at ?? "").trim(),
+  };
 }
 
 const cliDogfoodInviteSlots = [
@@ -1477,6 +1666,8 @@ async function seedDevFixtureIdentities() {
       String(p.principal_kind).toLowerCase() === "human" &&
       status?.dev_passkey_bypass_available === true;
 
+    const keyPair = generateCliEd25519KeyPair();
+    let keyID = "";
     let reg;
     if (usePasskeyDevHuman) {
       reg = await requestJson(
@@ -1491,10 +1682,9 @@ async function seedDevFixtureIdentities() {
         [201],
       );
     } else {
-      const publicKey = await ed25519PublicKeyBase64();
       const body = {
         username: p.auth_username,
-        public_key: publicKey,
+        public_key: keyPair.publicKeyBase64,
         existing_actor_id: p.actor_id,
       };
       if (i === 0) {
@@ -1517,9 +1707,15 @@ async function seedDevFixtureIdentities() {
         body,
         [201],
       );
+      keyID = String(reg?.key?.key_id ?? "").trim();
     }
     if (reg?.tokens?.access_token) {
-      inviteIssuerAccess = reg.tokens.access_token;
+      // Invites require a human or auth-admin principal. The bootstrap
+      // principal (index 0) is the only one guaranteed to satisfy that, so
+      // keep issuing from it instead of the most recently registered agent.
+      if (inviteIssuerAccess == null) {
+        inviteIssuerAccess = reg.tokens.access_token;
+      }
       if (
         humanInviteIssuerAccess == null &&
         String(p.principal_kind).toLowerCase() === "human"
@@ -1545,22 +1741,61 @@ async function seedDevFixtureIdentities() {
         "PATCH",
         "/agents/me",
         { registration },
-        inviteIssuerAccess,
+        reg.tokens.access_token,
         [200],
       );
     }
     const agent = reg.agent ?? {};
     const coreUsername = String(agent.username ?? "").trim();
+    let accessToken = String(reg.tokens?.access_token ?? "").trim();
+    let refreshToken = String(reg.tokens?.refresh_token ?? "").trim();
+    let expiresAt = String(reg.tokens?.expires_at ?? "").trim();
+    if (accessToken && !keyID) {
+      const rotated = await requestAuthJson(
+        "POST",
+        "/agents/me/keys/rotate",
+        { public_key: keyPair.publicKeyBase64 },
+        accessToken,
+        [200],
+      );
+      keyID = String(rotated?.key?.key_id ?? "").trim();
+      const agentID = String(agent.agent_id ?? "").trim();
+      if (keyID && agentID) {
+        const fresh = await issueAssertionTokens(
+          agentID,
+          keyID,
+          keyPair.privateKeyBase64,
+        );
+        if (inviteIssuerAccess === accessToken) {
+          inviteIssuerAccess = fresh.access_token;
+        }
+        if (humanInviteIssuerAccess === accessToken) {
+          humanInviteIssuerAccess = fresh.access_token;
+        }
+        accessToken = fresh.access_token;
+        refreshToken = fresh.refresh_token;
+        expiresAt = fresh.expires_at;
+      }
+    }
+    if (!keyID) {
+      throw new Error(
+        `persona ${p.persona_id}: registration did not return a key_id for CLI assertion auth`,
+      );
+    }
     bundle.push({
       persona_id: p.persona_id,
       actor_id: p.actor_id,
       agent_id: agent.agent_id,
+      key_id: keyID,
+      private_key: keyPair.privateKeyBase64,
       auth_username: coreUsername || p.auth_username,
       display_label: p.display_label,
       principal_kind: p.principal_kind,
       default: p.default === true,
       dev_bridge: p.dev_bridge,
-      refresh_token: reg.tokens?.refresh_token,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: expiresAt,
     });
   }
 

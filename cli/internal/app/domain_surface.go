@@ -28,6 +28,12 @@ func agentDomainSurfaces() []domainSurface {
 			Domain:       "docs",
 			ThreadBacked: true,
 			Commands: []domainSurfaceCommand{
+				{Path: "docs search", Target: "<q>", Examples: []string{"anx docs search \"runbook\" --knowledge --host m4-air"}, ForbidHelp: []string{}},
+				{Path: "docs put", Target: "<path>", Examples: []string{"anx docs put - --handle kb-shared --title \"Note\" --tags knowledge"}, ForbidHelp: []string{}},
+				{Path: "docs ingest", Target: "<path>", Examples: []string{"anx docs ingest ./kb --source https://example.invalid/kb"}, ForbidHelp: []string{}},
+				{Path: "docs get", Target: "<ref>", Examples: []string{"anx docs get kb-shared --format md"}, ForbidHelp: []string{}},
+				{Path: "docs comment", Target: "<ref>", Examples: []string{"anx docs comment doc:runbook \"Host B found this\""}, ForbidHelp: []string{"anx docs comment --document-id <document-id>", "--document-id <document-id>"}},
+				{Path: "docs comments", Target: "<ref>", Examples: []string{"anx docs comments doc:runbook"}, ForbidHelp: []string{"anx docs comments --document-id <document-id>", "--document-id <document-id>"}},
 				{Path: "docs message", Target: "<ref>", Examples: []string{"anx docs message doc:runbook --body-file note.md"}, ForbidHelp: []string{"anx docs message --document-id <document-id>", "--document-id <document-id>"}},
 				{Path: "docs messages", Target: "<ref>", Examples: []string{"anx docs messages doc:runbook"}, ForbidHelp: []string{"anx docs messages --document-id <document-id>", "--document-id <document-id>"}},
 				{Path: "docs reply", Target: "<ref>", Examples: []string{"anx docs reply doc:runbook --to <message-id> --body \"Confirmed\""}, ForbidHelp: []string{"anx docs reply --document-id <document-id>", "--document-id <document-id>"}},

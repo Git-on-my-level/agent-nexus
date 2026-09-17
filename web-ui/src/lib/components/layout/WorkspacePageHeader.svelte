@@ -5,7 +5,7 @@
 <div class="flex flex-wrap items-start justify-between gap-3">
   <div class="min-w-0">
     {#if title}
-      <h1 class="text-subtitle font-semibold text-fg">{title}</h1>
+      <h1 class="text-title text-fg">{title}</h1>
     {/if}
     {#if subtitle}
       <div class="mt-0.5 text-meta text-fg-muted">{@render subtitle()}</div>

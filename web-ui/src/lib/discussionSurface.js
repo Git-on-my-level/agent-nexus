@@ -1,11 +1,10 @@
 /**
- * Declarative descriptors for the four Discussion surfaces (board, card,
- * topic, document).
+ * Declarative descriptors for the live Discussion surfaces (document, topic).
  *
  * Each builder returns a plain object whose keys mirror DiscussionDrawer props,
  * so a wrapper can spread it directly:
  *
- *   <DiscussionDrawer {...boardDiscussionSurface(board)} {workspaceId} … />
+ *   <DiscussionDrawer {...documentDiscussionSurface(doc)} {workspaceId} … />
  *
  * This is the single seam where surfaces are allowed to differ. Anything that
  * is not captured here (label, layout, timeline source, ref filters, lifecycle
@@ -13,16 +12,14 @@
  * hardcoded in a per-surface wrapper, so the surfaces stay consistent.
  */
 
-import { boardBackingThreadId } from "$lib/boardUtils";
 import {
-  BOARD_EMPTY,
   DISCUSSION_TITLE,
   DOC_EMPTY,
   topicEmpty,
 } from "$lib/discussionVocabulary";
 
 /**
- * @typedef {"board" | "card" | "topic" | "document"} DiscussionSurfaceKind
+ * @typedef {"topic" | "document"} DiscussionSurfaceKind
  *
  * @typedef {Object} DiscussionSurface
  * @property {DiscussionSurfaceKind} kind        Which primitive this Discussion belongs to.
@@ -41,46 +38,6 @@ import {
  */
 
 /**
- * Board-wide Discussion (dock under the board viewport).
- * @returns {DiscussionSurface}
- */
-export function boardDiscussionSurface(board) {
-  const threadId = boardBackingThreadId(board);
-  return {
-    kind: "board",
-    threadId,
-    label: DISCUSSION_TITLE,
-    layout: "dock",
-    storageKey: `board-feed:${threadId}`,
-    emptyMessage: BOARD_EMPTY,
-    timelineSource: "thread",
-    liveUpdates: true,
-    expandFillsParent: true,
-    narrowEdgeToEdge: true,
-  };
-}
-
-/**
- * Per-card Discussion (dock inside the card detail view/modal).
- * @param {{ threadId: string, cardKey: string }} args
- * @returns {DiscussionSurface}
- */
-export function cardDiscussionSurface({ threadId, cardKey }) {
-  return {
-    kind: "card",
-    threadId: String(threadId ?? "").trim(),
-    label: DISCUSSION_TITLE,
-    layout: "dock",
-    storageKey: `card-discussion:${cardKey}`,
-    emptyMessage: "",
-    timelineSource: "thread",
-    liveUpdates: true,
-    expandFillsParent: true,
-    narrowEdgeToEdge: true,
-  };
-}
-
-/**
  * Document Discussion (right rail on desktop, dock on mobile). Doc messages can
  * be anchored to a text selection, so the lifecycle wording is Resolve/Reopen.
  * @returns {DiscussionSurface}
@@ -88,7 +45,20 @@ export function cardDiscussionSurface({ threadId, cardKey }) {
 export function documentDiscussionSurface(doc) {
   const docId = String(doc?.id ?? "").trim();
   const threadId = String(doc?.thread_id ?? "").trim();
-  const documentRef = docId ? `document:${docId}` : "";
+  const handle = String(doc?.handle ?? "").trim();
+  const publicRef = String(doc?.ref ?? "").trim();
+  // Comments posted through the CLI carry the public ref (document:<handle>);
+  // older UI posts carry document:<id>. Both name this document.
+  const documentRefs = [
+    ...new Set(
+      [
+        publicRef,
+        handle ? `document:${handle}` : "",
+        docId ? `document:${docId}` : "",
+      ].filter(Boolean),
+    ),
+  ];
+  const documentRef = documentRefs[0] || "";
   return {
     kind: "document",
     threadId,
@@ -98,11 +68,12 @@ export function documentDiscussionSurface(doc) {
     emptyMessage: DOC_EMPTY,
     timelineSource: "thread",
     liveUpdates: true,
-    subjectRefFilter: documentRef,
+    subjectRefFilter: documentRefs,
     extraPostRefs: documentRef ? [documentRef] : [],
     archiveLabelKind: "resolve",
     expandFillsParent: true,
     narrowEdgeToEdge: true,
+    defaultOpen: true,
   };
 }
 

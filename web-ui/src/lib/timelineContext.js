@@ -89,8 +89,6 @@ export function createTimelineContext(coreClient) {
       let res;
       if (lastLoadOpts.asTopic) {
         res = await coreClient.listTopicTimeline(scopeId);
-      } else if (lastLoadOpts.asCard) {
-        res = await coreClient.listCardTimeline(scopeId);
       } else {
         res = await coreClient.listThreadTimeline(scopeId);
       }
@@ -147,6 +145,19 @@ export function createTimelineContext(coreClient) {
     );
     let lastEventId = String(opts.lastEventId ?? "").trim();
     const reconnectDelayMs = Number(opts.reconnectDelayMs) || 1_500;
+    // A fresh connection replays the thread's history as a burst of events;
+    // one refresh after the burst is enough. Coalesce into a trailing call.
+    const refreshDelayMs = Number(opts.refreshDelayMs) || 250;
+    let refreshTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (
+      null
+    );
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        if (!stopped) void refreshTimeline();
+      }, refreshDelayMs);
+    };
 
     const connect = async () => {
       if (stopped) return;
@@ -163,7 +174,7 @@ export function createTimelineContext(coreClient) {
             if (message?.event !== "event") {
               return;
             }
-            await refreshTimeline();
+            scheduleRefresh();
           },
         });
       } catch (err) {
@@ -181,6 +192,7 @@ export function createTimelineContext(coreClient) {
       stopped = true;
       controller?.abort();
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }
 

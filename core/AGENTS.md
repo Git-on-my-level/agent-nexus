@@ -20,7 +20,9 @@ It owns the canonical organizational record, validates and records state transit
 ## What Core Does Not Own
 - Agent orchestration, dispatch, or lifecycle management.
 - Human-facing operator UX beyond the API contract.
-- Real-world side effects outside the Agent Nexus workspace.
+- Unscoped real-world side effects outside the Agent Nexus workspace. PM integration
+  may hand off explicitly authorized actions to source tools; collectors remain
+  read-only and durable decisions/receipts remain in this workspace.
 - Control-plane-specific integration types, clients, or endpoint constants.
   Allowed carve-outs: generic env-driven contracts for the heartbeat publisher
   and for the optional HTTP account status checker (see below).

@@ -129,4 +129,21 @@ describe("dev seed fixtures", () => {
       );
     }
   });
+
+  it("resolves every seeded inbox card/topic/document subject_ref", async () => {
+    const { listDevSeedInboxSubjectRefViolations } =
+      await import("../../src/lib/devSeedData.js");
+    const { getDevSeedScenarioConfig, listDevSeedScenarioNames } =
+      await import("../../scripts/dev-seed-scenarios.mjs");
+
+    for (const name of listDevSeedScenarioNames()) {
+      const cfg = getDevSeedScenarioConfig(name);
+      expect(cfg?.getSeedData, `scenario ${name}`).toBeTruthy();
+      const scenarioSeed = cfg.getSeedData();
+      const violations = listDevSeedInboxSubjectRefViolations(scenarioSeed);
+      expect(violations, `scenario ${name}: ${violations.join(" | ")}`).toEqual(
+        [],
+      );
+    }
+  });
 });

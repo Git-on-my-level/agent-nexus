@@ -32,6 +32,10 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
+	if isWorkCommandRoot(args[0]) {
+		result, name, err := a.runWorkCommand(ctx, args, cfg)
+		return name, result, err
+	}
 	switch args[0] {
 	case "version":
 		result, err := a.runVersion(cfg)
