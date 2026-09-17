@@ -78,13 +78,15 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	var spec workCommandSpec
 	ok := false
 	for n := len(args); n >= 2; n-- {
-		if candidate, found := workCommands[strings.Join(args[:n], " ")]; found {
+		candidateName := runtimePathFromRegistryPath(strings.Join(args[:n], " "))
+		if candidate, found := workCommands[candidateName]; found {
 			spec, width, ok = candidate, n, true
+			out.name = candidateName
 			break
 		}
 	}
-	out.name = strings.Join(args[:width], " ")
 	if !ok {
+		out.name = strings.Join(args[:width], " ")
 		return out, errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown %s subcommand %q; run anx help %s", args[0], args[1], args[0]))
 	}
 	out.spec = spec

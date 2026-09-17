@@ -31,6 +31,8 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 		{[]string{"work", "invent"}, "unknown_subcommand"},
 		{[]string{"work", "observations", "submit"}, "invalid_request"},
 		{[]string{"work", "observations", "submit", "--workspace-id", "other"}, "invalid_flags"},
+		{[]string{"pm", "conversations", "messages", "create"}, "invalid_request"},
+		{[]string{"pm", "turns", "decisions", "create"}, "invalid_request"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
@@ -206,6 +208,10 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 		{[]string{"pm", "actions", "list"}, "GET", "/pm/actions", "", `{"items":[],"has_more":true}`},
 		{[]string{"pm", "actions", "get", "action-1"}, "GET", "/pm/actions/action-1", "", `{"id":"action-1","status":"source_reported","receipt":{"independently_verified":false}}`},
 		{[]string{"pm", "actions", "reconcile", "action-1"}, "POST", "/pm/actions/action-1/reconcile", `{}`, `{"id":"action-1","status":"unknown","receipt":{"independently_verified":false}}`},
+		{[]string{"pm", "conversations", "message", "conv-1", "--from-file", "-"}, "POST", "/pm/conversations/conv-1/messages", `{"request_key":"msg-1","text":"hello"}`, `{"id":"turn-1","status":"accepted"}`},
+		{[]string{"pm", "conversations", "messages", "create", "conv-1", "--from-file", "-"}, "POST", "/pm/conversations/conv-1/messages", `{"request_key":"msg-1","text":"hello"}`, `{"id":"turn-1","status":"accepted"}`},
+		{[]string{"pm", "turns", "propose", "turn-1", "--from-file", "-"}, "POST", "/pm/turns/turn-1/decisions", `{"request_key":"decision-key","instruction":"Review","scope":"review","target_revision":"abc"}`, `{"id":"decision-1","status":"awaiting_answer"}`},
+		{[]string{"pm", "turns", "decisions", "create", "turn-1", "--from-file", "-"}, "POST", "/pm/turns/turn-1/decisions", `{"request_key":"decision-key","instruction":"Review","scope":"review","target_revision":"abc"}`, `{"id":"decision-1","status":"awaiting_answer"}`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -314,5 +320,45 @@ func TestWorkTextKeepsPaginationAndReceiptUncertainty(t *testing.T) {
 	pm := formatWorkCommandText("pm actions list", map[string]any{"items": []any{map[string]any{"id": "action-1", "work_ref": "card:example", "status": "source_reported", "receipt": map[string]any{"independently_verified": false}}}, "next_cursor": "next", "has_more": true})
 	if !strings.Contains(pm, "source_reported") || !strings.Contains(pm, "verified=false") || !strings.Contains(pm, "next_cursor: next") {
 		t.Errorf("lost receipt uncertainty: %s", pm)
+	}
+}
+
+func TestParseWorkCommandAcceptsOfficialPMRegistryPaths(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		args []string
+		name string
+		path string
+		id   string
+	}{
+		{
+			args: []string{"pm", "conversations", "messages", "create", "conv-1", "--from-file", "-"},
+			name: "pm conversations message",
+			path: "/pm/conversations/{id}/messages",
+			id:   "conv-1",
+		},
+		{
+			args: []string{"pm", "turns", "decisions", "create", "turn-1", "--from-file", "-"},
+			name: "pm turns propose",
+			path: "/pm/turns/{id}/decisions",
+			id:   "turn-1",
+		},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			t.Parallel()
+			parsed, err := parseWorkCommand(tc.args)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if parsed.name != tc.name {
+				t.Errorf("name=%q want %q", parsed.name, tc.name)
+			}
+			if parsed.spec.path != tc.path {
+				t.Errorf("path=%q want %q", parsed.spec.path, tc.path)
+			}
+			if parsed.id != tc.id {
+				t.Errorf("id=%q want %q", parsed.id, tc.id)
+			}
+		})
 	}
 }
