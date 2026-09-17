@@ -729,7 +729,7 @@
     </p>
   {:else}
     <div
-      class="grid min-h-[30rem] overflow-hidden rounded-md border border-line bg-panel lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]"
+      class="grid overflow-hidden rounded-md border border-line bg-panel lg:min-h-[30rem] lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]"
     >
       <section
         class="min-w-0 border-line lg:border-r {selectedId
