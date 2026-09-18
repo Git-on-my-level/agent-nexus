@@ -119,6 +119,12 @@ func sqliteDSN(databasePath string) string {
 	// a longer busy wait reduces spurious "database is locked" under bursty local traffic.
 	query.Add("_pragma", "busy_timeout(20000)")
 	query.Add("_pragma", "journal_mode(WAL)")
+	// Every transaction here writes, and a deferred one that reads first fails
+	// SQLITE_BUSY outright when it upgrades to a write -- busy_timeout does not
+	// cover a lock upgrade, because retrying it could deadlock. BEGIN IMMEDIATE
+	// takes the write lock up front, where busy_timeout does apply, so
+	// concurrent writers queue instead of erroring with "database is locked".
+	query.Set("_txlock", "immediate")
 	dsn.RawQuery = query.Encode()
 	return dsn.String()
 }

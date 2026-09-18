@@ -350,7 +350,8 @@ Long identifiers are common in Agent Nexus data.
    UUIDs and hashes. Use `title` or copy-on-click for the full value.
 2. Use `font-mono text-micro` for raw identifiers.
 3. Separate multiple refs with `·` in `text-fg-subtle` or use distinct labeled
-   groups (`Thread`, `Topic`, `Card`).
+   groups (`Thread`, `Project`, `Task`; `Topic` and `Card` only on the
+   diagnostics surfaces `anx-ui-spec.md` §1.8 exempts).
 4. In artifact/thread/document list views, metadata lines should use structured
    labels before each ref link. Avoid dumping raw refs as a run-on string.
 
@@ -465,14 +466,17 @@ item belongs to.
 
 ### Relationship Labels
 
+Labels follow the operator vocabulary in `anx-ui-spec.md` §1.8: a topic reads as
+**Project** and a card reads as **Task** on any operator-facing surface. Core
+names survive only on the diagnostics surfaces §1.8 exempts.
+
 | Relationship | Label | Where |
 | --- | --- | --- |
-| Board -> topic | `Topic` | Board header context line |
-| Document -> topic | `Topic` | Document header |
-| Artifact -> topic | `Topic` | Artifact header |
-| Topic detail -> owned boards | Section: `Owned by this topic` | Topic boards panel |
-| Topic detail -> board cards | Section: `Appears as card on` | Topic boards panel |
-| List item -> topic | `Topic: {title or id}` | List row metadata |
+| Document -> topic | `Project` | Document header |
+| List item -> topic | `Project: {title or id}` | List row metadata |
+| List item -> card | `Task: {title or id}` | List row metadata |
+| Board -> topic | `Topic` | Board header context line (diagnostics) |
+| Artifact -> topic | `Topic` | Artifact header (diagnostics) |
 | Diagnostic / `thread:` target | `Backing thread` or `Thread` | Explicitly thread-scoped surfaces |
 
 ## Anti-Patterns

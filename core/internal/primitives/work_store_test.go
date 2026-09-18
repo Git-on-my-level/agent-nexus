@@ -408,3 +408,24 @@ func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
 		t.Fatalf("expected one board after concurrent creates, got %d err=%v", len(listed), err)
 	}
 }
+
+func TestCreateWorkRejectedRequestLeavesNoDefaultBoard(t *testing.T) {
+	s := newEmptyWorkTestStore(t)
+	ctx := context.Background()
+	for _, input := range []map[string]any{
+		{"source": map[string]any{"authority": "nexus"}},
+		{"title": "Bad phase", "phase": "done", "source": map[string]any{"authority": "nexus"}},
+		{"title": "Bad priority", "priority": "p9", "source": map[string]any{"authority": "nexus"}},
+	} {
+		if _, err := s.CreateWork(ctx, "actor-1", "", input); err == nil {
+			t.Fatalf("expected rejection for %v", input)
+		}
+	}
+	boards, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(boards) != 0 {
+		t.Fatalf("a rejected work.create provisioned a board: %v", boards)
+	}
+}

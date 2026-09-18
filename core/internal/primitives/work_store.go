@@ -172,22 +172,6 @@ const (
 	defaultWorkBoardTitle = "Tasks"
 )
 
-func isSQLiteBusy(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "database is locked") || strings.Contains(text, "sqlite_busy")
-}
-
-func sqliteBusyBackoff(attempt int) {
-	d := 5 * time.Millisecond * time.Duration(1<<attempt)
-	if d > 50*time.Millisecond {
-		d = 50 * time.Millisecond
-	}
-	time.Sleep(d)
-}
-
 func (s *Store) oldestActiveBoardID(ctx context.Context) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM boards WHERE archived_at IS NULL AND trashed_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1`).Scan(&id)
@@ -201,69 +185,42 @@ func (s *Store) oldestActiveBoardID(ctx context.Context) (string, error) {
 }
 
 // ensureDefaultBoard returns an active board for work.create when the caller
-// omitted board_ref. It reuses the oldest active board, or creates a stable
-// "Tasks" board. Concurrent callers collide on the reserved id and converge.
+// omitted board_ref: the oldest active board, or a "Tasks" board created on
+// the spot. Concurrent callers race here, and the reserved id is what makes
+// that safe -- the loser of the insert gets ErrConflict and re-reads rather
+// than creating a second board. The archived case is why it re-reads instead
+// of just fetching by id: `workspace-default` can exist but be archived, and
+// then the workspace genuinely needs a new board with a generated id.
 func (s *Store) ensureDefaultBoard(ctx context.Context, actorID string) (string, error) {
-	var last error
-	for attempt := 0; attempt < 8; attempt++ {
-		id, err := s.oldestActiveBoardID(ctx)
-		if err != nil {
-			if isSQLiteBusy(err) {
-				last = err
-				sqliteBusyBackoff(attempt)
-				continue
-			}
-			return "", err
-		}
-		if id != "" {
-			return id, nil
-		}
-		board, err := s.CreateBoard(ctx, actorID, map[string]any{
-			"id":    defaultWorkBoardID,
-			"title": defaultWorkBoardTitle,
-		})
-		if err == nil {
-			return workString(board["id"]), nil
-		}
-		last = err
-		if errors.Is(err, ErrConflict) {
-			id, err := s.oldestActiveBoardID(ctx)
-			if err != nil {
-				if isSQLiteBusy(err) {
-					sqliteBusyBackoff(attempt)
-					continue
-				}
-				return "", err
-			}
-			if id != "" {
-				return id, nil
-			}
-			board, err = s.CreateBoard(ctx, actorID, map[string]any{"title": defaultWorkBoardTitle})
-			if err == nil {
-				return workString(board["id"]), nil
-			}
-			last = err
-			if isSQLiteBusy(err) || errors.Is(err, ErrConflict) {
-				sqliteBusyBackoff(attempt)
-				continue
-			}
-			return "", err
-		}
-		if isSQLiteBusy(err) {
-			sqliteBusyBackoff(attempt)
-			continue
-		}
+	id, err := s.oldestActiveBoardID(ctx)
+	if err != nil {
 		return "", err
 	}
-	if id, err := s.oldestActiveBoardID(ctx); err != nil {
+	if id != "" {
+		return id, nil
+	}
+	board, err := s.CreateBoard(ctx, actorID, map[string]any{
+		"id":    defaultWorkBoardID,
+		"title": defaultWorkBoardTitle,
+	})
+	if err == nil {
+		return workString(board["id"]), nil
+	}
+	if !errors.Is(err, ErrConflict) {
 		return "", err
+	}
+	if id, readErr := s.oldestActiveBoardID(ctx); readErr != nil {
+		return "", readErr
 	} else if id != "" {
 		return id, nil
 	}
-	if last != nil {
-		return "", last
+	// The reserved id is taken by an archived or trashed board, so this
+	// workspace needs a fresh active one.
+	board, err = s.CreateBoard(ctx, actorID, map[string]any{"title": defaultWorkBoardTitle})
+	if err != nil {
+		return "", err
 	}
-	return "", workInvalid("could not resolve a board for work.create")
+	return workString(board["id"]), nil
 }
 
 func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input map[string]any) (map[string]any, error) {
@@ -271,13 +228,6 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		return nil, workInvalid("actor required")
 	}
 	boardID = strings.TrimSpace(boardID)
-	if boardID == "" {
-		resolved, err := s.ensureDefaultBoard(ctx, actorID)
-		if err != nil {
-			return nil, err
-		}
-		boardID = resolved
-	}
 	m := workClone(input)
 	delete(m, "actor_id")
 	delete(m, "board_ref")
@@ -344,26 +294,24 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	if owner != "" && authority == "nexus" {
 		assignee = &owner
 	}
-	var result BoardCardMutationResult
-	var err error
-	for attempt := 0; attempt < 8; attempt++ {
-		result, err = s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
-		if err == nil {
-			break
+	// Resolve the board last. Everything above can still reject the request or
+	// return an existing card, and a rejected work.create must not leave a
+	// default board behind on a workspace that has none.
+	if boardID == "" {
+		resolved, err := s.ensureDefaultBoard(ctx, actorID)
+		if err != nil {
+			return nil, err
 		}
-		if isSQLiteBusy(err) {
-			sqliteBusyBackoff(attempt)
-			continue
-		}
+		boardID = resolved
+	}
+	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
+	if err != nil {
 		if authority != "nexus" {
 			var existing string
 			if lookupErr := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&existing); lookupErr == nil {
 				return s.GetWork(ctx, existing)
 			}
 		}
-		return nil, err
-	}
-	if err != nil {
 		return nil, err
 	}
 	return s.GetWork(ctx, workString(result.Card["id"]))

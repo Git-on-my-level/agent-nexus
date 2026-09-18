@@ -18,8 +18,9 @@ All routes are under `/o/{organization}/w/{workspace}`.
 - `/tasks?view=table|board`: commitments, source status, next actor/action,
   evidence freshness. Search and project/source/owner/phase/freshness filters
   call `work.list`.
-- `/tasks/new`: native commitment creation on an existing board, with required
-  acceptance criteria.
+- `/tasks/new`: native commitment creation with required acceptance criteria.
+  Boards are plumbing: `work.create` defaults the backing board, so the page
+  asks the operator to pick one only when the workspace already has several.
 - `/tasks/{card_ref}`: source authority, acceptance criteria, blockers, next
   action, observation history, and refresh requests.
 - `/docs`, `/docs/{document_ref}`: shared knowledge. Comments are first-class;

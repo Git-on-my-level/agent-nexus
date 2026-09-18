@@ -73,16 +73,19 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 **Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
 
 1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
-2. **Ref-type labels** rendered by `RefLink` / `refLinkModel`, which name the *ref type*. These still use the operator noun where one exists: a `card:` chip reads "Task", a `topic:` chip reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name.
+2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`getInboxSubjectLabel`) — because their job is to name the *ref type*. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
-Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists.
+Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
+
+**Open:** the Tasks table still renders a Board column for every row, including in a workspace whose only board is the one core provisioned. By the rule above that column is plumbing whenever there is no choice to make, but removing or conditioning it is a product decision about the Tasks table, not a copy fix, so it is recorded here rather than changed silently.
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
 | Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active|archived|trashed`) |
 | Root work item | Task, Tasks | Topic, Topics, Card, Cards, backing thread, Threads (as operator-facing labels) | `card:` refs, `card_id`, the `work.list` / `work.get` command ids, `thread_id`, `thread:` refs, `/threads` diagnostic detail route |
 | Project / work grouping | Project | Topic, Topics (as operator-facing labels) | `topic:` refs; core reports `"projects": "topics"` in `work.capabilities` |
+| Backing board | Board — only where the operator has a real choice among boards | Board as a required step, label or column when the workspace has one board | `board:` refs, `board_id`, the `boards.*` command family, diagnostics surfaces |
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |
 | Operator-facing actor in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |

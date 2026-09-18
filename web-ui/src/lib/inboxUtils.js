@@ -8,10 +8,6 @@ export const INBOX_CATEGORY_LABELS = {
   escalate: "Escalation",
 };
 
-export function getInboxCategoryLabel(category) {
-  return INBOX_CATEGORY_LABELS[category] ?? category;
-}
-
 export const INBOX_URGENCY_LEVELS = ["immediate", "high", "normal"];
 
 export const INBOX_URGENCY_LABELS = {
@@ -33,10 +29,6 @@ const INBOX_SUBJECT_LABELS = {
   document: "Document",
   thread: "Thread",
 };
-
-export function normalizeInboxCategory(category) {
-  return String(category ?? "").trim();
-}
 
 export function normalizeInboxKind(itemOrKind) {
   if (typeof itemOrKind === "object" && itemOrKind !== null) {
@@ -144,14 +136,6 @@ export function decisionGroundingRefForInboxItem(item) {
   return "";
 }
 
-export function getInboxSubjectKind(item) {
-  return splitTypedRef(getInboxSubjectRef(item)).prefix;
-}
-
-export function getInboxSubjectId(item) {
-  return splitTypedRef(getInboxSubjectRef(item)).id;
-}
-
 export function getInboxSubjectLabel(item) {
   const subjectRef = getInboxSubjectRef(item);
   if (!subjectRef) {
@@ -178,10 +162,6 @@ export function readSourceEventTime(item) {
     item?.source_event?.ts ??
     null
   );
-}
-
-function getItemTitle(item) {
-  return String(item?.title ?? item?.summary ?? "");
 }
 
 function readNowTimestamp(options = {}) {
@@ -291,47 +271,6 @@ export function summarizeInboxUrgency(items = [], options = {}) {
     },
     { immediate: 0, high: 0, normal: 0 },
   );
-}
-
-export function sortInboxItems(items, options = {}) {
-  const nowTs = readNowTimestamp(options);
-  const decoratedItems = [...items].map((item) => ({
-    item,
-    urgency: deriveInboxUrgency(item, { now: nowTs }),
-    sourceEventTs: parseTimestampMs(readSourceEventTime(item)),
-    title: getItemTitle(item),
-    id: String(item?.id ?? ""),
-  }));
-
-  return decoratedItems
-    .sort((left, right) => {
-      if (left.urgency.score !== right.urgency.score) {
-        return right.urgency.score - left.urgency.score;
-      }
-
-      const leftHasTs = Number.isFinite(left.sourceEventTs);
-      const rightHasTs = Number.isFinite(right.sourceEventTs);
-
-      if (
-        leftHasTs &&
-        rightHasTs &&
-        left.sourceEventTs !== right.sourceEventTs
-      ) {
-        return left.sourceEventTs - right.sourceEventTs;
-      }
-
-      if (leftHasTs !== rightHasTs) {
-        return leftHasTs ? -1 : 1;
-      }
-
-      const titleCompare = left.title.localeCompare(right.title);
-      if (titleCompare !== 0) {
-        return titleCompare;
-      }
-
-      return left.id.localeCompare(right.id);
-    })
-    .map(({ item }) => item);
 }
 
 export function summarizeInboxByCategory(items = []) {
