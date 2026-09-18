@@ -36,7 +36,9 @@ describe("topic detail header", () => {
   it("WorkspaceTopicThreadDetailPage uses shared tab list and compact header", () => {
     const src = readFileSync(pagePath, "utf8");
     expect(src).toContain("WorkspaceResourceTabList");
-    expect(src).toContain("{detailAsTopic} dense");
+    expect(src).toContain("{threadId} dense");
+    // The topic-scoped mode was unreachable (no route sets detailScope/topicId).
+    expect(src).not.toContain("detailAsTopic");
     expect(src).not.toContain("showDesktop");
     expect(src).not.toContain("dense={isMessagesTab}");
     expect(src).not.toContain("showDesktop={!isMessagesTab}");

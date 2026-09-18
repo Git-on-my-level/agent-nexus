@@ -127,19 +127,21 @@ redirects. (`/work` is still a core **API** path and is unrelated.)
 
 ### 2.2 Topic detail: timeline + workspace
 
-A topic detail view presents two complementary layers:
+There is no topic detail destination. `/threads/{threadId}` is a **read-only diagnostic** view of one backing thread, reached from a typed ref, an inbox deep link, or the `/threads` Diagnostics list. It presents two complementary layers:
 
-**Workspace (current state):** The operator-facing topic record plus related cards, boards, documents, and inbox context from projection endpoints where applicable — title, summary, lifecycle state, linked refs, card progress, and linked evidence. This is the "what's true right now" view. Editable in place only where the schema allows it (topics via title/summary patches; cards via their canonical patch and move APIs).
+**Workspace (current state):** the thread's record and related cards, documents and inbox context from projection endpoints — title, summary, lifecycle state, linked refs and linked evidence. This is the "what's true right now" view.
 
-**Timeline (audit trail):** A time-ordered, append-only sequence of all events on the topic's backing thread. Each timeline entry shows type, timestamp, actor, summary, and refs (rendered as navigable typed-ref links). The timeline includes messages, receipt submission, reviews, decisions, exceptions, acknowledgments, and topic/card lifecycle updates.
+**Timeline (audit trail):** a time-ordered, append-only sequence of all events on the thread. Each entry shows type, timestamp, actor, summary and refs. The timeline includes messages, receipt submission, reviews, decisions, exceptions, acknowledgments and lifecycle updates.
 
-Mutable topic and card fields are interpretive and versioned through events. The timeline is durable and append-only. The UI MUST make this distinction clear.
+Mutable fields are interpretive and versioned through events. The timeline is durable and append-only. The UI MUST make this distinction clear.
+
+**Lifecycle is not editable here.** Archive, trash and restore are core operations on the topic behind the thread; this surface MUST direct the operator to the CLI rather than offering controls it cannot honor. It MUST NOT reference a "topic route" — none exists.
 
 ### 2.3 Timeline rendering
 
 - Ordering MUST be time-based and stable.
 - Different event types SHOULD be visually distinguishable (icons, colors, or labels).
-- Typed refs in event entries SHOULD render as navigable links (artifact refs open artifact detail, `topic:` / `card:` refs open topic or card detail, URL refs open externally).
+- Typed refs in event entries render per `refLinkModel`: `card:` opens the Task, `document:` opens the Doc, `thread:` / `event:` open thread inspection, `url:` opens externally. `topic:`, `board:` and `artifact:` have **no operator destination** and render as inert labels — that is deliberate, not a gap.
 - Artifact-typed events (receipts, reviews) SHOULD be expandable inline or navigable to the artifact detail. The UI uses event `refs` (per reference conventions) to locate the linked artifacts.
 - `topic_updated`, topic lifecycle events (`topic_archived`, `topic_trashed`, `topic_restored`, etc.), `card_updated`, and related lifecycle events SHOULD display `changed_fields` (or equivalent change details) from the event payload when available.
 - Unknown event types MUST render without breaking the timeline.
@@ -173,7 +175,7 @@ A dedicated surface showing items that need operator attention.
 
 **Display:**
 
-- Inbox items grouped by generic **`kind`**. The current first-class UI affordances are `ask`, `review`, and `escalate`; unknown kinds MUST still appear in their own groups (forward compatibility).
+- Inbox items are grouped into three **mailboxes** — **Needs you**, **Watching**, **Handled** (`lib/inboxMailbox.js`). Item `kind` (`ask`, `review`, `escalate`) drives affordances within an item, not the grouping; unknown kinds MUST still appear rather than being dropped.
 - Within each group, sorted by inferred **urgency** (from kind, optional severity, and trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
 - Each item shows: title, kind, requester context, and a link to the relevant task, document, thread, or artifact.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
@@ -183,11 +185,11 @@ A dedicated surface showing items that need operator attention.
 - Navigate to the relevant inbox item, task, document, thread inspection route, or artifact.
 - Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
 - The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event: the first entry is the **recommended** response (highlighted); additional entries are optional fill-ins for the freeform response text. **`review`** items also expose local **Approve** / **Reject** actions that submit fixed response text without using those chips.
-- Record a response (creates a `human_attention_responded` event for inbox items, or a `message_posted` event for general notes) with notes and typed refs. The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). The operator may have arrived via a **topic** route, but durable follow-up events still attach to the backing thread; topic refs are optional context when present, not the anchor.
+- Record a response (creates a `human_attention_responded` event for inbox items, or a `message_posted` event for general notes) with notes and typed refs. The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). Topic refs are optional context when present, never the anchor.
 
 ### 3.2 Thread inspection list
 
-`/threads` is a filterable inspection list of backing conversations (docs-as-rooms, inbox deep links, audit). It is not a fourth product primitive and MUST NOT appear in primary nav.
+`/threads` is a filterable inspection list of backing conversations (docs-as-rooms, inbox deep links, audit). It is not a fourth product primitive and MUST NOT appear in primary nav. It is listed under the **Diagnostics** group in the sidebar footer / `/more` hub, so it is discoverable by link rather than only by URL.
 
 Document and thread list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
 

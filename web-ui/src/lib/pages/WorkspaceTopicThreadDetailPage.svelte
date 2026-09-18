@@ -28,9 +28,6 @@
   let threadId = $derived(
     data?.topicId || $page.params.topicId || $page.params.threadId,
   );
-  let detailAsTopic = $derived(
-    data?.detailScope === "topic" || Boolean($page.params.topicId),
-  );
 
   const timelineSlice = derived(topicDetailStore, ($s) => ({
     timeline: $s.timeline,
@@ -142,8 +139,6 @@
     const routeId = String(
       data?.topicId || $page.params.topicId || $page.params.threadId || "",
     ).trim();
-    const asTopic =
-      data?.detailScope === "topic" || Boolean($page.params.topicId);
 
     if (!routeId) {
       return;
@@ -157,12 +152,7 @@
     let cancelled = false;
 
     void (async () => {
-      await topicDetailStore.fullRefresh(routeId, { asTopic });
-      if (cancelled) return;
-
-      if (get(topicDetailStore).detailAsTopic) {
-        await topicDetailStore.loadTimeline(routeId);
-      }
+      await topicDetailStore.fullRefresh(routeId);
       if (cancelled) return;
 
       const state = get(topicDetailStore);
@@ -350,9 +340,7 @@
 
   $effect(() => {
     if ((activeTab === "messages" || activeTab === "timeline") && threadId) {
-      void topicDetailStore.loadTimeline(threadId, {
-        asTopic: detailAsTopic,
-      });
+      void topicDetailStore.loadTimeline(threadId);
     }
   });
 
@@ -371,20 +359,18 @@
   Other tabs render in normal page flow.
 -->
 {#if topicLoading}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense />
+  <TopicDetailHeader {threadId} dense />
   <p class="text-[13px] text-fg-muted">Loading...</p>
 {:else if topicError}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense />
+  <TopicDetailHeader {threadId} dense />
   <p
     class="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger-text [overflow-wrap:anywhere]"
   >
     {topicError}
   </p>
 {:else if !topic}
-  <TopicDetailHeader {threadId} {detailAsTopic} dense />
-  <p class="text-[13px] text-fg-muted">
-    {detailAsTopic ? "Topic not found." : "Thread not found."}
-  </p>
+  <TopicDetailHeader {threadId} dense />
+  <p class="text-[13px] text-fg-muted">Thread not found.</p>
 {:else}
   {@const isMessagesTab = activeTab === "messages"}
   <div
@@ -393,7 +379,7 @@
       : ""}
   >
     <div class={isMessagesTab ? "page-dock-head max-lg:px-4" : "contents"}>
-      <TopicDetailHeader {threadId} {detailAsTopic} dense />
+      <TopicDetailHeader {threadId} dense />
 
       <WorkspaceResourceTabList
         ariaLabel="Topic sections"
