@@ -662,6 +662,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(
         page.getByRole("dialog", { name: "Keyboard shortcuts" }),
       ).toBeVisible();
+      await expect(
+        page.getByText("Move focused task to the previous or next phase"),
+      ).toBeVisible();
+      await expect(page.locator("#task-board-card-help")).toContainText(
+        "Drag a task between phases",
+      );
       await expectCleanLayout(page, "shortcut overlay over move notice");
       await page.keyboard.press("Escape");
       await expect(

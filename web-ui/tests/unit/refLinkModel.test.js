@@ -311,6 +311,17 @@ describe("RefLink model", () => {
       isLink: false,
     });
 
+    const cardRef = resolveRefLink("card:card-1", {
+      humanize: true,
+    });
+
+    expect(cardRef).toMatchObject({
+      kind: "card",
+      label: "Task card-1",
+      primaryLabel: "Task card-1",
+      secondaryLabel: "card:card-1",
+    });
+
     const threadRef = resolveRefLink("thread:thread-1", {
       humanize: true,
     });

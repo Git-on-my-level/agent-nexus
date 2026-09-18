@@ -260,6 +260,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
       await page.getByRole("button", { name: /^Filter/ }).click();
       await expect(page.getByTestId("events-filter-panel")).toBeVisible();
+      await expect(
+        page.getByRole("option", { name: "Watching" }),
+      ).toBeAttached();
+      await expect(page.getByRole("option", { name: "Home feed" })).toHaveCount(
+        0,
+      );
       await expectCleanLayout(page, "audit filters open", bothEnds);
 
       await page.getByPlaceholder("Type", { exact: true }).fill(LONG_TOKEN);

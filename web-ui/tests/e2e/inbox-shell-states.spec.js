@@ -935,6 +935,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
           .first()
           .click();
         await expect(tour.getByText(step, { exact: false })).toBeVisible();
+        if (step === "2 of 5") {
+          await expect(
+            tour.getByText("Drag a task created here to change phase"),
+          ).toBeVisible();
+          await expect(tour.getByText(/Nexus-owned card/i)).toHaveCount(0);
+        }
         await expectCleanLayout(page, `tour ${step}`);
       }
 

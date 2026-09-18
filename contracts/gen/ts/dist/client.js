@@ -2476,7 +2476,7 @@ export const commandRegistry = [
         "path": "/cards",
         "operation_id": "listCards",
         "summary": "List cards",
-        "why": "Scan first-class card resources across boards.",
+        "why": "Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -8563,7 +8563,7 @@ export const commandRegistry = [
         "path": "/work/capabilities",
         "operation_id": "workCapabilities",
         "summary": "Inspect work tracking capabilities",
-        "why": "Inspect work tracking capabilities.",
+        "why": "Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -8741,7 +8741,7 @@ export const commandRegistry = [
         "path": "/work/{card_ref}",
         "operation_id": "workGet",
         "summary": "Read a commitment and its evidence",
-        "why": "Read a commitment and its evidence.",
+        "why": "Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations).",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -8784,8 +8784,8 @@ export const commandRegistry = [
         "path": "/work",
         "operation_id": "workList",
         "summary": "List heterogeneous commitments",
-        "description": "Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.",
-        "why": "List heterogeneous commitments.",
+        "description": "Operator Tasks projection over card rows. Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.",
+        "why": "List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"

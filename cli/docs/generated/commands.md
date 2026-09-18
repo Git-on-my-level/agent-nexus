@@ -625,7 +625,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Scan first-class card resources across boards.
+- Why: Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes.
 - Concepts: `cards`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ cards }`.
@@ -1930,7 +1930,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Inspect work tracking capabilities.
+- Why: Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkCapabilitiesResponse`.
@@ -1956,7 +1956,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Read a commitment and its evidence.
+- Why: Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations).
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
@@ -1969,7 +1969,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: List heterogeneous commitments.
+- Why: List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkListResponse`.

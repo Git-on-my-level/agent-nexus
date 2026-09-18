@@ -76,7 +76,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 2. **Ref-type labels** rendered by `RefLink` / `refLinkModel`, which name the *ref type*. These still use the operator noun where one exists: a `card:` chip reads "Task", a `topic:` chip reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
-Outside those three, "card" still appears in operator copy in the Tasks board help, the keyboard help and the onboarding tour. Those are known violations, not sanctioned ones, and they are tracked as follow-ups rather than silently permitted. Do not add new ones, and do not read the backlog as license — a rule this document does not enforce is a rule the next reader will ignore. Task creation asks the operator to choose a Board only when more than one board already exists.
+Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists.
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |

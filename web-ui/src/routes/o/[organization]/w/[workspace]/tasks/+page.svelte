@@ -555,7 +555,7 @@
     ["Next task", ["J"]],
     ["Previous task", ["K"]],
     ["Open focused task", ["Enter"]],
-    ["Move focused card to the previous or next phase (board)", ["←", "→"]],
+    ["Move focused task to the previous or next phase (board)", ["←", "→"]],
     ["Board view", ["B"]],
     ["Table view", ["T"]],
     ["Shortcut help", ["?"]],

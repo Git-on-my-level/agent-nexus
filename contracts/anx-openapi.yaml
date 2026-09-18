@@ -12,6 +12,11 @@ info:
 
     Topics and cards are primary durable resources. Threads remain backing
     infrastructure surfaced through read-only inspection and workspace views.
+
+    `cards.*` is the canonical store API over card rows. `work.*` is the operator
+    Tasks projection over those same rows (acceptance criteria, observations,
+    freshness). Use `cards.*` for store reads and card workflow writes; use
+    `work.*` to see what operators see. They are layered, not duplicates.
 servers:
   - url: http://127.0.0.1:8000
 x-anx-extension-vocabulary:
@@ -1248,13 +1253,13 @@ paths:
     get:
       operationId: workList
       summary: List heterogeneous commitments
-      description: Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.
+      description: Operator Tasks projection over card rows. Most recently updated first by updated_at descending, then card id descending. Opaque cursors retain both ordering values; newer inserts and updates ahead of the cursor are visible on a fresh first page.
       tags:
       - work
       x-anx-surface: projection
       x-anx-command-id: work.list
       x-anx-cli-path: work list
-      x-anx-why: List heterogeneous commitments.
+      x-anx-why: "List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes."
       x-anx-input-mode: none
       x-anx-streaming:
         mode: none
@@ -1368,7 +1373,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: work.capabilities
       x-anx-cli-path: work capabilities
-      x-anx-why: Inspect work tracking capabilities.
+      x-anx-why: "Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store."
       x-anx-input-mode: none
       x-anx-streaming:
         mode: none
@@ -1400,7 +1405,7 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: work.get
       x-anx-cli-path: work get
-      x-anx-why: Read a commitment and its evidence.
+      x-anx-why: "Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations)."
       x-anx-input-mode: none
       x-anx-streaming:
         mode: none
@@ -3674,7 +3679,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.list
       x-anx-cli-path: cards list
-      x-anx-why: Scan first-class card resources across boards.
+      x-anx-why: "Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes."
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ cards }`."
@@ -4145,7 +4150,7 @@ paths:
         - name: preset
           in: query
           schema: { type: string, enum: [home_feed] }
-          description: Optional shared filter preset. `home_feed` applies the same high-signal event family set used by Home before unread cursor filtering.
+          description: Optional shared filter preset. `home_feed` is the Watching projection (operator Inbox mailbox); the stored preset id stays `home_feed`. It applies the same high-signal event family set used by Home before unread cursor filtering.
         - name: type
           in: query
           schema: { type: array, items: { type: string } }

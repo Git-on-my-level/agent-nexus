@@ -81,7 +81,7 @@
             selector: '[data-tour="tasks"]',
             eyebrow: "2 of 5 · Tasks",
             title: "Tasks is the work board",
-            body: "Table and board over the same records. Drag a Nexus-owned card to change phase. Source-owned cards open a decision instead of mutating the source.",
+            body: "Table and board over the same records. Drag a task created here to change phase. A task that lives in another tracker opens a decision instead of mutating the source.",
           },
           {
             selector: '[data-tour="docs"]',

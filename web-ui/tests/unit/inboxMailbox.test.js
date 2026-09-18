@@ -376,3 +376,21 @@ describe("inbox mailbox row ids", () => {
     ]);
   });
 });
+
+describe("inbox subject fallback labels", () => {
+  it("names a card subject as Task when no work title is known", () => {
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "in-card",
+          title: "Need a reply",
+          kind: "ask",
+          subject_ref: "card:card-1",
+          related_refs: ["thread:t1"],
+        },
+      ],
+    });
+    const row = rows.find((item) => item.id === "inbox:in-card");
+    expect(row.source).toBe("Task: card-1");
+  });
+});

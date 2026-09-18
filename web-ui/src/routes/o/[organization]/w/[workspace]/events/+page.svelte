@@ -248,7 +248,7 @@
                 class="mt-1 w-full rounded-md border border-line bg-bg-soft px-2.5 py-1.5 text-meta transition-colors focus:bg-panel"
               >
                 <option value="">All events</option>
-                <option value={HOME_FEED_PRESET}>Home feed</option>
+                <option value={HOME_FEED_PRESET}>Watching</option>
               </select>
             </label>
             <label

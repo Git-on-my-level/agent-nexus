@@ -304,6 +304,27 @@ func TestConceptsCommandAndHelpTopic(t *testing.T) {
 	}
 }
 
+func TestConceptsGuideLayersCardsStoreAndWorkProjection(t *testing.T) {
+	t.Parallel()
+
+	output := runHelpCommand(t, "concepts")
+	if !strings.Contains(output, "canonical card store") {
+		t.Fatalf("expected cards store guidance output=%s", output)
+	}
+	if !strings.Contains(output, "operator Tasks projection over the same card rows") {
+		t.Fatalf("expected work projection layering output=%s", output)
+	}
+	if !strings.Contains(output, "Layered, not a duplicate of cards") {
+		t.Fatalf("expected choosing rule output=%s", output)
+	}
+	if !strings.Contains(output, "`anx human ask|review|escalate` is the way to put something in Inbox") {
+		t.Fatalf("expected Inbox vs PM decision guidance output=%s", output)
+	}
+	if !strings.Contains(output, "A PM decision is part of a PM conversation and is not an operator request") {
+		t.Fatalf("expected PM decision contrast output=%s", output)
+	}
+}
+
 func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 	t.Parallel()
 

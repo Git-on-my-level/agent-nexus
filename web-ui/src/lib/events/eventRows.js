@@ -1,5 +1,7 @@
 import { messageEventHrefFromEvent } from "$lib/deepLinkTargets";
 
+// Core's stored preset id is `home_feed` (HTTP `/home/*`, `home_read_cursors`).
+// Operators see the same projection as Watching in Inbox and on Audit filters.
 export const HOME_FEED_PRESET = "home_feed";
 
 export const HOME_FEED_EVENT_TYPES = new Set([

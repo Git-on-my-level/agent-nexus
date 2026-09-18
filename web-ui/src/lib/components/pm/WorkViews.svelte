@@ -390,7 +390,7 @@
     tabindex="0"
   >
     <p id="task-board-card-help" class="sr-only">
-      Drag a card between phases, or focus it and press the left or right arrow
+      Drag a task between phases, or focus it and press the left or right arrow
       to move it. Enter opens the task. Moving a task that lives in another
       tracker asks for confirmation and files a request for you to approve.
     </p>

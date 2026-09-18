@@ -112,6 +112,26 @@ function humanizedLabelForPrefix(prefix, value) {
   return "";
 }
 
+/**
+ * Narrow-viewport chips have room for a noun and an id, not a sentence, so they
+ * abbreviate what humanizedLabelForPrefix spells out. Keep the two together:
+ * they are the same vocabulary, and when they lived apart the compact one
+ * silently kept saying "Card" and "Topic" after the operator nouns changed.
+ */
+const COMPACT_NOUN_BY_PREFIX = {
+  artifact: "Artifact",
+  board: "Board",
+  card: "Task",
+  document: "Doc",
+  document_revision: "Doc rev",
+  thread: "Thread",
+  topic: "Project",
+};
+
+export function compactNounForPrefix(prefix) {
+  return COMPACT_NOUN_BY_PREFIX[prefix] ?? "";
+}
+
 function resolveRefLabels(raw, prefix, value, options = {}) {
   const humanize = Boolean(options.humanize) || shouldHumanizeByDefault(prefix);
   const labelHint = lookupLabelHint(raw, prefix, value, options.labelHints);

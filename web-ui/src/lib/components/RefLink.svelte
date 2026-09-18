@@ -7,7 +7,11 @@
   import { coreClient } from "$lib/coreClient";
   import { isInternalUuid } from "$lib/resourceIdentity.js";
   import { eventRouteForRef } from "$lib/deepLinkTargets";
-  import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
+  import {
+    buildPrimitiveRefRoutes,
+    compactNounForPrefix,
+    resolveRefLink,
+  } from "$lib/refLinkModel";
 
   let {
     refValue = "",
@@ -110,16 +114,7 @@
     const value = compactId(link?.value);
     if (!prefix || !value) return String(link?.primaryLabel ?? link?.raw ?? "");
 
-    const nounByPrefix = {
-      artifact: "Artifact",
-      board: "Board",
-      card: "Card",
-      document: "Doc",
-      document_revision: "Doc rev",
-      thread: "Thread",
-      topic: "Topic",
-    };
-    const noun = nounByPrefix[prefix];
+    const noun = compactNounForPrefix(prefix);
     return noun ? `${noun} ${value}` : `${prefix}:${value}`;
   }
 

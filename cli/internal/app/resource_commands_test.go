@@ -4507,6 +4507,21 @@ func TestAgentGuideDocumentsRefNativeIdentity(t *testing.T) {
 	}
 }
 
+func TestAgentGuideRoutesOperatorInboxThroughHumanAskNotPmDecisions(t *testing.T) {
+	t.Parallel()
+
+	guide := agentGuideText()
+	if !strings.Contains(guide, "`anx human ask|review|escalate` is the way to put something in the operator's Inbox") {
+		t.Fatalf("expected Inbox routing guidance output=%s", guide)
+	}
+	if !strings.Contains(guide, "A PM decision (`anx pm decisions create`, `pm.turns.decisions.create`) is part of a PM conversation and is not an operator request") {
+		t.Fatalf("expected PM decision contrast output=%s", guide)
+	}
+	if !strings.Contains(guide, "the two surfaces are layered, not aliases") {
+		t.Fatalf("expected cards vs work layering output=%s", guide)
+	}
+}
+
 func TestCardsCreateRejectsBeforeAndAfterFlags(t *testing.T) {
 	t.Parallel()
 

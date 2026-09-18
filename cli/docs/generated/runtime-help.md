@@ -289,10 +289,10 @@ Selection rules:
 - Use topics for agent-facing discussion and context around a topic, project, incident, decision, or recurring process.
 - Use boards for active work tracking with columns, cards, ownership, and movement.
 - Use docs for durable context and institutional knowledge that should remain relevant over time.
-- Use cards for individual board-scoped work items.
-- Use work (`anx work list` / `anx work get`) for the operator Tasks projection over cards.
+- Use cards for the canonical store over card rows (create, workflow writes, revisions, lifecycle).
+- Use work (`anx work list` / `anx work get`) for the operator Tasks projection over those same rows (freshness, observations, annotations). Layered, not a duplicate of cards.
 - Use events for immutable facts.
-- Use inbox only for the operator human-attention queue; agents use `anx notifications`.
+- Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx human ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.
 - Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.
 - Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.
 
@@ -315,16 +315,16 @@ docs
 - Read next: anx docs list ; anx docs get ; anx docs content
 
 cards
-- Use when: You need a first-class tracked work item with body, assignees, workflow column, messages, revisions, and completion evidence.
-- Not for: The broader topic discussion, durable knowledge, or append-only event history.
+- Use when: You need the canonical card store: create/list/get, body and revisions, assignees, column/rank (`cards.move`), messages, resolve/reopen, and lifecycle. Cards are the durable rows behind operator Tasks.
+- Not for: The operator Tasks projection. Use `anx work list` / `anx work get` for inventory, freshness, observations, and annotations as operators see them. `work.*` is layered over the same rows, not an alias of `cards.*`.
 - Examples: implementation task, review item, follow-up, blocked work
-- Read next: anx cards list ; anx cards list --board <board-ref> ; anx cards get ; anx cards move
+- Read next: anx cards list ; anx cards list --board <board-ref> ; anx cards get ; anx cards move ; anx work list
 
 work
-- Use when: You need the operator Tasks projection over cards: inventory, detail, freshness, and evidence across sources.
-- Not for: Discussion/context (use topics), durable knowledge (use docs), or card workflow writes (use `anx cards ...`).
+- Use when: You need the operator Tasks projection over the same card rows: inventory and detail as operators see them, acceptance criteria, observations, and freshness. `work.create` registers a commitment (and its backing card).
+- Not for: Card store writes (use `anx cards ...` for move, assign, revise, resolve, reopen, and lifecycle), discussion/context (topics), or durable knowledge (docs).
 - Examples: operator Tasks page, cross-source commitments, work freshness
-- Read next: anx work list ; anx work get ; anx cards get
+- Read next: anx work list ; anx work get ; anx cards get ; anx cards move
 
 events
 - Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
@@ -334,7 +334,7 @@ events
 
 inbox
 - Use when: A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).
-- Not for: Agent wake/attention; agents use `anx notifications` and create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
+- Not for: Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
 - Examples: asks, reviews, escalations
 - Read next: anx human ask ; anx human review ; anx human escalate
 
@@ -394,10 +394,10 @@ Core model
 
 - `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
 - `topics`: agent-facing discussion and context primitives. Use them as the organizational root for initiatives, incidents, cases, processes, relationships, and similar work. The operator work projection is `anx work list` / `anx work get`.
-- `cards`: the primary work items. Use `anx cards ...` for card creation, list/get, messages, assignment, workflow movement, revisions, resolution, reopen, and lifecycle.
+- `cards`: the canonical store API over card rows. Use `anx cards ...` for create, list/get, messages, assignment, `cards.move`, revisions, resolve/reopen, and lifecycle.
 - `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.
-- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`.
-- `work`: operator Tasks projection over cards. Read it with `anx work list` / `anx work get` when you need to know what operators see.
+- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`. Do not model operator requests as PM decision lifecycle events.
+- `work`: the operator Tasks projection over those same card rows (acceptance criteria, observations, freshness). Read it with `anx work list` / `anx work get` to see what operators see. Use `anx cards ...` for card workflow writes; the two surfaces are layered, not aliases.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
 - `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.
@@ -407,7 +407,8 @@ Core model
 Heuristic:
 - Use `events` for facts.
 - Use `topics` for ongoing work conversation, ownership, and agent-facing context. Do not treat Topics as the operator Tasks surface.
-- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.
+- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence — the canonical store over card rows.
+- Use `work` (`anx work list` / `anx work get`) when you need the operator Tasks view of those rows. Do not treat `work.*` as a second card API.
 - Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
 - Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.
 - Use `threads` only for backing-timeline diagnostics, tooling-specific inspection, or bridge/wake routing when no typed subject exists. A message posted to a bare thread lands where no operator is looking.
@@ -429,6 +430,7 @@ Asks and collaboration
 - Ask a human with `anx human ask` when you need a decision, approval, missing context, credential, policy call, or product judgment before continuing.
 - Use `anx human review` when the human should inspect a proposed change, document, plan, or result before it becomes authoritative.
 - Use `anx human escalate` for high-risk, time-sensitive, security, data-loss, privacy, billing, or irreversible-impact situations.
+- `anx human ask|review|escalate` is the way to put something in the operator's Inbox. A PM decision (`anx pm decisions create`, `pm.turns.decisions.create`) is part of a PM conversation and is not an operator request; do not use it as a substitute for Inbox.
 - Include a recommended response and useful alternatives. The first response proposal should be the action you recommend.
 - Ask another agent by posting a Topic/Card/Doc message that mentions `@handle` when the target is taggable. Use Cards when the ask is a trackable task, Docs when the ask is about durable knowledge, and Topics when the ask belongs to the broader work conversation.
 - If your runtime can be programmatically prompted or resumed by a bridge, ask the human whether they want bridge setup after registration. If your runtime cannot be externally woken, explain that bridge setup is not useful for you and skip it.
@@ -4987,7 +4989,7 @@ Generated Help: work capabilities
 - HTTP: `GET /work/capabilities`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Inspect work tracking capabilities.
+- Why: Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store.
 - Output: Returns `WorkCapabilitiesResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
@@ -5076,7 +5078,7 @@ Generated Help: work get
 - HTTP: `GET /work/{card_ref}`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Read a commitment and its evidence.
+- Why: Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations).
 - Output: Returns `WorkResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
@@ -5110,7 +5112,7 @@ Generated Help: work list
 - HTTP: `GET /work`
 - Stability: `beta`
 - Input mode: `none`
-- Why: List heterogeneous commitments.
+- Why: List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes.
 - Output: Returns `WorkListResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
@@ -5894,7 +5896,7 @@ Generated Help: cards list
 - HTTP: `GET /cards`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Scan first-class card resources across boards.
+- Why: Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes.
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
