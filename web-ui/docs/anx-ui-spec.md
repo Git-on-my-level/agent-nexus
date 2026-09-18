@@ -32,7 +32,7 @@ Agent Nexus web UI does **not**:
 ### 1.3 Typed references
 
 - All ref strings use typed prefixes as defined in `/contracts/anx-schema.yaml` → `ref_format` (e.g., `artifact:<id>`, `topic:<id>`, `card:<id>`, `board:<id>`, `document:<id>`, `event:<id>`, `thread:<id>`, `inbox:<id>`, `url:<url>`).
-- Agent Nexus web UI MUST parse ref prefixes to determine link targets and render appropriate navigation (e.g., `artifact:` links navigate to artifact detail, `url:` links open externally, `event:` links scroll to timeline entry or, for `message_posted`, the message item).
+- Agent Nexus web UI MUST parse ref prefixes to determine link targets and render appropriate navigation (`card:` opens the Task, `document:` opens the Doc, `thread:` opens thread inspection, `url:` links open externally, `event:` links scroll to the timeline entry or, for `message_posted`, the message item). `topic:`, `board:` and `artifact:` have no operator destination and render as inert labels.
 - Unknown ref prefixes MUST be rendered as raw text, not hidden or discarded.
 
 ### 1.4 Actor identity
@@ -73,15 +73,16 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 **Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
 
 1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
-2. **Ref-type labels** rendered by `RefLink` / `refLinkModel` — a `card:` chip may read "Card".
+2. **Ref-type labels** rendered by `RefLink` / `refLinkModel`, which name the *ref type*. These still use the operator noun where one exists: a `card:` chip reads "Task", a `topic:` chip reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
-Outside those three, the core nouns are still present in operator copy in several places (the Tasks board help, the Watching mailbox group headers, the Topic-detail rendering of `/threads/{id}`). Those are known violations, not sanctioned ones; they are tracked as follow-ups rather than silently permitted. Do not add new ones, and do not read the backlog as license — a rule this document does not enforce is a rule the next reader will ignore.
+Outside those three, "card" still appears in operator copy in the Tasks board help, the keyboard help, the onboarding tour and the task-creation flow, which also still asks the operator to choose a Board. Those are known violations, not sanctioned ones, and they are tracked as follow-ups rather than silently permitted. Do not add new ones, and do not read the backlog as license — a rule this document does not enforce is a rule the next reader will ignore.
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
 | Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active|archived|trashed`) |
 | Root work item | Task, Tasks | Topic, Topics, Card, Cards, backing thread, Threads (as operator-facing labels) | `card:` refs, `card_id`, the `work.list` / `work.get` command ids, `thread_id`, `thread:` refs, `/threads` diagnostic detail route |
+| Project / work grouping | Project | Topic, Topics (as operator-facing labels) | `topic:` refs; core reports `"projects": "topics"` in `work.capabilities` |
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |
 | Operator-facing actor in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |

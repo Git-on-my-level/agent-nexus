@@ -531,7 +531,7 @@
     error = "";
     try {
       await coreClient.respondInboxItem(item.id, {
-        response_text: "Dismissed from inbox",
+        response_text: "Acknowledged from inbox",
         notify_mode: "none",
       });
       inboxItems = inboxItems.map((entry) =>
@@ -543,7 +543,7 @@
             }
           : entry,
       );
-      notice = "Dismissed from inbox only.";
+      notice = "Acknowledged. Removed from your inbox only.";
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -990,7 +990,7 @@
                     class="ui-btn-secondary"
                     onclick={() => dismissInbox(selected.item)}
                     disabled={busy}
-                    type="button">Dismiss from Inbox</button
+                    type="button">Acknowledge</button
                   >
                 </div>
               </form>

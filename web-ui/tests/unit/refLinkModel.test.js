@@ -304,8 +304,8 @@ describe("RefLink model", () => {
 
     expect(topicRef).toMatchObject({
       kind: "topic",
-      label: "Topic topic-1",
-      primaryLabel: "Topic topic-1",
+      label: "Project topic-1",
+      primaryLabel: "Project topic-1",
       secondaryLabel: "topic:topic-1",
       href: "",
       isLink: false,
@@ -429,7 +429,7 @@ describe("RefLink model", () => {
       { humanize: true },
     );
     expect(topicRef).toMatchObject({
-      primaryLabel: "Topic a1b2c3d4-e",
+      primaryLabel: "Project a1b2c3d4-e",
     });
 
     const nonUuidRef = resolveRefLink("thread:thread-onboarding", {
