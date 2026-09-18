@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
 
+  import { focusTrap } from "$lib/actions/focusTrap.js";
   import {
     adminHeaders,
     readAdminActor,
@@ -60,8 +61,8 @@
     const mod = event.metaKey || event.ctrlKey;
     if (mod && (event.key === "k" || event.key === "K")) {
       event.preventDefault();
+      // `focusTrap` on the dialog moves focus to the input once it mounts.
       open = true;
-      requestAnimationFrame(() => inputEl?.focus());
       return;
     }
     if (!open) return;
@@ -196,7 +197,14 @@
 {#if open}
   <div
     class="fixed inset-0 z-50 flex items-start justify-center bg-bg/70 px-4 pt-24 backdrop-blur-sm"
-    role="presentation"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Admin command palette"
+    tabindex="-1"
+    use:focusTrap={{
+      initialFocus: () => inputEl,
+      fallbackFocus: () => document.querySelector("main"),
+    }}
     onclick={(event) => {
       if (event.target === event.currentTarget) close();
     }}

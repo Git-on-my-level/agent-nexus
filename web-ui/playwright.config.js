@@ -13,8 +13,14 @@ const channel = process.env.PLAYWRIGHT_CHANNEL || undefined;
 const mockedCoreBaseUrl =
   process.env.PLAYWRIGHT_CORE_BASE_URL ?? `http://127.0.0.1:${corePort}`;
 
+// Keyed by port so concurrent runs (different PLAYWRIGHT_CORE_PORT) do not wipe
+// each other's core workspace.
+const coreWorkspaceRoot =
+  process.env.PLAYWRIGHT_CORE_WORKSPACE_ROOT ??
+  `/tmp/anx-playwright-core-workspace-${corePort}`;
+
 const coreWebServer = {
-  command: `rm -rf /tmp/anx-playwright-core-workspace && cd ../core && HOST=127.0.0.1 PORT=${corePort} WORKSPACE_ROOT=/tmp/anx-playwright-core-workspace ./scripts/dev`,
+  command: `rm -rf ${coreWorkspaceRoot} && cd ../core && HOST=127.0.0.1 PORT=${corePort} WORKSPACE_ROOT=${coreWorkspaceRoot} ./scripts/dev`,
   port: corePort,
   timeout: 120000,
   reuseExistingServer: !process.env.CI,

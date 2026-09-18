@@ -728,7 +728,9 @@ for (const viewport of AUDIT_VIEWPORTS) {
         timeline: THREAD_TIMELINE,
       });
       await page.goto(`${ROOT}/threads/${THREAD_ID}?tab=messages`);
-      await expect(page.getByText(/was archived on/)).toBeVisible();
+      // No "on": formatTimestamp is relative under 7 days, so the old copy
+      // read "was archived on 3h ago". See archived-copy-states.spec.js.
+      await expect(page.getByText(/was archived 3h ago/)).toBeVisible();
       await expectCleanLayout(page, "archived thread notice", bothEnds);
 
       api.topic = {

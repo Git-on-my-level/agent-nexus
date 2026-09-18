@@ -1,7 +1,7 @@
 {
   "name": "agent-nexus",
   "private": true,
-  "packageManager": "pnpm@10.17.1",
+  "packageManager": "pnpm@11.20.0",
   "scripts": {
     "check": "make check",
     "serve": "make serve",
@@ -12,10 +12,5 @@
   "devDependencies": {
     "playwright": "^1.58.2",
     "typescript": "^5.9.3"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

@@ -1,3 +1,13 @@
 packages:
   - web-ui
   - cli/dogfood/pi
+
+# pnpm 11 replaced package.json's `pnpm.onlyBuiltDependencies` with an explicit
+# allow/deny decision per dependency that ships an install script, and fails the
+# install when one is undecided. esbuild's postinstall links the prebuilt
+# platform binary, so it must run; koffi and protobufjs were already unbuilt
+# under pnpm 10 and nothing here needs their postinstall output.
+allowBuilds:
+  esbuild: true
+  koffi: false
+  protobufjs: false

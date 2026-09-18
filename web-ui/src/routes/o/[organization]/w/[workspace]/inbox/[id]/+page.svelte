@@ -460,7 +460,16 @@
             >
           </span>
         </div>
-        <h1 class="text-subtitle font-semibold leading-tight text-fg">
+        <!--
+          Subjects are written by the asking agent and routinely carry a bare
+          64-char correlation id, a ref or a URL — nothing for the browser to
+          break on. Without this the title escapes the column and scrolls the
+          page sideways at phone width. Matches the inbox list pane, whose
+          detail headings were hardened the same way.
+        -->
+        <h1
+          class="text-subtitle font-semibold leading-tight text-fg [overflow-wrap:anywhere]"
+        >
           {item.title}
         </h1>
         {#if item.body}
@@ -598,7 +607,11 @@
                           Recommended
                         </span>
                       {/if}
-                      <span class="w-full whitespace-pre-wrap">{proposal}</span>
+                      <!-- Canned replies quote ids and addresses verbatim. -->
+                      <span
+                        class="w-full whitespace-pre-wrap [overflow-wrap:anywhere]"
+                        >{proposal}</span
+                      >
                     </span>
                   </button>
                 {/each}

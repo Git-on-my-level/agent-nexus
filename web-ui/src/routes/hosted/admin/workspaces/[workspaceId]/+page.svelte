@@ -178,18 +178,23 @@
     </section>
 
     <section class="grid gap-3 xl:grid-cols-3">
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <!-- min-w-0, like the cards above: a grid item's automatic minimum size
+           is its min-content width, so without it this card inflates to the
+           widest value inside (a long access mode) and scrolls the page. -->
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <h2 class="text-heading text-fg">Runtime identifiers</h2>
         <dl class="mt-3 grid gap-2 text-micro">
-          <div class="flex justify-between gap-3">
+          <div class="flex min-w-0 justify-between gap-3">
             <dt class="text-fg-subtle">Container</dt>
             <dd class="font-mono text-fg">
               {workspace.container_id_short || "Unknown"}
             </dd>
           </div>
-          <div class="flex justify-between gap-3">
+          <div class="flex min-w-0 justify-between gap-3">
             <dt class="text-fg-subtle">Access</dt>
-            <dd>
+            <!-- min-w-0 so the pill inside can shrink instead of pushing the
+                 term out of this justify-between row. -->
+            <dd class="min-w-0">
               <StatusPill
                 status={workspace.access_mode}
                 label={formatListValue(workspace.access_mode)}
@@ -210,11 +215,11 @@
           </div>
         </dl>
       </div>
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <h2 class="text-heading text-fg">Health summary</h2>
         <dl class="mt-3 grid gap-2 text-micro">
           {#each Object.entries(workspace.health_summary ?? {}) as [key, value]}
-            <div class="flex justify-between gap-3">
+            <div class="flex min-w-0 justify-between gap-3">
               <dt class="text-fg-subtle">{formatListValue(key)}</dt>
               <dd class="max-w-[12rem] truncate text-fg">{String(value)}</dd>
             </div>
@@ -269,14 +274,18 @@
 </div>
 
 {#snippet Rows(title, rows, labelKey)}
-  <div class="rounded-md border border-line bg-bg-soft p-4">
+  <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
     <h2 class="text-heading text-fg">{title}</h2>
     {#if rows?.length}
       <ul class="mt-3 divide-y divide-line">
         {#each rows.slice(0, 10) as row (row.id)}
           <li class="py-2 text-micro">
-            <div class="flex justify-between gap-3">
-              <span class="text-fg">{formatListValue(row[labelKey])}</span
+            <div class="flex min-w-0 justify-between gap-3">
+              <!-- min-w-0 + truncate: a flex item's automatic minimum size is
+                   its content width, so without this the row name refuses to
+                   shrink and pushes the status pill out of the row. -->
+              <span class="min-w-0 truncate text-fg"
+                >{formatListValue(row[labelKey])}</span
               ><StatusPill status={row.status} />
             </div>
             <div class="font-mono text-fg-subtle">

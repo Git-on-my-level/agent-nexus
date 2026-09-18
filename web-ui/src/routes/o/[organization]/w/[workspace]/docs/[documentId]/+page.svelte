@@ -14,7 +14,7 @@
   import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
   import { extractDocumentOutline } from "$lib/markdown.js";
   import { coreClient } from "$lib/coreClient";
-  import { formatTimestamp } from "$lib/formatDate";
+  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import { splitTypedRef } from "$lib/inboxUtils";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import {
@@ -1210,7 +1210,10 @@
             />
           {/if}
           {#if document.trashed_at}
-            <span>at {formatTimestamp(document.trashed_at)}</span>
+            <!-- No "at": formatTimestamp is relative under 7 days ("3h ago"). -->
+            <span title={formatAbsoluteDateTime(document.trashed_at)}
+              >{formatTimestamp(document.trashed_at)}</span
+            >
           {/if}
         </p>
       </div>
@@ -1229,10 +1232,16 @@
       class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warn bg-warn-soft px-3 py-2 text-meta text-warn-text"
     >
       <p class="flex min-w-0 flex-1 flex-wrap items-center gap-x-1">
-        <span class="text-warn-text">
-          This document was archived on {formatTimestamp(
-            document.archived_at,
-          ) || "—"}
+        <!-- No "on" before formatTimestamp: it returns a relative string ("3h
+             ago") under 7 days and an absolute date beyond, so "archived on 3h
+             ago" read wrong. Without "on" both forms read correctly, and the
+             exact instant is available from the title. -->
+        <span
+          class="text-warn-text"
+          title={formatAbsoluteDateTime(document.archived_at)}
+        >
+          This document was archived {formatTimestamp(document.archived_at) ||
+            "—"}
         </span>
         {#if document.archived_by}
           <ActorLabel
@@ -1344,7 +1353,13 @@
   {/snippet}
 
   {#snippet docDesktop()}
-    <h1 class="min-w-0 text-subtitle font-semibold text-fg">
+    <!--
+      `resourceDisplayLabel` falls back to the raw document id, so an untitled
+      doc puts a 64-char token here. `min-w-0` alone only lets the box shrink;
+      it still needs somewhere to break. Dormant today (the call site passes
+      `showDesktop={false}`) but a trap for whoever turns the block back on.
+    -->
+    <h1 class="min-w-0 break-words text-subtitle font-semibold text-fg">
       {resourceDisplayLabel(document, documentId)}
     </h1>
     {#if String(document.summary ?? "").trim()}

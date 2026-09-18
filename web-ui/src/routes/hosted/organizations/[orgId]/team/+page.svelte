@@ -3,6 +3,7 @@
   import { page } from "$app/stores";
 
   import Button from "$lib/components/Button.svelte";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import Skeleton from "$lib/components/state/Skeleton.svelte";
@@ -24,12 +25,54 @@
   let loadError = $state("");
   let inviteError = $state("");
   let actionMessage = $state("");
+  /**
+   * The action banner carries both outcomes, so it has to be told which one it
+   * is showing: a failure painted in the success colors reads as "it worked".
+   * @type {"ok" | "danger"}
+   */
+  let actionTone = $state("ok");
   let phase = $state("loading");
   let retrying = $state(false);
   let actionBusy = $state(false);
   let inviteEmail = $state("");
   let inviteRole = $state("member");
   let lastLoadedKey = $state("");
+
+  /**
+   * Destructive actions go through the app's ConfirmModal, never `confirm()`:
+   * the operator has to see *which* member / invitation they are about to
+   * destroy, and a failed request has to stay on screen next to the confirm
+   * button instead of vanishing with the dialog.
+   *
+   * @typedef {{
+   *   open: boolean,
+   *   kind: "" | "member" | "invite",
+   *   id: string,
+   *   title: string,
+   *   message: string,
+   *   detail: string,
+   *   confirmLabel: string,
+   *   busyLabel: string,
+   * }} TeamConfirmState
+   */
+
+  /** @returns {TeamConfirmState} */
+  function emptyConfirm() {
+    return {
+      open: false,
+      kind: "",
+      id: "",
+      title: "Confirm",
+      message: "",
+      detail: "",
+      confirmLabel: "Confirm",
+      busyLabel: "Working…",
+    };
+  }
+
+  let confirmState = $state(emptyConfirm());
+  let confirmBusy = $state(false);
+  let confirmError = $state("");
 
   const myAccountId = $derived(String(session.account?.id ?? "").trim());
   const myMembership = $derived(
@@ -56,7 +99,10 @@
     loadError = "";
     inviteError = "";
     // A reload that follows a successful action must not wipe its message.
-    if (!keepActionMessage) actionMessage = "";
+    if (!keepActionMessage) {
+      actionMessage = "";
+      actionTone = "ok";
+    }
     phase = "loading";
     try {
       const [memRes, invRes] = await Promise.all([
@@ -132,6 +178,7 @@
 
   async function updateMemberRole(membership, nextRole) {
     actionMessage = "";
+    actionTone = "ok";
     actionBusy = true;
     try {
       const res = await hostedCpFetch(
@@ -143,42 +190,104 @@
       );
       if (!res.ok) {
         actionMessage = await readJsonError(res);
+        actionTone = "danger";
         return;
       }
       await loadData();
     } catch (e) {
       actionMessage = e instanceof Error ? e.message : "Update failed.";
+      actionTone = "danger";
     } finally {
       actionBusy = false;
     }
   }
 
-  async function removeMember(m) {
+  /** Name the member the way the operator sees them in the list. */
+  function memberLabel(m) {
+    const name = String(m.account_display_name ?? "").trim();
+    const email = String(m.account_email ?? "").trim();
+    if (name && email) return `${name} (${email})`;
+    if (name || email) return name || email;
+    return String(m.account_id ?? "").trim() || "this member";
+  }
+
+  function requestRemoveMember(m) {
     if (String(m.account_id) === myAccountId) {
       actionMessage = "You cannot remove yourself here. Ask another admin.";
+      actionTone = "danger";
       return;
     }
-    if (!confirm("Remove this member from the organization?")) {
-      return;
+    confirmError = "";
+    confirmState = {
+      open: true,
+      kind: "member",
+      id: String(m.id ?? ""),
+      title: "Remove member",
+      message: `Remove ${memberLabel(m)} from this organization? They lose access to every workspace in it. You can invite them again later.`,
+      detail: `Account ID: ${String(m.account_id ?? "").trim() || "unknown"}`,
+      confirmLabel: "Remove member",
+      busyLabel: "Removing…",
+    };
+  }
+
+  function requestRevokeInvite(inv) {
+    const email = String(inv.email ?? "").trim();
+    confirmError = "";
+    confirmState = {
+      open: true,
+      kind: "invite",
+      id: String(inv.id ?? ""),
+      title: "Revoke invitation",
+      message: email
+        ? `Revoke the invitation for ${email}? The invite link stops working immediately.`
+        : "Revoke this invitation? The invite link stops working immediately.",
+      detail: `Invitation ID: ${String(inv.id ?? "").trim() || "unknown"}`,
+      confirmLabel: "Revoke invite",
+      busyLabel: "Revoking…",
+    };
+  }
+
+  function cancelConfirm() {
+    if (confirmBusy) return;
+    confirmState = emptyConfirm();
+    confirmError = "";
+  }
+
+  async function runConfirmedAction() {
+    if (confirmBusy) return;
+    if (confirmState.kind === "member") {
+      await removeMember(confirmState.id);
+    } else if (confirmState.kind === "invite") {
+      await revokeInvite(confirmState.id);
     }
+  }
+
+  async function removeMember(membershipId) {
+    if (!membershipId) return;
     actionMessage = "";
+    actionTone = "ok";
+    confirmError = "";
+    confirmBusy = true;
     actionBusy = true;
     try {
       const res = await hostedCpFetch(
-        `organizations/${encodeURIComponent(orgId)}/memberships/${encodeURIComponent(m.id)}`,
+        `organizations/${encodeURIComponent(orgId)}/memberships/${encodeURIComponent(membershipId)}`,
         {
           method: "PATCH",
           body: JSON.stringify({ status: "disabled" }),
         },
       );
       if (!res.ok) {
-        actionMessage = await readJsonError(res);
+        // Keep the modal open so the operator can read the reason and retry.
+        confirmError = await readJsonError(res);
         return;
       }
+      confirmState = emptyConfirm();
       await loadData();
     } catch (e) {
-      actionMessage = e instanceof Error ? e.message : "Remove failed.";
+      confirmError = e instanceof Error ? e.message : "Remove failed.";
     } finally {
+      confirmBusy = false;
       actionBusy = false;
     }
   }
@@ -207,6 +316,7 @@
       inviteEmail = "";
       if (j.invite_url) {
         actionMessage = `Invite link created and copied. Send it to ${email} (it is only shown once).`;
+        actionTone = "ok";
         try {
           await navigator.clipboard.writeText(String(j.invite_url));
         } catch {
@@ -214,6 +324,7 @@
         }
       } else {
         actionMessage = "Invitation created.";
+        actionTone = "ok";
       }
       await loadData({ keepActionMessage: true });
     } catch (e) {
@@ -223,24 +334,26 @@
     }
   }
 
-  async function revokeInvite(inv) {
-    if (!confirm("Revoke this invitation?")) {
-      return;
-    }
+  async function revokeInvite(inviteId) {
+    if (!inviteId) return;
+    confirmError = "";
+    confirmBusy = true;
     actionBusy = true;
     try {
       const res = await hostedCpFetch(
-        `organizations/${encodeURIComponent(orgId)}/invites/${encodeURIComponent(inv.id)}/revoke`,
+        `organizations/${encodeURIComponent(orgId)}/invites/${encodeURIComponent(inviteId)}/revoke`,
         { method: "POST" },
       );
       if (!res.ok) {
-        actionMessage = await readJsonError(res);
+        confirmError = await readJsonError(res);
         return;
       }
+      confirmState = emptyConfirm();
       await loadData();
     } catch (e) {
-      actionMessage = e instanceof Error ? e.message : "Revoke failed.";
+      confirmError = e instanceof Error ? e.message : "Revoke failed.";
     } finally {
+      confirmBusy = false;
       actionBusy = false;
     }
   }
@@ -268,8 +381,13 @@
 
   {#if actionMessage}
     <p
-      role="status"
-      class="rounded-md bg-ok-soft px-3 py-2 text-micro text-ok-text [overflow-wrap:anywhere]"
+      role={actionTone === "danger" ? "alert" : "status"}
+      data-testid="team-action-message"
+      data-tone={actionTone}
+      class="rounded-md px-3 py-2 text-micro [overflow-wrap:anywhere] {actionTone ===
+      'danger'
+        ? 'bg-danger-soft text-danger-text'
+        : 'bg-ok-soft text-ok-text'}"
     >
       {actionMessage}
     </p>
@@ -405,7 +523,7 @@
                     class="text-danger-text"
                     disabled={actionBusy ||
                       String(m.account_id) === myAccountId}
-                    onclick={() => removeMember(m)}
+                    onclick={() => requestRemoveMember(m)}
                   >
                     Remove
                   </Button>
@@ -441,7 +559,7 @@
                   variant="ghost"
                   size="compact"
                   disabled={actionBusy}
-                  onclick={() => revokeInvite(inv)}
+                  onclick={() => requestRevokeInvite(inv)}
                 >
                   Revoke
                 </Button>
@@ -453,3 +571,23 @@
     {/if}
   {/if}
 </div>
+
+<ConfirmModal
+  open={confirmState.open}
+  title={confirmState.title}
+  message={confirmState.message}
+  confirmLabel={confirmState.confirmLabel}
+  cancelLabel="Keep"
+  variant="danger"
+  busy={confirmBusy}
+  busyLabel={confirmState.busyLabel}
+  error={confirmError}
+  onconfirm={() => void runConfirmedAction()}
+  oncancel={cancelConfirm}
+>
+  {#if confirmState.detail}
+    <p class="mt-2 text-micro text-fg-subtle [overflow-wrap:anywhere]">
+      {confirmState.detail}
+    </p>
+  {/if}
+</ConfirmModal>

@@ -2,7 +2,7 @@
 
 ## Environment requirements
 - **Go 1.23+** is required (`go.mod` specifies `go 1.23.0`). The default VM ships with Go 1.22; the update script installs Go 1.23.6 to `/usr/local/go`. Ensure `/usr/local/go/bin` is on `PATH`.
-- **Node.js 20+** and **pnpm 10.17.1** are pre-installed via nvm and corepack.
+- **Node.js 22.13+** and **pnpm 11.20.0** are pre-installed via nvm and corepack. pnpm 11 imports `node:sqlite`, so Node 20 cannot run it.
 - No external services (databases, caches, queues) are needed — the backend uses embedded SQLite.
 
 ## Running services
