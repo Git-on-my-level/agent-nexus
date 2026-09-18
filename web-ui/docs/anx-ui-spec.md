@@ -73,7 +73,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
 | Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active|archived|trashed`) |
-| Root work item | Topic, Topics | backing thread, Threads (as operator-facing label) | `thread_id`, `thread:` refs, `/threads` diagnostic routes |
+| Root work item | Task, Tasks | Topic, Topics, Card, Cards, backing thread, Threads (as operator-facing labels) | `card:` refs, `card_id`, the `work.list` / `work.get` command ids, `thread_id`, `thread:` refs, `/threads` diagnostic detail route |
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |
 | Operator-facing actor in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |
@@ -81,7 +81,14 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 
 `Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
 
-**Domain note:** A **thread** is a core primitive (durable event timeline, `thread_id`, backing streams). A **topic** is the discussion/context primitive implemented on top of a thread. Operator work is **Tasks** (`work.list` / `work.get` over cards). Use **topic** in operator copy when the UI means that discussion unit, and **thread** when the meaning is the timeline primitive, a `thread:` ref, or a read-only inspection route. `/threads` is inspection, not a nav primitive.
+**Domain note:** Operator vocabulary and core vocabulary are deliberately different. The boundary between them is the typed ref.
+
+- **Operator-facing nouns are Inbox, Tasks and Docs, and nothing else.** A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards).
+- **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `doc:`) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
+- A **thread** is infrastructure: a durable append-only event timeline that backs topics, cards, boards and documents, and resolves packet subjects. It is never an operator-facing noun.
+- A **topic** is the core discussion/context primitive built on a thread. It has **no operator destination**; it appears only as a ref-type label (e.g. in `RefLink` or an Events filter) and as the detail rendering of its backing thread.
+
+The practical rule: if an operator has to learn a word to use the product, it belongs in the first bullet. Everything else is addressed by ref, and the UI resolves the ref to something the operator already understands.
 
 ---
 
@@ -95,10 +102,20 @@ Integrations, Audit) live in the sidebar footer and `/more`.
 
 Tasks is the operator projection over work (`work.list` / `work.get`), shown as
 table or board. Boards and cards remain the backing store; they are not
-separate product destinations. Threads remain the read-only backing timeline
-for docs, inbox deep links, and audit inspection at `/threads/...`.
+separate product destinations. Threads remain the backing timeline for docs,
+inbox deep links and audit inspection at `/threads/...`.
 
-`/work` and `/decisions` redirect to `/tasks` and `/inbox`.
+`/threads` and `/events` are **Diagnostics**, not product: they expose core
+primitives that are deliberately not operator nouns. Both are reachable only
+from the sidebar footer / `/more` hub — `/events` under Settings as "Audit",
+`/threads` under a "Diagnostics" group. They MUST NOT appear in primary nav.
+A diagnostic surface is labelled and grouped rather than merely unlinked: an
+orphaned page reachable only by typing its URL is undiscoverable to the
+operator who needs it and unexplained to everyone else.
+
+There are no legacy route aliases: `/work`, `/work/{card_ref}`, `/work/new`,
+`/decisions` and `/settings` were removed outright rather than left as
+redirects. (`/work` is still a core **API** path and is unrelated.)
 
 ### 2.2 Topic detail: timeline + workspace
 
@@ -210,7 +227,7 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 
 - The UI MUST present Tasks as the operator projection over work (`work.list` / `work.get`), as table or board.
 - Nexus-owned Tasks board drops MUST persist through `cards.move` with public `card:` refs. Source-owned drops MUST file a PM decision rather than silently mutating the source.
-- `/boards` is not an operator destination. `/work` redirects to `/tasks`.
+- `/boards` is not an operator destination, and neither is `/work` — the operator route is `/tasks`.
 - There is no card-detail modal on a board workspace.
 
 **Docs:**

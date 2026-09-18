@@ -6,7 +6,6 @@
   import ConfirmModal from "$lib/components/ConfirmModal.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
-  import RefLink from "$lib/components/RefLink.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import DocumentMarkdownEditor from "$lib/components/DocumentMarkdownEditor.svelte";
@@ -169,22 +168,6 @@
       );
     };
   });
-  function documentTopicRefForLink(doc) {
-    if (!doc || typeof doc !== "object") return "";
-    const sr = String(doc.subject_ref ?? "").trim();
-    if (sr) {
-      const { prefix, id } = splitTypedRef(sr);
-      if (prefix === "topic" && id) return `topic:${id}`;
-      if (prefix === "thread" && id) return `thread:${id}`;
-      if (!sr.includes(":") && sr) return `topic:${sr}`;
-    }
-    const tid = String(doc.thread_id ?? "").trim();
-    return tid ? `thread:${tid}` : "";
-  }
-
-  let documentTopicRefValue = $derived(
-    document ? documentTopicRefForLink(document) : "",
-  );
 
   let parentTopicId = $derived.by(() => {
     if (!document) return "";
@@ -1352,82 +1335,6 @@
     {/if}
   {/snippet}
 
-  {#snippet docDesktop()}
-    <!--
-      `resourceDisplayLabel` falls back to the raw document id, so an untitled
-      doc puts a 64-char token here. `min-w-0` alone only lets the box shrink;
-      it still needs somewhere to break. Dormant today (the call site passes
-      `showDesktop={false}`) but a trap for whoever turns the block back on.
-    -->
-    <h1 class="min-w-0 break-words text-subtitle font-semibold text-fg">
-      {resourceDisplayLabel(document, documentId)}
-    </h1>
-    {#if String(document.summary ?? "").trim()}
-      <p
-        class="line-clamp-3 text-[13px] text-fg-muted"
-        title={String(document.summary).trim()}
-      >
-        {String(document.summary).trim()}
-      </p>
-    {/if}
-    <div class="mt-1 flex flex-wrap items-center gap-1.5 text-micro">
-      {#if document.state}
-        <span
-          class="rounded px-1.5 py-0.5 font-medium {document.state === 'active'
-            ? 'text-ok-text bg-ok-soft'
-            : document.state === 'trashed'
-              ? 'text-danger-text bg-danger-soft'
-              : 'text-warn-text bg-warn-soft'}"
-          >{{
-            active: "Active",
-            archived: "Archived",
-            trashed: "Trashed",
-          }[document.state] ?? document.state}</span
-        >
-      {/if}
-      {#if document.state}
-        <span class="text-fg-subtle">·</span>
-      {/if}
-      <span class="text-fg-muted"
-        >v{displayedRevision?.revision_number ?? "\u2014"}</span
-      >
-      <span class="text-fg-subtle">·</span>
-      <span class="text-fg-muted"
-        >{formatTimestamp(displayedRevision?.created_at) || "—"}</span
-      >
-      <span class="text-fg-subtle">·</span>
-      <span class="text-fg-muted"
-        >by {actorName(displayedRevision?.created_by)}</span
-      >
-    </div>
-    {#if documentTopicRefValue}
-      <p
-        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-fg-muted"
-      >
-        <span>Topic / thread</span>
-        <RefLink
-          refValue={documentTopicRefValue}
-          threadId={document.thread_id}
-          humanize
-          showRaw
-        />
-      </p>
-    {/if}
-    {#if String(document.subject_ref ?? "").trim()}
-      <p
-        class="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-micro text-fg-muted"
-      >
-        <span>Source</span>
-        <RefLink
-          refValue={String(document.subject_ref).trim()}
-          threadId={document.thread_id}
-          humanize
-          showRaw
-        />
-      </p>
-    {/if}
-  {/snippet}
-
   <!--
     Compact shell (&lt;1024px / max-lg): `page-dock-layout` pins discussion at the
     bottom like boards / topic. From `lg` up the shell is full-width with a
@@ -1448,10 +1355,7 @@
         <div class="doc-detail-content min-w-0 flex-1">
           <WorkspaceResourceTopRow
             breadcrumbAriaLabel="Breadcrumb and document status"
-            desktopAriaLabel="Document details"
             dense
-            showDesktop={false}
-            desktop={docDesktop}
           >
             {#snippet breadcrumb()}
               <a

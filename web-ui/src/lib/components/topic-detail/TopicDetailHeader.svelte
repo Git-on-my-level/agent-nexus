@@ -136,9 +136,7 @@
 
 <WorkspaceResourceTopRow
   breadcrumbAriaLabel="Breadcrumb and topic status"
-  desktopAriaLabel="Topic details"
   {dense}
-  showDesktop={false}
 >
   {#snippet breadcrumb()}
     <a

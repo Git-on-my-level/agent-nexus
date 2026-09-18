@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => {
   let value = {
-    url: new URL("http://localhost/o/local/w/local/work"),
+    url: new URL("http://localhost/o/local/w/local/tasks"),
     params: { organization: "local", workspace: "local" },
   };
   const listeners = new Set();

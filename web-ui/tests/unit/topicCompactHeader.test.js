@@ -23,7 +23,9 @@ describe("topic detail header", () => {
   it("TopicDetailHeader uses breadcrumb shell with an h1 title", () => {
     const src = readFileSync(headerPath, "utf8");
     expect(src).toContain("WorkspaceResourceTopRow");
-    expect(src).toContain("showDesktop={false}");
+    // The desktop title block was removed; no call site may reintroduce it.
+    expect(src).not.toContain("showDesktop");
+    expect(src).not.toContain("desktopAriaLabel");
     expect(src).toContain("<h1");
     expect(src).not.toContain("compact = false");
     expect(src).not.toContain('aria-label="Topic channel"');
@@ -44,6 +46,14 @@ describe("topic detail header", () => {
   it("WorkspaceResourceTopRow supports dense dock layouts", () => {
     const src = readFileSync(topRowPath, "utf8");
     expect(src).toContain("dense = false");
-    expect(src).toContain("showDesktop = true");
+  });
+
+  it("WorkspaceResourceTopRow has no unreachable desktop title block", () => {
+    // Every call site passed `showDesktop={false}`, so the `desktop` snippet,
+    // its aria label and its `{#if}` branch could never render. Keep them gone.
+    const src = readFileSync(topRowPath, "utf8");
+    expect(src).not.toContain("showDesktop");
+    expect(src).not.toContain("desktopAriaLabel");
+    expect(src).not.toContain("{@render desktop()}");
   });
 });

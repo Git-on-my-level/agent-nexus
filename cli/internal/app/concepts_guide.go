@@ -71,9 +71,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "threads",
-		UseWhen:     "You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.",
-		NotFor:      "Primary coordination when a Topic exists; use topics workspace instead.",
-		Examples:    []string{"backing timeline", "diagnostic projection", "low-level inspection"},
+		UseWhen:     "You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.",
+		NotFor:      "Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.",
+		Examples:    []string{"backing timeline", "diagnostic projection", "low-level inspection", "bridge/wake routing on an untyped thread"},
 		RelatedRead: []string{"anx threads list", "anx threads inspect", "anx threads workspace"},
 	},
 }
@@ -132,7 +132,7 @@ func conceptsSelectionRules() []string {
 		"Use events for immutable facts.",
 		"Use inbox for current attention signals from the active CLI identity's perspective.",
 		"Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.",
-		"Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.",
+		"Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.",
 	}
 }
 

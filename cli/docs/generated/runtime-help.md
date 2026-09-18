@@ -293,7 +293,7 @@ Selection rules:
 - Use events for immutable facts.
 - Use inbox for current attention signals from the active CLI identity's perspective.
 - Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.
-- Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.
+- Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.
 
 topics
 - Use when: You need a topic-centered discussion and coordination surface for a project, incident, decision, recurring process, or durable work subject.
@@ -338,9 +338,9 @@ draft
 - Read next: anx draft create ; anx draft list ; anx draft commit
 
 threads
-- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
-- Not for: Primary coordination when a Topic exists; use topics workspace instead.
-- Examples: backing timeline, diagnostic projection, low-level inspection
+- Use when: You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.
+- Not for: Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.
+- Examples: backing timeline, diagnostic projection, low-level inspection, bridge/wake routing on an untyped thread
 - Read next: anx threads list ; anx threads inspect ; anx threads workspace
 
 Inbox categories:
