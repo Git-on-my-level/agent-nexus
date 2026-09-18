@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
@@ -13,7 +13,7 @@ COPY contracts/gen/ts/ /src/contracts/gen/ts/
 ENV ADAPTER=node
 RUN pnpm run build
 
-FROM node:20-slim
+FROM node:22-slim
 
 RUN groupadd --system anx \
   && useradd --system --gid anx --create-home --home-dir /app --shell /usr/sbin/nologin anx

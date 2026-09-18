@@ -5,7 +5,8 @@ inputs:
   node-version:
     description: Node.js version to install.
     required: false
-    default: "20"
+    # pnpm 11 imports node:sqlite, which needs Node >= 22.13.
+    default: "22"
   cache-dependency-path:
     description: Lockfile path used for pnpm cache keys.
     required: false
