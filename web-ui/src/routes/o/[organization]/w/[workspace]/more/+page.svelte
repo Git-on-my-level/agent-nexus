@@ -14,7 +14,7 @@
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { navIconPath } from "$lib/icons.js";
-  import { settingsNavItems } from "$lib/navigation";
+  import { settingsNavGroups } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
 
@@ -95,57 +95,61 @@
 </script>
 
 <div class="space-y-3 sm:space-y-4">
-  <!-- Settings navigation -->
-  <section>
-    <p class="ui-label mb-1.5 sm:mb-2">Settings</p>
-    <div class="overflow-hidden rounded-md border border-line bg-panel">
-      {#each settingsNavItems as item, i}
-        <a
-          class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
-          0
-            ? 'border-t border-line'
-            : ''}"
-          href={workspaceHref(item.href)}
-          data-tour={item.href === "/access" ? "access" : undefined}
-        >
-          <svg
-            class="h-4 w-4 shrink-0 text-fg-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.75"
-            aria-hidden="true"
+  <!-- Secondary navigation, grouped: Settings, then Diagnostics. The group
+       label is rendered from the data so a new group cannot silently land
+       under the wrong heading. -->
+  {#each settingsNavGroups as group (group.label)}
+    <section>
+      <p class="ui-label mb-1.5 sm:mb-2">{group.label}</p>
+      <div class="overflow-hidden rounded-md border border-line bg-panel">
+        {#each group.items as item, i}
+          <a
+            class="flex items-center gap-2.5 px-3 py-2.5 text-meta font-medium text-fg transition-colors hover:bg-line-subtle sm:gap-3 sm:px-4 sm:py-3 {i >
+            0
+              ? 'border-t border-line'
+              : ''}"
+            href={workspaceHref(item.href)}
+            data-tour={item.href === "/access" ? "access" : undefined}
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d={navIconPath(item.icon)}
-            />
-          </svg>
-          <span class="flex-1">{item.label}</span>
-          {#if item.hint}
-            <span class="hidden text-micro text-fg-muted sm:inline"
-              >{item.hint}</span
+            <svg
+              class="h-4 w-4 shrink-0 text-fg-muted"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.75"
+              aria-hidden="true"
             >
-          {/if}
-          <svg
-            class="h-4 w-4 shrink-0 text-fg-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="1.5"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M8.25 4.5l7.5 7.5-7.5 7.5"
-            />
-          </svg>
-        </a>
-      {/each}
-    </div>
-  </section>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d={navIconPath(item.icon)}
+              />
+            </svg>
+            <span class="flex-1">{item.label}</span>
+            {#if item.hint}
+              <span class="hidden text-micro text-fg-muted sm:inline"
+                >{item.hint}</span
+              >
+            {/if}
+            <svg
+              class="h-4 w-4 shrink-0 text-fg-muted"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8.25 4.5l7.5 7.5-7.5 7.5"
+              />
+            </svg>
+          </a>
+        {/each}
+      </div>
+    </section>
+  {/each}
 
   {#if hostedMode}
     <section>

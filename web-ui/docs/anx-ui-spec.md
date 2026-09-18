@@ -70,6 +70,14 @@ Agent Nexus web UI does **not**:
 
 Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appear in navigation, buttons, banners, or empty states except where noted as technical exceptions.
 
+**Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
+
+1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
+2. **Ref-type labels** rendered by `RefLink` / `refLinkModel` — a `card:` chip may read "Card".
+3. **Timeline and audit event rows**, which name the core event that occurred.
+
+Outside those three, the core nouns are still present in operator copy in several places (the Tasks board help, the Watching mailbox group headers, the Topic-detail rendering of `/threads/{id}`). Those are known violations, not sanctioned ones; they are tracked as follow-ups rather than silently permitted. Do not add new ones, and do not read the backlog as license — a rule this document does not enforce is a rule the next reader will ignore.
+
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
 | Soft-delete lifecycle | Trash, trashed, move to trash, restore | tombstone, tombstoned | HTTP paths and machine identifiers follow `contracts/` (`/trash`, `trashed_at`, `trash_reason`; list endpoints use repeated `state=active|archived|trashed`) |
@@ -84,7 +92,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 **Domain note:** Operator vocabulary and core vocabulary are deliberately different. The boundary between them is the typed ref.
 
 - **Operator-facing nouns are Inbox, Tasks and Docs, and nothing else.** A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards).
-- **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `doc:`) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
+- **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `document:` — the contract's prefixes, per `contracts/anx-schema.yaml` → `ref_format`; `doc:` is a CLI target shorthand only and is rejected inside a ref) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
 - A **thread** is infrastructure: a durable append-only event timeline that backs topics, cards, boards and documents, and resolves packet subjects. It is never an operator-facing noun.
 - A **topic** is the core discussion/context primitive built on a thread. It has **no operator destination**; it appears only as a ref-type label (e.g. in `RefLink` or an Events filter) and as the detail rendering of its backing thread.
 

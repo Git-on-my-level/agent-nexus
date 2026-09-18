@@ -338,20 +338,30 @@ func (a *App) resolveHumanAttentionThreadIDFromSubjectRef(ctx context.Context, c
 	if err != nil {
 		return "", err
 	}
+	// Every thread-backed subject resolves its own grounding thread. Asking an
+	// agent to discover a thread id in order to ask a human about a Task or a
+	// Doc would push a purely internal noun into the conversation — the whole
+	// point of these commands is that the agent names the subject an operator
+	// can see and the CLI grounds it.
+	var body map[string]any
 	switch strings.TrimSpace(prefix) {
 	case "topic":
-		topic, err := a.fetchTopicBody(ctx, cfg, subjectRef)
-		if err != nil {
-			return "", err
-		}
-		threadID := strings.TrimSpace(anyString(topic["thread_id"]))
-		if threadID == "" {
-			return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s does not expose a backing thread_id; pass --thread-id explicitly", subjectRef))
-		}
-		return threadID, nil
+		body, err = a.fetchTopicBody(ctx, cfg, subjectRef)
+	case "card":
+		body, err = a.fetchCardBody(ctx, cfg, subjectRef)
+	case "document":
+		body, err = a.fetchDocumentBody(ctx, cfg, subjectRef)
 	default:
 		return "", nil
 	}
+	if err != nil {
+		return "", err
+	}
+	threadID := strings.TrimSpace(anyString(body["thread_id"]))
+	if threadID == "" {
+		return "", errnorm.Usage("invalid_request", fmt.Sprintf("%s does not expose a backing thread_id; pass --thread-id explicitly", subjectRef))
+	}
+	return threadID, nil
 }
 
 func isHumanEscalationSeverity(value string) bool {

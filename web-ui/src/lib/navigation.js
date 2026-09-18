@@ -86,7 +86,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "56rem",
   },
   {
-    match: /^\/(work|tasks|inbox|integrations)(\/|$)/,
+    match: /^\/(tasks|inbox|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
   },
@@ -111,7 +111,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "88rem",
   },
   {
-    match: /^\/(more|settings)$/,
+    match: /^\/more$/,
     mode: "standard",
     maxWidth: "42rem",
   },

@@ -173,3 +173,89 @@ func TestHumanCommandFromFileRequiresFrontmatterFields(t *testing.T) {
 		t.Fatalf("%#v", payload)
 	}
 }
+
+// A human-attention request must be expressible with the noun the operator
+// actually sees. Before this, only `topic:` subjects resolved their backing
+// thread, so `anx human review --subject-ref document:...` — the command's own
+// documented example — failed with "thread id is required", forcing the agent
+// to go and find a thread id the operator has never heard of.
+func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		subjectRef   string
+		getPath      string
+		getBody      string
+		wantThreadID string
+	}{
+		{
+			name:         "card subject",
+			subjectRef:   "card:implement-login",
+			getPath:      "/cards/card:implement-login",
+			getBody:      `{"card":{"id":"implement-login","thread_id":"thr-card"}}`,
+			wantThreadID: "thr-card",
+		},
+		{
+			name:         "document subject",
+			subjectRef:   "document:launch_notes",
+			getPath:      "/docs/document:launch_notes",
+			getBody:      `{"document":{"id":"launch_notes","thread_id":"thr-doc"}}`,
+			wantThreadID: "thr-doc",
+		},
+		{
+			name:         "topic subject",
+			subjectRef:   "topic:launch",
+			getPath:      "/topics/topic:launch",
+			getBody:      `{"topic":{"id":"launch","thread_id":"thr-topic"}}`,
+			wantThreadID: "thr-topic",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var captured map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodGet && r.URL.Path == tc.getPath {
+					_, _ = w.Write([]byte(tc.getBody))
+					return
+				}
+				if r.Method == http.MethodPost && r.URL.Path == "/events" {
+					if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+						t.Fatalf("decode: %v", err)
+					}
+					_, _ = w.Write([]byte(`{"event":{"id":"evt1","type":"human_attention_requested"}}`))
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+
+			home := t.TempDir()
+			writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+
+			raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+				"--json", "--base-url", server.URL, "--agent", "agent-a",
+				"human", "ask", "Which launch date?",
+				"--subject-ref", tc.subjectRef,
+				"--recommended-response", "Use May 15.",
+			})
+
+			// No --thread-id was passed: the CLI must have grounded it itself.
+			if captured == nil {
+				payload := assertEnvelopeError(t, raw)
+				t.Fatalf("expected the request to be posted, got error: %#v", payload)
+			}
+			event, _ := captured["event"].(map[string]any)
+			if got := anyStringValue(event["thread_id"]); got != tc.wantThreadID {
+				t.Fatalf("thread_id = %q, want %q: %#v", got, tc.wantThreadID, captured)
+			}
+			// The operator-visible subject must survive as the subject_ref.
+			payload, _ := event["payload"].(map[string]any)
+			if got := anyStringValue(payload["subject_ref"]); got != tc.subjectRef {
+				t.Fatalf("subject_ref = %q, want %q", got, tc.subjectRef)
+			}
+		})
+	}
+}

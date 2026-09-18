@@ -393,7 +393,7 @@ Core model
 - `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
 - `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
 - `cards`: the primary work items. Use `anx cards ...` for card creation, list/get, messages, assignment, workflow movement, revisions, resolution, reopen, and lifecycle.
-- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
+- `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.
 - `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
@@ -407,7 +407,7 @@ Heuristic:
 - Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.
 - Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
 - Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.
-- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
+- Use `threads` only for backing-timeline diagnostics, tooling-specific inspection, or bridge/wake routing when no typed subject exists. A message posted to a bare thread lands where no operator is looking.
 - Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
 
 If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
