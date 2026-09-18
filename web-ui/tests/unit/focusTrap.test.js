@@ -102,6 +102,25 @@ describe("focusTrap", () => {
     expect(document.activeElement?.id).toBe("search");
   });
 
+  it("moves Tab from the dialog node into the first tabbable control", () => {
+    const { dialog } = mountDialog(
+      '<input id="search" /><button id="one">one</button>',
+    );
+    dialog.tabIndex = -1;
+    trapOn(dialog);
+    dialog.focus();
+    expect(document.activeElement).toBe(dialog);
+
+    const forward = tab();
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement?.id).toBe("search");
+
+    dialog.focus();
+    const back = tab({ shiftKey: true });
+    expect(back.defaultPrevented).toBe(true);
+    expect(document.activeElement?.id).toBe("one");
+  });
+
   it("skips disabled controls when cycling", () => {
     const { dialog } = mountDialog(
       '<input id="search" /><button id="one">one</button><button id="hint" disabled>hint</button>',

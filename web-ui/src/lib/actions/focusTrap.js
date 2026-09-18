@@ -102,7 +102,11 @@ export function focusTrap(node, options = {}) {
     const first = tabbable[0];
     const last = tabbable[tabbable.length - 1];
     const active = activeElement();
-    if (!active || !node.contains(active)) {
+    // `Node.contains` is inclusive, so focus on the trap node itself (e.g. a
+    // click on non-tabbable chrome of a `tabindex="-1"` dialog) is not an
+    // escape. Same for other non-tabbable descendants. Send those to the
+    // first/last control instead of letting Tab walk into the page behind.
+    if (!active || !tabbable.includes(active)) {
       event.preventDefault();
       focusIfPossible(event.shiftKey ? last : first);
       return;
