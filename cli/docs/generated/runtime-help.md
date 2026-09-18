@@ -55,7 +55,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
 - `topics timeline` (command): Get topic timeline
-- `topics workspace` (command): Get topic workspace (primary operator coordination read)
+- `topics workspace` (command): Get topic workspace (agent-facing discussion/context primitive)
 - `topics archive` (command): Archive topic
 - `topics unarchive` (command): Unarchive topic
 - `topics restore` (command): Restore topic from trash
@@ -1560,7 +1560,7 @@ Commands:
   topics timeline          Get topic timeline
   topics trash             Move topic to trash
   topics unarchive         Unarchive topic
-  topics workspace         Get topic workspace (primary operator coordination read)
+  topics workspace         Get topic workspace (agent-facing discussion/context primitive)
 
 Agent-facing topic surface:
   topics create           Create a topic from plain flags or advanced JSON.
@@ -2271,7 +2271,7 @@ Global flags:
 
 ## `topics workspace`
 
-Get topic workspace (primary operator coordination read)
+Get topic workspace (agent-facing discussion/context primitive)
 
 ```text
 Generated Help: topics workspace
@@ -2281,7 +2281,7 @@ Generated Help: topics workspace
 - HTTP: `GET /topics/{topic_id}/workspace`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+- Why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `workspace`
