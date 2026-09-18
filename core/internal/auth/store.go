@@ -407,22 +407,29 @@ func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKe
 		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("commit register agent transaction: %w", err)
 	}
 
-	return Agent{
-			AgentID:       agentID,
-			Username:      username,
-			ActorID:       actorID,
-			Revoked:       false,
-			CreatedAt:     nowText,
-			UpdatedAt:     nowText,
-			PrincipalKind: ptrString("agent"),
-			AuthMethod:    ptrString(AuthMethodPublicKey),
-		}, AgentKey{
-			KeyID:     keyID,
-			AgentID:   agentID,
-			Algorithm: "ed25519",
-			PublicKey: publicKey,
-			CreatedAt: nowText,
-		}, tokens, nil
+	// Built as locals rather than composite literals inside the return:
+	// gofmt indents a multi-line literal in a multi-value return differently
+	// across Go versions, so that form reformats itself on any machine whose
+	// toolchain is newer than the one in core/go.mod and dirties the tree
+	// mid-release. Locals format identically everywhere.
+	agent := Agent{
+		AgentID:       agentID,
+		Username:      username,
+		ActorID:       actorID,
+		Revoked:       false,
+		CreatedAt:     nowText,
+		UpdatedAt:     nowText,
+		PrincipalKind: ptrString("agent"),
+		AuthMethod:    ptrString(AuthMethodPublicKey),
+	}
+	agentKey := AgentKey{
+		KeyID:     keyID,
+		AgentID:   agentID,
+		Algorithm: "ed25519",
+		PublicKey: publicKey,
+		CreatedAt: nowText,
+	}
+	return agent, agentKey, tokens, nil
 }
 
 func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInput) (TokenBundle, error) {
