@@ -1906,7 +1906,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `none`
-- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+- Why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
 - Concepts: `topics`, `workspace`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.

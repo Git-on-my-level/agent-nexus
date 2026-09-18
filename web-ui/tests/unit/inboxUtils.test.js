@@ -8,62 +8,10 @@ import {
   formatInboxItemBoardPanelResourceLine,
   getInboxSubjectRef,
   getInboxUrgencyLabel,
-  groupInboxItems,
   inboxItemMailboxId,
   summarizeInboxUrgency,
 } from "../../src/lib/inboxUtils.js";
 import { resolveRefLink } from "../../src/lib/refLinkModel.js";
-
-describe("inbox grouping", () => {
-  it("groups by human attention kind and sorts by inferred urgency then age", () => {
-    const now = "2026-03-07T12:00:00.000Z";
-    const grouped = groupInboxItems(
-      [
-        {
-          id: "new-action",
-          kind: "ask",
-          title: "Action just raised",
-          source_event_time: "2026-03-07T11:00:00.000Z",
-        },
-        {
-          id: "old-risk",
-          kind: "escalate",
-          title: "Aging risk",
-          source_event_time: "2026-03-03T10:00:00.000Z",
-        },
-        {
-          id: "old-action",
-          kind: "ask",
-          source_event_time: "2026-03-03T10:00:00.000Z",
-          title: "Action waiting for days",
-        },
-        {
-          id: "fresh-risk",
-          kind: "escalate",
-          source_event_time: "2026-03-07T10:00:00.000Z",
-          title: "Fresh exception",
-        },
-      ],
-      { now },
-    );
-
-    expect(grouped.map((group) => group.category)).toEqual([
-      "escalate",
-      "ask",
-      "review",
-    ]);
-
-    expect(grouped[0].items.map((item) => item.id)).toEqual([
-      "old-risk",
-      "fresh-risk",
-    ]);
-    expect(grouped[1].items.map((item) => item.id)).toEqual([
-      "old-action",
-      "new-action",
-    ]);
-    expect(grouped[2].items).toEqual([]);
-  });
-});
 
 describe("inbox urgency derivation", () => {
   it("derives urgency level from kind + source event age", () => {

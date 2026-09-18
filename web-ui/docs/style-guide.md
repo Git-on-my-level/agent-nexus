@@ -428,10 +428,12 @@ Mobile is for triage. Show work first, chrome second, explanatory copy last.
 
 ## Data Relationships & Navigation
 
-**Thread vs topic:** Use **topic** as the default operator-facing noun for the
-primary work item. **Thread** is correct for the timeline primitive,
-`thread:` / `thread_id` diagnostics, read-only `/threads` inspection, or when
-the UI explicitly means a backing stream.
+**Task, not topic or thread:** the operator-facing noun for the primary work
+item is **Task**. Neither **topic** nor **thread** is an operator noun — both
+are core primitives agents address by typed ref. **Thread** is correct only for
+the timeline primitive, `thread:` / `thread_id` diagnostics, and the `/threads`
+Diagnostics surface. See `anx-ui-spec.md` §1.8, which is authoritative for
+operator vocabulary and lists the enforced scope and its exemptions.
 
 ### Parent/Owner Links
 

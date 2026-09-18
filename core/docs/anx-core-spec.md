@@ -325,7 +325,7 @@ failure.
 
 anx-core MUST enforce the reference conventions defined in `anx-schema.yaml` → `reference_conventions`.
 
-**Topic vs thread for human attention:** Operators think in topics, cards, boards, and docs. Human-attention events are still grounded by the backing thread for timeline/audit purposes: `human_attention_requested` includes `thread:<thread_id>` plus a typed `subject_ref`, and `human_attention_responded` includes `inbox:<inbox_item_id>` plus response metadata. Do not model operator requests as decision lifecycle events.
+**Topic vs thread for human attention:** Operators think in Inbox, Tasks and Docs; agents address topics, cards, boards and documents by typed ref (see `docs/architecture/foundation.md`, "Operator vocabulary and core vocabulary are different on purpose"). A thread is never an operator noun. Human-attention events are still grounded by the backing thread for timeline/audit purposes: `human_attention_requested` includes `thread:<thread_id>` plus a typed `subject_ref`, and `human_attention_responded` includes `inbox:<inbox_item_id>` plus response metadata. Do not model operator requests as decision lifecycle events.
 
 Key rules:
 - All ref strings MUST use typed prefixes (`artifact:`, `event:`, `thread:`, `topic:`, `document:`, `board:`, `card:`, `url:`, `inbox:`). Unknown prefixes are preserved, not rejected.

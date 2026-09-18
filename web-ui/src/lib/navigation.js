@@ -56,6 +56,22 @@ export const settingsNavGroups = [
       },
     ],
   },
+  {
+    // Infrastructure surfaces. These expose core primitives that are
+    // deliberately not operator nouns (see anx-ui-spec.md "Canonical operator
+    // vocabulary"). They belong behind an explicit Diagnostics label rather
+    // than in primary nav — and rather than being reachable only by typing a
+    // URL, which is how `/threads` was orphaned after the Tasks refactor.
+    label: "Diagnostics",
+    items: [
+      {
+        label: "Threads",
+        href: "/threads",
+        icon: "link",
+        hint: "Backing timelines",
+      },
+    ],
+  },
 ];
 
 /** Flat view of the secondary destinations (kept for existing consumers). */
@@ -70,7 +86,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "56rem",
   },
   {
-    match: /^\/(work|tasks|inbox|integrations)(\/|$)/,
+    match: /^\/(tasks|inbox|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
   },
@@ -95,7 +111,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "88rem",
   },
   {
-    match: /^\/(more|settings)$/,
+    match: /^\/more$/,
     mode: "standard",
     maxWidth: "42rem",
   },
@@ -133,7 +149,7 @@ export function isKnownSection(pathname) {
 /** When true, the mobile bottom "More" tab should read as active (hub + settings destinations). */
 export function isMoreHubActivePath(pathname) {
   const p = normalizePathname(pathname);
-  if (p === "/more" || p.startsWith("/more/") || p === "/settings") {
+  if (p === "/more" || p.startsWith("/more/")) {
     return true;
   }
   return settingsNavItems.some(

@@ -8,25 +8,17 @@
     wraps **current title** (`min-w-0 shrink truncate`, no `flex-1` on the
     title) with **badges** (`shrink-0`) so pills sit tight to the right of the
     text instead of at the end of a stretched title cell.
-  - Optional `desktop` snippet: wrapped in `hidden lg:flex` for full title
-    (full shell only; compact shell reuses the crumb row),
-    summary, and long metadata lines that are redundant with the crumb row on
-    narrow viewports.
 
-  Pass optional named snippets: `breadcrumb` (required for the nav body),
-  `actions`, `desktop`.
+  Pass optional named snippets: `breadcrumb` (required for the nav body) and
+  `actions`.
 -->
 <script>
   let {
     breadcrumbAriaLabel = "Breadcrumb",
-    desktopAriaLabel = "Resource details",
     /** Tighter bottom margin for dock / chat layouts. */
     dense = false,
-    /** When false, hides the large desktop title block (breadcrumb remains). */
-    showDesktop = true,
     breadcrumb,
     actions,
-    desktop,
   } = $props();
 </script>
 
@@ -47,12 +39,3 @@
     </div>
   {/if}
 </div>
-
-{#if desktop && showDesktop}
-  <div
-    class="mt-0 hidden max-w-full flex-col gap-1 lg:flex"
-    aria-label={desktopAriaLabel}
-  >
-    {@render desktop()}
-  </div>
-{/if}

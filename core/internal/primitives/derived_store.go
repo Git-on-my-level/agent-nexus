@@ -204,10 +204,6 @@ func (s *Store) ListDerivedInboxItems(ctx context.Context, filter DerivedInboxLi
 		if leftOrder != rightOrder {
 			return leftOrder < rightOrder
 		}
-		if left.Category == "risk_exception" && right.Category == "risk_exception" &&
-			left.HasDueAt && right.HasDueAt && left.DueAt != right.DueAt {
-			return left.DueAt < right.DueAt
-		}
 		if left.TriggerAt != right.TriggerAt {
 			return left.TriggerAt > right.TriggerAt
 		}

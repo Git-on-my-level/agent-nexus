@@ -14,16 +14,11 @@ type conceptsPrimitive struct {
 	RelatedRead []string
 }
 
-type namedDescription struct {
-	Name        string
-	Description string
-}
-
 var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "topics",
-		UseWhen:     "You need a topic-centered discussion and coordination surface for a project, incident, decision, recurring process, or durable work subject.",
-		NotFor:      "Tracking active work status across columns or storing long-term reference material.",
+		UseWhen:     "You need an agent-facing discussion/context primitive for a project, incident, decision, recurring process, or durable work subject.",
+		NotFor:      "The operator Tasks projection (use `anx work list` / `anx work get`), tracking active work status across columns, or storing long-term reference material.",
 		Examples:    []string{"project discussion", "incident coordination", "decision thread", "recurring process"},
 		RelatedRead: []string{"anx topics list", "anx topics get", "anx topics workspace"},
 	},
@@ -49,6 +44,13 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 		RelatedRead: []string{"anx cards list", "anx cards list --board <board-ref>", "anx cards get", "anx cards move"},
 	},
 	{
+		Name:        "work",
+		UseWhen:     "You need the operator Tasks projection over cards: inventory, detail, freshness, and evidence across sources.",
+		NotFor:      "Discussion/context (use topics), durable knowledge (use docs), or card workflow writes (use `anx cards ...`).",
+		Examples:    []string{"operator Tasks page", "cross-source commitments", "work freshness"},
+		RelatedRead: []string{"anx work list", "anx work get", "anx cards get"},
+	},
+	{
 		Name:        "events",
 		UseWhen:     "You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.",
 		NotFor:      "Replacing the current durable state of a Topic, Board, Card, or Doc.",
@@ -57,8 +59,8 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "inbox",
-		UseWhen:     "A human operator needs to inspect the human attention queue.",
-		NotFor:      "Agent coordination; agents should create attention items with `anx human ask|review|escalate`, each emitting `human_attention_requested` with required ordered `response_proposals` (CLI: `--recommended-response`, optional repeatable `--proposal`, or `--from-file` Markdown with YAML frontmatter).",
+		UseWhen:     "A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).",
+		NotFor:      "Agent wake/attention; agents use `anx notifications` and create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
 		Examples:    []string{"asks", "reviews", "escalations"},
 		RelatedRead: []string{"anx human ask", "anx human review", "anx human escalate"},
 	},
@@ -71,35 +73,11 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	},
 	{
 		Name:        "threads",
-		UseWhen:     "You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.",
-		NotFor:      "Primary coordination when a Topic exists; use topics workspace instead.",
-		Examples:    []string{"backing timeline", "diagnostic projection", "low-level inspection"},
+		UseWhen:     "You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.",
+		NotFor:      "Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.",
+		Examples:    []string{"backing timeline", "diagnostic projection", "low-level inspection", "bridge/wake routing on an untyped thread"},
 		RelatedRead: []string{"anx threads list", "anx threads inspect", "anx threads workspace"},
 	},
-}
-
-var inboxCategoryReference = []namedDescription{
-	{Name: "action_needed", Description: "A responsible actor must take direct action or own the next step."},
-	{Name: "risk_exception", Description: "Exceptions or at-risk work items that need follow-up."},
-	{Name: "attention", Description: "Review or lighter operator focus (for example document attention)."},
-}
-
-func inboxCategoryReferenceMap() map[string]string {
-	out := make(map[string]string, len(inboxCategoryReference))
-	for _, entry := range inboxCategoryReference {
-		out[entry.Name] = entry.Description
-	}
-	return out
-}
-
-func inboxCategoryDescription(name string) string {
-	name = strings.TrimSpace(name)
-	for _, entry := range inboxCategoryReference {
-		if entry.Name == name {
-			return entry.Description
-		}
-	}
-	return ""
 }
 
 func conceptsGuideData() map[string]any {
@@ -118,21 +96,21 @@ func conceptsGuideData() map[string]any {
 		"summary":           "Quick guide to the core ANX primitives and when to use each.",
 		"primitives":        primitives,
 		"selection_rules":   conceptsSelectionRules(),
-		"inbox_categories":  inboxCategoryReferenceMap(),
 		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc profiles", "anx meta doc env"},
 	}
 }
 
 func conceptsSelectionRules() []string {
 	return []string{
-		"Use topics for discussion and coordination around a topic, project, incident, decision, or recurring process.",
+		"Use topics for agent-facing discussion and context around a topic, project, incident, decision, or recurring process.",
 		"Use boards for active work tracking with columns, cards, ownership, and movement.",
 		"Use docs for durable context and institutional knowledge that should remain relevant over time.",
 		"Use cards for individual board-scoped work items.",
+		"Use work (`anx work list` / `anx work get`) for the operator Tasks projection over cards.",
 		"Use events for immutable facts.",
-		"Use inbox for current attention signals from the active CLI identity's perspective.",
+		"Use inbox only for the operator human-attention queue; agents use `anx notifications`.",
 		"Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.",
-		"Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.",
+		"Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.",
 	}
 }
 
@@ -166,14 +144,6 @@ func conceptsGuideText() string {
 			b.WriteString(strings.Join(primitive.RelatedRead, " ; "))
 			b.WriteString("\n")
 		}
-	}
-	b.WriteString("\nInbox categories:\n")
-	for _, entry := range inboxCategoryReference {
-		b.WriteString("- `")
-		b.WriteString(entry.Name)
-		b.WriteString("`: ")
-		b.WriteString(entry.Description)
-		b.WriteString("\n")
 	}
 	b.WriteString("\nConfiguration and profiles:\n")
 	b.WriteString("- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.\n")

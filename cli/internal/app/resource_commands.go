@@ -943,7 +943,7 @@ func (a *App) resolveThreadContextSelection(ctx context.Context, cfg config.Reso
 	if len(threadIDs) != 1 {
 		return nil, errnorm.Usage(
 			"invalid_request",
-			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For operator coordination across topics, use `anx topics list` and `anx topics workspace`. For a multi-thread diagnostic backing projection, use `anx threads workspace` with discovery filters.", commandName),
+			fmt.Sprintf("%s requires exactly one thread; refine filters or pass one --thread-id. For topic context, use `anx topics list` and `anx topics workspace`. For a multi-thread diagnostic backing projection, use `anx threads workspace` with discovery filters.", commandName),
 		)
 	}
 	return threadIDs, nil
@@ -954,7 +954,7 @@ func mixedThreadSelectionMessage(commandName string) string {
 	discoveryExample := "anx threads inspect --state active"
 	switch strings.TrimSpace(commandName) {
 	case "threads context":
-		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace topic:<handle>` for primary coordination when you have a topic. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
+		return base + " For one thread, use `anx threads inspect --thread-id <thread-id>` or `anx threads workspace --thread-id <thread-id>` for backing-thread diagnostics. Prefer `anx topics workspace topic:<handle>` for agent-facing topic context. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads workspace":
 		return base + " For one thread, use `anx threads workspace --thread-id <thread-id>`. For discovery, remove `--thread-id` and use `" + discoveryExample + "`."
 	case "threads inspect":
@@ -2225,7 +2225,7 @@ func (a *App) runInboxList(ctx context.Context, args []string, cfg config.Resolv
 	var typeFlags trackedStrings
 	var fullIDFlag trackedBool
 	fs.Var(&threadIDFlags, "thread-id", "Filter by thread id (repeatable)")
-	fs.Var(&typeFlags, "type", "Filter by inbox item type/category/kind (repeatable)")
+	fs.Var(&typeFlags, "type", "Filter by inbox kind: ask, review, or escalate (repeatable)")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full inbox ids in default text output (non-JSON)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
@@ -2326,31 +2326,6 @@ func enrichInboxListBody(body map[string]any, cfg config.Resolved) bool {
 	viewing := viewingAsData(cfg)
 	if len(viewing) > 0 {
 		body["viewing_as"] = viewing
-		changed = true
-	}
-	body["category_reference"] = inboxCategoryReferenceMap()
-	items := asSlice(body["items"])
-	for _, raw := range items {
-		item := asMap(raw)
-		if item == nil {
-			continue
-		}
-		category := firstNonEmpty(
-			strings.TrimSpace(anyString(item["category"])),
-			strings.TrimSpace(anyString(item["type"])),
-			strings.TrimSpace(anyString(item["kind"])),
-		)
-		if category == "" {
-			continue
-		}
-		description := inboxCategoryDescription(category)
-		if description == "" {
-			continue
-		}
-		if strings.TrimSpace(anyString(item["category_description"])) == description {
-			continue
-		}
-		item["category_description"] = description
 		changed = true
 	}
 	return changed
@@ -4218,14 +4193,14 @@ func normalizeIDFilters(rawIDs []string) []string {
 	return out
 }
 
-// canonicalInboxCategoryForCLIFilter reports inbox categories accepted by the CLI.
-func canonicalInboxCategoryForCLIFilter(category string) (string, bool) {
-	category = strings.TrimSpace(category)
-	switch category {
-	case "action_needed", "risk_exception", "attention":
-		return category, true
+// canonicalInboxKindForCLIFilter reports inbox kinds accepted by `anx inbox --type`.
+func canonicalInboxKindForCLIFilter(kind string) (string, bool) {
+	kind = strings.TrimSpace(kind)
+	switch kind {
+	case "ask", "review", "escalate":
+		return kind, true
 	default:
-		return category, false
+		return kind, false
 	}
 }
 
@@ -4237,7 +4212,7 @@ func normalizeInboxListTypeFilters(types []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(types))
 	invalid := make([]string, 0)
 	for _, inboxType := range types {
-		canon, ok := canonicalInboxCategoryForCLIFilter(inboxType)
+		canon, ok := canonicalInboxKindForCLIFilter(inboxType)
 		if !ok {
 			invalid = append(invalid, strings.TrimSpace(inboxType))
 			continue
@@ -4259,7 +4234,7 @@ func normalizeInboxListTypeFilters(types []string) ([]string, error) {
 		if len(quoted) > 0 {
 			return nil, errnorm.Usage(
 				"invalid_flags",
-				fmt.Sprintf("legacy inbox type/category aliases are no longer supported: %s; use action_needed, risk_exception, or attention", strings.Join(quoted, ", ")),
+				fmt.Sprintf("unsupported inbox kind: %s; use ask, review, or escalate", strings.Join(quoted, ", ")),
 			)
 		}
 	}
@@ -4300,7 +4275,7 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 			}
 		}
 		if len(typeFilter) > 0 {
-			canon, ok := canonicalInboxCategoryForCLIFilter(inboxItemType(item))
+			canon, ok := canonicalInboxKindForCLIFilter(inboxItemKind(item))
 			if !ok {
 				continue
 			}
@@ -4313,15 +4288,11 @@ func filteredInboxItems(items []any, threadIDs []string, types []string) []any {
 	return filtered
 }
 
-func inboxItemType(item map[string]any) string {
+func inboxItemKind(item map[string]any) string {
 	if item == nil {
 		return ""
 	}
-	return firstNonEmpty(
-		strings.TrimSpace(anyString(item["type"])),
-		strings.TrimSpace(anyString(item["category"])),
-		strings.TrimSpace(anyString(item["kind"])),
-	)
+	return strings.TrimSpace(anyString(item["kind"]))
 }
 
 func filterEventsByActorID(events []any, actorID string) []any {

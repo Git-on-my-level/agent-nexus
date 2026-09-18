@@ -372,37 +372,6 @@ export function sortInboxItems(items, options = {}) {
     .map(({ item }) => item);
 }
 
-export function groupInboxItems(items = [], options = {}) {
-  const grouped = new Map();
-
-  INBOX_CATEGORY_ORDER.forEach((category) => grouped.set(category, []));
-
-  for (const item of items) {
-    const category = normalizeInboxKind(item);
-
-    if (!grouped.has(category)) {
-      grouped.set(category, []);
-    }
-
-    grouped.get(category).push(item);
-  }
-
-  const knownGroups = INBOX_CATEGORY_ORDER.map((category) => ({
-    category,
-    items: sortInboxItems(grouped.get(category) ?? [], options),
-  }));
-
-  const extraGroups = [...grouped.entries()]
-    .filter(([category]) => !INBOX_CATEGORY_ORDER.includes(category))
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([category, categoryItems]) => ({
-      category,
-      items: sortInboxItems(categoryItems, options),
-    }));
-
-  return [...knownGroups, ...extraGroups];
-}
-
 export function summarizeInboxByCategory(items = []) {
   const counts = {};
   for (const category of INBOX_CATEGORY_ORDER) {

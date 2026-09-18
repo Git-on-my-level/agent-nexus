@@ -23,6 +23,9 @@ describe("navigation model", () => {
       "Secrets",
       "Integrations",
       "Audit",
+      // Diagnostics group: infrastructure surfaces, explicitly labelled rather
+      // than reachable only by URL.
+      "Threads",
     ]);
   });
 
@@ -50,7 +53,6 @@ describe("navigation model", () => {
   it("marks mobile More tab active for hub and settings routes", () => {
     expect(isMoreHubActivePath("/more")).toBe(true);
     expect(isMoreHubActivePath("/more/")).toBe(true);
-    expect(isMoreHubActivePath("/settings")).toBe(true);
     expect(isMoreHubActivePath("/access")).toBe(true);
     expect(isMoreHubActivePath("/secrets")).toBe(true);
     expect(isMoreHubActivePath("/events")).toBe(true);

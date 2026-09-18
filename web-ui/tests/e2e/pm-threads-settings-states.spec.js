@@ -731,6 +731,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
       // No "on": formatTimestamp is relative under 7 days, so the old copy
       // read "was archived on 3h ago". See archived-copy-states.spec.js.
       await expect(page.getByText(/was archived 3h ago/)).toBeVisible();
+      // Lifecycle is not editable from this diagnostic surface: the controls
+      // were gated on a flag no route could set, so they never rendered.
+      await expect(page.getByRole("button", { name: "Unarchive" })).toHaveCount(
+        0,
+      );
+      await expect(page.getByText(/anx topics unarchive/)).toBeVisible();
       await expectCleanLayout(page, "archived thread notice", bothEnds);
 
       api.topic = {
@@ -741,7 +747,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
         trash_reason: `Superseded by the new vendor board. ${LONG_SENTENCE}`,
       };
       await page.reload();
-      await expect(page.getByText("This topic is in trash")).toBeVisible();
+      await expect(page.getByText("This thread is in trash")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(
+        0,
+      );
+      await expect(page.getByText(/anx topics restore/)).toBeVisible();
       await expectCleanLayout(page, "trashed thread notice", bothEnds);
       await expectNoClippedContent(page, "trashed thread notice");
     });

@@ -29,11 +29,15 @@ All routes are under `/o/{organization}/w/{workspace}`.
 - `/integrations`, `/access`, `/secrets`, `/events`: settings (also under
   `/more` on mobile). Events is the audit log.
 
-`/work` and `/work/{card_ref}` redirect to `/tasks`. `/decisions` redirects to
-`/inbox`. Those paths are bookmarks, not product.
+There are no legacy route aliases. `/work`, `/work/{card_ref}`, `/work/new`,
+`/decisions` and `/settings` were removed rather than left as redirects; the
+canonical paths above are the only ones. `/work` remains a **core API** path
+(`work.list` / `work.get`) and is unrelated to the removed UI route.
 
 `/threads` and `/threads/{threadId}` remain inspection surfaces for backing
-conversations and inbox deep links. They are not a fourth primitive.
+conversations and inbox deep links. They are not a fourth primitive: `/threads`
+is listed under a "Diagnostics" group in the sidebar footer / `/more` hub,
+never in primary nav.
 
 ## Boundaries
 

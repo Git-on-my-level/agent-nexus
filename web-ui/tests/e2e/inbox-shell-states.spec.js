@@ -1155,12 +1155,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("alert").first()).toBeVisible();
       await expectCleanLayout(page, "superseded on answer", bothEnds);
 
-      // Dismissing an inbox item leaves a notice above the panes.
+      // Acknowledging an inbox item leaves a notice above the panes.
       api.fail = {};
       await page.goto(INBOX_PATH);
       await page.getByTestId("inbox-row-inbox-plain").click(FIRST_PAINT);
-      await page.getByRole("button", { name: "Dismiss from Inbox" }).click();
-      await expect(page.getByText("Dismissed from inbox only.")).toBeVisible();
+      await page.getByRole("button", { name: "Acknowledge" }).click();
+      await expect(
+        page.getByText("Acknowledged. Removed from your inbox only."),
+      ).toBeVisible();
       await expectCleanLayout(page, "dismissed notice", bothEnds);
     });
 

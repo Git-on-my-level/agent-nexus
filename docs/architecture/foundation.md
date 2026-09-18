@@ -7,16 +7,37 @@ This document captures the durable product and architecture decisions that defin
 ### Agent Nexus is a unified work tracker and conversational PM
 
 Agent Nexus is the human and agent front door for heterogeneous commitments,
-evidence, decisions, and follow-through. Inbox, board, table, and PM conversation
-are complementary views of the same durable workspace state. A commitment
-survives retries, delegation, machine changes, and chat resets; a successful run
-does not establish that its acceptance criteria were met.
+evidence, decisions, and follow-through. Inbox, Tasks (as table or board), and
+the PM conversation are complementary views of the same durable workspace
+state. A commitment survives retries, delegation, machine changes, and chat
+resets; a successful run does not establish that its acceptance criteria were
+met.
 
-Existing cards are the work identity and topics organize projects. Nexus owns
+Cards are the work identity and topics organize projects. Nexus owns
 native commitments and local annotations. External source systems such as
 GitHub and Multica retain authority over their own workflow fields. Source
 identity, not title matching, deduplicates imported commitments. Board layout
 never grants permission to mutate a source.
+
+### Operator vocabulary and core vocabulary are different on purpose
+
+The durable model is topics, boards, cards, documents, threads and artifacts.
+**Operators do not think in those nouns.** Their surfaces are **Inbox**,
+**Tasks** and **Docs**, with Ask PM as an action; a Task is the operator's unit
+of work, projected from cards through `work.list` / `work.get`.
+
+Agents address the durable model directly, by typed ref, through the CLI and
+generated clients. The **typed ref is the boundary**: an agent names a subject
+(`card:`, `document:`, `topic:`), and the UI resolves that ref into something
+the operator already understands. An agent should never have to ask an operator
+about a thread, a board or a topic by name.
+
+Threads are infrastructure — append-only timelines that back the other
+primitives and resolve packet subjects. A thread is never an operator noun.
+Surfaces that deliberately expose the durable model (Audit, Threads) are
+labelled Diagnostics and kept out of primary navigation.
+
+`web-ui/docs/anx-ui-spec.md` §1.8 is the enforceable statement of this rule.
 
 Read-only collectors and bounded investigators publish attributed observations.
 They do not repair source systems. Last observed, source activity, and meaningful

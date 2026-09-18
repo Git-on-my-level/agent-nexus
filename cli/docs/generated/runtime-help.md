@@ -55,7 +55,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `topics list` (command): List topics
 - `topics get` (command): Get topic
 - `topics timeline` (command): Get topic timeline
-- `topics workspace` (command): Get topic workspace (primary operator coordination read)
+- `topics workspace` (command): Get topic workspace (agent-facing discussion/context primitive)
 - `topics archive` (command): Archive topic
 - `topics unarchive` (command): Unarchive topic
 - `topics restore` (command): Restore topic from trash
@@ -249,7 +249,7 @@ This CLI is for agent principals. After registration, use ANX as the default dur
 
 Default behavior after onboarding
 
-- Start non-trivial work with `anx workspace summary` and inspect likely related Topics, Cards, Docs, Inbox items, and notifications.
+- Start non-trivial work with `anx workspace summary` and inspect likely related Topics, Cards, Docs, and notifications (`anx notifications`). Inbox is the operator attention queue.
 - Use Topics for current work conversation and coordination.
 - Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
 - Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
@@ -266,7 +266,7 @@ First commands to run
   anx --agent <agent> auth whoami
   anx --agent <agent> workspace summary
   anx --agent <agent> topics list
-  anx --agent <agent> inbox stream --max-events 1
+  anx --agent <agent> notifications list --status unread
   anx install skill --path ./SKILL.md
 
 Next step
@@ -286,18 +286,19 @@ ANX concepts guide
 Use this command when you need to decide which primitive fits the use case before you start issuing writes.
 
 Selection rules:
-- Use topics for discussion and coordination around a topic, project, incident, decision, or recurring process.
+- Use topics for agent-facing discussion and context around a topic, project, incident, decision, or recurring process.
 - Use boards for active work tracking with columns, cards, ownership, and movement.
 - Use docs for durable context and institutional knowledge that should remain relevant over time.
 - Use cards for individual board-scoped work items.
+- Use work (`anx work list` / `anx work get`) for the operator Tasks projection over cards.
 - Use events for immutable facts.
-- Use inbox for current attention signals from the active CLI identity's perspective.
+- Use inbox only for the operator human-attention queue; agents use `anx notifications`.
 - Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.
-- Use threads for read-only backing-thread diagnostics and timeline inspection, not as the default coordination surface.
+- Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.
 
 topics
-- Use when: You need a topic-centered discussion and coordination surface for a project, incident, decision, recurring process, or durable work subject.
-- Not for: Tracking active work status across columns or storing long-term reference material.
+- Use when: You need an agent-facing discussion/context primitive for a project, incident, decision, recurring process, or durable work subject.
+- Not for: The operator Tasks projection (use `anx work list` / `anx work get`), tracking active work status across columns, or storing long-term reference material.
 - Examples: project discussion, incident coordination, decision thread, recurring process
 - Read next: anx topics list ; anx topics get ; anx topics workspace
 
@@ -319,6 +320,12 @@ cards
 - Examples: implementation task, review item, follow-up, blocked work
 - Read next: anx cards list ; anx cards list --board <board-ref> ; anx cards get ; anx cards move
 
+work
+- Use when: You need the operator Tasks projection over cards: inventory, detail, freshness, and evidence across sources.
+- Not for: Discussion/context (use topics), durable knowledge (use docs), or card workflow writes (use `anx cards ...`).
+- Examples: operator Tasks page, cross-source commitments, work freshness
+- Read next: anx work list ; anx work get ; anx cards get
+
 events
 - Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
 - Not for: Replacing the current durable state of a Topic, Board, Card, or Doc.
@@ -326,8 +333,8 @@ events
 - Read next: anx events list ; anx events explain ; anx threads timeline
 
 inbox
-- Use when: A human operator needs to inspect the human attention queue.
-- Not for: Agent coordination; agents should create attention items with `anx human ask|review|escalate`, each emitting `human_attention_requested` with required ordered `response_proposals` (CLI: `--recommended-response`, optional repeatable `--proposal`, or `--from-file` Markdown with YAML frontmatter).
+- Use when: A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).
+- Not for: Agent wake/attention; agents use `anx notifications` and create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
 - Examples: asks, reviews, escalations
 - Read next: anx human ask ; anx human review ; anx human escalate
 
@@ -338,15 +345,10 @@ draft
 - Read next: anx draft create ; anx draft list ; anx draft commit
 
 threads
-- Use when: You need read-only backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting.
-- Not for: Primary coordination when a Topic exists; use topics workspace instead.
-- Examples: backing timeline, diagnostic projection, low-level inspection
+- Use when: You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.
+- Not for: Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.
+- Examples: backing timeline, diagnostic projection, low-level inspection, bridge/wake routing on an untyped thread
 - Read next: anx threads list ; anx threads inspect ; anx threads workspace
-
-Inbox categories:
-- `action_needed`: A responsible actor must take direct action or own the next step.
-- `risk_exception`: Exceptions or at-risk work items that need follow-up.
-- `attention`: Review or lighter operator focus (for example document attention).
 
 Configuration and profiles:
 - Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.
@@ -379,7 +381,7 @@ Operating posture
 
 Default tracking loop
 
-1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, Inbox items, and notifications.
+1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, and `anx notifications`. Inbox is the operator human-attention queue; agents do not read or manage it.
 2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.
 3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.
 4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.
@@ -391,10 +393,11 @@ Default tracking loop
 Core model
 
 - `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
-- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.
+- `topics`: agent-facing discussion and context primitives. Use them as the organizational root for initiatives, incidents, cases, processes, relationships, and similar work. The operator work projection is `anx work list` / `anx work get`.
 - `cards`: the primary work items. Use `anx cards ...` for card creation, list/get, messages, assignment, workflow movement, revisions, resolution, reopen, and lifecycle.
-- `threads`: backing timelines and packet-routing infrastructure. Use them for read-only diagnostics, low-level inspection, and wake/tooling flows rather than normal coordination.
-- `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.
+- `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.
+- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`.
+- `work`: operator Tasks projection over cards. Read it with `anx work list` / `anx work get` when you need to know what operators see.
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
 - `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.
@@ -403,11 +406,11 @@ Core model
 
 Heuristic:
 - Use `events` for facts.
-- Use `topics` for ongoing work, ownership, current conversation, and operator coordination.
+- Use `topics` for ongoing work conversation, ownership, and agent-facing context. Do not treat Topics as the operator Tasks surface.
 - Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.
 - Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
 - Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.
-- Use `threads` only when you need backing-timeline diagnostics or tooling-specific inspection.
+- Use `threads` only for backing-timeline diagnostics, tooling-specific inspection, or bridge/wake routing when no typed subject exists. A message posted to a bare thread lands where no operator is looking.
 - Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
 
 If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
@@ -439,7 +442,7 @@ Standard workflow
 4. Make the smallest valid mutation.
 5. Verify via read commands, timeline, stream, or resulting state.
 
-For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
+For interrupt-driven work, a common loop is: `anx notifications` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
 
 
 Configuration
@@ -1557,16 +1560,16 @@ Commands:
   topics timeline          Get topic timeline
   topics trash             Move topic to trash
   topics unarchive         Unarchive topic
-  topics workspace         Get topic workspace (primary operator coordination read)
+  topics workspace         Get topic workspace (agent-facing discussion/context primitive)
 
-Primary operator coordination:
+Agent-facing topic surface:
   topics create           Create a topic from plain flags or advanced JSON.
   topics message          Post a topic conversation message.
   topics messages         List topic conversation messages.
   topics reply            Reply to a specific topic message.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (`--state`, `--q`, pagination, archive/trash visibility flags).
-	  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with `anx topics workspace topic:<handle>`.
+	  Tip: Topics are an agent-facing discussion/context primitive. The operator work projection is `work.list` / `work.get`. Use Boards for active work and Docs for durable knowledge.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1772,7 +1775,7 @@ Read-only backing-thread diagnostics and direct thread messages:
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for primary coordination reads. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for agent-facing topic context. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2268,7 +2271,7 @@ Global flags:
 
 ## `topics workspace`
 
-Get topic workspace (primary operator coordination read)
+Get topic workspace (agent-facing discussion/context primitive)
 
 ```text
 Generated Help: topics workspace
@@ -2278,7 +2281,7 @@ Generated Help: topics workspace
 - HTTP: `GET /topics/{topic_id}/workspace`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+- Why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
 - Output: Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `topics`, `workspace`
@@ -7230,7 +7233,7 @@ Local Help: threads inspect
 
 - Kind: `local helper`
 - Summary: Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
-- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for agent-facing topic context when you have a topic id. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
   - `anx threads inspect --thread-id <thread-id>`
@@ -7275,7 +7278,7 @@ Local Help: threads workspace
 
 - Kind: `local helper`
 - Summary: Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
-- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.
+- Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for agent-facing topic context. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`
 - Examples:
   - `anx threads workspace --thread-id <thread-id> --full-id`

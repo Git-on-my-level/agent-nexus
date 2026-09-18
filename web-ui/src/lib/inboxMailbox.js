@@ -347,7 +347,7 @@ function rowTime(row) {
 
 const UPDATE_GROUP_SOURCES = {
   board: "Board updates",
-  topic: "Topic updates",
+  topic: "Project updates",
   thread: "Thread updates",
   workspace: "Workspace updates",
 };

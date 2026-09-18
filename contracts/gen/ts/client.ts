@@ -8544,8 +8544,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "GET",
     "path": "/topics/{topic_id}/workspace",
     "operation_id": "getTopicWorkspace",
-    "summary": "Get topic workspace (primary operator coordination read)",
-    "why": "Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.",
+    "summary": "Get topic workspace (agent-facing discussion/context primitive)",
+    "why": "Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.",
     "input_mode": "none",
     "streaming": {
       "mode": "none"

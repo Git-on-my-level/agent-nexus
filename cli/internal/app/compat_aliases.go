@@ -8,8 +8,8 @@ type commandShapeCompatibilityAlias struct {
 	requireTrailingArgs bool
 }
 
-// commandShapeCompatibilityAliases is intentionally empty (pre-user: removed old shapes).
-// mapRuntimePathToRegistryPath in help_generated.go still maps legacy *help topic* phrasing.
+// commandShapeCompatibilityAliases is empty: old command shapes were removed
+// rather than kept as runtime aliases.
 var commandShapeCompatibilityAliases = []commandShapeCompatibilityAlias{}
 
 func applyCommandShapeCompatibilityAlias(args []string) ([]string, bool) {

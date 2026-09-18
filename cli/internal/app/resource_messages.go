@@ -23,11 +23,9 @@ type messageTarget struct {
 func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, replyToEventID string) (map[string]any, messageTarget, bool, error) {
 	leadingTopicID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
-	var topicIDFlag, threadIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
+	var threadIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&topicIDFlag, "topic", "Topic id to message")
-	fs.Var(&topicIDFlag, "topic-id", "Topic id to message")
 	fs.Var(&threadIDFlag, "thread", "Backing thread id to message")
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
@@ -40,7 +38,7 @@ func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg con
 		return nil, messageTarget{}, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	topicID := firstNonEmpty(strings.TrimSpace(topicIDFlag.value), leadingTopicID)
+	topicID := strings.TrimSpace(leadingTopicID)
 	if topicID == "" && len(positionals) > 0 {
 		topicID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -50,10 +48,10 @@ func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg con
 	}
 	threadID := strings.TrimSpace(threadIDFlag.value)
 	if topicID != "" && threadID != "" {
-		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("provide only one of --topic or --thread for `anx %s`", commandName))
+		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("provide only one of a topic positional or --thread for `anx %s`", commandName))
 	}
 	if topicID == "" && threadID == "" {
-		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("topic id is required for `anx %s`; pass --topic or --thread", commandName))
+		return nil, messageTarget{}, false, errnorm.Usage("invalid_request", fmt.Sprintf("topic id is required for `anx %s`; pass a positional topic ref or --thread", commandName))
 	}
 	if topicID != "" {
 		if err := validateID(topicID, "topic id"); err != nil {
@@ -105,10 +103,9 @@ func (a *App) parseTopicReplyInput(ctx context.Context, args []string, cfg confi
 func (a *App) parseDocMessageInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, replyToEventID string) (map[string]any, messageTarget, bool, error) {
 	leadingDocumentID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
-	var documentIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
+	var bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&documentIDFlag, "document-id", "Document ref, handle, or id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
@@ -119,7 +116,7 @@ func (a *App) parseDocMessageInput(ctx context.Context, args []string, cfg confi
 		return nil, messageTarget{}, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	documentID := firstNonEmpty(strings.TrimSpace(documentIDFlag.value), leadingDocumentID)
+	documentID := strings.TrimSpace(leadingDocumentID)
 	if documentID == "" && len(positionals) > 0 {
 		documentID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -168,10 +165,9 @@ func (a *App) parseDocReplyInput(ctx context.Context, args []string, cfg config.
 func (a *App) parseCardMessageInput(ctx context.Context, args []string, cfg config.Resolved, commandName string, replyToEventID string) (map[string]any, map[string]any, bool, error) {
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
-	var cardIDFlag, bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
+	var bodyFlag, bodyFileFlag, summaryFlag, actorIDFlag trackedString
 	var refFlags trackedStrings
 	var dryRunFlag trackedBool
-	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id to message")
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
@@ -182,7 +178,7 @@ func (a *App) parseCardMessageInput(ctx context.Context, args []string, cfg conf
 		return nil, nil, false, errnorm.Usage("invalid_flags", err.Error())
 	}
 	positionals := fs.Args()
-	cardID := firstNonEmpty(strings.TrimSpace(cardIDFlag.value), leadingCardID)
+	cardID := strings.TrimSpace(leadingCardID)
 	if cardID == "" && len(positionals) > 0 {
 		cardID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -294,11 +290,10 @@ func (a *App) parseThreadReplyInput(ctx context.Context, args []string, cfg conf
 func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet("cards messages")
-	var cardIDFlag, actorIDFlag trackedString
+	var actorIDFlag trackedString
 	var maxEventsFlag trackedInt
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
@@ -314,7 +309,7 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 		return nil, err
 	}
 	positionals := fs.Args()
-	cardID := firstNonEmpty(strings.TrimSpace(cardIDFlag.value), leadingCardID)
+	cardID := strings.TrimSpace(leadingCardID)
 	if cardID == "" && len(positionals) > 0 {
 		cardID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -376,12 +371,10 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leadingTopicID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet("topics messages")
-	var topicIDFlag, actorIDFlag trackedString
+	var actorIDFlag trackedString
 	var maxEventsFlag trackedInt
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&topicIDFlag, "topic", "Topic id whose messages should be listed")
-	fs.Var(&topicIDFlag, "topic-id", "Topic id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
@@ -397,7 +390,7 @@ func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg co
 		return nil, err
 	}
 	positionals := fs.Args()
-	topicID := firstNonEmpty(strings.TrimSpace(topicIDFlag.value), leadingTopicID)
+	topicID := strings.TrimSpace(leadingTopicID)
 	if topicID == "" && len(positionals) > 0 {
 		topicID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]
@@ -422,11 +415,10 @@ func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg co
 func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leadingDocumentID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet("docs messages")
-	var documentIDFlag, actorIDFlag trackedString
+	var actorIDFlag trackedString
 	var maxEventsFlag trackedInt
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
-	fs.Var(&documentIDFlag, "document-id", "Document ref, handle, or id whose messages should be listed")
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
 	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
@@ -442,7 +434,7 @@ func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg conf
 		return nil, err
 	}
 	positionals := fs.Args()
-	documentID := firstNonEmpty(strings.TrimSpace(documentIDFlag.value), leadingDocumentID)
+	documentID := strings.TrimSpace(leadingDocumentID)
 	if documentID == "" && len(positionals) > 0 {
 		documentID = strings.TrimSpace(positionals[0])
 		positionals = positionals[1:]

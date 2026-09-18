@@ -1903,12 +1903,12 @@ paths:
   /topics/{topic_id}/workspace:
     get:
       operationId: getTopicWorkspace
-      summary: Get topic workspace (primary operator coordination read)
+      summary: Get topic workspace (agent-facing discussion/context primitive)
       tags: [topics]
       x-anx-surface: projection
       x-anx-command-id: topics.workspace
       x-anx-cli-path: topics workspace
-      x-anx-why: Primary operator coordination read — load the topic workspace composed from linked cards, docs, backing threads, and inbox items. Prefer this over thread workspace for triage and planning.
+      x-anx-why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ topic, cards, boards, documents, threads, inbox, projection_freshness, generated_at }`."

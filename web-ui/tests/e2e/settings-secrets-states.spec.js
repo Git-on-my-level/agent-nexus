@@ -344,17 +344,33 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "integrations empty", bothEnds);
     });
 
-    test("more hub and the settings redirect", async ({ page }) => {
+    test("more hub lists settings and diagnostics destinations", async ({
+      page,
+    }) => {
       await installWorkspaceApi(page);
       await page.goto(`${ROOT}/more`);
       await expect(
         page.getByRole("link", { name: /Access/ }).first(),
       ).toBeVisible();
+      // Threads is infrastructure, not an operator noun, so it belongs here
+      // under Diagnostics rather than in primary nav — but it must be reachable
+      // by link, not only by typing the URL.
+      await expect(
+        page.getByRole("link", { name: /Threads/ }).first(),
+      ).toBeVisible();
       await expectCleanLayout(page, "more hub", bothEnds);
+    });
 
-      await page.goto(`${ROOT}/settings`);
-      await expect(page).toHaveURL(/\/more$/);
-      await expectCleanLayout(page, "settings redirect", bothEnds);
+    test("removed legacy routes 404 rather than redirecting", async ({
+      page,
+    }) => {
+      await installWorkspaceApi(page);
+      // These were redirect-only stubs. With no backwards-compatibility
+      // requirement they were deleted outright; nothing may resurrect them.
+      for (const legacy of ["/settings", "/decisions", "/work", "/work/new"]) {
+        const response = await page.goto(`${ROOT}${legacy}`);
+        expect(response?.status(), `${legacy} should not resolve`).toBe(404);
+      }
     });
   });
 }

@@ -665,7 +665,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_1","category":"action_needed"}]}`))
+		_, _ = w.Write([]byte(`{"items":[{"id":"inbox:1","thread_id":"thread_1","kind":"ask"}]}`))
 	}))
 	defer server.Close()
 
@@ -681,17 +681,16 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	if got := anyStringValue(viewingAs["actor_id"]); got != "actor_123" {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", payload)
 	}
-	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "take direct action") {
-		t.Fatalf("expected category reference in alias response, got %#v", payload)
+	if _, ok := data["category_reference"]; ok {
+		t.Fatalf("did not expect category_reference in inbox payload, got %#v", payload)
 	}
 	items, _ := data["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one inbox item, got %#v", payload)
 	}
 	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "take direct action") {
-		t.Fatalf("expected per-item category_description in alias response, got %#v", payload)
+	if _, ok := item["category_description"]; ok {
+		t.Fatalf("did not expect category_description on inbox item, got %#v", payload)
 	}
 }
 
@@ -730,7 +729,7 @@ func TestInboxListIncludesAliasesAndLinkedPublicIdentity(t *testing.T) {
 func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 	t.Parallel()
 
-	const matchingID = "inbox:action_needed:thread_1234567890:none:event_1234567890"
+	const matchingID = "inbox:ask:thread_1234567890:none:event_1234567890"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
@@ -739,9 +738,9 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"items":[
-			{"id":"` + matchingID + `","thread_id":"thread_1234567890","type":"action_needed","summary":"needs approval"},
-			{"id":"inbox:action_needed:thread_other:none:event_other","thread_id":"thread_other","type":"action_needed","summary":"other thread"},
-			{"id":"inbox:review:thread_1234567890:none:event_review","thread_id":"thread_1234567890","type":"review_needed","summary":"other type"}
+			{"id":"` + matchingID + `","thread_id":"thread_1234567890","kind":"ask","title":"needs approval"},
+			{"id":"inbox:ask:thread_other:none:event_other","thread_id":"thread_other","kind":"ask","title":"other thread"},
+			{"id":"inbox:review:thread_1234567890:none:event_review","thread_id":"thread_1234567890","kind":"review","title":"other kind"}
 		]}`))
 	}))
 	defer server.Close()
@@ -752,7 +751,7 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
-		"--type", "action_needed",
+		"--type", "ask",
 		"--full-id",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -765,7 +764,7 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		t.Fatalf("expected full_id=true, got %#v", data)
 	}
 	types := stringList(data["types"])
-	if len(types) != 1 || types[0] != "action_needed" {
+	if len(types) != 1 || types[0] != "ask" {
 		t.Fatalf("expected filtered types, got %#v", data)
 	}
 	items, _ := data["items"].([]any)
@@ -781,14 +780,14 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 		"--base-url", server.URL,
 		"inbox", "list",
 		"--thread-id", "thread_1234567890",
-		"--type", "action_needed",
+		"--type", "ask",
 	})
 	if !strings.Contains(textOut, "total_items: 3") || !strings.Contains(textOut, "returned_items: 1") {
 		t.Fatalf("expected rendered inbox counts in default text output, got:\n%s", textOut)
 	}
 }
 
-func TestInboxListTypeFilterRejectsLegacyCategoryAliases(t *testing.T) {
+func TestInboxListTypeFilterRejectsUnknownKinds(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -805,20 +804,21 @@ func TestInboxListTypeFilterRejectsLegacyCategoryAliases(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"inbox", "list",
-		"--thread-id", "thread_1234567890",
-		"--type", "human_attention_requested",
-	})
-	payload := assertEnvelopeError(t, raw)
-	errObj, _ := payload["error"].(map[string]any)
-	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_flags" {
-		t.Fatalf("expected invalid_flags error, got %#v", payload)
-	}
-	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "legacy inbox type/category aliases are no longer supported") || !strings.Contains(got, "human_attention_requested") {
-		t.Fatalf("expected legacy alias rejection message, got %q", got)
+	for _, kind := range []string{"action_needed", "human_attention_requested", "risk_exception"} {
+		raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
+			"--json",
+			"--base-url", server.URL,
+			"inbox", "list",
+			"--type", kind,
+		})
+		payload := assertEnvelopeError(t, raw)
+		errObj, _ := payload["error"].(map[string]any)
+		if errObj == nil || anyStringValue(errObj["code"]) != "invalid_flags" {
+			t.Fatalf("expected invalid_flags error for %q, got %#v", kind, payload)
+		}
+		if got := anyStringValue(errObj["message"]); !strings.Contains(got, "unsupported inbox kind") || !strings.Contains(got, kind) || !strings.Contains(got, "ask, review, or escalate") {
+			t.Fatalf("expected kind rejection message for %q, got %q", kind, got)
+		}
 	}
 	mu.Lock()
 	gotRequests := requestCount
@@ -828,10 +828,28 @@ func TestInboxListTypeFilterRejectsLegacyCategoryAliases(t *testing.T) {
 	}
 }
 
-func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
+func TestFilteredInboxItemsMatchesKindNotDeadCategoryNames(t *testing.T) {
 	t.Parallel()
 
-	const inboxID = "inbox:action_needed:thread_123:none:event_123"
+	items := []any{
+		map[string]any{"id": "live", "kind": "ask", "type": "action_needed", "category": "action_needed"},
+		map[string]any{"id": "dead-names-only", "type": "action_needed", "category": "action_needed"},
+		map[string]any{"id": "review", "kind": "review"},
+	}
+	got := filteredInboxItems(items, nil, []string{"ask"})
+	if len(got) != 1 {
+		t.Fatalf("expected one ask item, got %#v", got)
+	}
+	item, _ := got[0].(map[string]any)
+	if anyStringValue(item["id"]) != "live" {
+		t.Fatalf("expected kind=ask item, got %#v", got)
+	}
+}
+
+func TestInboxListIncludesViewingAs(t *testing.T) {
+	t.Parallel()
+
+	const inboxID = "inbox:ask:thread_123:none:event_123"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/inbox" {
@@ -839,7 +857,7 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_123","category":"action_needed","title":"Choose launch date"}]}`))
+		_, _ = w.Write([]byte(`{"items":[{"id":"` + inboxID + `","thread_id":"thread_123","kind":"ask","title":"Choose launch date"}]}`))
 	}))
 	defer server.Close()
 
@@ -864,17 +882,12 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 	if got := anyStringValue(viewingAs["actor_id"]); got != "actor_123" {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", data)
 	}
-	categoryReference, _ := data["category_reference"].(map[string]any)
-	if got := anyStringValue(categoryReference["action_needed"]); !strings.Contains(got, "take direct action") {
-		t.Fatalf("expected action_needed category description, got %#v", data)
+	if _, ok := data["category_reference"]; ok {
+		t.Fatalf("did not expect category_reference, got %#v", data)
 	}
 	items, _ := data["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one inbox item, got %#v", data)
-	}
-	item, _ := items[0].(map[string]any)
-	if got := anyStringValue(item["category_description"]); !strings.Contains(got, "take direct action") {
-		t.Fatalf("expected item category_description, got %#v", item)
 	}
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
@@ -885,8 +898,8 @@ func TestInboxListIncludesViewingAsAndCategoryReference(t *testing.T) {
 	if !strings.Contains(textOut, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
-	if !strings.Contains(textOut, "category_reference:") || !strings.Contains(textOut, "action_needed: A responsible actor must take direct action or own the next step.") {
-		t.Fatalf("expected category reference in default text output, got:\n%s", textOut)
+	if strings.Contains(textOut, "category_reference:") || strings.Contains(textOut, "action_needed") {
+		t.Fatalf("did not expect dead inbox category copy in default text output, got:\n%s", textOut)
 	}
 }
 
@@ -1573,7 +1586,7 @@ func TestDocsContentCommand(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"docs", "content",
-		"--document-id", "doc_1",
+		"doc_1",
 	})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "docs content" {
@@ -1652,7 +1665,7 @@ func TestDocsMessagesCommand(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"docs", "messages",
-		"--document-id", "doc_1",
+		"doc_1",
 	})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "docs messages" {
@@ -1673,7 +1686,7 @@ func TestDocsMessagesCommand(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"docs", "messages",
-		"--document-id", "doc_1",
+		"doc_1",
 		"--include-trashed",
 	})
 	p2 := assertEnvelopeOK(t, raw2)
@@ -3955,6 +3968,34 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 			command:     "docs content",
 			code:        "invalid_flags",
 			messagePart: "document",
+		},
+		{
+			name:        "docs content rejected document-id flag",
+			args:        []string{"docs", "content", "--document-id", "doc_123"},
+			command:     "docs content",
+			code:        "invalid_flags",
+			messagePart: "document-id",
+		},
+		{
+			name:        "topics message rejected topic-id flag",
+			args:        []string{"topics", "message", "--topic-id", "topic_1"},
+			command:     "topics message",
+			code:        "invalid_flags",
+			messagePart: "topic-id",
+		},
+		{
+			name:        "docs message rejected document-id flag",
+			args:        []string{"docs", "message", "--document-id", "doc_1"},
+			command:     "docs message",
+			code:        "invalid_flags",
+			messagePart: "document-id",
+		},
+		{
+			name:        "cards message rejected card-id flag",
+			args:        []string{"cards", "message", "--card-id", "card_1"},
+			command:     "cards message",
+			code:        "invalid_flags",
+			messagePart: "card-id",
 		},
 		{
 			name:        "boards workspace unsupported board alias",

@@ -94,10 +94,13 @@ export function attachmentArtifactDisplayLabel(artifact) {
 function humanizedLabelForPrefix(prefix, value) {
   const short = compactValue(value);
   if (prefix === "artifact") return `Artifact ${short}`.trim();
-  if (prefix === "card") return `Card ${short}`.trim();
+  // The operator noun: a `card:` ref links to /tasks and reads as a Task.
+  if (prefix === "card") return `Task ${short}`.trim();
   if (prefix === "message") return "Message";
   if (prefix === "thread") return `Thread ${short}`.trim();
-  if (prefix === "topic") return `Topic ${short}`.trim();
+  // Topics are Projects to an operator: core reports `"projects": "topics"`
+  // in work.capabilities and the Tasks filter is labelled "Project reference".
+  if (prefix === "topic") return `Project ${short}`.trim();
   if (prefix === "event") return "Event";
   if (prefix === "document") return `Document ${short}`.trim();
   if (prefix === "document_revision")
