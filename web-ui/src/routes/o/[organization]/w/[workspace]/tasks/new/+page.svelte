@@ -6,6 +6,7 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { workKey, errorMessage } from "$lib/pm/presentation.js";
+  import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { datetimeLocalToIso } from "$lib/formatDate";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -23,6 +24,7 @@
     nextAction = $state(""),
     due = $state("");
   let created = $state(false);
+  let chooseBoard = $derived(boards.length > 1);
   let dirty = $derived(
     !created &&
       Boolean(
@@ -48,9 +50,21 @@
         workspaceSlug: $page.params.workspace,
         authDriver: "work-create",
       });
-      const result = await coreClient.listBoards({ limit: 200 });
-      boards = result.boards || [];
     } catch (err) {
+      error = errorMessage(err);
+      loading = false;
+      return;
+    }
+    try {
+      const result = await coreClient.listBoards({ limit: 200 });
+      boards = (result.boards || [])
+        .map(boardRecordFromBoardsListRow)
+        .filter((item) => item && (item.ref || item.handle || item.id));
+    } catch (err) {
+      // Non-blocking: core defaults the backing board, so the form still works.
+      // Say so anyway — silently dropping the list would silently drop the
+      // operator's board choice in a workspace that has several.
+      boards = [];
       error = errorMessage(err);
     } finally {
       loading = false;
@@ -58,12 +72,12 @@
   }
   async function save(event) {
     event.preventDefault();
-    if (saving || !title.trim() || !board || !criteria.trim()) return;
+    if (saving || !title.trim() || !criteria.trim()) return;
+    if (chooseBoard && !board) return;
     saving = true;
     error = "";
     try {
-      const result = await coreClient.createWork({
-        board_ref: board,
+      const payload = {
         title: title.trim(),
         summary: summary.trim(),
         definition_of_done: criteria
@@ -76,7 +90,9 @@
         ...(due ? { due_at: datetimeLocalToIso(due) } : {}),
         source: { authority: "nexus" },
         phase: "backlog",
-      });
+      };
+      if (chooseBoard) payload.board_ref = board;
+      const result = await coreClient.createWork(payload);
       const key = workKey(result.work || {});
       if (!key)
         throw new Error(
@@ -113,24 +129,7 @@
     >{#snippet subtitle()}Say what must be true when it is done.{/snippet}</WorkspacePageHeader
   >
   {#if error}<StateError message={error} />{/if}
-  {#if loading}<p role="status" class="text-fg-muted">
-      Loading workspace boards…
-    </p>{:else if !boards.length}<section
-      class="rounded-md border border-line bg-panel p-5"
-    >
-      <h2 class="text-meta font-semibold text-fg">
-        This workspace has no board yet
-      </h2>
-      <p class="mt-2 text-meta text-fg-muted">
-        Every Nexus task lives on a board so it has a phase column. Ask the PM
-        to create one, or run <code class="font-mono">anx boards create</code>
-        from the CLI, then reload.
-      </p>
-      <div class="mt-3 flex flex-wrap gap-2">
-        <a class="ui-btn-primary" href={workspaceHref("/pm")}>Ask PM</a>
-        <button class="ui-btn-secondary" onclick={load}>Reload boards</button>
-      </div>
-    </section>{:else}
+  {#if loading}<p role="status" class="text-fg-muted">Loading…</p>{:else}
     <form
       class="max-w-3xl space-y-4 rounded-md border border-line bg-panel p-4 sm:p-5"
       onsubmit={save}
@@ -149,15 +148,15 @@
           placeholder="What needs to be true when this is done?"
         /></label
       >
-      <label class="block text-micro font-medium text-fg-muted"
-        >Board<select class="ui-input mt-1" bind:value={board} required
-          ><option value="" disabled>Choose a board</option
-          >{#each boards as item}<option
-              value={item.ref || item.handle || item.id}
-              >{item.title || item.name || item.handle || item.id}</option
-            >{/each}</select
-        ></label
-      >
+      {#if chooseBoard}<label class="block text-micro font-medium text-fg-muted"
+          >Board<select class="ui-input mt-1" bind:value={board} required
+            ><option value="" disabled>Choose a board</option
+            >{#each boards as item}<option
+                value={item.ref || item.handle || item.id}
+                >{item.title || item.name || item.handle || item.id}</option
+              >{/each}</select
+          ></label
+        >{/if}
       <label class="block text-micro font-medium text-fg-muted"
         >Context<textarea
           class="ui-input mt-1"
@@ -208,7 +207,10 @@
         <button
           class="ui-btn-primary"
           type="submit"
-          disabled={saving || !board || !title.trim() || !criteria.trim()}
+          disabled={saving ||
+            !title.trim() ||
+            !criteria.trim() ||
+            (chooseBoard && !board)}
           data-anx-save-shortcut>{saving ? "Creating…" : "Create task"}</button
         ><a
           class="text-meta text-fg-muted hover:text-fg"

@@ -46,13 +46,7 @@ func handleCreateCardGlobal(w http.ResponseWriter, r *http.Request, opts handler
 	addBoardCardFromRaw(w, r, opts, boardID, raw, "cards.create")
 }
 
-func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, r *http.Request, raw map[string]any, opts handlerOptions) (string, bool) {
-	if raw == nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "body is required")
-		return "", false
-	}
-	boardID := strings.TrimSpace(anyString(raw["board_id"]))
-	refRaw := raw["board_ref"]
+func parseBoardRefString(refRaw any) string {
 	refStr := strings.TrimSpace(anyString(refRaw))
 	if refStr == "" && refRaw != nil {
 		if m, ok := refRaw.(map[string]any); ok {
@@ -66,6 +60,23 @@ func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, r *http.Request, r
 			}
 		}
 	}
+	return refStr
+}
+
+func workCreateSpecifiesBoard(raw map[string]any) bool {
+	if raw == nil {
+		return false
+	}
+	return strings.TrimSpace(anyString(raw["board_id"])) != "" || parseBoardRefString(raw["board_ref"]) != ""
+}
+
+func resolveBoardIDForGlobalCardCreate(w http.ResponseWriter, r *http.Request, raw map[string]any, opts handlerOptions) (string, bool) {
+	if raw == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "body is required")
+		return "", false
+	}
+	boardID := strings.TrimSpace(anyString(raw["board_id"]))
+	refStr := parseBoardRefString(raw["board_ref"])
 	if boardID != "" && refStr != "" {
 		resolvedID, idOK := resolveResourceIDForInternalUse(r.Context(), opts, "board", boardID)
 		resolvedRef, err := opts.primitiveStore.ResolveResourceRef(r.Context(), primitives.ResourceRefInput{Type: "board", Ref: refStr})

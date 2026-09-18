@@ -416,7 +416,7 @@ and out-of-order handling; the CLI prints the actual server result without hidin
 and authenticated actor; remote claims cannot grant themselves verified authority.
 The CLI never retries a failed observation write automatically.
 
-`work create --from-file <path|->` registers work using an existing `board_ref`.
+`work create --from-file <path|->` registers work. `board_ref` is optional; when omitted, core uses the workspace's oldest active board, creating a default Tasks board if none exists.
 `work patch <ref> --from-file <path|->` requires the API's `if_version` and `patch`
 object. Read the version with `work get`; external source status/title/owner remain
 source-owned and update through observations. These commands do not mutate the

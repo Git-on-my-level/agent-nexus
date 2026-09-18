@@ -122,9 +122,13 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		}
 	}
 	if path == "" {
-		boardID, ok := resolveBoardIDForGlobalCardCreate(w, r, raw, opts)
-		if !ok {
-			return
+		boardID := ""
+		if workCreateSpecifiesBoard(raw) {
+			var ok bool
+			boardID, ok = resolveBoardIDForGlobalCardCreate(w, r, raw, opts)
+			if !ok {
+				return
+			}
 		}
 		item, err := store.CreateWork(r.Context(), actor, boardID, raw)
 		if err != nil {

@@ -1329,7 +1329,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.create
       x-anx-cli-path: work create
-      x-anx-why: Register a card-backed commitment.
+      x-anx-why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
       x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
@@ -1343,8 +1343,9 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh
-        acceptance is not a successful read.
+      x-anx-agent-notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's
+        oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside
+        attributed observations; refresh acceptance is not a successful read.
       requestBody:
         required: true
         content:
@@ -7518,6 +7519,8 @@ components:
           type: string
         board_ref:
           type: string
+          description: Optional board to place the card on (`board:<handle-or-id>`). When omitted, the server uses the
+            workspace's oldest active board, creating a default Tasks board if none exists.
         title:
           type: string
         summary:
@@ -7543,7 +7546,6 @@ components:
         relations: *id010
         executions: *id011
       required:
-      - board_ref
       - title
     WorkPatchRequest:
       type: object

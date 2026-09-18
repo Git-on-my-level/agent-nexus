@@ -721,14 +721,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
       page.on("dialog", (dialog) => dialog.accept());
       api.hold.boards = deferred();
       await page.goto(`${TASKS}/new`);
-      await expect(page.getByText("Loading workspace boards…")).toBeVisible(
-        firstPaint,
-      );
-      await expectCleanLayout(page, "new task loading boards");
+      await expect(page.getByText("Loading…")).toBeVisible(firstPaint);
+      await expectCleanLayout(page, "new task loading");
 
       api.hold.boards.resolve();
       api.hold = {};
       await expect(page.getByLabel("Outcome")).toBeVisible();
+      await expect(page.getByLabel("Board")).toBeVisible();
       await expectCleanLayout(page, "new task empty form", bothEnds);
 
       await page.getByLabel("Outcome").fill(LONG_TITLE);
@@ -755,8 +754,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
       );
       await expectCleanLayout(page, "new task save failed", bothEnds);
 
-      // With no board at all the form is replaced by an explanation. Empty the
-      // draft first so the unsaved-changes guard does not block the reload.
+      // Zero boards is not a dead end: the form stays, and Board is hidden
+      // because the operator is not choosing among boards.
       api.fail = {};
       api.boards = [];
       for (const field of [
@@ -769,9 +768,11 @@ for (const viewport of AUDIT_VIEWPORTS) {
       ])
         await page.getByLabel(field, { exact: true }).fill("");
       await page.reload();
+      await expect(page.getByLabel("Outcome")).toBeVisible(firstPaint);
+      await expect(page.getByLabel("Board")).toHaveCount(0);
       await expect(
         page.getByText("This workspace has no board yet"),
-      ).toBeVisible(firstPaint);
+      ).toHaveCount(0);
       await expectCleanLayout(page, "new task with no boards", bothEnds);
     });
 

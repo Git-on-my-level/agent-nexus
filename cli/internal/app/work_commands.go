@@ -28,7 +28,7 @@ type workCommandSpec struct {
 var workCommands = map[string]workCommandSpec{
 	"work list":                {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
 	"work get":                 {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
-	"work create":              {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source on an existing board."},
+	"work create":              {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
 	"work patch":               {path: "/work/{id}", method: "PATCH", idFlag: "work-id", body: true, summary: "Update work metadata with if_version; external status remains source-owned."},
 	"work context":             {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Compose work, a bounded observation page and refresh status using read-only requests.", filters: []string{"limit", "cursor"}},
 	"work freshness":           {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Inspect last observed, source activity and meaningful progress independently."},

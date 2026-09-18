@@ -8603,7 +8603,7 @@ export const commandRegistry = [
         "path": "/work",
         "operation_id": "workCreate",
         "summary": "Register a card-backed commitment",
-        "why": "Register a card-backed commitment.",
+        "why": "Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -8621,13 +8621,9 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "canonical",
-        "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+        "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
         "body_schema": {
             "required": [
-                {
-                    "name": "board_ref",
-                    "type": "string"
-                },
                 {
                     "name": "title",
                     "type": "string"
@@ -8641,6 +8637,10 @@ export const commandRegistry = [
                 {
                     "name": "blockers",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "board_ref",
+                    "type": "string"
                 },
                 {
                     "name": "definition_of_done",

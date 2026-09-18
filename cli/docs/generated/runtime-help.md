@@ -141,7 +141,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `pm turns release` (command): Lease owner returns a claimed turn to the queue.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
-- `work create` (command): Register a native commitment or canonical external source on an existing board.
+- `work create` (command): Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 - `work get` (command): Read one work card, source authority, executions and current evidence.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
@@ -1463,7 +1463,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 
   anx work capabilities        Read capabilities actually advertised by the authenticated central API.
   anx work context             Compose work, a bounded observation page and refresh status using read-only requests.
-  anx work create              Register a native commitment or canonical external source on an existing board.
+  anx work create              Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
   anx work freshness           Inspect last observed, source activity and meaningful progress independently.
   anx work get                 Read one work card, source authority, executions and current evidence.
   anx work list                List work cards across sources in the authenticated workspace.
@@ -5007,7 +5007,7 @@ Use --json for one machine-readable envelope.
 
 ## `work create`
 
-Register a native commitment or canonical external source on an existing board.
+Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
 ```text
 Generated Help: work create
@@ -5017,20 +5017,20 @@ Generated Help: work create
 - HTTP: `POST /work`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Register a card-backed commitment.
+- Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
 - Output: Returns `WorkResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
-  - body `board_ref` (string)
   - body `title` (string)
   Optional:
   - body `actor_id` (string)
   - body `blockers` (list<string>)
+  - body `board_ref` (string)
   - body `definition_of_done` (list<string>)
   - body `due_at` (string)
   - body `executions` (list<object>)
@@ -5053,7 +5053,7 @@ Inputs:
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
-Register a native commitment or canonical external source on an existing board.
+Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
 Usage: anx work create --from-file <path|->
 

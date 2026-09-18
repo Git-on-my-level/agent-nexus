@@ -167,9 +167,116 @@ func validateWorkLocal(m map[string]any) error {
 	return nil
 }
 
+const (
+	defaultWorkBoardID    = "workspace-default"
+	defaultWorkBoardTitle = "Tasks"
+)
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "database is locked") || strings.Contains(text, "sqlite_busy")
+}
+
+func sqliteBusyBackoff(attempt int) {
+	d := 5 * time.Millisecond * time.Duration(1<<attempt)
+	if d > 50*time.Millisecond {
+		d = 50 * time.Millisecond
+	}
+	time.Sleep(d)
+}
+
+func (s *Store) oldestActiveBoardID(ctx context.Context) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM boards WHERE archived_at IS NULL AND trashed_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1`).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(id), nil
+}
+
+// ensureDefaultBoard returns an active board for work.create when the caller
+// omitted board_ref. It reuses the oldest active board, or creates a stable
+// "Tasks" board. Concurrent callers collide on the reserved id and converge.
+func (s *Store) ensureDefaultBoard(ctx context.Context, actorID string) (string, error) {
+	var last error
+	for attempt := 0; attempt < 8; attempt++ {
+		id, err := s.oldestActiveBoardID(ctx)
+		if err != nil {
+			if isSQLiteBusy(err) {
+				last = err
+				sqliteBusyBackoff(attempt)
+				continue
+			}
+			return "", err
+		}
+		if id != "" {
+			return id, nil
+		}
+		board, err := s.CreateBoard(ctx, actorID, map[string]any{
+			"id":    defaultWorkBoardID,
+			"title": defaultWorkBoardTitle,
+		})
+		if err == nil {
+			return workString(board["id"]), nil
+		}
+		last = err
+		if errors.Is(err, ErrConflict) {
+			id, err := s.oldestActiveBoardID(ctx)
+			if err != nil {
+				if isSQLiteBusy(err) {
+					sqliteBusyBackoff(attempt)
+					continue
+				}
+				return "", err
+			}
+			if id != "" {
+				return id, nil
+			}
+			board, err = s.CreateBoard(ctx, actorID, map[string]any{"title": defaultWorkBoardTitle})
+			if err == nil {
+				return workString(board["id"]), nil
+			}
+			last = err
+			if isSQLiteBusy(err) || errors.Is(err, ErrConflict) {
+				sqliteBusyBackoff(attempt)
+				continue
+			}
+			return "", err
+		}
+		if isSQLiteBusy(err) {
+			sqliteBusyBackoff(attempt)
+			continue
+		}
+		return "", err
+	}
+	if id, err := s.oldestActiveBoardID(ctx); err != nil {
+		return "", err
+	} else if id != "" {
+		return id, nil
+	}
+	if last != nil {
+		return "", last
+	}
+	return "", workInvalid("could not resolve a board for work.create")
+}
+
 func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input map[string]any) (map[string]any, error) {
 	if strings.TrimSpace(actorID) == "" {
 		return nil, workInvalid("actor required")
+	}
+	boardID = strings.TrimSpace(boardID)
+	if boardID == "" {
+		resolved, err := s.ensureDefaultBoard(ctx, actorID)
+		if err != nil {
+			return nil, err
+		}
+		boardID = resolved
 	}
 	m := workClone(input)
 	delete(m, "actor_id")
@@ -237,14 +344,26 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	if owner != "" && authority == "nexus" {
 		assignee = &owner
 	}
-	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
-	if err != nil {
+	var result BoardCardMutationResult
+	var err error
+	for attempt := 0; attempt < 8; attempt++ {
+		result, err = s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column, DefinitionOfDone: dod, Assignee: assignee, WorkMetadata: m})
+		if err == nil {
+			break
+		}
+		if isSQLiteBusy(err) {
+			sqliteBusyBackoff(attempt)
+			continue
+		}
 		if authority != "nexus" {
-			var id string
-			if lookupErr := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&id); lookupErr == nil {
-				return s.GetWork(ctx, id)
+			var existing string
+			if lookupErr := s.db.QueryRowContext(ctx, `SELECT card_id FROM work_metadata WHERE authority=? AND connection_id=? AND native_id=?`, authority, workString(source["connection_id"]), workString(source["native_id"])).Scan(&existing); lookupErr == nil {
+				return s.GetWork(ctx, existing)
 			}
 		}
+		return nil, err
+	}
+	if err != nil {
 		return nil, err
 	}
 	return s.GetWork(ctx, workString(result.Card["id"]))

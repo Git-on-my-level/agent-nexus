@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -24,6 +25,17 @@ func newWorkTestStore(t *testing.T) (*primitives.Store, string) {
 	}
 	return s, b["id"].(string)
 }
+
+func newEmptyWorkTestStore(t *testing.T) *primitives.Store {
+	t.Helper()
+	ws, err := storage.InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ws.Close() })
+	return primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+}
+
 func registerWork(t *testing.T, s *primitives.Store, b string) map[string]any {
 	t.Helper()
 	w, err := s.CreateWork(context.Background(), "actor-1", b, map[string]any{"title": "Ship release", "source": map[string]any{"authority": "github", "connection_id": "test", "native_id": "org/repo/issues/1"}})
@@ -303,5 +315,96 @@ func TestBoardMoveBindsAndAdvancesWorkRevision(t *testing.T) {
 	after, err := s.GetWork(ctx, id)
 	if err != nil || after["version"] != version || after["phase"] != "ready" {
 		t.Fatalf("rejected move mutated work %v %v", after, err)
+	}
+}
+
+func TestCreateWorkWithoutBoardRefCreatesDefaultBoard(t *testing.T) {
+	s := newEmptyWorkTestStore(t)
+	ctx := context.Background()
+	boards, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
+	if err != nil || len(boards) != 0 {
+		t.Fatalf("expected empty workspace, got %d boards err=%v", len(boards), err)
+	}
+	w, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "First task", "source": map[string]any{"authority": "nexus"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	boardID := fmt.Sprint(w["board_id"])
+	if boardID == "" || boardID == "<nil>" {
+		t.Fatalf("created work has no board_id: %#v", w)
+	}
+	if fmt.Sprint(w["board_ref"]) == "" {
+		t.Fatalf("created work has no board_ref: %#v", w)
+	}
+	listed, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("expected one default board, got %d err=%v", len(listed), err)
+	}
+	card, err := s.GetBoardCard(ctx, boardID, fmt.Sprint(w["id"]))
+	if err != nil || fmt.Sprint(card["title"]) != "First task" {
+		t.Fatalf("card did not land on a usable board: %v %v", card, err)
+	}
+	again, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "Second task", "source": map[string]any{"authority": "nexus"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(again["board_id"]) != boardID {
+		t.Fatalf("second create used a different board: %v vs %v", again["board_id"], boardID)
+	}
+}
+
+func TestCreateWorkWithoutBoardRefReusesExistingBoard(t *testing.T) {
+	s, existing := newWorkTestStore(t)
+	ctx := context.Background()
+	w, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": "On existing board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(w["board_id"]) != existing {
+		t.Fatalf("expected existing board %q, got %v", existing, w["board_id"])
+	}
+	listed, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("must not create a second board: %d err=%v", len(listed), err)
+	}
+}
+
+func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
+	s := newEmptyWorkTestStore(t)
+	ctx := context.Background()
+	const n = 12
+	type result struct {
+		boardID string
+		err     error
+	}
+	results := make(chan result, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			w, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": fmt.Sprintf("Concurrent %d", i), "source": map[string]any{"authority": "nexus"}})
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			results <- result{boardID: fmt.Sprint(w["board_id"])}
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+	boardIDs := map[string]struct{}{}
+	for r := range results {
+		if r.err != nil {
+			t.Fatal(r.err)
+		}
+		boardIDs[r.boardID] = struct{}{}
+	}
+	if len(boardIDs) != 1 {
+		t.Fatalf("concurrent creates split across boards: %v", boardIDs)
+	}
+	listed, _, err := s.ListBoards(ctx, primitives.BoardListFilter{})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("expected one board after concurrent creates, got %d err=%v", len(listed), err)
 	}
 }
