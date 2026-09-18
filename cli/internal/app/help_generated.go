@@ -759,7 +759,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "threads inspect",
 		Summary:     "Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`",
-		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for primary operator coordination when you have a topic id.",
+		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for agent-facing topic context when you have a topic id. The operator work projection is `work.list` / `work.get`.",
 		Examples: []string{
 			"anx threads inspect --thread-id <thread-id>",
 			"anx threads inspect --state active --full-id",
@@ -776,7 +776,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "threads workspace",
 		Summary:     "Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.",
 		JSONShape:   "`thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`",
-		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for normal operator coordination.",
+		Composition: "Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for agent-facing topic context. The operator work projection is `work.list` / `work.get`.",
 		Examples: []string{
 			"anx threads workspace --thread-id <thread-id> --full-id",
 			"anx threads workspace --state active",
@@ -1371,14 +1371,14 @@ func formatGeneratedGroupHelp(topic string, commands []registry.Command) string 
 func localGroupHelpSupplement(topic string) string {
 	switch strings.TrimSpace(topic) {
 	case "topics":
-		return strings.TrimSpace(`Primary operator coordination:
+		return strings.TrimSpace(`Agent-facing topic surface:
   topics create           Create a topic from plain flags or advanced JSON.
   topics message          Post a topic conversation message.
   topics messages         List topic conversation messages.
   topics reply            Reply to a specific topic message.
   topics workspace        Load the topic workspace (cards, docs, backing threads, inbox).
   topics list / topics get   Discover and resolve topic ids (` + "`--state`" + `, ` + "`--q`" + `, pagination, archive/trash visibility flags).
-	  Tip: use Topics for discussion/current context; use Boards for active work and Docs for durable knowledge. Start triage with ` + "`anx topics workspace topic:<handle>`" + `.`)
+	  Tip: Topics are an agent-facing discussion/context primitive. The operator work projection is ` + "`work.list`" + ` / ` + "`work.get`" + `. Use Boards for active work and Docs for durable knowledge.`)
 	case "threads":
 		return strings.TrimSpace(`Read-only backing-thread diagnostics and direct thread messages:
   threads message         Post directly to a backing thread; prefer domain commands like ` + "`anx cards message`" + ` or ` + "`anx topics message`" + `.
@@ -1386,7 +1386,7 @@ func localGroupHelpSupplement(topic string) string {
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-	  Tip: prefer domain commands like ` + "`anx cards message card:<handle>`" + ` for normal authoring and ` + "`anx topics workspace topic:<handle>`" + ` for primary coordination reads. Use ` + "`anx threads workspace --full-id`" + ` (debug/admin) when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
+	  Tip: prefer domain commands like ` + "`anx cards message card:<handle>`" + ` for normal authoring and ` + "`anx topics workspace topic:<handle>`" + ` for agent-facing topic context. Use ` + "`anx threads workspace --full-id`" + ` (debug/admin) when you need the backing-thread projection with full ids in default text; use ` + "`--state active`" + ` to discover backing threads by lifecycle state. For a minimal ` + "`{thread}`" + ` read, use ` + "`anx threads get`" + ` (contract: ` + "`threads.inspect`" + `).`)
 	case "events":
 		return strings.TrimSpace(`Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -1995,7 +1995,7 @@ This CLI is for agent principals. After registration, use ANX as the default dur
 
 Default behavior after onboarding
 
-- Start non-trivial work with ` + "`anx workspace summary`" + ` and inspect likely related Topics, Cards, Docs, Inbox items, and notifications.
+- Start non-trivial work with ` + "`anx workspace summary`" + ` and inspect likely related Topics, Cards, Docs, and notifications (` + "`anx notifications`" + `). Inbox is the operator attention queue.
 - Use Topics for current work conversation and coordination.
 - Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
 - Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
@@ -2012,7 +2012,7 @@ First commands to run
   anx --agent <agent> auth whoami
   anx --agent <agent> workspace summary
   anx --agent <agent> topics list
-  anx --agent <agent> inbox stream --max-events 1
+  anx --agent <agent> notifications list --status unread
   anx install skill --path ./SKILL.md
 
 Next step
@@ -2028,6 +2028,8 @@ func mapRuntimePathToRegistryPath(path string) string {
 		return ""
 	}
 	path = strings.Join(parts, " ")
+	// Live CLI paths that differ from OpenAPI x-anx-cli-path. This is not a
+	// compatibility table for deleted commands.
 	rewrites := map[string]string{
 		"pm conversations message": "pm conversations messages create",
 		"pm turns propose":         "pm turns decisions create",
@@ -2035,7 +2037,6 @@ func mapRuntimePathToRegistryPath(path string) string {
 		"inbox tail":               "inbox stream",
 		"threads get":              "threads inspect",
 		"artifacts get":            "artifacts inspect",
-		"artifacts content get":    "artifacts content",
 		"artifacts download":       "artifacts content",
 		"secret get":               "secret get --reveal",
 		"meta commands":            "meta commands list",

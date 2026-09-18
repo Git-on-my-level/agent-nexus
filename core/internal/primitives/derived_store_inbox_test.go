@@ -4,6 +4,23 @@ import (
 	"testing"
 )
 
+func TestDerivedInboxCategoryOrderRanksHumanAttentionKinds(t *testing.T) {
+	t.Parallel()
+
+	if got := derivedInboxCategoryOrder("escalate"); got != 0 {
+		t.Fatalf("escalate order=%d want 0", got)
+	}
+	if got := derivedInboxCategoryOrder("ask"); got != 1 {
+		t.Fatalf("ask order=%d want 1", got)
+	}
+	if got := derivedInboxCategoryOrder("review"); got != 2 {
+		t.Fatalf("review order=%d want 2", got)
+	}
+	if got := derivedInboxCategoryOrder("risk_exception"); got != 99 {
+		t.Fatalf("dead risk_exception category should sort last, got %d", got)
+	}
+}
+
 func TestStripInboxDataForStoreOmitsColumnMirrors(t *testing.T) {
 	t.Parallel()
 

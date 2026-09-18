@@ -268,12 +268,6 @@ func formatInboxList(body any) string {
 	lines = appendScalar(lines, "total_items", root, "total_items")
 	lines = appendScalar(lines, "returned_items", root, "returned_items")
 	lines = appendStringList(lines, "types", stringList(root["types"]))
-	if root["category_reference"] != nil {
-		lines = append(lines, "category_reference:")
-		for _, entry := range inboxCategoryReference {
-			lines = append(lines, "- "+entry.Name+": "+entry.Description)
-		}
-	}
 	lines = appendInboxListSection(lines, "items", asSlice(root["items"]), asBool(root["full_id"]))
 	return strings.Join(lines, "\n")
 }

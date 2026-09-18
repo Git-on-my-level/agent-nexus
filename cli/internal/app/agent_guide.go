@@ -38,7 +38,7 @@ func agentGuideSections() []guideSection {
 		{
 			Title: "Default tracking loop",
 			Lines: []string{
-				"1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, Inbox items, and notifications.",
+				"1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, and `anx notifications`. Inbox is the operator human-attention queue; agents do not read or manage it.",
 				"2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.",
 				"3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.",
 				"4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.",
@@ -51,10 +51,11 @@ func agentGuideSections() []guideSection {
 			Title: "Core model",
 			Lines: []string{
 				"- `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.",
-				"- `topics`: the primary durable work subjects. Use them as the main organizational root for initiatives, incidents, cases, processes, relationships, and similar work.",
+				"- `topics`: agent-facing discussion and context primitives. Use them as the organizational root for initiatives, incidents, cases, processes, relationships, and similar work. The operator work projection is `anx work list` / `anx work get`.",
 				"- `cards`: the primary work items. Use `anx cards ...` for card creation, list/get, messages, assignment, workflow movement, revisions, resolution, reopen, and lifecycle.",
 				"- `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.",
-				"- `inbox`: work intake and notifications. Use to see what needs attention and ack handled items.",
+				"- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`.",
+				"- `work`: operator Tasks projection over cards. Read it with `anx work list` / `anx work get` when you need to know what operators see.",
 				"- `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.",
 				"- `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.",
 				"- `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.",
@@ -63,7 +64,7 @@ func agentGuideSections() []guideSection {
 				"",
 				"Heuristic:",
 				"- Use `events` for facts.",
-				"- Use `topics` for ongoing work, ownership, current conversation, and operator coordination.",
+				"- Use `topics` for ongoing work conversation, ownership, and agent-facing context. Do not treat Topics as the operator Tasks surface.",
 				"- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence.",
 				"- Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.",
 				"- Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.",
@@ -102,7 +103,7 @@ func agentGuideSections() []guideSection {
 				"4. Make the smallest valid mutation.",
 				"5. Verify via read commands, timeline, stream, or resulting state.",
 				"",
-				"For interrupt-driven work, a common loop is: `inbox` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify -> ack inbox item. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.",
+				"For interrupt-driven work, a common loop is: `anx notifications` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.",
 			},
 		},
 		{

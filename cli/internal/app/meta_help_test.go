@@ -166,8 +166,8 @@ func TestRunGeneratedTopicsHelpMentionsPrimaryCoordination(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "Primary operator coordination:") {
-		t.Fatalf("expected primary coordination supplement in topics group help output=%s", output)
+	if !strings.Contains(output, "Agent-facing topic surface:") {
+		t.Fatalf("expected topics group supplement in topics group help output=%s", output)
 	}
 	if !strings.Contains(output, "topics workspace") {
 		t.Fatalf("expected topics workspace in topics group help output=%s", output)
@@ -294,8 +294,8 @@ func TestConceptsCommandAndHelpTopic(t *testing.T) {
 	if !strings.Contains(commandOutput, "ANX concepts guide") {
 		t.Fatalf("expected concepts guide heading output=%s", commandOutput)
 	}
-	if !strings.Contains(commandOutput, "threads") || !strings.Contains(commandOutput, "docs") || !strings.Contains(commandOutput, "boards") {
-		t.Fatalf("expected core primitives in concepts guide output=%s", commandOutput)
+	if !strings.Contains(commandOutput, "threads") || !strings.Contains(commandOutput, "docs") || !strings.Contains(commandOutput, "boards") || !strings.Contains(commandOutput, "work") {
+		t.Fatalf("expected core primitives including work in concepts guide output=%s", commandOutput)
 	}
 
 	helpOutput := runHelpCommand(t, "help", "concepts")

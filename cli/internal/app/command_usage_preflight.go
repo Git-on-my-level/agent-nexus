@@ -587,17 +587,9 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"notify-mode":   valueFlag,
 			"actor-id":      valueFlag,
 		},
-		// Compatibility target flags stay accepted even though help teaches positional targets.
-		"topics message": {"topic": valueFlag, "topic-id": valueFlag},
-		"topics messages": merge(map[string]preflightFlagSpec{
-			"topic":    valueFlag,
-			"topic-id": valueFlag,
-		}, lifecycle),
-		"topics reply":  {"topic": valueFlag, "topic-id": valueFlag},
-		"docs content":  {"document-id": valueFlag},
-		"docs message":  {"document-id": valueFlag},
-		"docs messages": {"document-id": valueFlag},
-		"docs reply":    {"document-id": valueFlag},
+		"topics messages": lifecycle,
+		"docs messages":   lifecycle,
+		"cards messages":  lifecycle,
 		"docs search": {
 			"q":         valueFlag,
 			"tag":       valueFlag,
@@ -665,9 +657,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"apply":       boolFlag,
 			"propose":     boolFlag,
 		},
-		"cards message":  {"card-id": valueFlag},
-		"cards messages": {"card-id": valueFlag},
-		"cards reply":    {"card-id": valueFlag},
 		"cards create": {
 			"board":               valueFlag,
 			"board-id":            valueFlag,
