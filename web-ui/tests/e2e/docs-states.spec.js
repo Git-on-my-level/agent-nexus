@@ -819,6 +819,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       const api = await installDocsApi(page);
       await page.goto(`${DOCS_PATH}/doc-billing-runbook`);
       await expect(page.getByText(/This document was archived/)).toBeVisible();
+      // No "on" before the timestamp: formatTimestamp is relative under 7 days
+      // ("3h ago") and absolute beyond, so "archived on <stamp>" read wrong for
+      // recent archives. See archived-copy-states.spec.js.
+      await expect(page.getByText(/was archived on /)).toHaveCount(0);
       await expectCleanLayout(page, "archived banner", bothEnds);
 
       await page.getByRole("button", { name: "Unarchive" }).click();

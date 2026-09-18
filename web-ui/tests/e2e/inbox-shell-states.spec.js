@@ -826,6 +826,77 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByText(`Runbook ${LONG_HASH}`)).toBeVisible();
       await expectCleanLayout(page, "palette results");
 
+      // A task title far wider than any viewport must end in an ellipsis and
+      // must not push the trailing "Task" badge out of the row.
+      api.work = [
+        {
+          ...WORK[0],
+          id: "card-overlong",
+          ref: "card:card-overlong",
+          handle: "card-overlong",
+          title: `Overlong ${LONG_HASH}${LONG_HASH}${LONG_HASH} trailing words that must not survive`,
+        },
+      ];
+      await page.getByRole("combobox").fill(`${LONG_HASH} overlong`);
+      await expect(page.getByText(/^Overlong 1fb951be/)).toBeVisible();
+      await expectCleanLayout(page, "palette overlong task title");
+
+      const rowGeometry = await page.evaluate(() => {
+        const row = document.querySelector(".cmd-result-row");
+        const title = row.querySelector(".cmd-result-title");
+        const badge = row.querySelector(".cmd-result-badge");
+        const titleStyle = getComputedStyle(title);
+        return {
+          textOverflow: titleStyle.textOverflow,
+          whiteSpace: titleStyle.whiteSpace,
+          truncated: title.scrollWidth > title.clientWidth,
+          titleWidth: title.clientWidth,
+          badgeWidth: badge.getBoundingClientRect().width,
+          badgeRight: badge.getBoundingClientRect().right,
+          rowRight: row.getBoundingClientRect().right,
+        };
+      });
+      // Truncation, not a mid-glyph cut: nowrap + ellipsis, overflowing text.
+      expect(rowGeometry.textOverflow).toBe("ellipsis");
+      expect(rowGeometry.whiteSpace).toBe("nowrap");
+      expect(rowGeometry.truncated).toBe(true);
+      // The title yields space instead of eating the row: the badge stays
+      // whole and inside the row, and the title keeps a readable width.
+      expect(rowGeometry.badgeWidth).toBeGreaterThan(20);
+      expect(rowGeometry.badgeRight).toBeLessThanOrEqual(
+        rowGeometry.rowRight + 1,
+      );
+      expect(rowGeometry.titleWidth).toBeGreaterThan(100);
+      await expect(page.getByText("Task", { exact: true })).toBeVisible();
+
+      // The dialog traps Tab: the input is its only tabbable control, so Tab
+      // and Shift+Tab must both leave focus inside it.
+      const focusReport = () =>
+        page.evaluate(() => {
+          const dialog = document.querySelector(
+            '[aria-label="Command palette"]',
+          );
+          const active = document.activeElement;
+          return {
+            insideDialog: Boolean(dialog && active && dialog.contains(active)),
+            isCombobox: active?.getAttribute("role") === "combobox",
+          };
+        });
+      expect(await focusReport()).toEqual({
+        insideDialog: true,
+        isCombobox: true,
+      });
+      await page.keyboard.press("Tab");
+      expect(await focusReport()).toEqual({
+        insideDialog: true,
+        isCombobox: true,
+      });
+      await page.keyboard.press("Shift+Tab");
+      expect(await focusReport()).toEqual({
+        insideDialog: true,
+        isCombobox: true,
+      });
+
       api.documents = [];
       api.work = [];
       await page.getByRole("combobox").fill("zzz-nothing-matches");
@@ -833,6 +904,10 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "palette empty results");
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
+      // Closing hands the keyboard back to the control that opened it.
+      await expect(
+        page.getByRole("button", { name: "Search workspace" }),
+      ).toBeFocused();
     });
 
     test("first-run onboarding tour", async ({ page }) => {
@@ -972,6 +1047,32 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByRole("button", { name: "Send response" }).click();
       await expect(page.getByRole("alert")).toBeVisible();
       await expectCleanLayout(page, "item route submit failed", bothEnds);
+    });
+
+    // The route's own header renders the subject, the requester and the ref
+    // chips. Inbox subjects are copied from the asking agent, so a 64-char
+    // correlation id lands in the title with nothing to wrap on; the same
+    // shape already broke the docs detail crumb row.
+    test("standalone inbox item: unbreakable title and requester", async ({
+      page,
+    }) => {
+      await installWorkspaceApi(page);
+      await page.goto(`${WS}/inbox/inbox-long-ask`);
+      await expect(page.getByRole("heading", { name: LONG_TITLE })).toBeVisible(
+        FIRST_PAINT,
+      );
+      await expectCleanLayout(page, "item route long title", bothEnds);
+
+      // The proposal buttons carry the same unbroken hash.
+      await page
+        .getByRole("button", { name: new RegExp(LONG_HASH.slice(0, 24)) })
+        .first()
+        .click();
+      await expectCleanLayout(
+        page,
+        "item route long proposal applied",
+        bothEnds,
+      );
     });
 
     test("standalone inbox item: completed and not found", async ({ page }) => {

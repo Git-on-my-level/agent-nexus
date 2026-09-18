@@ -1335,11 +1335,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
         },
       });
       await page.goto("/hosted/admin/organizations");
-      await expect(
-        page.getByRole("link", { name: LONG_NAME, exact: true }),
-      ).toBeVisible();
+      const opener = page.getByRole("link", { name: LONG_NAME, exact: true });
+      await expect(opener).toBeVisible();
 
       const palette = page.getByPlaceholder("Jump to org, workspace, account…");
+      // Open from a focused control so closing has somewhere to hand focus back to.
+      await opener.focus();
       await page.keyboard.press("Control+k");
       await expect(palette).toBeVisible();
       await expectCleanLayout(page, "palette static links", bothEnds);
@@ -1356,6 +1357,73 @@ for (const viewport of AUDIT_VIEWPORTS) {
       ).toBeVisible();
       await expectCleanLayout(page, "palette results", bothEnds);
 
+      // The 58-char org name must end in an ellipsis without collapsing to
+      // zero width or shoving the trailing hint out of the row.
+      const rowGeometry = await page.evaluate(() => {
+        const row = document.querySelector('[role="dialog"] li button');
+        const [label, hint] = row.querySelectorAll("span");
+        const labelStyle = getComputedStyle(label);
+        const hintStyle = getComputedStyle(hint);
+        return {
+          labelTextOverflow: labelStyle.textOverflow,
+          labelWhiteSpace: labelStyle.whiteSpace,
+          labelTruncated: label.scrollWidth > label.clientWidth,
+          labelWidth: label.clientWidth,
+          hintTextOverflow: hintStyle.textOverflow,
+          hintWidth: hint.getBoundingClientRect().width,
+          hintRight: hint.getBoundingClientRect().right,
+          rowRight: row.getBoundingClientRect().right,
+        };
+      });
+      expect(rowGeometry.labelTextOverflow).toBe("ellipsis");
+      expect(rowGeometry.labelWhiteSpace).toBe("nowrap");
+      expect(rowGeometry.labelTruncated).toBe(true);
+      expect(rowGeometry.labelWidth).toBeGreaterThan(100);
+      expect(rowGeometry.hintTextOverflow).toBe("ellipsis");
+      expect(rowGeometry.hintWidth).toBeGreaterThan(20);
+      expect(rowGeometry.hintRight).toBeLessThanOrEqual(
+        rowGeometry.rowRight + 1,
+      );
+
+      // Focus trap: Tab and Shift+Tab cycle inside the dialog, never onto the
+      // organizations table behind it.
+      const focusReport = () =>
+        page.evaluate(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const active = document.activeElement;
+          const tabbable = dialog
+            ? Array.from(dialog.querySelectorAll("input, button")).filter(
+                (el) => !el.disabled,
+              )
+            : [];
+          return {
+            insideDialog: Boolean(dialog && active && dialog.contains(active)),
+            ariaModal: dialog?.getAttribute("aria-modal") ?? null,
+            index: tabbable.indexOf(active),
+            count: tabbable.length,
+          };
+        });
+      const opened = await focusReport();
+      expect(opened.ariaModal).toBe("true");
+      expect(opened.insideDialog).toBe(true);
+      expect(opened.index).toBe(0);
+      expect(opened.count).toBeGreaterThan(1);
+
+      await page.keyboard.press("Tab");
+      expect((await focusReport()).index).toBe(1);
+      // Wrap forward from the last control back to the first.
+      for (let i = 1; i < opened.count; i += 1) {
+        await page.keyboard.press("Tab");
+      }
+      const wrapped = await focusReport();
+      expect(wrapped.insideDialog).toBe(true);
+      expect(wrapped.index).toBe(0);
+      // And backwards from the first control to the last.
+      await page.keyboard.press("Shift+Tab");
+      const back = await focusReport();
+      expect(back.insideDialog).toBe(true);
+      expect(back.index).toBe(back.count - 1);
+
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("ArrowDown");
       await expectCleanLayout(page, "palette keyboard selection");
@@ -1367,6 +1435,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
+      // Closing restores focus to whatever held it before the palette opened.
+      await expect(opener).toBeFocused();
       await expectCleanLayout(page, "palette closed");
 
       // Palette over a long, scrolled page.

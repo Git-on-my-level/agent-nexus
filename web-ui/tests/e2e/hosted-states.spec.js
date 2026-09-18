@@ -521,6 +521,21 @@ async function waitForHydration(page) {
     .catch(() => {});
 }
 
+/**
+ * Collects native `alert`/`confirm`/`prompt` dialogs instead of letting
+ * Playwright auto-dismiss them, so a regression back to `window.confirm()`
+ * shows up as a failed assertion rather than as a silently skipped action.
+ */
+function recordNativeDialogs(page) {
+  /** @type {string[]} */
+  const seen = [];
+  page.on("dialog", (dialog) => {
+    seen.push(dialog.message());
+    void dialog.dismiss();
+  });
+  return seen;
+}
+
 async function gotoHosted(page, path) {
   await page.goto(path);
   await waitForHydration(page);
@@ -774,7 +789,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
     test("team page: member view, invites and role changes", async ({
       page,
     }) => {
-      page.on("dialog", (dialog) => dialog.accept());
+      // Destructive actions here go through ConfirmModal, never `confirm()`.
+      const nativeDialogs = recordNativeDialogs(page);
       const api = await installHostedApi(page);
       api.hold.memberships = deferred();
       await gotoHosted(page, `/hosted/organizations/${PRIMARY_ORG_ID}/team`);
@@ -818,14 +834,133 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "team role changed", bothEnds);
 
       api.fail.updateMembership = { message: LONG_ERROR };
+
+      // A failed role change must not be painted in the success banner.
+      await adminRow.getByRole("combobox").selectOption("member");
+      const actionBanner = page.getByTestId("team-action-message");
+      await expect(actionBanner).toHaveAttribute("data-tone", "danger");
+      await expect(actionBanner).toHaveRole("alert");
+      await expect(actionBanner).toContainText(LONG_ERROR);
+      await expectCleanLayout(page, "team role change failed", bothEnds);
+
       await adminRow.getByRole("button", { name: "Remove" }).click();
-      await expect(page.getByRole("status")).toBeVisible();
+      const removeModal = page.getByRole("dialog", { name: "Remove member" });
+      await expect(removeModal).toBeVisible();
+      await removeModal.getByRole("button", { name: "Remove member" }).click();
+      await expect(removeModal.getByRole("alert")).toBeVisible();
       await expectCleanLayout(page, "team remove failed", bothEnds);
+      await page.keyboard.press("Escape");
+      await expect(removeModal).toHaveCount(0);
 
       api.fail.revokeInvite = { message: LONG_ERROR };
       await page.getByRole("button", { name: "Revoke" }).first().click();
-      await expect(page.getByRole("status")).toBeVisible();
+      const revokeModal = page.getByRole("dialog", {
+        name: "Revoke invitation",
+      });
+      await expect(revokeModal).toBeVisible();
+      await revokeModal.getByRole("button", { name: "Revoke invite" }).click();
+      await expect(revokeModal.getByRole("alert")).toBeVisible();
       await expectCleanLayout(page, "team revoke failed", bothEnds);
+      expect(nativeDialogs).toEqual([]);
+    });
+
+    test("team page: remove and revoke confirmations", async ({ page }) => {
+      // A surviving `confirm()` would auto-dismiss and silently skip the
+      // action, so record every native dialog and assert none appeared.
+      const nativeDialogs = recordNativeDialogs(page);
+      const LONG_INVITE_ID = `oinv_${"a1b2c3d4".repeat(9)}`;
+      const api = await installHostedApi(page, {
+        invites: [
+          {
+            id: LONG_INVITE_ID,
+            email: `pending.${LONG_EMAIL}`,
+            role: "member",
+            status: "pending",
+          },
+        ],
+      });
+      await gotoHosted(page, `/hosted/organizations/${PRIMARY_ORG_ID}/team`);
+      await expect(page.getByRole("heading", { name: "Members" })).toBeVisible(
+        firstPaint,
+      );
+
+      const memberRow = page
+        .getByRole("listitem")
+        .filter({ hasText: LONG_UNBROKEN_NAME });
+      const removeModal = page.getByRole("dialog", { name: "Remove member" });
+
+      // Cancel leaves the member alone: no request, row unchanged.
+      await memberRow.getByRole("button", { name: "Remove" }).click();
+      await expect(removeModal).toBeVisible();
+      await expect(
+        removeModal.getByText(`admin.${LONG_EMAIL}`, { exact: false }),
+      ).toBeVisible();
+      await expectCleanLayout(page, "team remove confirm (long email)");
+      await removeModal.getByRole("button", { name: "Keep" }).click();
+      await expect(removeModal).toHaveCount(0);
+      expect(api.calls).not.toContain("updateMembership");
+      await expect(memberRow).toHaveCount(1);
+
+      // A member with neither name nor email: the modal falls back to the id.
+      const idOnlyRow = page
+        .getByRole("listitem")
+        .filter({ hasText: "acct_0123456789abcdef" });
+      await idOnlyRow.getByRole("button", { name: "Remove" }).click();
+      await expect(removeModal).toBeVisible();
+      await expectCleanLayout(page, "team remove confirm (long account id)");
+      await page.keyboard.press("Escape");
+      await expect(removeModal).toHaveCount(0);
+
+      // In-flight: the confirm button swaps to its busy label and disables.
+      api.hold.updateMembership = deferred();
+      await memberRow.getByRole("button", { name: "Remove" }).click();
+      await removeModal.getByRole("button", { name: "Remove member" }).click();
+      const removingButton = removeModal.getByRole("button", {
+        name: "Removing…",
+      });
+      await expect(removingButton).toBeVisible();
+      await expect(removingButton).toBeDisabled();
+      await expect(
+        removeModal.getByRole("button", { name: "Keep" }),
+      ).toBeDisabled();
+      await expectCleanLayout(page, "team remove in flight");
+
+      api.hold.updateMembership.resolve();
+      api.hold = {};
+      await expect(removeModal).toHaveCount(0);
+      await expect(memberRow.getByText("Status: Removed")).toBeVisible();
+      await expectCleanLayout(page, "team member removed", bothEnds);
+
+      // Revoke: confirm, fail, read the error in the modal, then retry clean.
+      const revokeModal = page.getByRole("dialog", {
+        name: "Revoke invitation",
+      });
+      await page.getByRole("button", { name: "Revoke" }).first().click();
+      await expect(revokeModal).toBeVisible();
+      await expect(revokeModal.getByText(LONG_INVITE_ID)).toBeVisible();
+      await expectCleanLayout(page, "team revoke confirm (long invite id)");
+
+      await revokeModal.getByRole("button", { name: "Keep" }).click();
+      await expect(revokeModal).toHaveCount(0);
+      expect(api.calls).not.toContain("revokeInvite");
+
+      api.fail.revokeInvite = { message: LONG_ERROR };
+      await page.getByRole("button", { name: "Revoke" }).first().click();
+      await revokeModal.getByRole("button", { name: "Revoke invite" }).click();
+      await expect(revokeModal.getByRole("alert")).toContainText(
+        /control plane rejected/,
+      );
+      await expect(revokeModal).toBeVisible();
+      await expectCleanLayout(page, "team revoke error in modal", bothEnds);
+
+      api.fail = {};
+      await revokeModal.getByRole("button", { name: "Revoke invite" }).click();
+      await expect(revokeModal).toHaveCount(0);
+      await expect(
+        page.getByRole("heading", { name: "Pending invites" }),
+      ).toHaveCount(0);
+      await expectCleanLayout(page, "team invite revoked", bothEnds);
+      expect(nativeDialogs).toEqual([]);
     });
 
     test("team page without manage rights and empty members", async ({

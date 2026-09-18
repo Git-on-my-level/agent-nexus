@@ -157,11 +157,13 @@
           {formatDateTime(organization.updated_at)} updated
         </div>
       </div>
-      <div class="rounded-md border border-line bg-bg-soft p-4">
+      <!-- min-w-0: the access-mode pill's label is arbitrary, and a grid item's
+           automatic minimum size would otherwise inflate this card to fit it. -->
+      <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
         <div class="text-micro uppercase tracking-wide text-fg-subtle">
           State
         </div>
-        <div class="mt-2 flex flex-wrap gap-1">
+        <div class="mt-2 flex min-w-0 flex-wrap gap-1">
           <StatusPill status={organization.status} />
           <StatusPill
             status={organization.access_mode}
@@ -304,14 +306,19 @@
 {/snippet}
 
 {#snippet JobList(title, jobs)}
-  <div class="rounded-md border border-line bg-bg-soft p-4">
+  <!-- min-w-0: a grid item's automatic minimum size is its min-content width,
+       so without it this card inflates to its widest row and scrolls the page. -->
+  <div class="min-w-0 rounded-md border border-line bg-bg-soft p-4">
     <h2 class="text-heading text-fg">{title}</h2>
     {#if jobs?.length}
       <ul class="mt-3 divide-y divide-line">
         {#each jobs.slice(0, 8) as job (job.id)}
           <li class="py-2 text-micro">
-            <div class="flex justify-between gap-3">
-              <span class="text-fg"
+            <div class="flex min-w-0 justify-between gap-3">
+              <!-- min-w-0 + truncate: a flex item's automatic minimum size is
+                   its content width, so without this the job name refuses to
+                   shrink and pushes the status pill out of the row. -->
+              <span class="min-w-0 truncate text-fg"
                 >{formatListValue(job.kind || job.schedule_name)}</span
               ><StatusPill status={job.status} />
             </div>

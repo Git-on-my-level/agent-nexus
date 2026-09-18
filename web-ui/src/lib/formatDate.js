@@ -19,6 +19,12 @@ export function formatAbsoluteDateTime(isoString) {
 /**
  * Format an ISO 8601 timestamp as a human-readable relative or absolute date.
  * Returns "" for null/undefined inputs; returns the raw value if not parseable.
+ *
+ * The return value switches form: relative under 7 days ("just now", "3h ago"),
+ * absolute beyond it ("Mar 5, 2026"). Callers must NOT prefix it with "on" or
+ * "at" — that reads as "archived on 3h ago". Word the sentence so both forms
+ * work ("archived 3h ago" / "archived Mar 5, 2026"), and pair it with
+ * `formatAbsoluteDateTime` in a `title` when the exact instant matters.
  */
 export function formatTimestamp(isoString) {
   if (!isoString) return "";

@@ -1,5 +1,6 @@
 <script>
   import { goto } from "$app/navigation";
+  import { focusTrap } from "$lib/actions/focusTrap.js";
   import {
     searchDocuments,
     searchWork,
@@ -51,21 +52,16 @@
       .filter((i) => i !== -1),
   );
 
-  // The element that opened the palette gets focus back when it closes, so
-  // Escape does not strand the keyboard on <body>.
-  let opener = null;
-  let wasOpen = false;
-  $effect(() => {
-    if (open && inputEl) {
-      if (!wasOpen) {
-        const active = document.activeElement;
-        opener =
-          active instanceof HTMLElement && active !== inputEl ? active : null;
-      }
-      wasOpen = true;
-      inputEl.focus();
-    }
-  });
+  // `focusTrap` on the dialog owns focus: it moves focus in on open, cycles
+  // Tab inside, and restores the opener (or the fallback below) on close.
+  /** Opened by shortcut with nothing focused: land on the page's search
+   * trigger, or its main landmark, rather than <body>. */
+  function fallbackFocus() {
+    return (
+      document.querySelector('[aria-keyshortcuts="Meta+K"]') ||
+      document.querySelector("main")
+    );
+  }
 
   $effect(() => {
     if (!open) {
@@ -74,22 +70,6 @@
       loading = false;
       activeIndex = -1;
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (wasOpen) {
-        wasOpen = false;
-        // Opened by shortcut with nothing focused: land on the page's search
-        // trigger (or its main landmark) rather than <body>.
-        const target =
-          opener?.isConnected && opener !== document.body
-            ? opener
-            : document.querySelector('[aria-keyshortcuts="Meta+K"]') ||
-              document.querySelector("main");
-        opener = null;
-        if (target instanceof HTMLElement) {
-          if (!target.hasAttribute("tabindex") && target.tagName === "MAIN")
-            target.setAttribute("tabindex", "-1");
-          target.focus();
-        }
-      }
     }
   });
 
@@ -238,6 +218,7 @@
     aria-modal="true"
     aria-label="Command palette"
     tabindex="-1"
+    use:focusTrap={{ initialFocus: () => inputEl, fallbackFocus }}
   >
     <div class="cmd-modal">
       <div class="cmd-input-wrap">
@@ -378,6 +359,9 @@
 
   .cmd-input {
     flex: 1;
+    /* An input's intrinsic minimum width would otherwise push the ESC hint
+       out of the row on the narrowest viewports. */
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
