@@ -277,6 +277,11 @@ routes remain.
 
 ## Workstream decisions
 
+- 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
+  each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and
+  `adapter`. Event reads expose the same object. Presence and progress notes
+  use separate infrastructure tables and do not create activity events.
+
 - 2026-09-27: Adoption proofs bind a client-generated 128-bit request nonce and host
   public key because the enrollment ID does not exist when start is submitted; core
   freezes proved adoptions before human approval. Local `--exclude` omits profiles

@@ -24,6 +24,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/storage"
@@ -109,6 +110,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		"0.2.2",
 		WithActorRegistry(registry),
 		WithAuthStore(authStore),
+		WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		WithWorkspaceHumanGrantVerifier(options.workspaceHumanGrantVerifier),
 		WithWorkspaceManagedAgentGrantVerifier(options.workspaceManagedGrantVerifier),
 		WithWorkspaceGrantRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1000, AuthBurst: 1000}),

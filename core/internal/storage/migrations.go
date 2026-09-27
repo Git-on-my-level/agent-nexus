@@ -804,6 +804,33 @@ var migrations = []migration{
 		Version:    28,
 		AfterApply: applyMigration28DocumentFTS,
 	},
+	{
+		Version: 30,
+		Statements: []string{
+			`CREATE TABLE runs (
+				id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE,
+				launcher TEXT NOT NULL, external_id TEXT NOT NULL,
+				host_id TEXT NOT NULL, agent_id TEXT NOT NULL, adapter TEXT NOT NULL,
+				model TEXT, state TEXT NOT NULL, liveness TEXT NOT NULL,
+				result_collected INTEGER NOT NULL, labels_json TEXT NOT NULL,
+				card_ref TEXT, repository TEXT, branch TEXT, started_at TEXT,
+				ended_at TEXT, last_observed_at TEXT NOT NULL,
+				UNIQUE(launcher, host_id, external_id)
+			);`,
+			`CREATE INDEX idx_runs_agent_observed ON runs(agent_id, last_observed_at DESC);`,
+			`CREATE INDEX idx_runs_card_observed ON runs(card_ref, last_observed_at DESC);`,
+			`CREATE INDEX idx_runs_state_liveness ON runs(state, liveness);`,
+			`CREATE TABLE agent_presence (
+				agent_id TEXT PRIMARY KEY, current_card_ref TEXT, note TEXT,
+				observed_at TEXT NOT NULL
+			);`,
+			`CREATE TABLE agent_progress_notes (
+				id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id TEXT NOT NULL,
+				card_ref TEXT, text TEXT NOT NULL, observed_at TEXT NOT NULL
+			);`,
+			`CREATE INDEX idx_agent_progress_notes_agent_at ON agent_progress_notes(agent_id, observed_at DESC);`,
+		},
+	},
 }
 
 func applyMigration25ResourceHandles(ctx context.Context, tx *sql.Tx) error {
