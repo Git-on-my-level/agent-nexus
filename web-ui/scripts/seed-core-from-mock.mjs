@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,14 +34,6 @@ const scenarioName = String(
 ).trim();
 const workspaceID =
   String(process.env.ANX_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
-const repoRoot = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-);
-const cliDogfoodResourcesDir =
-  String(process.env.ANX_CLI_DOGFOOD_RESOURCES_DIR ?? "").trim() ||
-  path.join(repoRoot, "cli", "dogfood-resources");
 const devIdentityBundlePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -148,8 +140,7 @@ async function main() {
     await seedArtifacts();
     await seedBoards();
     await applySeedTopicAndBoardLifecycle();
-    // Register seeded agent principals before posting mention-heavy events so
-    // @handle routing resolves against durable auth principals during seeding.
+    // Derive seeded personas under the dev host before mention-heavy events.
     if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
       await seedDevFixtureIdentities();
     }
@@ -1497,97 +1488,6 @@ function pkcs8FromCliPrivateKey(privateKeyBase64) {
   ]);
 }
 
-async function issueAssertionTokens(agentID, keyID, privateKeyBase64) {
-  const signedAt = new Date().toISOString();
-  const message = `anx-auth-token|${agentID}|${keyID}|${signedAt}`;
-  const key = createPrivateKey({
-    key: pkcs8FromCliPrivateKey(privateKeyBase64),
-    format: "der",
-    type: "pkcs8",
-  });
-  const signature = sign(null, Buffer.from(message), key).toString("base64");
-  const body = await requestJson(coreBaseUrl, "POST", "/auth/token", {
-    grant_type: "assertion",
-    agent_id: agentID,
-    key_id: keyID,
-    signed_at: signedAt,
-    signature,
-  });
-  const tokens = body?.tokens ?? {};
-  const accessToken = String(tokens.access_token ?? "").trim();
-  const refreshToken = String(tokens.refresh_token ?? "").trim();
-  if (!accessToken || !refreshToken) {
-    throw new Error(
-      "assertion token response missing access_token/refresh_token",
-    );
-  }
-  return {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    token_type: String(tokens.token_type ?? "Bearer").trim() || "Bearer",
-    expires_at: String(tokens.expires_at ?? "").trim(),
-  };
-}
-
-const cliDogfoodInviteSlots = [
-  { slot: "dogfood-agent-1", summary: "Primary CLI / agent registration" },
-  { slot: "dogfood-agent-2", summary: "Second profile or machine" },
-  { slot: "dogfood-agent-3", summary: "Spare (experiments, CI local, etc.)" },
-];
-
-/**
- * After the seeded human is registered, issue agent invites via the normal API
- * and write tokens for local CLI dogfooding (see cli/dogfood-resources/README.md).
- */
-async function writeCliDogfoodInviteArtifacts({
-  cliDogfoodDir,
-  coreBaseUrl,
-  humanAccessToken,
-}) {
-  if (!humanAccessToken) {
-    return;
-  }
-  await mkdir(cliDogfoodDir, { recursive: true });
-  const outPath = path.join(cliDogfoodDir, "invites.generated.json");
-  try {
-    await unlink(outPath);
-  } catch (err) {
-    if (err?.code !== "ENOENT") {
-      throw err;
-    }
-  }
-
-  const invites = [];
-  for (const { slot, summary } of cliDogfoodInviteSlots) {
-    const created = await requestAuthJson(
-      "POST",
-      "/auth/invites",
-      { kind: "agent" },
-      humanAccessToken,
-      [201],
-    );
-    invites.push({
-      slot,
-      summary,
-      kind: "agent",
-      token: created.token,
-      invite: created.invite,
-    });
-  }
-
-  const doc = {
-    generated_at: new Date().toISOString(),
-    core_base_url: coreBaseUrl,
-    issued_by:
-      "First seeded human principal; invites created with POST /auth/invites",
-    invites,
-  };
-  await writeFile(outPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
-  console.log(
-    `Wrote CLI dogfood invite bundle (${invites.length} invites) to ${outPath}`,
-  );
-}
-
 async function requestAuthJson(
   method,
   requestPath,
@@ -1620,236 +1520,89 @@ async function requestAuthJson(
 async function seedDevFixtureIdentities() {
   const bootstrapToken = String(process.env.ANX_BOOTSTRAP_TOKEN ?? "").trim();
   if (!bootstrapToken) {
-    console.warn(
-      "ANX_DEV_SEED_IDENTITIES=1 but ANX_BOOTSTRAP_TOKEN is empty; skipping dev identity bundle.",
-    );
+    console.warn("ANX_DEV_SEED_IDENTITIES=1 requires ANX_BOOTSTRAP_TOKEN; skipping identities.");
     return;
   }
-
   const status = await request("GET", "/auth/bootstrap/status");
   if (status?.bootstrap_registration_available !== true) {
-    console.log(
-      "Dev fixture identities skipped (bootstrap already consumed). Keep web-ui/.dev/local-identities.json from the initial seed or reset the dev workspace.",
-    );
+    console.log("Dev fixture identities skipped (bootstrap already consumed).");
     return;
   }
-
-  const personas = [...seedPersonas].sort(
-    (a, b) => (a.default === true ? 0 : 1) - (b.default === true ? 0 : 1),
-  );
-  const defaultHumanPersona = personas.find(
-    (p) =>
-      String(p.principal_kind).toLowerCase() === "human" && p.default === true,
-  );
-  if (!defaultHumanPersona && !scenarioConfig?.noDefaultHuman) {
-    const hasAnyHuman = personas.some(
-      (p) => String(p.principal_kind).toLowerCase() === "human",
-    );
-    console.warn(
-      hasAnyHuman
-        ? `Warning: scenario "${scenarioName}" has a human persona but none ` +
-            `with default: true. Auto-auth requires a default human persona.`
-        : `Warning: scenario "${scenarioName}" has no human persona. ` +
-            `Add a persona with principal_kind: "human" and default: true ` +
-            `for seamless dev auto-auth. Set noDefaultHuman: true on the ` +
-            `scenario config to suppress this warning.`,
-    );
-  }
-  const bundle = [];
-  let inviteIssuerAccess = null;
-  let humanInviteIssuerAccess = null;
-
-  for (let i = 0; i < personas.length; i++) {
-    const p = personas[i];
-    const usePasskeyDevHuman =
-      i === 0 &&
-      String(p.principal_kind).toLowerCase() === "human" &&
-      status?.dev_passkey_bypass_available === true;
-
-    const keyPair = generateCliEd25519KeyPair();
-    let keyID = "";
-    let reg;
-    if (usePasskeyDevHuman) {
-      reg = await requestJson(
-        coreBaseUrl,
-        "POST",
-        "/auth/passkey/dev/register",
-        {
-          display_name: p.display_label,
-          bootstrap_token: bootstrapToken,
-          existing_actor_id: p.actor_id,
-        },
-        [201],
-      );
-    } else {
-      const body = {
-        username: p.auth_username,
-        public_key: keyPair.publicKeyBase64,
-        existing_actor_id: p.actor_id,
-      };
-      if (i === 0) {
-        body.bootstrap_token = bootstrapToken;
-      } else {
-        const inv = await requestAuthJson(
-          "POST",
-          "/auth/invites",
-          { kind: "agent" },
-          inviteIssuerAccess,
-          [201],
-        );
-        body.invite_token = inv.token;
-      }
-
-      reg = await requestJson(
-        coreBaseUrl,
-        "POST",
-        "/auth/agents/register",
-        body,
-        [201],
-      );
-      keyID = String(reg?.key?.key_id ?? "").trim();
-    }
-    if (reg?.tokens?.access_token) {
-      // Invites require a human or auth-admin principal. The bootstrap
-      // principal (index 0) is the only one guaranteed to satisfy that, so
-      // keep issuing from it instead of the most recently registered agent.
-      if (inviteIssuerAccess == null) {
-        inviteIssuerAccess = reg.tokens.access_token;
-      }
-      if (
-        humanInviteIssuerAccess == null &&
-        String(p.principal_kind).toLowerCase() === "human"
-      ) {
-        humanInviteIssuerAccess = reg.tokens.access_token;
-      }
-      const registration = {
-        status: "active",
-        workspace_bindings: [
-          {
-            workspace_id: workspaceID,
-            enabled: true,
-          },
-        ],
-      };
-      // Passkey dev register assigns a synthetic username from display_name; PATCH
-      // must not send fixture auth_username as handle (core requires handle == row username).
-      if (!usePasskeyDevHuman) {
-        registration.handle = p.auth_username;
-        registration.actor_id = p.actor_id;
-      }
-      await requestAuthJson(
-        "PATCH",
-        "/agents/me",
-        { registration },
-        reg.tokens.access_token,
-        [200],
-      );
-    }
-    const agent = reg.agent ?? {};
-    const coreUsername = String(agent.username ?? "").trim();
-    let accessToken = String(reg.tokens?.access_token ?? "").trim();
-    let refreshToken = String(reg.tokens?.refresh_token ?? "").trim();
-    let expiresAt = String(reg.tokens?.expires_at ?? "").trim();
-    if (accessToken && !keyID) {
-      const rotated = await requestAuthJson(
-        "POST",
-        "/agents/me/keys/rotate",
-        { public_key: keyPair.publicKeyBase64 },
-        accessToken,
-        [200],
-      );
-      keyID = String(rotated?.key?.key_id ?? "").trim();
-      const agentID = String(agent.agent_id ?? "").trim();
-      if (keyID && agentID) {
-        const fresh = await issueAssertionTokens(
-          agentID,
-          keyID,
-          keyPair.privateKeyBase64,
-        );
-        if (inviteIssuerAccess === accessToken) {
-          inviteIssuerAccess = fresh.access_token;
-        }
-        if (humanInviteIssuerAccess === accessToken) {
-          humanInviteIssuerAccess = fresh.access_token;
-        }
-        accessToken = fresh.access_token;
-        refreshToken = fresh.refresh_token;
-        expiresAt = fresh.expires_at;
-      }
-    }
-    if (!keyID) {
-      throw new Error(
-        `persona ${p.persona_id}: registration did not return a key_id for CLI assertion auth`,
-      );
-    }
+  const human = seedPersonas.find((p) => p.principal_kind === "human" && p.default === true);
+  if (!human) throw new Error("dev seed requires a default human persona");
+  const registered = await requestJson(coreBaseUrl, "POST", "/auth/passkey/dev/register", {
+    display_name: human.display_label,
+    bootstrap_token: bootstrapToken,
+    existing_actor_id: human.actor_id,
+  }, [201]);
+  const adminToken = registered.tokens.access_token;
+  const bundle = [{
+    persona_id: human.persona_id,
+    actor_id: human.actor_id,
+    agent_id: registered.agent.agent_id,
+    auth_username: registered.agent.username,
+    display_label: human.display_label,
+    principal_kind: "human",
+    default: true,
+    dev_bridge: false,
+    access_token: adminToken,
+    refresh_token: registered.tokens.refresh_token,
+  }];
+  const keyPair = generateCliEd25519KeyPair();
+  const nonce = Buffer.from(generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "der" })).subarray(-16).toString("base64url");
+  const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
+  const created = await requestAuthJson("POST", "/auth/hosts/enrollment-tokens", {
+    label: "dev-host seed", expires_at: expiresAt,
+  }, adminToken, [201]);
+  const slug = "dev-host";
+  const privateKey = createPrivateKey({
+    key: pkcs8FromCliPrivateKey(keyPair.privateKeyBase64), format: "der", type: "pkcs8",
+  });
+  const enrollmentMessage = `anx-host-headless-enroll|${nonce}|${slug}|${keyPair.publicKeyBase64}`;
+  const hostResponse = await requestJson(coreBaseUrl, "POST", "/auth/hosts/enrollments/headless", {
+    public_key: keyPair.publicKeyBase64,
+    requested_slug: slug,
+    os_user: "dev-seed",
+    hostname: slug,
+    discovered_adapters: ["generic"],
+    request_nonce: nonce,
+    adoptions: [],
+    enrollment_token: created.token,
+    signature: sign(null, Buffer.from(enrollmentMessage), privateKey).toString("base64"),
+  }, [201]);
+  const host = hostResponse.host;
+  for (const p of seedPersonas.filter((p) => p.principal_kind === "agent")) {
+    const signedAt = new Date().toISOString();
+    const name = p.persona_id.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+    const message = `anx-host-agent-token|${host.id}|${host.key_id}|${name}|${signedAt}`;
+    const granted = await requestJson(coreBaseUrl, "POST", "/auth/token", {
+      grant_type: "host_assertion",
+      host_id: host.id,
+      key_id: host.key_id,
+      agent_name: name,
+      signed_at: signedAt,
+      signature: sign(null, Buffer.from(message), privateKey).toString("base64"),
+      existing_actor_id: p.actor_id,
+    });
     bundle.push({
       persona_id: p.persona_id,
       actor_id: p.actor_id,
-      agent_id: agent.agent_id,
-      key_id: keyID,
-      private_key: keyPair.privateKeyBase64,
-      auth_username: coreUsername || p.auth_username,
+      agent_id: granted.agent.id,
+      auth_username: granted.agent.handle,
       display_label: p.display_label,
-      principal_kind: p.principal_kind,
-      default: p.default === true,
+      principal_kind: "agent",
+      default: false,
       dev_bridge: p.dev_bridge,
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_at: expiresAt,
+      access_token: granted.tokens.access_token,
+      host_id: host.id,
+      key_id: host.key_id,
+      host_private_key: keyPair.privateKeyBase64,
     });
   }
-
-  const outDir = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    ".dev",
-  );
+  const outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".dev");
   await mkdir(outDir, { recursive: true });
-  const outPath = path.join(outDir, "local-identities.json");
-  await writeFile(
-    outPath,
-    `${JSON.stringify({ generated_at: new Date().toISOString(), personas: bundle }, null, 2)}\n`,
-    "utf8",
-  );
-  console.log(
-    `Wrote dev identity bundle (${bundle.length} personas) to ${outPath}`,
-  );
-
-  await writeCliDogfoodInviteArtifacts({
-    cliDogfoodDir: cliDogfoodResourcesDir,
-    coreBaseUrl,
-    humanAccessToken: humanInviteIssuerAccess,
-  });
-
-  const bridgePersonas = bundle.filter((row) => row.dev_bridge === true);
-  if (bridgePersonas.length > 0) {
-    const hintsPath = path.join(outDir, "deterministic-bridge.md");
-    const lines = [
-      "# Deterministic agent bridge (local dev)",
-      "",
-      "Fixture personas with `dev_bridge: true` were seeded as workspace agents.",
-      "The Python bridge keeps its **own** auth state; register once per config via:",
-      "",
-      "```bash",
-      "cd adapters/agent-bridge",
-      "anx-agent-bridge auth register --config examples/deterministic.toml --invite-token <token> --apply-registration",
-      "```",
-      "",
-      "Align `agent.handle` in `examples/deterministic.toml` with a seeded persona id",
-      "(e.g. `zara`). Create a fresh invite with a seeded operator/agent when bootstrap",
-      "is already consumed. See `adapters/agent-bridge/README.md` and `scripts/run-deterministic-bridge.sh`.",
-      "",
-      "Seeded bridge-marked personas (this run):",
-      "",
-      ...bridgePersonas.map(
-        (p) =>
-          `- ${p.persona_id} — ${p.display_label} (actor_id=${p.actor_id}, agent_id=${p.agent_id ?? ""})`,
-      ),
-      "",
-    ];
-    await writeFile(hintsPath, `${lines.join("\n")}\n`, "utf8");
-    console.log(`Wrote bridge hints to ${hintsPath}`);
-  }
+  await writeFile(path.join(outDir, "local-identities.json"), `${JSON.stringify({ generated_at: new Date().toISOString(), host, personas: bundle }, null, 2)}\n`, "utf8");
+  console.log(`Wrote dev host and ${bundle.length} persona identities`);
 }
 
 async function request(method, path, body, okStatuses = [200, 201]) {
