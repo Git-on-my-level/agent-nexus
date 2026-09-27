@@ -7,10 +7,7 @@
     agentPath,
     agentRowModel,
     groupAgentsByState,
-    matchInboxItem,
-    openAsksByActor,
     rosterSummary,
-    sortWaitingByAge,
     taskPath,
   } from "$lib/agentPresence.js";
   import {
@@ -22,7 +19,6 @@
     agentShortcutAction,
     agentShortcutList,
   } from "$lib/agentShortcuts.js";
-  import { coreClient } from "$lib/coreClient";
   import { otherDialogOpen } from "$lib/inboxShortcuts.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import AgentRosterRow from "$lib/components/agents/AgentRosterRow.svelte";
@@ -39,7 +35,6 @@
   );
 
   let now = $state(Date.now());
-  let inboxItems = $state([]);
   let helpOpen = $state(false);
   let selectedHandle = $state("");
   let retrying = $state(false);
@@ -49,22 +44,15 @@
   );
   let agents = $derived(roster?.agents ?? []);
   let summary = $derived(rosterSummary(agents));
-  let asksByActor = $derived(openAsksByActor(inboxItems));
-  let groups = $derived(
-    groupAgentsByState(agents).map((group) =>
-      group.key === "waiting_on_human"
-        ? { ...group, agents: sortWaitingByAge(group.agents, asksByActor) }
-        : group,
-    ),
-  );
+  let groups = $derived(groupAgentsByState(agents));
   let rows = $derived(
     groups.flatMap((group) =>
       group.agents.map((agent) => ({
         agent,
         group: group.key,
         model: agentRowModel(agent, {
-          asks: asksByActor.get(agent.actor_id) ?? [],
           now,
+          loadedAt: roster?.loadedAt || now,
         }),
       })),
     ),
@@ -74,41 +62,6 @@
   );
   let loading = $derived(!roster || roster.status === "idle");
   let failed = $derived(roster?.status === "error" && agents.length === 0);
-
-  // Waiting rows name the ask they wait on; asks live in the Inbox list.
-  let lastInboxLoad = 0;
-  async function loadAsks() {
-    lastInboxLoad = Date.now();
-    // The Inbox list says how long each ask has waited; an agent's own
-    // detail names the task each ask is about.
-    const waiting = agents.filter(
-      (agent) => agent.state === "waiting_on_human" && agent.handle,
-    );
-    const [inbox, ...details] = await Promise.allSettled([
-      coreClient.listInboxItems(),
-      ...waiting.map((agent) => coreClient.getAgent(agent.handle)),
-    ]);
-    if (inbox.status !== "fulfilled") {
-      // The roster still says who is waiting; the row falls back to a count.
-      return;
-    }
-    const asks = details.flatMap((result) =>
-      result.status === "fulfilled" ? (result.value?.open_asks ?? []) : [],
-    );
-    const items = Array.isArray(inbox.value?.items) ? inbox.value.items : [];
-    inboxItems = items.map((item) => {
-      const ask = asks.find((entry) => matchInboxItem(entry, [item]));
-      return ask?.subject_title && !item.subject_title
-        ? { ...item, subject_title: ask.subject_title }
-        : item;
-    });
-  }
-  $effect(() => {
-    // Re-read asks whenever the roster re-reads (events, timer, focus).
-    void roster?.loadedAt;
-    if (!roster?.loadedAt || Date.now() - lastInboxLoad < 2_000) return;
-    void loadAsks();
-  });
 
   async function retry() {
     retrying = true;

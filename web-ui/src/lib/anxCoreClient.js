@@ -1175,6 +1175,17 @@ export function createAnxCoreClient(options = {}) {
       });
       await consumeSSEStream(response, { onEvent, signal });
     },
+    /**
+     * `GET /stream/agents`: ephemeral `agents_changed` invalidations (no
+     * replay cursor, not in the event log). Core sends one on connect.
+     */
+    streamAgentChanges: async ({ signal, onEvent } = {}) => {
+      const response = await invokeDirectRaw("/stream/agents", {
+        accept: "text/event-stream",
+        signal,
+      });
+      await consumeSSEStream(response, { onEvent, signal });
+    },
     streamNotificationReceipts: async ({
       threadId,
       lastEventId,

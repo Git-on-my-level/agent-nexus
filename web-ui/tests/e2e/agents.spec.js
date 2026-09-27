@@ -53,7 +53,22 @@ const LEO = agent("codex", "working", {
     duration_seconds: 840,
   },
 });
-const OMAR = agent("claude", "waiting_on_human", { open_asks_count: 1 });
+const WAITING_ASK = {
+  id: "evt-ask",
+  inbox_item_id: "inbox:ask:thread-1:evt-ask:evt-ask",
+  title: "Confirm 20-minute quest path",
+  severity: "high",
+  created_at: ago(192),
+  kind: "ask",
+  subject_ref: "card:lock-hub-quest-path",
+  subject_title: "Lock hub quest path",
+  requester_actor_id: "actor-claude",
+  requester_agent_id: "agent-claude",
+};
+const OMAR = agent("claude", "waiting_on_human", {
+  open_asks_count: 1,
+  waiting_ask: WAITING_ASK,
+});
 const IDLE = agent("reviewer", "idle", { last_signal_at: ago(120) });
 const STALE = agent("release-bot", "stale", { last_signal_at: null });
 const ROSTER = [STALE, IDLE, LEO, OMAR];
@@ -102,7 +117,7 @@ function isApiCall(route) {
 }
 
 async function installAgentsApi(page, overrides = {}) {
-  const api = { roster: ROSTER, fail: {}, ...overrides };
+  const api = { roster: ROSTER, fail: {}, detailCalls: [], ...overrides };
   const mock = (pattern, handler) =>
     page.route(pattern, (route) =>
       isApiCall(route) ? handler(route) : route.fallback(),
@@ -126,6 +141,7 @@ async function installAgentsApi(page, overrides = {}) {
   );
   await mock(/\/agents\/[^/?]+$/, (route) => {
     const key = decodeURIComponent(route.request().url().split("/agents/")[1]);
+    api.detailCalls.push(key);
     const found = api.roster.find(
       (entry) => entry.handle === key || entry.id === key,
     );
@@ -150,21 +166,7 @@ async function installAgentsApi(page, overrides = {}) {
             ]
           : [],
       recent_runs: found === LEO ? [RUN] : [],
-      open_asks:
-        found === OMAR
-          ? [
-              {
-                id: "evt-ask",
-                kind: "ask",
-                title: INBOX_ITEM.title,
-                severity: "high",
-                subject_ref: "card:lock-hub-quest-path",
-                subject_title: "Lock hub quest path",
-                related_refs: [],
-                response_proposals: ["Yes"],
-              },
-            ]
-          : [],
+      open_asks: found === OMAR ? [WAITING_ASK] : [],
       recent_notes:
         found === LEO
           ? [
@@ -227,7 +229,7 @@ async function installAgentsApi(page, overrides = {}) {
 test("roster groups agents by derived state and hands asks to the Inbox", async ({
   page,
 }) => {
-  await installAgentsApi(page);
+  const api = await installAgentsApi(page);
   await page.goto(`${BASE}/agents`);
   const roster = page.locator("[data-agents-roster]");
   await expect(roster).toBeVisible();
@@ -256,6 +258,8 @@ test("roster groups agents by derived state and hands asks to the Inbox", async 
     "href",
     `${BASE}/inbox?mailbox=needs-you&item=${encodeURIComponent(INBOX_ITEM.id)}`,
   );
+  // Waiting rows come from the roster alone: no per-agent detail reads.
+  expect(api.detailCalls).toEqual([]);
   // The roster never answers: no response controls on the page.
   await expect(page.getByRole("button", { name: /Send/ })).toHaveCount(0);
 

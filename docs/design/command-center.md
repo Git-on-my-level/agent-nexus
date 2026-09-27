@@ -480,3 +480,13 @@ routes remain.
   revoke in Access.
 - **Navigation order** is Inbox, Agents, Tasks, Docs (sidebar and bottom bar); ⌘K binds
   G then A.
+- 2026-09-27 (O3 follow-up, after core b40ab0a7): the UI follows `GET /stream/agents`
+  through `liveAgentChanges` in `web-ui/src/lib/liveWorkspaceEvents.js` (same shared-hub
+  pattern as `liveWorkspaceEvents`, keyed `agents`). The roster store refetches `GET
+  /agents` on every notification (core sends one on connect and after reconnects), on
+  ask events from the workspace stream (asks move agents in and out of "waiting on you"
+  without a roster notification), on visibility, and on a 2-minute fallback timer
+  (was 30 s). Waiting rows use `waiting_ask` and the agent page uses `open_asks`
+  directly; the extra `/inbox` and per-agent detail reads are gone. Access host cards
+  use `/hosts` agent states and re-read on the roster stream. Run time counts forward
+  from `duration_seconds` between reads.

@@ -7,12 +7,9 @@ import {
   agentRuntimeLabel,
   groupAgentsByState,
   inboxAskPath,
-  matchInboxItem,
-  openAsksByActor,
   rosterSummary,
   runDuration,
   runLabel,
-  sortWaitingByAge,
   titleFromCardRef,
   workingAgentCount,
 } from "../../src/lib/agentPresence.js";
@@ -71,47 +68,50 @@ describe("agent roster model", () => {
     ]);
     expect(working.agents.map((a) => a.name)).toEqual(["long", "short"]);
 
-    const asks = openAsksByActor([
-      { id: "i1", requester_actor_id: "actor-new", source_event_time: ago(5) },
-      { id: "i2", requester_actor_id: "actor-old", source_event_time: ago(90) },
+    const ask = (minutes) => ({
+      id: `evt-${minutes}`,
+      inbox_item_id: `inbox:ask:t:evt-${minutes}`,
+      title: "Ask",
+      severity: null,
+      created_at: ago(minutes),
+    });
+    const [waiting] = groupAgentsByState([
+      agent("new", "waiting_on_human", { waiting_ask: ask(5) }),
+      agent("old", "waiting_on_human", { waiting_ask: ask(90) }),
     ]);
-    const waiting = sortWaitingByAge(
-      [agent("new", "waiting_on_human"), agent("old", "waiting_on_human")],
-      asks,
-    );
-    expect(waiting.map((a) => a.name)).toEqual(["old", "new"]);
+    expect(waiting.agents.map((a) => a.name)).toEqual(["old", "new"]);
   });
 
   it("describes a waiting agent by its oldest open ask and links to the Inbox", () => {
-    const asks = openAsksByActor([
-      {
-        id: "inbox:ask:t:e2",
-        requester_actor_id: "actor-omar",
-        source_event_time: ago(10),
-        title: "Newer",
-      },
-      {
-        id: "inbox:ask:t:e1",
-        requester_actor_id: "actor-omar",
-        source_event_time: ago(192),
-        title: "Confirm 20-minute quest path",
-        kind: "ask",
-        severity: "high",
-        subject_title: "Lock hub quest path",
-      },
-      { id: "done", requester_actor_id: "actor-omar", responded_at: ago(1) },
-    ]);
     const model = agentRowModel(
-      agent("omar", "waiting_on_human", { open_asks_count: 2 }),
-      { asks: asks.get("actor-omar"), now: NOW },
+      agent("omar", "waiting_on_human", {
+        open_asks_count: 2,
+        waiting_ask: {
+          id: "e1",
+          inbox_item_id: "inbox:ask:t:e1",
+          title: "Confirm 20-minute quest path",
+          kind: "ask",
+          severity: "high",
+          subject_title: "Lock hub quest path",
+          created_at: ago(192),
+        },
+      }),
+      { now: NOW },
     );
     expect(model.ask.title).toBe("Confirm 20-minute quest path");
     expect(model.ask.severity).toBe("high");
+    expect(model.ask.subjectTitle).toBe("Lock hub quest path");
     expect(model.ask.href).toBe(
       "/inbox?mailbox=needs-you&item=inbox%3Aask%3At%3Ae1",
     );
     expect(model.duration).toBe("3h 12m");
     expect(model.moreAsks).toBe(1);
+  });
+
+  it("links to Needs you while the inbox projection catches up", () => {
+    expect(inboxAskPath({ id: "e1", inbox_item_id: null })).toBe(
+      "/inbox?mailbox=needs-you",
+    );
   });
 
   it("describes a working agent by task, quoted note and run time", () => {
@@ -128,7 +128,8 @@ describe("agent roster model", () => {
           duration_seconds: 840,
         },
       }),
-      { now: NOW },
+      // Read two minutes ago: run time counts forward from core's value.
+      { now: NOW, loadedAt: NOW - 120_000 },
     );
     expect(model.task).toEqual({
       title: "Tune core combat loop",
@@ -138,7 +139,7 @@ describe("agent roster model", () => {
       text: "Parry window at 120 ms",
       age: "6m",
     });
-    expect(model.duration).toBe("14m");
+    expect(model.duration).toBe("16m");
     expect(model.durationTitle).toBe("Run time");
   });
 
@@ -187,13 +188,6 @@ describe("agent roster model", () => {
     expect(runDuration({ started_at: ago(71), ended_at: null }, NOW)).toBe(
       "1h 11m",
     );
-  });
-
-  it("matches an agent's ask to its Inbox item by source event", () => {
-    const item = { id: "inbox:review:t:evt-1:evt-1", source_event_id: "evt-1" };
-    expect(matchInboxItem({ id: "evt-1" }, [item])).toBe(item);
-    expect(matchInboxItem({ id: "evt-2" }, [item])).toBeNull();
-    expect(inboxAskPath(null)).toBe("/inbox?mailbox=needs-you");
   });
 
   it("merges notes and messages newest first with card titles", () => {

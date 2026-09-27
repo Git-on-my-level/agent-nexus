@@ -85,27 +85,9 @@ export function formatAge(iso, now = Date.now()) {
   return formatWait(Math.max(0, now - at));
 }
 
-/** Open Inbox asks per requesting actor, oldest (longest waiting) first. */
-export function openAsksByActor(inboxItems = []) {
-  const byActor = new Map();
-  for (const item of Array.isArray(inboxItems) ? inboxItems : []) {
-    if (!item || item.responded_at || item.status === "completed") continue;
-    const actorId = text(item.requester_actor_id);
-    if (!actorId) continue;
-    const list = byActor.get(actorId) ?? [];
-    list.push(item);
-    byActor.set(actorId, list);
-  }
-  for (const list of byActor.values()) {
-    list.sort((a, b) => askSince(a) - askSince(b));
-  }
-  return byActor;
-}
-
-function askSince(item) {
-  const at = time(
-    item?.source_event_time || item?.trigger_at || item?.created_at,
-  );
+/** When an ask started waiting (`AgentOpenAsk.created_at`), or +∞. */
+function askSince(ask) {
+  const at = time(ask?.created_at);
   return Number.isFinite(at) ? at : Number.POSITIVE_INFINITY;
 }
 
@@ -115,38 +97,27 @@ export function askKindLabel(kind) {
   return ASK_KIND_LABEL[text(kind)] ?? "Ask";
 }
 
-/** Inbox deep link for one open ask, or the Needs you list without one. */
-export function inboxAskPath(item) {
+/**
+ * Inbox deep link for an open ask (`AgentOpenAsk.inbox_item_id`), or the
+ * Needs you list while core's inbox projection has not caught up.
+ */
+export function inboxAskPath(ask) {
   const params = new URLSearchParams({ mailbox: "needs-you" });
-  const id = inboxItemMailboxId(item ?? {});
+  const itemId = text(ask?.inbox_item_id);
+  const id = itemId ? inboxItemMailboxId({ id: itemId }) : "";
   if (id) params.set("item", id);
   return `/inbox?${params.toString()}`;
 }
 
 /**
- * The open ask an agent-detail `open_asks` entry corresponds to in the Inbox
- * list. Core keys agent asks by request event id and Inbox items by their own
- * id, so match on the source event.
- */
-export function matchInboxItem(ask, inboxItems = []) {
-  const id = text(ask?.id).replace(/^event:/, "");
-  if (!id) return null;
-  return (
-    (Array.isArray(inboxItems) ? inboxItems : []).find(
-      (item) =>
-        text(item?.source_event_id) === id ||
-        text(item?.source_event_ref) === `event:${id}` ||
-        text(item?.request_event_ref) === `event:${id}` ||
-        text(item?.id) === id,
-    ) ?? null
-  );
-}
-
-/**
  * One roster row: what the agent is doing and for how long, in operator
- * terms. `asks` are this agent's open Inbox items, oldest first.
+ * terms. A waiting agent names its oldest open ask (`waiting_ask`). Run time
+ * is core's `duration_seconds` at `loadedAt`, counted forward to `now`.
  */
-export function agentRowModel(agent, { asks = [], now = Date.now() } = {}) {
+export function agentRowModel(
+  agent,
+  { now = Date.now(), loadedAt = now } = {},
+) {
   const state = text(agent?.state) || "stale";
   const note = text(agent?.last_progress_note);
   const noteAge = formatAge(agent?.last_progress_at, now);
@@ -171,11 +142,8 @@ export function agentRowModel(agent, { asks = [], now = Date.now() } = {}) {
   };
 
   if (state === "waiting_on_human") {
-    const ask = asks[0] ?? null;
-    const since = ask
-      ? ask.source_event_time || ask.trigger_at || ask.created_at
-      : "";
-    const count = Math.max(Number(agent?.open_asks_count) || 0, asks.length);
+    const ask = agent?.waiting_ask ?? null;
+    const count = Math.max(Number(agent?.open_asks_count) || 0, ask ? 1 : 0);
     return {
       ...base,
       ask: ask
@@ -190,7 +158,7 @@ export function agentRowModel(agent, { asks = [], now = Date.now() } = {}) {
         : null,
       moreAsks: Math.max(0, count - 1),
       headline: ask ? text(ask.title) || "Open ask" : "Waiting on a response",
-      duration: formatAge(since, now),
+      duration: ask ? formatAge(ask.created_at, now) : "",
       durationTitle: "Waiting for",
     };
   }
@@ -200,7 +168,10 @@ export function agentRowModel(agent, { asks = [], now = Date.now() } = {}) {
       ...base,
       headline: cardTitle || (note ? "" : "Working"),
       duration: run
-        ? formatDurationSeconds(run.duration_seconds)
+        ? formatDurationSeconds(
+            Number(run.duration_seconds) +
+              Math.max(0, Math.floor((now - loadedAt) / 1000)),
+          )
         : noteAge || signalAge,
       durationTitle: run ? "Run time" : "Last update",
       run,
@@ -238,6 +209,11 @@ export function groupAgentsByState(agents = []) {
 }
 
 function compareWithinState(a, b, state) {
+  if (state === "waiting_on_human") {
+    // Longest wait first.
+    const diff = askSince(a?.waiting_ask) - askSince(b?.waiting_ask);
+    if (diff) return diff;
+  }
   if (state === "working") {
     const runA = Number(a?.active_run?.duration_seconds ?? -1);
     const runB = Number(b?.active_run?.duration_seconds ?? -1);
@@ -251,16 +227,6 @@ function compareWithinState(a, b, state) {
   const diff = at(b) - at(a);
   if (diff) return diff;
   return text(a?.display_name).localeCompare(text(b?.display_name));
-}
-
-/** Waiting agents sort by how long their oldest ask has waited. */
-export function sortWaitingByAge(agents = [], asksByActor = new Map()) {
-  const since = (agent) => {
-    const ask = asksByActor.get(text(agent?.actor_id))?.[0];
-    const at = ask ? askSince(ask) : Number.POSITIVE_INFINITY;
-    return at;
-  };
-  return [...agents].sort((a, b) => since(a) - since(b));
 }
 
 /** Counts for the roster summary line. */

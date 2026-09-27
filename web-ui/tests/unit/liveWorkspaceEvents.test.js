@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { liveWorkspaceEvents } from "../../src/lib/liveWorkspaceEvents.js";
+import {
+  liveAgentChanges,
+  liveWorkspaceEvents,
+} from "../../src/lib/liveWorkspaceEvents.js";
 
 function fakeClient({ newest = "evt-9" } = {}) {
   const calls = [];
@@ -166,6 +169,59 @@ describe("liveWorkspaceEvents", () => {
 
   it("is a no-op for a client without a stream", () => {
     const stop = liveWorkspaceEvents({ client: {}, onChange: vi.fn() });
+    expect(stop).toBeTypeOf("function");
+    stop();
+  });
+
+  it("shares one roster change stream and notifies on connect and changes", async () => {
+    let emit = null;
+    let fail = null;
+    const client = {
+      streamAgentChanges: vi.fn(
+        ({ onEvent, signal }) =>
+          new Promise((resolve, reject) => {
+            emit = onEvent;
+            fail = reject;
+            signal?.addEventListener("abort", () => {
+              const error = new Error("aborted");
+              error.name = "AbortError";
+              reject(error);
+            });
+          }),
+      ),
+    };
+    const badge = vi.fn();
+    const page = vi.fn();
+    // The first subscriber opens the shared connection and sets its backoff.
+    const stopBadge = liveAgentChanges({
+      client,
+      onChange: badge,
+      reconnectMs: 10,
+    });
+    const stopPage = liveAgentChanges({ client, onChange: page });
+    await flush();
+    expect(client.streamAgentChanges).toHaveBeenCalledTimes(1);
+    // Core's first notification on connect is itself a change.
+    emit({ event: "agents_changed", data: { revision: 1 } });
+    emit({ event: "agents_changed", data: { revision: 2 } });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(badge).toHaveBeenCalledTimes(1);
+    expect(page.mock.calls[0][0].map((change) => change.revision)).toEqual([
+      1, 2,
+    ]);
+    // A dropped stream reconnects; its first notification refetches again.
+    fail(new Error("dropped"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(client.streamAgentChanges).toHaveBeenCalledTimes(2);
+    emit({ event: "agents_changed", data: { revision: 3 } });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(badge).toHaveBeenCalledTimes(2);
+    stopBadge();
+    stopPage();
+  });
+
+  it("is a no-op for a client without the roster stream", () => {
+    const stop = liveAgentChanges({ client: {}, onChange: vi.fn() });
     expect(stop).toBeTypeOf("function");
     stop();
   });

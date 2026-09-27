@@ -75,9 +75,8 @@ function host(overrides = {}) {
     discovered_adapters: ["claude", "codex", "cursor"],
     key_id: "hkey_6ecc6649-91e8-46cf-9e5b-57f1cbf8ffd4",
     excluded_names: [],
-    // Core's host read embeds summaries without derived state; the roster
-    // supplies the state.
-    agents: AGENTS.map((agent) => ({ ...agent, state: "stale" })),
+    // Host reads carry the same derived agent state as the roster.
+    agents: AGENTS,
     created_at: "2026-03-01T10:00:00Z",
     revoked_at: null,
     ...overrides,
