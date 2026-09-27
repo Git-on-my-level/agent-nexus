@@ -20,7 +20,7 @@ func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"thread_id":"thread_1","actor_id":"actor_1","type":"message_posted"}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "events.create",
 	})
@@ -84,7 +84,7 @@ func TestDraftCreateInterventionNeededRequiresThreadRefInRefs(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"human_attention_requested","summary":"unblock me","refs":["topic:top_1"],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "events.create",
 	})
@@ -112,7 +112,7 @@ func TestDraftCreateAllowsDerivedRebuildWithoutActorID(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "derived.rebuild",
 	})
@@ -130,7 +130,7 @@ func TestDraftCreateDerivedRebuildRejectsEmptyActorIDWhenProvided(t *testing.T) 
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"   "}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "derived.rebuild",
 	})
@@ -148,7 +148,7 @@ func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "topics create",
 	})
@@ -207,7 +207,7 @@ func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
 
 	raw := runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "topics.create",
 		"--from-file", fromFile,
@@ -265,7 +265,7 @@ func TestDraftListStableJSON(t *testing.T) {
 	}
 
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--agent", "agent-a", "draft", "list"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--as", "agent-a", "draft", "list"})
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["result"].(map[string]any)
 	drafts, _ := data["drafts"].([]any)

@@ -16,14 +16,15 @@ import (
 )
 
 type App struct {
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
-	Getenv      func(string) string
-	UserHomeDir func() (string, error)
-	ReadFile    func(string) ([]byte, error)
-	StdinIsTTY  func() bool
-	pmTurns     *pmTurnMemory
+	Stdin          io.Reader
+	Stdout         io.Writer
+	Stderr         io.Writer
+	Getenv         func(string) string
+	UserHomeDir    func() (string, error)
+	ReadFile       func(string) ([]byte, error)
+	StdinIsTTY     func() bool
+	hasOMPAncestor func() bool
+	pmTurns        *pmTurnMemory
 }
 
 func isAPICallHelpOnly(remaining []string) bool {
@@ -63,13 +64,14 @@ func isTrailingHelpOnlyInvocation(remaining []string) bool {
 
 func New() *App {
 	app := &App{
-		Stdin:       os.Stdin,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Getenv:      os.Getenv,
-		UserHomeDir: os.UserHomeDir,
-		ReadFile:    os.ReadFile,
-		pmTurns:     newPMTurnMemory(),
+		Stdin:          os.Stdin,
+		Stdout:         os.Stdout,
+		Stderr:         os.Stderr,
+		Getenv:         os.Getenv,
+		UserHomeDir:    os.UserHomeDir,
+		ReadFile:       os.ReadFile,
+		hasOMPAncestor: ompAncestor,
+		pmTurns:        newPMTurnMemory(),
 	}
 	app.StdinIsTTY = func() bool {
 		file, ok := app.Stdin.(*os.File)
@@ -113,12 +115,8 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	authSub := authSubcommandSpec.normalize(subPeek)
-	configSub := configSubcommandSpec.normalize(subPeek)
 	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
-		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
-		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
 		isWorkCommandGroup(strings.Join(remaining, " "))
@@ -149,6 +147,16 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
+	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
+		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
+			if _, hostErr := a.resolvedHost(resolved); hostErr == nil {
+				resolved, err = a.resolveHostAgent(context.Background(), resolved)
+				if err != nil {
+					return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
+				}
+			}
+		}
+	}
 
 	normalizedArgs, actorErr := normalizeActorArgs(remaining, resolved)
 	if actorErr != nil {
@@ -170,12 +178,35 @@ func (a *App) Run(args []string) int {
 	if value == nil && result != nil && result.Text != "" {
 		value = map[string]any{"text": result.Text}
 	}
+	if identity.Command == "host token" && !resolved.JSON {
+		if token := anyString(asMap(value)["token"]); token != "" {
+			a.writeOutput(a.Stdout, token+"\n")
+			return 0
+		}
+	}
 	warnings, repairs := resultWarnings(identity.Command, normalizedArgs, value)
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
 	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}); err != nil {
 		return 1
 	}
 	return 0
+}
+
+func needsAgentIdentity(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if hasHelpToken(args) {
+		return false
+	}
+	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
+		return false
+	}
+	switch args[0] {
+	case "help", "version", "doctor", "config", "update", "install", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
+		return false
+	}
+	return true
 }
 
 func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelope) error {
@@ -235,7 +266,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	var (
 		jsonFlag    trackedBool
 		baseURLFlag trackedString
-		agentFlag   trackedString
+		asFlag      trackedString
 		noColorFlag trackedBool
 		verboseFlag trackedBool
 		headersFlag trackedBool
@@ -244,7 +275,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
-	fs.Var(&agentFlag, "agent", "Agent profile name")
+	fs.Var(&asFlag, "as", "Derived agent name")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
 	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
 	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
@@ -266,8 +297,8 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if baseURLFlag.set {
 		overrides.BaseURL = &baseURLFlag.value
 	}
-	if agentFlag.set {
-		overrides.Agent = &agentFlag.value
+	if asFlag.set {
+		overrides.As = &asFlag.value
 	}
 	if noColorFlag.set {
 		overrides.NoColor = &noColorFlag.value
@@ -364,13 +395,13 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			}
 			parsed := strings.TrimSpace(rawValue)
 			overrides.BaseURL = &parsed
-		case "agent":
+		case "as":
 			rawValue, err := readValue(name)
 			if err != nil {
 				return nil, err
 			}
 			parsed := strings.TrimSpace(rawValue)
-			overrides.Agent = &parsed
+			overrides.As = &parsed
 		case "timeout":
 			rawValue, err := readValue(name)
 			if err != nil {

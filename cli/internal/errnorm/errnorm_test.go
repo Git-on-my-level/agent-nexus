@@ -32,7 +32,7 @@ func TestEnrich401EmptyBodyGetsAuthHint(t *testing.T) {
 	if err.Code != "remote_error" {
 		t.Fatalf("unexpected code: %s", err.Code)
 	}
-	if !strings.Contains(err.Hint, "auth token-status") {
+	if !strings.Contains(err.Hint, "auth whoami") {
 		t.Fatalf("expected auth recovery hint, got %q", err.Hint)
 	}
 }
@@ -73,7 +73,7 @@ func TestEnrichInvalidTokenGetsAuthHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Hint, "auth token-status") {
+	if !strings.Contains(err.Hint, "auth whoami") {
 		t.Fatalf("expected auth recovery hint, got %q", err.Hint)
 	}
 }
@@ -82,7 +82,7 @@ func TestEnrichAuthRequiredGetsAuthHint(t *testing.T) {
 	t.Parallel()
 
 	err := FromHTTPFailure(401, []byte(`{"error":{"code":"auth_required","message":"missing bearer","recoverable":true,"hint":"Attach a valid Bearer token and retry."}}`))
-	if !strings.Contains(err.Hint, "auth token-status") {
+	if !strings.Contains(err.Hint, "auth whoami") {
 		t.Fatalf("expected auth recovery hint, got %q", err.Hint)
 	}
 }
@@ -94,7 +94,7 @@ func TestEnrichWakeProofRequiredGetsHostedRecoveryHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Hint, "/auth/token") || !strings.Contains(err.Hint, "auth whoami") {
+	if !strings.Contains(err.Hint, "auth whoami") {
 		t.Fatalf("expected hosted auth recovery hint, got %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
@@ -139,7 +139,7 @@ func TestEnrichKeyMismatchAssertion(t *testing.T) {
 	t.Parallel()
 
 	err := FromHTTPFailure(401, []byte(`{"error":{"code":"key_mismatch","message":"key assertion could not be validated","recoverable":true,"hint":"Rotate key material and retry token exchange."}}`))
-	if !strings.Contains(err.Hint, "auth token-status") {
+	if !strings.Contains(err.Hint, "anx doctor") {
 		t.Fatalf("expected key mismatch recovery hint, got %q", err.Hint)
 	}
 	details, _ := err.Details.(map[string]any)
@@ -193,7 +193,7 @@ func TestEnrichAgentRevoked(t *testing.T) {
 	t.Parallel()
 
 	err := FromHTTPFailure(403, []byte(`{"error":{"code":"agent_revoked","message":"agent has been revoked","recoverable":false,"hint":"x"}}`))
-	if !strings.Contains(err.Hint, "auth register") {
+	if !strings.Contains(err.Hint, "host enrollment") {
 		t.Fatalf("unexpected hint: %q", err.Hint)
 	}
 }

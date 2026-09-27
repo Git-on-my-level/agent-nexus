@@ -4937,7 +4937,7 @@ func ensureDocsRevisionActorIdentity(body any, cfg config.Resolved) (any, error)
 
 	return nil, errnorm.Usage(
 		"invalid_request",
-		"No active actor identity. Run: anx auth register --username <name> or anx auth whoami to inspect current profile.",
+		"No active actor identity. Run: anx host enroll, then anx --as <name> auth whoami.",
 	)
 }
 

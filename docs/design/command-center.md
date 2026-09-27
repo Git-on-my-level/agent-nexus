@@ -279,6 +279,20 @@ routes remain.
 
 (Append dated entries here: decision, reason, files.)
 
+- 2026-09-27 (S5): The CLI uses the handshake workspace ID as the host key
+  directory name when available, otherwise a stable hash of the core URL.
+  This permits enrollment against a core whose generated metadata handshake is
+  unavailable. The agentctl `command` destination passes an owner-only event
+  file path, so `runs ingest` accepts that positional path as well as stdin.
+  (`cli/internal/hostidentity/host.go`, `cli/internal/app/host_commands.go`,
+  `cli/internal/app/runs_commands.go`.)
+- 2026-09-27 (S5): Installed OMP 17.4.0 exports generic `AGENT=1` to tool
+  shells but no exclusive environment marker; CLI confirms an `omp` process
+  ancestor before selecting it. Exclusion edits use a different derivable
+  reader name to permit including an excluded current name; the signed host
+  key performs the mutation. (`cli/internal/app/host_resolution.go`,
+  `cli/internal/app/host_commands.go`.)
+
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and
   `adapter`. Event reads expose the same object. Presence and progress notes

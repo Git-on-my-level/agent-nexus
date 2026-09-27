@@ -200,14 +200,11 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 	}
 
 	authOutput := run([]string{"help", "auth"})
-	if !strings.Contains(authOutput, "Auth lifecycle and registration surface") {
+	if !strings.Contains(authOutput, "Auth: anx auth whoami") {
 		t.Fatalf("expected local auth help header output=%s", authOutput)
 	}
-	if !strings.Contains(authOutput, "auth register") || !strings.Contains(authOutput, "auth invites") || !strings.Contains(authOutput, "auth bootstrap") {
-		t.Fatalf("expected auth subcommand discoverability output=%s", authOutput)
-	}
-	if !strings.Contains(authOutput, "auth whoami") || !strings.Contains(authOutput, "auth default") || !strings.Contains(authOutput, "auth token-status") {
-		t.Fatalf("expected local auth lifecycle guidance output=%s", authOutput)
+	if strings.Contains(authOutput, "auth register") || strings.Contains(authOutput, "auth default") {
+		t.Fatalf("obsolete auth guidance output=%s", authOutput)
 	}
 
 	invitesOutput := run([]string{"help", "auth", "invites"})
@@ -228,7 +225,7 @@ func TestRunGeneratedAuthHelpTopics(t *testing.T) {
 func TestRunLocalAuthLifecycleHelpTopics(t *testing.T) {
 	t.Parallel()
 
-	for _, topic := range []string{"auth whoami", "auth list", "auth default", "auth update-username", "auth rotate", "auth revoke", "auth token-status"} {
+	for _, topic := range []string{"auth whoami"} {
 		output := runHelpCommand(t, append([]string{"help"}, strings.Fields(topic)...)...)
 		if !strings.Contains(output, "Local Help: "+topic) {
 			t.Fatalf("expected local auth help header for %q output=%s", topic, output)

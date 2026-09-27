@@ -31,6 +31,13 @@ func isDailyWorkVerb(verb string) bool {
 // dailyAgent is the only profile identity seam for the daily loop. S5 can replace
 // this with the host assertion resolver without changing any of the verbs.
 func (a *App) dailyAgent(ctx context.Context, cfg config.Resolved) (map[string]any, map[string]any, error) {
+	if cfg.AgentID == "" {
+		var err error
+		cfg, err = a.resolveHostAgent(ctx, cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	id := strings.TrimSpace(cfg.AgentID)
 	if id == "" {
 		return nil, nil, errnorm.Usage("identity_unresolved", "select an agent profile for this workspace")

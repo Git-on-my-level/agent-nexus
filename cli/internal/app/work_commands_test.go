@@ -1305,7 +1305,7 @@ func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
 			if tc.agent {
 				writeAgentProfile(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 				env = map[string]string{}
-				args = []string{"--agent", "pm", "--base-url", server.URL}
+				args = []string{"--as", "pm", "--base-url", server.URL}
 			}
 			args = append(args, "pm", "turns", "claim")
 			args = append(args, tc.args...)

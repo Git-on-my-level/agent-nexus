@@ -730,24 +730,12 @@ func (s *Service) EnsureAccessToken(ctx context.Context) (profile.Profile, error
 	return s.ensureAccessToken(ctx)
 }
 
-func (s *Service) ensureAccessToken(ctx context.Context) (profile.Profile, error) {
-	prof, ok, err := profile.Load(s.cfg.ProfilePath)
-	if err != nil {
-		return profile.Profile{}, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
+func (s *Service) ensureAccessToken(_ context.Context) (profile.Profile, error) {
+	if token := strings.TrimSpace(s.cfg.AccessToken); token != "" {
+		return profile.Profile{AccessToken: token}, nil
 	}
-	if !ok {
-		return profile.Profile{}, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
-	}
-	if prof.Revoked {
-		return profile.Profile{}, errnorm.Local("agent_revoked", "profile is revoked and cannot authenticate")
-	}
+	return profile.Profile{}, errnorm.Local("auth_required", "set ANX_ACCESS_TOKEN for a human admin session or enroll this host")
 
-	expiresAt, hasExpiry := profile.ParseAccessTokenExpiry(prof.AccessTokenExpiresAt)
-	if strings.TrimSpace(prof.AccessToken) != "" && hasExpiry && time.Until(expiresAt) > minAccessTokenTTL {
-		return prof, nil
-	}
-
-	return s.forceRefresh(ctx, prof)
 }
 
 func (s *Service) forceRefresh(ctx context.Context, prof profile.Profile) (profile.Profile, error) {

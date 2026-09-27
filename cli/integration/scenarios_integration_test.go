@@ -47,6 +47,8 @@ type liveCoreHarness struct {
 	server         *exec.Cmd
 	workspace      string
 	bootstrapToken string
+	adminToken     string
+	humanTokens    map[string]string
 }
 
 type cliResult struct {
@@ -479,6 +481,10 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 			t.Fatalf("invalid ANX_INTEGRATION_PORT %q", assigned)
 		}
 		port = parsed
+		if conn, dialErr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond); dialErr == nil {
+			_ = conn.Close()
+			port = allocatePort(t)
+		}
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
@@ -492,6 +498,9 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	cmd.Env = append(os.Environ(),
 		"ANX_BOOTSTRAP_TOKEN="+bootstrapToken,
 		"ANX_PROJECTION_MODE=manual",
+		"ANX_ALLOW_PASSKEY_DEV_BYPASS=1",
+		"ANX_HOSTED_DEV_MODE=1",
+		"ANX_ENABLE_DEV_ACTOR_MODE=1",
 	)
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Stdout = logFile
@@ -511,6 +520,7 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 		server:         cmd,
 		workspace:      workspace,
 		bootstrapToken: bootstrapToken,
+		humanTokens:    map[string]string{},
 	}
 
 	t.Cleanup(func() {
@@ -536,36 +546,73 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 
 func (h *liveCoreHarness) registerAgentBootstrap(t *testing.T, agent string, username string) {
 	t.Helper()
-	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--bootstrap-token", h.bootstrapToken)
+	if h.adminToken != "" {
+		return
+	}
+	admin := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "CLI integration admin", "bootstrap_token": h.bootstrapToken})
+	h.adminToken = mustStringPath(t, admin, "tokens.access_token")
+	grant := h.postCore(t, "/auth/hosts/enrollment-tokens", h.adminToken, map[string]any{"label": "CLI integration host", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
+	h.runCLIExpectOK(t, agent, nil, "host", "enroll", "--name", "integration-host", "--token", mustStringPath(t, grant, "token"))
 }
 
 func (h *liveCoreHarness) registerAgentInvite(t *testing.T, agent string, username string, inviteToken string) {
 	t.Helper()
-	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--invite-token", inviteToken)
+	// Derived agents are created on first --as token grant.
 }
 
 func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) string {
 	t.Helper()
-	return h.createInviteTokenKind(t, issuerAgent, "agent")
+	return "derived-agent-needs-no-invite"
 }
 
 func (h *liveCoreHarness) createInviteTokenKind(t *testing.T, issuerAgent, kind string) string {
 	t.Helper()
-	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", kind)
-	return mustStringPath(t, res.Payload, "result.token")
+	res := h.postCore(t, "/auth/invites", h.adminToken, map[string]any{"kind": kind})
+	return mustStringPath(t, res, "token")
+}
+
+func (h *liveCoreHarness) postCore(t *testing.T, path, token string, body any) map[string]any {
+	t.Helper()
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequest("POST", h.baseURL+path, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode >= 400 {
+		logs, _ := os.ReadFile(h.logPath)
+		t.Fatalf("POST %s: %d %s\ncore: %s", path, resp.StatusCode, data, logs)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func (h *liveCoreHarness) actorID(t *testing.T, agent string) string {
 	t.Helper()
 	res := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	return mustStringPath(t, res.Payload, "result.profile.actor_id")
+	return mustStringPath(t, res.Payload, "result.agent.actor_id")
 }
 
 func (h *liveCoreHarness) selectPMAgent(t *testing.T, agent string) {
 	t.Helper()
 	who := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	actor := mustStringPath(t, who.Payload, "result.profile.actor_id")
-	handle := mustStringPath(t, who.Payload, "result.profile.username")
+	actor := mustStringPath(t, who.Payload, "result.agent.actor_id")
+	handle := mustStringPath(t, who.Payload, "result.agent.handle")
 	restartCoreForWorkTest(t, h, "ANX_PM_AGENT_ACTOR_ID="+actor, "ANX_PM_AGENT_HANDLE="+handle)
 }
 
@@ -606,6 +653,7 @@ func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName,
 	if payload.Agent.AgentID == "" || payload.Tokens.AccessToken == "" {
 		t.Fatalf("passkey register missing fields: %s", raw)
 	}
+	h.humanTokens[agent] = payload.Tokens.AccessToken
 	dir := filepath.Join(h.homeDir, ".config", "anx", "profiles")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -660,13 +708,20 @@ func (h *liveCoreHarness) runCLI(t *testing.T, agent string, stdin any, args ...
 	t.Helper()
 
 	allArgs := make([]string, 0, len(args)+6)
-	allArgs = append(allArgs, "--json", "--base-url", h.baseURL, "--agent", agent)
+	allArgs = append(allArgs, "--json", "--base-url", h.baseURL)
+	if h.humanTokens[agent] == "" {
+		allArgs = append(allArgs, "--as", agent)
+	}
 	allArgs = append(allArgs, args...)
 
 	cmd := exec.Command(h.cliBin, allArgs...)
 	cmd.Env = append(os.Environ(),
 		"HOME="+h.homeDir,
 		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
+		"ANX_ACCESS_TOKEN="+h.humanTokens[agent],
+		"AGENTCTL_EXECUTION_ID=",
+		"AGENTCTL_ADAPTER=",
+		"AGENTCTL_HOST_ID=",
 	)
 
 	var stdinReader io.Reader

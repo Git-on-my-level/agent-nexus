@@ -1,135 +1,33 @@
-# anx-cli Runbook
+# CLI runbook
 
-This runbook covers local development, end-to-end smoke usage, release steps, and common troubleshooting for `anx`.
+## Host enrollment and identity
 
-## Local development
-
-Build and test:
+Set `ANX_BASE_URL` to the workspace core URL. A human auth-admin must bootstrap the workspace before a host can enroll.
 
 ```bash
-cd cli
-go build ./cmd/anx go test ./...
-go test -tags=integration ./integration/...
+anx host enroll --plan
+anx host enroll --name my-mac
+anx --as codex auth whoami
+anx doctor
 ```
 
-Run against local core (default output is **text** on stdout and should be the first choice for agent readbacks; add **`--json`** or **`ANX_JSON=true`** only when a script or program parses the CLI envelope):
+Interactive enrollment prints a user code and verification URL. A human approves the request in Access → Hosts; the CLI polls at the server interval. For unattended hosts, create a one-time enrollment token in the Access page and run `anx host enroll --token <token>`. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
+
+Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
+
+`--as <name>` or `ANX_AS` chooses a derived agent. Otherwise `anx` checks `agentctl run` context and then known harness markers. `anx auth whoami` shows the host, agent and resolution source. `anx host token --as <name>` prints only the short-lived bearer in text mode; JSON mode returns `{token, expires_at, agent: {id, handle}}` for the bridge. Protect its stdout as a secret.
+
+Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Revocation is a human auth-admin action in the Access page.
+
+## Runs from agentctl
+
+Label launched work with `--label anx.card.<card-slug>`. To subscribe the execution to ANX, use agentctl's `command` destination; it appends an owner-only callback file path to the argv:
 
 ```bash
-cd cli
-go run ./cmd/anx --base-url http://127.0.0.1:8000 --agent local version
-go run ./cmd/anx --base-url http://127.0.0.1:8000 --agent local doctor
-go run ./cmd/anx --base-url http://127.0.0.1:8000 --agent local auth bootstrap status
-go run ./cmd/anx --base-url http://127.0.0.1:8000 --agent local auth register --username local.agent --bootstrap-token <token>
-go run ./cmd/anx --agent local version
+agentctl subscribe create --execution "$EXECUTION_ID" --destination command --target "$(command -v anx)" --arg runs --arg ingest --kind all
 ```
 
-**Output modes:** concise text is the default for direct reading and normal LLM tool output. JSON mode is for programmatic consumers (`jq`, CI, services, scripts). `auth register` does **not** write `"json": true` into the profile; older profiles may still set it—use `--json=false` / `ANX_JSON=false` for a single command if needed.
-
-All non-streaming commands emit envelope v2 in JSON mode. Success has `ok`, `schema_version: 2`, `command`, `result`, `warnings: []`, and `next_actions: []`. Errors have `ok: false`, `schema_version: 2`, `warnings: []`, and `error` with `code`, `message`, `retryable`, `exit_code`, `details`, and `next_actions`. Text mode projects the same document as `fact key=value`, `warning code=…`, and `next anx …` lines. Values containing whitespace or quotes are quoted. `next_actions` include `argv`, `mutates`, and `side_effect_class` (`read_only`, `local_operational_write`, `remote_coordination_write`, or `external_side_effect`).
-
-Exit codes: 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 declined, 1 other. A warning does not change the exit code. Run `anx help` for daily and setup commands, or `anx help --all` for the full catalog. Diagnostic groups are under `anx debug` (for example, `anx debug events list` and `anx debug meta commands`).
-
-**Refs and handles:** list-style JSON and default text rows lead with public typed refs such as `topic:<handle>`, `board:<handle>`, and `card:<handle>`. You can paste typed refs or bare handles back into commands; the CLI passes them through to core for resolution. Use `--json` when scripts need `ref` and `handle` fields directly.
-
-**Active profile (recommended for interactive use):** after you have at least one profile under `~/.config/anx/profiles/`, run `anx config use <name>` (or `anx auth default <name>`) once. The CLI stores the choice in `~/.config/anx/default-profile` and loads `base_url` and credentials from `~/.config/anx/profiles/<name>.json`, so later commands can omit `--base-url` and `--agent`. Inspect merged settings with `anx config show` (tokens are redacted). Clear the marker with `anx config unset` if you want to rely on single-profile auto-select or explicit flags/env only.
-
-Global config precedence:
-
-1. command-line flags
-2. environment variables
-3. profile file (`~/.config/anx/profiles/<agent>.json`)
-4. defaults
-
-**Default base URL:** when no `ANX_BASE_URL`, no `--base-url`, and the profile does not override it, the CLI uses `http://127.0.0.1:8000`. That makes local reads easy to try but is portable to **only** matching cores; automation should always pass `--base-url` / `ANX_BASE_URL` explicitly.
-
-**Multiple profiles:** with more than one `~/.config/anx/profiles/*.json` and no explicit `--agent` / `ANX_AGENT` / `anx config use` / `anx auth default`, config resolution fails until you name a profile.
-
-Supported env vars:
-
-- `ANX_BASE_URL`
-- `ANX_AGENT`
-- `ANX_JSON`
-- `ANX_NO_COLOR`
-- `ANX_TIMEOUT`
-- `ANX_PROFILE_PATH`
-- `ANX_ACCESS_TOKEN`
-- `ANX_USERNAME`
-
-## Bridge bootstrap
-
-If an agent/operator only has the `anx` binary installed and needs the per-agent bridge runtime, use the CLI-managed helpers:
-
-```bash
-# requires Python 3.11+ and git on PATH
-# default: installs bridge at the same git tag as this anx binary (e.g. v0.3.2); use --ref main for default-branch HEAD
-anx bridge install
-anx bridge init-config --kind subprocess --output ./agent.toml --handle <handle> --adapter-entrypoint ./adapter.py
-anx bridge import-auth --config ./agent.toml --from-profile <agent>
-anx bridge start --config ./agent.toml
-anx bridge status --config ./agent.toml
-anx bridge doctor --config ./agent.toml
-anx bridge logs --config ./agent.toml
-anx bridge restart --config ./agent.toml
-anx bridge stop --config ./agent.toml
-```
-
-`anx bridge init-config` discovers the durable workspace id from the active profile or core handshake. Add `--workspace-id <workspace-id>` only when discovery fails or you need an explicit binding.
-
-Wake routing is owned by the workspace deployment and runs inside `anx-core` by default. `anx bridge ...` only manages the per-agent bridge process.
-
-Lifecycle guardrail:
-
-- registration plus a matching enabled workspace binding makes an agent taggable
-- fresh bridge check-in makes the agent online for immediate delivery
-- if bridge check-in becomes stale, wake routing should keep the agent taggable but queue notifications until the bridge returns
-
-## Auth/profile lifecycle
-
-The CLI auth flow is for workspace-local Ed25519 agent principals. In SaaS
-deployments with `anx-core` running in `control_plane` human auth mode, human
-workspace access comes from the control plane's signed workspace grant flow
-instead of `anx auth register`.
-
-Registration and profile bootstrap:
-
-```bash
-anx --base-url http://127.0.0.1:8000 --agent agent-a auth bootstrap status
-anx --base-url http://127.0.0.1:8000 --agent agent-a auth register --username agent.a --bootstrap-token <token>
-anx --agent agent-a auth whoami
-anx --agent agent-a auth token-status
-```
-
-When `bootstrap_registration_available` is **false**, bootstrap registration is closed (typical after the first principal has onboarded). Register additional agent profiles with a **one-time invite** from an operator who can run `anx auth invites create --kind agent` (or use a deployment-supplied invite):
-
-```bash
-anx --base-url http://127.0.0.1:8000 --agent agent-b auth register --username agent.b --invite-token <oinv_...>
-```
-
-### Local `make serve` (fixture seed)
-
-The default dev stack runs `web-ui/scripts/seed-core-from-mock.mjs`, which registers the seeded **human** operator with the workspace bootstrap token. That **consumes** bootstrap; you cannot register a second principal with `--bootstrap-token` against the same fresh workspace.
-
-For local CLI dogfooding, each `make serve` run refreshes **pre-issued agent invites** created via the normal `POST /auth/invites` API (human session → invites). Read:
-
-- `cli/dogfood-resources/README.md` (usage)
-- `cli/dogfood-resources/invites.generated.json` (gitignored; three single-use `oinv_` tokens after a successful identity seed)
-
-If that file is missing, `GET /auth/bootstrap/status` on your core and either reset the dev workspace / re-run serve with seeding, or obtain an invite from an existing principal. Turning off fixture identities (`ANX_DEV_SEED_IDENTITIES=0`) leaves bootstrap open longer but skips auto-generated invites and `web-ui/.dev/local-identities.json` refresh.
-
-Rotation/update/revoke:
-
-```bash
-anx --agent agent-a auth update-username --username agent.a.renamed
-anx --agent agent-a auth rotate
-anx --agent agent-a auth revoke
-```
-
-Profile material paths:
-
-- profile: `~/.config/anx/profiles/<agent>.json`
-- private key: `~/.config/anx/keys/<agent>.ed25519`
-
-Permissions are enforced by CLI runtime (`0700` dirs, `0600` files).
+`anx runs ingest` also accepts one version 1 callback or execution JSON envelope on stdin. It derives the reporting agent from the envelope adapter because callback processes have no `AGENTCTL_*` environment. Replayed observations converge on the same run. Read with `anx runs list` and `anx runs get <run-id>`.
 
 ## Integration Scenarios
 
@@ -174,42 +72,42 @@ The runner:
 ## Typed Command Smoke
 
 ```bash
-printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}\n' | anx --agent agent-a topics create
-anx --agent agent-a topics list --state active
+printf '{"topic":{"title":"Incident #42","summary":"Investigate #42","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}\n' | anx --as agent-a topics create
+anx --as agent-a topics list --state active
 
-anx --agent agent-a events stream --max-events 1
-anx --agent agent-a inbox stream --max-events 1
-anx --agent agent-a events stream --follow
+anx --as agent-a events stream --max-events 1
+anx --as agent-a inbox stream --max-events 1
+anx --as agent-a events stream --follow
 # Diagnostic/local helper over backing-thread timelines; prefer topics/cards/boards for primary coordination reads.
-anx --agent agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --max-events 20
-anx --agent agent-a provenance walk --from event:incident-42 --depth 2
-anx --agent agent-a topics get incident-42
-anx --agent agent-a topics create --title "Launch" --summary "Coordinate launch work"
-anx --agent agent-a topics message incident-42 --body-file message.md
-anx --agent agent-a topics messages incident-42 --max-events 10
-anx --agent agent-a topics workspace incident-42
+anx --as agent-a events list --thread-id thread_123 --thread-id thread_456 --type message_posted --mine --max-events 20
+anx --as agent-a provenance walk --from event:incident-42 --depth 2
+anx --as agent-a topics get incident-42
+anx --as agent-a topics create --title "Launch" --summary "Coordinate launch work"
+anx --as agent-a topics message incident-42 --body-file message.md
+anx --as agent-a topics messages incident-42 --max-events 10
+anx --as agent-a topics workspace incident-42
 # Backing-thread reads (tooling/diagnostics; prefer topics workspace for operator triage)
-anx --agent agent-a threads inspect thread_123 --max-events 50
-anx --agent agent-a threads context --state active
-anx --agent agent-a threads workspace thread_123
-anx --agent agent-a docs content product-constitution
-anx --agent agent-a docs message product-constitution --body-file note.md
-anx --agent agent-a docs messages product-constitution --max-events 10
-anx --agent agent-a artifacts inspect --artifact-id incident-42-log
-anx --agent agent-a workspace summary
-anx --agent agent-a boards list --state active
-anx --agent agent-a boards create --topic incident-42 --title "Launch board"
-anx --agent agent-a boards workspace product-launch
+anx --as agent-a threads inspect thread_123 --max-events 50
+anx --as agent-a threads context --state active
+anx --as agent-a threads workspace thread_123
+anx --as agent-a docs content product-constitution
+anx --as agent-a docs message product-constitution --body-file note.md
+anx --as agent-a docs messages product-constitution --max-events 10
+anx --as agent-a artifacts inspect --artifact-id incident-42-log
+anx --as agent-a workspace summary
+anx --as agent-a boards list --state active
+anx --as agent-a boards create --topic incident-42 --title "Launch board"
+anx --as agent-a boards workspace product-launch
 # Cards: draft prose locally, then use domain verbs for active work.
-anx --agent agent-a cards list --board product-launch
-anx --agent agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
-anx --agent agent-a cards revise rescue-digest --body-file card.md
-anx --agent agent-a cards assign rescue-digest --assignee-ref actor:agent-a
-anx --agent agent-a cards move rescue-digest --column review
-anx --agent agent-a cards resolve rescue-digest --body-file evidence.md
+anx --as agent-a cards list --board product-launch
+anx --as agent-a cards create --board product-launch --topic incident-42 --title "Rescue digest" --body-file card.md
+anx --as agent-a cards revise rescue-digest --body-file card.md
+anx --as agent-a cards assign rescue-digest --assignee-ref actor:agent-a
+anx --as agent-a cards move rescue-digest --column review
+anx --as agent-a cards resolve rescue-digest --body-file evidence.md
 # Packet APIs are subject-based: `packet.subject_ref` must be `card:<card-handle>`.
-anx --agent agent-a receipts create --from-file receipt.json
-anx --agent agent-a reviews create --from-file review.json
+anx --as agent-a receipts create --from-file receipt.json
+anx --as agent-a reviews create --from-file review.json
 ```
 
 Board activity uses `board:<board-handle>` typed refs on emitted events. When
@@ -228,10 +126,10 @@ or unusual integrations.
 Draft/commit flow:
 
 ```bash
-printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | anx --agent agent-a draft create --command topics.create
-anx --agent agent-a draft list
-anx --agent agent-a draft commit <draft-id>
-anx --agent agent-a draft discard <draft-id>
+printf '%s\n' '{"topic":{"title":"Drafted incident","summary":"Staged via draft","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":[],"provenance":{"sources":["event:example"]}}}' | anx --as agent-a draft create --command topics.create
+anx --as agent-a draft list
+anx --as agent-a draft commit <draft-id>
+anx --as agent-a draft discard <draft-id>
 ```
 
 Use `draft` for reviewable JSON writes, broad/risky mutations, or changes delegated by a human where an inspectable checkpoint is useful. Prefer direct domain verbs for narrow, already-verified changes.
@@ -239,7 +137,7 @@ Use `draft` for reviewable JSON writes, broad/risky mutations, or changes delega
 The raw fallback remains available:
 
 ```bash
-anx --base-url http://127.0.0.1:8000 --agent agent-a api call --path /meta/handshake
+anx --base-url http://127.0.0.1:8000 --as agent-a api call --path /meta/handshake
 ```
 
 ## Generated help sync
@@ -289,30 +187,13 @@ Maintainer checklist:
 3. Verify release assets and `checksums.txt` on the GitHub release page.
 4. Verify handshake compatibility with a live core:
    - `anx meta command meta.handshake` (add `--json` if you need the JSON envelope)
-   - `anx --base-url <core> --agent <agent> api call --path /meta/handshake`
+   - `anx --base-url <core> --as <agent> api call --path /meta/handshake`
 
 ## Troubleshooting
 
-### Auth/profile failures
+### Host identity failures
 
-Symptoms:
-
-- `profile_not_found`
-- `key_mismatch`
-- `invalid_token`
-- `agent_revoked`
-
-Actions:
-
-1. Check selected agent/profile:
-
-```bash
-anx --agent <agent> auth token-status
-```
-
-1. Verify profile file exists and is readable (`~/.config/anx/profiles/<agent>.json`).
-2. If key mismatch after key/manual edits, run `auth rotate` (if possible) or `auth register` with a new agent profile.
-3. If revoked, create/register a new agent profile; revoked profiles cannot recover tokens.
+Run `anx doctor` for enrollment, host key permissions, identity resolution and agentctl checks. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement.
 
 ### Version mismatch
 
@@ -326,7 +207,7 @@ Actions:
 1. Inspect handshake metadata:
 
 ```bash
-anx --base-url <core> --agent <agent> api call --path /meta/handshake
+anx --base-url <core> --as <agent> api call --path /meta/handshake
 ```
 
 1. Compare current CLI version against:
@@ -371,8 +252,8 @@ curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8000/stream/inbox
 
 `anx work` reads the central work projection of existing cards. Projects are
 existing topics (`anx topics list`); boards and native card workflow commands keep
-their existing meaning. Select the workspace with the existing `--agent` profile
-and `--base-url`; reports reuse its key/token identity. No local tracker store or
+their existing meaning. Select the workspace with `--base-url` and the derived
+agent with `--as`; reports use the enrolled host identity. No local tracker store or
 remote daemon is required.
 
 ```sh
@@ -471,9 +352,9 @@ authenticated actor id. Text output prints `runner_id` and `lease_token` so
 the same runner can release later:
 
 ```sh
-anx --agent pm pm turns claim --runner-id "$RUNNER_ID"
+anx --as pm pm turns claim --runner-id "$RUNNER_ID"
 # turn-1  status=in progress  runner_id=runner-1  lease_token=...
-anx --agent pm pm turns release turn-1 --from-file - <<'EOF'
+anx --as pm pm turns release turn-1 --from-file - <<'EOF'
 {"runner_id":"runner-1","lease_token":"<lease_token from claim>"}
 EOF
 ```
@@ -499,7 +380,7 @@ and that variable is unset, the turn fails with a sentence that names
 The harness child receives the **full parent environment**, then `HOME` is
 reset to the login account home from passwd (`user.Current().HomeDir`). That
 is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
-`HOME=.tmp/anx-dev-profile-homes/pm` applies to the `anx` process (CLI
+`ANX_AS=pm` applies to the `anx` process (CLI
 profiles), not to the child harness. After a successful claim the runner also
 sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
 `anx pm turns context` send it when `--lease-token` is omitted, so the harness
@@ -521,22 +402,22 @@ of that one turn until the deadline. Example, separate uid:
 
 ```sh
 sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
-  HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+  ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
 ```
 
 Example, separate host: start core locally, then on the runner machine
-`ANX_BASE_URL=http://core-host:8000 ZAI_API_KEY=... ./cli/anx --agent pm pm serve ...`.
+`ANX_BASE_URL=http://core-host:8000 ZAI_API_KEY=... ./cli/anx --as pm pm serve ...`.
 
 ```sh
 make cli-build
 export ZAI_API_KEY
 ANX_DEV_BLOB_BACKEND=filesystem make serve
-HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
-HOME=.tmp/anx-dev-profile-homes/maya ./cli/anx --agent maya pm ask --wait \
+ANX_AS=maya ./cli/anx --as maya pm ask --wait \
   "What needs my decision?"
 ```
 
@@ -634,17 +515,17 @@ from this checkout unless asked):
 
 ```sh
 # Hermes (direct)
-HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'
 
 # Codex (direct)
-HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'codex exec --skip-git-repo-check -- {prompt}'
 
 # Same harnesses through agentctl (no {prompt} placeholder)
-HOME=.tmp/anx-dev-profile-homes/pm ./cli/anx --agent pm pm serve \
+ANX_AS=pm ./cli/anx --as pm pm serve \
   --work-dir .tmp/pm-runner \
   --runner 'hermes -p --provider zai --model glm-5.3'
 ```

@@ -502,7 +502,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-a",
+		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "Should we ship Friday?",
 		"--thread-id", "thread_1",
 		"--subject-ref", "topic:launch",
@@ -592,7 +592,7 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-a",
+		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "Should we ship Friday?",
 		"--subject-ref", "topic:launch",
 		"--recommend", "Ship Friday with a rollback plan ready.",
@@ -676,7 +676,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 
 	home := t.TempDir()
 	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "debug", "inbox", "get"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--as", "agent-a", "debug", "inbox", "get"})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "debug inbox list" {
 		t.Fatalf("expected alias to resolve to inbox list, got %q payload=%#v", got, payload)
@@ -872,7 +872,7 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "inbox", "list",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -897,7 +897,7 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "inbox", "list",
 	})
 	if !strings.Contains(textOut, "result.viewing_as.profile=agent-a") || !strings.Contains(textOut, "result.viewing_as.username=agent.alpha") || !strings.Contains(textOut, "result.viewing_as.actor_id=actor_123") {
@@ -1202,7 +1202,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
@@ -1231,7 +1231,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 
 	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
@@ -1244,7 +1244,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 
 	textShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
@@ -1439,7 +1439,7 @@ func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs",
+		"--as", "agent-docs",
 		"docs", "revise", "--apply",
 		"--document-id", "doc_1",
 	})
@@ -1475,7 +1475,7 @@ func TestDocsReviseRequiresActiveActorIdentity(t *testing.T) {
 	if !strings.Contains(message, "No active actor identity") {
 		t.Fatalf("expected missing actor identity guidance, got %q payload=%#v", message, payload)
 	}
-	if !strings.Contains(message, "anx auth register --username <name>") || !strings.Contains(message, "anx auth whoami") {
+	if !strings.Contains(message, "anx host enroll") || !strings.Contains(message, "auth whoami") {
 		t.Fatalf("expected actionable auth guidance, got %q payload=%#v", message, payload)
 	}
 
@@ -1484,89 +1484,6 @@ func TestDocsReviseRequiresActiveActorIdentity(t *testing.T) {
 	mu.Unlock()
 	if gotRequests != 0 {
 		t.Fatalf("expected no HTTP requests when actor identity is missing, got %d", gotRequests)
-	}
-}
-
-func TestProductManagerFlowRegisterThenDocsRevise(t *testing.T) {
-	t.Parallel()
-
-	var mu sync.Mutex
-	docsRevisionCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/meta/handshake":
-			_, _ = w.Write([]byte(`{"core_instance_id":"fake-core","min_cli_version":"0.1.0"}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/auth/agents/register":
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"agent": map[string]any{
-					"agent_id": "agent-product-manager",
-					"actor_id": "actor-product-manager",
-					"username": "pi-dogfood-agent-product-manager",
-				},
-				"key": map[string]any{
-					"key_id": "key-product-manager",
-				},
-				"tokens": map[string]any{
-					"access_token":  "token-product-manager",
-					"refresh_token": "refresh-product-manager",
-					"token_type":    "Bearer",
-					"expires_in":    300,
-				},
-			})
-			return
-		case r.Method == http.MethodGet && r.URL.Path == "/docs/northwave-pilot-rescue-brief":
-			_, _ = w.Write([]byte(`{"document":{"id":"northwave-pilot-rescue-brief","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","revision_number":1,"content":"initial brief","content_type":"text"}}`))
-			return
-		case r.Method == http.MethodPost && r.URL.Path == "/docs/northwave-pilot-rescue-brief/revisions":
-			if gotAuth := strings.TrimSpace(r.Header.Get("Authorization")); gotAuth != "Bearer token-product-manager" {
-				t.Fatalf("expected auth bearer token, got %q", gotAuth)
-			}
-			body, _ := io.ReadAll(r.Body)
-			var payload map[string]any
-			if err := json.Unmarshal(body, &payload); err != nil {
-				t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
-			}
-			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-product-manager" {
-				t.Fatalf("expected actor_id from registered profile, got %q body=%s", got, string(body))
-			}
-			mu.Lock()
-			docsRevisionCalls++
-			mu.Unlock()
-			_, _ = w.Write([]byte(`{"document":{"id":"northwave-pilot-rescue-brief","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
-			return
-		default:
-			http.NotFound(w, r)
-			return
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	env := map[string]string{}
-
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-product-manager",
-		"auth", "register",
-		"--username", "pi-dogfood-agent-product-manager",
-	}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_base_revision":"rev_1","content":"updated brief","content_type":"text"}`), []string{
-		"--json",
-		"--base-url", server.URL,
-		"--agent", "agent-product-manager",
-		"docs", "revise", "--apply",
-		"--document-id", "northwave-pilot-rescue-brief",
-	}))
-
-	mu.Lock()
-	gotCalls := docsRevisionCalls
-	mu.Unlock()
-	if gotCalls != 1 {
-		t.Fatalf("expected one docs revise request, got %d", gotCalls)
 	}
 }
 
@@ -1752,7 +1669,7 @@ func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.
 	writeAgentProfile(t, home, "agent-doc-message", `{"agent":"agent-doc-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-doc-message",
+		"--json", "--base-url", server.URL, "--as", "agent-doc-message",
 		"docs", "message", documentID, "--body", "Reviewed via domain command.",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -1962,7 +1879,7 @@ func TestDocsReviseRejectsNullContentBeforeHTTP(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs-null-content",
+		"--as", "agent-docs-null-content",
 		"docs", "revise", "--apply",
 		"--document-id", "doc_1",
 	})
@@ -2021,7 +1938,7 @@ func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs-content-file",
+		"--as", "agent-docs-content-file",
 		"docs", "revise",
 		"--document-id", "doc_1",
 		"--from-file", updateFile,
@@ -2077,7 +1994,7 @@ func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs-content-only",
+		"--as", "agent-docs-content-only",
 		"docs", "revise",
 		"--document-id", "doc_1",
 		"--body-file", contentFile,
@@ -2125,7 +2042,7 @@ func TestDocsRevisePreservesStructuredContentInDiff(t *testing.T) {
 	}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs-structured",
+		"--as", "agent-docs-structured",
 		"docs", "revise",
 		"--document-id", "doc_structured",
 	})
@@ -2182,7 +2099,7 @@ func TestDocsReviseTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 	}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-docs-text-fallback",
+		"--as", "agent-docs-text-fallback",
 		"docs", "revise",
 		"--document-id", "doc_text_fallback",
 	})
@@ -2990,7 +2907,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "create", "--board", boardID, "--topic", "topic_cards_123", "--title", "Implement login", "--body-file", cardFile,
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(createPayload)); got != "cards.create" {
@@ -2998,7 +2915,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	revisePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "revise", cardID, "--body-file", revisedFile,
 	}))
 	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
@@ -3009,7 +2926,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	historyPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "history", "--card-id", cardID,
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(historyPayload)); got != "cards.revisions.list" {
@@ -3017,7 +2934,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	revisionPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "revision", "get", "--card-id", cardID, "--revision-id", revisionID,
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(revisionPayload)); got != "cards.revisions.get" {
@@ -3025,7 +2942,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	assignPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "assign", cardID, "--assignee-ref", "actor:actor_owner",
 	}))
 	if got := anyStringValue(assignPayload["command"]); got != "cards assign" {
@@ -3033,7 +2950,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	movePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "move", cardID, "--column", "review",
 	}))
 	if got := anyStringValue(movePayload["command"]); got != "cards move" {
@@ -3041,7 +2958,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	resolvePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "resolve", cardID, "--resolution-ref", "event:event_done",
 	}))
 	if got := anyStringValue(resolvePayload["command"]); got != "cards resolve" {
@@ -3052,7 +2969,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	}
 
 	reopenPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-cards",
+		"--json", "--base-url", server.URL, "--as", "agent-cards",
 		"cards", "reopen", cardID,
 	}))
 	if got := anyStringValue(reopenPayload["command"]); got != "cards reopen" {
@@ -3139,7 +3056,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 	}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-resolve-body",
+		"--json", "--base-url", server.URL, "--as", "agent-resolve-body",
 		"cards", "resolve", cardID, "--body-file", evidenceFile,
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
@@ -3216,7 +3133,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 	writeAgentProfile(t, home, "agent-resolve-reason", `{"agent":"agent-resolve-reason","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-resolve-reason",
+		"--json", "--base-url", server.URL, "--as", "agent-resolve-reason",
 		"cards", "resolve", cardID, "--reason", "Works as expected.", "--body", "Validated in staging.",
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
@@ -3232,7 +3149,7 @@ func TestCardsResolveWithoutEvidenceFlagsRejected(t *testing.T) {
 	home := t.TempDir()
 	writeAgentProfile(t, home, "agent-resolve-empty", `{"agent":"agent-resolve-empty","actor_id":"actor","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-resolve-empty",
+		"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-resolve-empty",
 		"cards", "resolve", "card:foo",
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -3293,7 +3210,7 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 	}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-move-file-column",
+		"--json", "--base-url", server.URL, "--as", "agent-move-file-column",
 		"cards", "move", cardID, "--from-file", bodyFile, "--column", "done",
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
@@ -3324,7 +3241,7 @@ func TestCardsMoveDryRunSurfacesFlagOverlay(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json",
 		"--base-url", "http://127.0.0.1:9",
-		"--agent", "agent-move-dry-overlay",
+		"--as", "agent-move-dry-overlay",
 		"cards", "move", cardID,
 		"--from-file", bodyFile,
 		"--column", "done",
@@ -3381,7 +3298,7 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 				t.Parallel()
 				home := t.TempDir()
 				writeAgentProfile(t, home, "agent-lifecycle-matrix", `{"agent":"agent-lifecycle-matrix","actor_id":"actor_matrix_prof","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-				base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-lifecycle-matrix"}
+				base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-lifecycle-matrix"}
 				id := lifecycleMatrixSampleID(spec.resource)
 				prefix := append([]string(nil), base...)
 				if isDiagnosticGroup(spec.resource) {
@@ -3445,7 +3362,7 @@ func TestDocsTrashRequiresReasonFlagOrJSONBody(t *testing.T) {
 
 	home := t.TempDir()
 	writeAgentProfile(t, home, "agent-docs-trash", `{"agent":"agent-docs-trash","actor_id":"actor_docs_trash","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-docs-trash", "docs", "trash", "document_docs_trash_1"}
+	base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-docs-trash", "docs", "trash", "document_docs_trash_1"}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(base, "--reason", "superseded", "--dry-run")))
 	data := asMap(payload["result"])
@@ -3502,7 +3419,7 @@ func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 	writeAgentProfile(t, home, "agent-topic-alias", `{"agent":"agent-topic-alias","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-topic-alias",
+		"--json", "--base-url", server.URL, "--as", "agent-topic-alias",
 		"topics", "message", "--thread", threadID, "--body", "Thread-scoped reply path.",
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
@@ -3589,7 +3506,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 
 	dryRun := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"--json", "--base-url", server.URL, "--as", "agent-model",
 		"topics", "create", "--title", "Preview", "--summary", "Preview summary", "--dry-run",
 	}))
 	data, _ := dryRun["result"].(map[string]any)
@@ -3598,7 +3515,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 
 	topicPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"--json", "--base-url", server.URL, "--as", "agent-model",
 		"topics", "create", "--title", "CLI ergonomics", "--summary", "Coordinate CLI work", "--ref", "document:doc_model",
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(topicPayload)); got != "topics.create" {
@@ -3606,7 +3523,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 
 	boardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"--json", "--base-url", server.URL, "--as", "agent-model",
 		"boards", "create", "--topic", topicID, "--title", "CLI board", "--summary", "Active work",
 	}))
 	if got := anyStringValue(machineEnvelopeCommandID(boardPayload)); got != "boards.create" {
@@ -3614,7 +3531,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	}
 
 	messagePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-model",
+		"--json", "--base-url", server.URL, "--as", "agent-model",
 		"topics", "message", topicID, "--body-file", messageFile, "--actor-id", profileActor,
 	}))
 	if got := anyStringValue(messagePayload["command"]); got != "topics message" {
@@ -3700,7 +3617,7 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 		{"topics", "restore", topicID},
 		{"topics", "trash", topicID, "--reason", "cleanup"},
 	} {
-		payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json", "--base-url", server.URL, "--agent", "agent-lifecycle"}, args...)))
+		payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json", "--base-url", server.URL, "--as", "agent-lifecycle"}, args...)))
 		if got := anyStringValue(payload["command"]); got == "" {
 			t.Fatalf("expected command in payload %#v", payload)
 		}
@@ -3746,7 +3663,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	writeAgentProfile(t, home, "agent-message", `{"agent":"agent-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-message",
+		"--json", "--base-url", server.URL, "--as", "agent-message",
 		"cards", "message", cardID, "--body", "Implemented via domain command.",
 	})
 	payload := assertEnvelopeOK(t, raw)
@@ -3765,7 +3682,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	}
 
 	textOut := runCLIForTest(t, home, nil, nil, []string{
-		"--base-url", server.URL, "--agent", "agent-message",
+		"--base-url", server.URL, "--as", "agent-message",
 		"cards", "message", cardID, "--body", "Implemented via domain command.",
 	})
 	if !strings.Contains(textOut, "result.event.type=message_posted") || !strings.Contains(textOut, "result.card_title=\"Message card\"") || !strings.Contains(textOut, "result.thread_id="+threadID) {
@@ -3866,7 +3783,7 @@ func TestCardsReplyRequiresTargetMessageOnCardThread(t *testing.T) {
 	home := t.TempDir()
 	writeAgentProfile(t, home, "agent-reply", `{"agent":"agent-reply","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-reply",
+		"--json", "--base-url", server.URL, "--as", "agent-reply",
 		"cards", "reply", cardID, "--to", "event_parent_123456", "--body", "Reply from CLI",
 	})
 	assertEnvelopeOK(t, raw)
@@ -3911,174 +3828,6 @@ func TestMessageCommandInvalidFlagsBeatAmbiguousProfileResolution(t *testing.T) 
 	}
 	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "message-file") {
 		t.Fatalf("expected removed flag in error message, got %#v", payload)
-	}
-}
-
-func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-
-	tests := []struct {
-		name        string
-		args        []string
-		command     string
-		code        string
-		messagePart string
-	}{
-		{
-			name:        "generated list invalid flag",
-			args:        []string{"boards", "list", "--definitely-not-a-flag"},
-			command:     "boards list",
-			code:        "invalid_flags",
-			messagePart: "definitely-not-a-flag",
-		},
-		{
-			name:        "local helper lifecycle conflict",
-			args:        []string{"debug", "events", "list", "--include-archived", "--archived-only"},
-			command:     "debug events list",
-			code:        "invalid_flags",
-			messagePart: "include-archived",
-		},
-		{
-			name:        "nested domain unknown subcommand",
-			args:        []string{"topics", "frobnicate"},
-			command:     "topics",
-			code:        "unknown_subcommand",
-			messagePart: "frobnicate",
-		},
-		{
-			name:        "threads unknown subcommand",
-			args:        []string{"debug", "threads", "frobnicate"},
-			command:     "debug threads",
-			code:        "unknown_subcommand",
-			messagePart: "frobnicate",
-		},
-		{
-			name:        "unknown root command",
-			args:        []string{"frobnicate"},
-			command:     "frobnicate",
-			code:        "unknown_command",
-			messagePart: "frobnicate",
-		},
-		{
-			name:        "import execute invalid flag",
-			args:        []string{"import", "apply", "--plan", "plan.json", "--execute", "--unknown"},
-			command:     "import apply",
-			code:        "invalid_flags",
-			messagePart: "unknown",
-		},
-		{
-			name:        "docs content unsupported document alias",
-			args:        []string{"docs", "content", "--document", "doc_123"},
-			command:     "docs content",
-			code:        "invalid_flags",
-			messagePart: "document",
-		},
-		{
-			name:        "docs content rejected document-id flag",
-			args:        []string{"docs", "content", "--document-id", "doc_123"},
-			command:     "docs content",
-			code:        "invalid_flags",
-			messagePart: "document-id",
-		},
-		{
-			name:        "topics message rejected topic-id flag",
-			args:        []string{"topics", "message", "--topic-id", "topic_1"},
-			command:     "topics message",
-			code:        "invalid_flags",
-			messagePart: "topic-id",
-		},
-		{
-			name:        "docs message rejected document-id flag",
-			args:        []string{"docs", "message", "--document-id", "doc_1"},
-			command:     "docs message",
-			code:        "invalid_flags",
-			messagePart: "document-id",
-		},
-		{
-			name:        "cards message rejected card-id flag",
-			args:        []string{"cards", "message", "--card-id", "card_1"},
-			command:     "cards message",
-			code:        "invalid_flags",
-			messagePart: "card-id",
-		},
-		{
-			name:        "boards workspace unsupported board alias",
-			args:        []string{"boards", "workspace", "--board", "board_123"},
-			command:     "boards workspace",
-			code:        "invalid_flags",
-			messagePart: "board",
-		},
-		{
-			name:        "boards cards list unsupported board alias",
-			args:        []string{"boards", "cards", "list", "--board", "board_123"},
-			command:     "boards cards list",
-			code:        "invalid_flags",
-			messagePart: "board",
-		},
-		{
-			name:        "boards cards move removed",
-			args:        []string{"boards", "cards", "move", "--board-id", "board_123", "--card-id", "card_123", "--column", "review"},
-			command:     "boards cards",
-			code:        "unknown_subcommand",
-			messagePart: "valid subcommands",
-		},
-		{
-			name:        "config lenient invalid flag",
-			args:        []string{"config", "use", "agent-a", "--unknown"},
-			command:     "config use",
-			code:        "invalid_flags",
-			messagePart: "unknown",
-		},
-		{
-			name:        "notifications list unknown flag",
-			args:        []string{"notifications", "list", "--unknown"},
-			command:     "notifications list",
-			code:        "invalid_flags",
-			messagePart: "unknown",
-		},
-		{
-			name:        "notifications list missing status value",
-			args:        []string{"notifications", "list", "--status"},
-			command:     "notifications list",
-			code:        "invalid_flags",
-			messagePart: "status",
-		},
-		{
-			name:        "notifications read missing wakeup id value",
-			args:        []string{"notifications", "read", "--wakeup-id"},
-			command:     "notifications read",
-			code:        "invalid_flags",
-			messagePart: "wakeup-id",
-		},
-		{
-			name:        "notifications dismiss missing wakeup id value",
-			args:        []string{"notifications", "dismiss", "--wakeup-id"},
-			command:     "notifications dismiss",
-			code:        "invalid_flags",
-			messagePart: "wakeup-id",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			raw := runCLIForTest(t, home, nil, nil, append([]string{"--json"}, tt.args...))
-			payload := assertEnvelopeError(t, raw)
-			if got := anyStringValue(payload["command"]); got != tt.command {
-				t.Fatalf("expected command %q, got %#v", tt.command, payload)
-			}
-			errObj, _ := payload["error"].(map[string]any)
-			if got := anyStringValue(errObj["code"]); got != tt.code {
-				t.Fatalf("expected %s before config resolution, got %#v", tt.code, payload)
-			}
-			if got := anyStringValue(errObj["message"]); !strings.Contains(got, tt.messagePart) {
-				t.Fatalf("expected message to contain %q, got %#v", tt.messagePart, payload)
-			}
-		})
 	}
 }
 
@@ -4174,48 +3923,6 @@ func TestPreConfigUsagePreflightRejectsStaleManualResourceFlags(t *testing.T) {
 				t.Fatalf("expected message to contain %q, got %#v", tt.flag, payload)
 			}
 		})
-	}
-}
-
-func TestPreConfigUsagePreflightMirrorsGoFlagSpelling(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-
-	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json",
-		"boards", "list", "-limit", "10",
-	})
-	payload := assertEnvelopeError(t, raw)
-	if got := anyStringValue(payload["command"]); got != "boards list" {
-		t.Fatalf("expected boards list config error command, got %#v", payload)
-	}
-	errObj, _ := payload["error"].(map[string]any)
-	if got := anyStringValue(errObj["code"]); got != "config_resolution_failed" {
-		t.Fatalf("expected single-dash flag to pass preflight and reach config resolution, got %#v", payload)
-	}
-}
-
-func TestConfigResolutionErrorsUsePreflightCommandIdentity(t *testing.T) {
-	t.Parallel()
-
-	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-
-	raw := runCLIForTest(t, home, nil, nil, []string{
-		"--json",
-		"debug", "events", "list", "--max-events", "1",
-	})
-	payload := assertEnvelopeError(t, raw)
-	if got := anyStringValue(payload["command"]); got != "debug events list" {
-		t.Fatalf("expected events list config error command, got %#v", payload)
-	}
-	errObj, _ := payload["error"].(map[string]any)
-	if got := anyStringValue(errObj["code"]); got != "config_resolution_failed" {
-		t.Fatalf("expected config_resolution_failed, got %#v", payload)
 	}
 }
 
@@ -5062,7 +4769,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "Approved.",
@@ -5134,7 +4841,7 @@ func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, failingStdinReader{}, []string{
 		"--json",
 		"--base-url", server.URL,
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
@@ -5175,7 +4882,7 @@ func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
@@ -5229,7 +4936,7 @@ func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
 
 		stdin := strings.NewReader(`{"items":[{"title":"A"}]}`)
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
-			"--json", "--base-url", server.URL, "--agent", "agent-b",
+			"--json", "--base-url", server.URL, "--as", "agent-b",
 			"boards", "cards", "create-batch", "--board-id", boardID,
 		})
 		assertEnvelopeOK(t, raw)
@@ -5268,7 +4975,7 @@ func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
 
 		stdin := strings.NewReader(`{"items":[{"title":"A"}],"actor_id":"actor_from_json","request_key":"req_json","if_board_updated_at":"1999-01-01T00:00:00Z"}`)
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
-			"--json", "--base-url", server.URL, "--agent", "agent-b",
+			"--json", "--base-url", server.URL, "--as", "agent-b",
 			"boards", "cards", "create-batch", "--board-id", boardID,
 			"--actor-id", flagActor,
 			"--request-key", "req_cli",
@@ -6247,7 +5954,7 @@ func TestDocsCreateAndReviseBodyFileStdinNotConsumedAsJSON(t *testing.T) {
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
 			"--json",
 			"--base-url", server.URL,
-			"--agent", "agent-docs",
+			"--as", "agent-docs",
 			"docs", "revise", "--apply",
 			"--document-id", "doc_1",
 			"--body-file=-",

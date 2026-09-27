@@ -83,7 +83,7 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	serveCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"--json", "--base-url", h.baseURL, "--as", "pm",
 		"pm", "serve",
 		"--work-dir", workDir,
 		"--poll-interval", "200ms",
@@ -153,7 +153,7 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	serveCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"--json", "--base-url", h.baseURL, "--as", "pm",
 		"pm", "serve",
 		"--work-dir", workDir,
 		"--poll-interval", "200ms",

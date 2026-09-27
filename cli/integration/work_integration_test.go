@@ -135,7 +135,7 @@ func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 			t.Fatalf("cross-workspace access succeeded: %s", result.Stdout)
 		}
 		code := mustStringPath(t, result.Payload, "error.code")
-		if code != "invalid_token" && code != "auth_required" && code != "unauthorized" && code != "key_mismatch" {
+		if code != "host_not_enrolled" && code != "invalid_token" && code != "auth_required" && code != "unauthorized" && code != "key_mismatch" {
 			t.Fatalf("expected auth rejection before resource handling, got %s: %s", code, result.Stdout)
 		}
 	}

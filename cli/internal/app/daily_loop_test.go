@@ -1,6 +1,7 @@
 package app
 
 import (
+	"agent-nexus-cli/internal/profile"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,9 @@ func dailyTestApp(t *testing.T, serverURL string) (*App, *bytes.Buffer) {
 	a.Getenv = func(k string) string {
 		if k == "ANX_BASE_URL" {
 			return serverURL
+		}
+		if k == "ANX_PROFILE_PATH" {
+			return profile.ProfilePath(home, "worker")
 		}
 		return ""
 	}
@@ -56,7 +60,7 @@ func TestOrientIncludesSecondaryAssigneeAndAnswers(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--agent", "worker", "orient"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "orient"}); exit != 0 {
 		t.Fatalf("orient exit=%d output=%s", exit, out.String())
 	}
 	result := asMap(dailyJSON(t, out)["result"])
@@ -108,7 +112,7 @@ func TestAwaitAnsweredDeclinedTimeoutAndReconnect(t *testing.T) {
 			}))
 			defer server.Close()
 			a, out := dailyTestApp(t, server.URL)
-			exit := a.Run([]string{"--json", "--agent", "worker", "await", "event:ask-1", "--timeout", "700ms"})
+			exit := a.Run([]string{"--json", "--as", "worker", "await", "event:ask-1", "--timeout", "700ms"})
 			if exit != tc.wantExit {
 				t.Fatalf("exit=%d want=%d output=%s", exit, tc.wantExit, out.String())
 			}
@@ -128,7 +132,7 @@ func TestAwaitAnsweredDeclinedTimeoutAndReconnect(t *testing.T) {
 
 func TestHumanGroupRemoved(t *testing.T) {
 	a, out := dailyTestApp(t, "http://127.0.0.1:1")
-	exit := a.Run([]string{"--json", "--agent", "worker", "human", "ask"})
+	exit := a.Run([]string{"--json", "--as", "worker", "human", "ask"})
 	if exit != 2 || anyString(asMap(dailyJSON(t, out)["error"])["code"]) != "unknown_command" {
 		t.Fatalf("old group dispatched: %s", out.String())
 	}
@@ -155,7 +159,7 @@ func TestAwaitCardState(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--agent", "worker", "await", "card:task", "--until", "state=done", "--timeout", "1s"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:task", "--until", "state=done", "--timeout", "1s"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	result := asMap(dailyJSON(t, out)["result"])

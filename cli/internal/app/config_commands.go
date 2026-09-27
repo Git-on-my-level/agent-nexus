@@ -2,217 +2,35 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"sort"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
-	"agent-nexus-cli/internal/errnorm"
-	"agent-nexus-cli/internal/profile"
 )
 
 func (a *App) runConfig(_ context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
-	if len(args) == 0 {
-		return nil, "config", configSubcommandSpec.requiredError()
+	if len(args) != 1 || args[0] != "show" {
+		return nil, "config", configSubcommandSpec.unknownError(firstConfigArg(args))
 	}
-	sub := configSubcommandSpec.normalize(args[0])
-	switch sub {
-	case "use":
-		result, err := a.runConfigUse(args[1:])
-		return result, "config use", err
-	case "unset":
-		result, err := a.runConfigUnset(args[1:])
-		return result, "config unset", err
-	case "show":
-		result := a.runConfigShow(cfg)
-		return result, "config show", nil
-	default:
-		return nil, "config", configSubcommandSpec.unknownError(args[0])
-	}
+	return &commandResult{Data: redactedConfigShowData(cfg)}, "config show", nil
 }
 
-func (a *App) runConfigUse(args []string) (*commandResult, error) {
-	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-		return nil, errnorm.Usage("profile_required", "usage: anx config use <profile>")
+func firstConfigArg(args []string) string {
+	if len(args) > 0 {
+		return args[0]
 	}
-	agentName := strings.TrimSpace(args[0])
-	homeDir, err := a.UserHomeDir()
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "home_dir", "failed to determine home directory", err)
-	}
-	profilePath, err := profile.SetActiveAgent(homeDir, agentName)
-	if err != nil {
-		if errors.Is(err, profile.ErrProfileNotFound) {
-			return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth list` to inspect available profiles")
-		}
-		if errors.Is(err, profile.ErrPersistDefaultMarker) {
-			return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
-		}
-		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
-	}
-	var agents []string
-	if listed, err := profile.ListAgents(homeDir); err == nil {
-		agents = listed
-	}
-	otherProfiles := make([]string, 0, len(agents))
-	for _, agent := range agents {
-		if agent != agentName {
-			otherProfiles = append(otherProfiles, agent)
-		}
-	}
-	lines := []string{"Active profile: " + agentName}
-	warnings := []string{}
-	if len(otherProfiles) > 0 {
-		lines = append(lines, "Other profiles on this machine: "+strings.Join(otherProfiles, ", "))
-		warning := "For agent services or multi-agent shells, prefer ANX_AGENT=<profile> over config use so you do not change the shared default profile."
-		lines = append(lines, warning)
-		lines = append(lines, "Docs: anx meta doc profiles ; anx meta doc env")
-		warnings = append(warnings, warning)
-	}
-	data := map[string]any{
-		"agent":             agentName,
-		"active_profile":    agentName,
-		"default_file_path": profile.DefaultAgentPath(homeDir),
-		"profile_path":      profilePath,
-	}
-	if len(otherProfiles) > 0 {
-		data["other_profiles"] = otherProfiles
-		data["warnings"] = warnings
-	}
-	return &commandResult{
-		Text: strings.Join(lines, "\n"),
-		Data: data,
-	}, nil
-}
-
-func (a *App) runConfigUnset(args []string) (*commandResult, error) {
-	if len(args) != 0 {
-		return nil, errnorm.Usage("unexpected_args", "usage: anx config unset")
-	}
-	homeDir, err := a.UserHomeDir()
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "home_dir", "failed to determine home directory", err)
-	}
-	if err := profile.ClearDefaultAgent(homeDir); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_clear_failed", "failed to clear default profile selection", err)
-	}
-	path := profile.DefaultAgentPath(homeDir)
-	return &commandResult{
-		Text: "Cleared default profile marker: " + path,
-		Data: map[string]any{
-			"default_file_path": path,
-			"cleared":           true,
-		},
-	}, nil
-}
-
-func (a *App) runConfigShow(cfg config.Resolved) *commandResult {
-	data := redactedConfigShowData(cfg)
-	var lines []string
-	lines = append(lines, "Effective configuration (secrets redacted):")
-	lines = append(lines, "  Base URL: "+cfg.BaseURL)
-	lines = append(lines, "  Agent profile: "+cfg.Agent)
-	lines = append(lines, "  Profile path: "+cfg.ProfilePath)
-	lines = append(lines, "  Timeout: "+cfg.Timeout.String())
-	lines = append(lines, fmt.Sprintf("  JSON output: %t", cfg.JSON))
-	if strings.TrimSpace(cfg.AccessToken) != "" {
-		lines = append(lines, "  Access token: (redacted)")
-	} else {
-		lines = append(lines, "  Access token: (empty)")
-	}
-	if strings.TrimSpace(cfg.RefreshToken) != "" {
-		lines = append(lines, "  Refresh token: (redacted)")
-	} else {
-		lines = append(lines, "  Refresh token: (empty)")
-	}
-	keys := make([]string, 0, len(cfg.Sources))
-	for k := range cfg.Sources {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		lines = append(lines, fmt.Sprintf("  Source %s: %s", k, cfg.Sources[k]))
-	}
-	lines = append(lines, "")
-	lines = append(lines, "Precedence:")
-	lines = append(lines, "  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults")
-	lines = append(lines, "")
-	lines = append(lines, "Environment overrides available:")
-	for _, envVar := range cliEnvironmentVariables() {
-		lines = append(lines, fmt.Sprintf("  %-16s %s", envVar.Name, envVar.Summary))
-	}
-	lines = append(lines, "")
-	lines = append(lines, "Docs: anx meta doc profiles ; anx meta doc env")
-	return &commandResult{
-		Text: strings.Join(lines, "\n"),
-		Data: data,
-	}
+	return ""
 }
 
 func redactedConfigShowData(cfg config.Resolved) map[string]any {
-	sources := make(map[string]string, len(cfg.Sources))
-	for k, v := range cfg.Sources {
-		sources[k] = v
+	data := map[string]any{"base_url": cfg.BaseURL, "as": cfg.As, "identity_source": cfg.IdentitySource, "timeout": cfg.Timeout.String(), "json": cfg.JSON, "sources": cfg.Sources}
+	if cfg.HostID != "" {
+		data["host_id"] = cfg.HostID
 	}
-	out := map[string]any{
-		"base_url":               cfg.BaseURL,
-		"agent":                  cfg.Agent,
-		"timeout":                cfg.Timeout.String(),
-		"json":                   cfg.JSON,
-		"no_color":               cfg.NoColor,
-		"verbose":                cfg.Verbose,
-		"headers":                cfg.Headers,
-		"profile_path":           cfg.ProfilePath,
-		"sources":                sources,
-		"access_token_redacted":  strings.TrimSpace(cfg.AccessToken) != "",
-		"refresh_token_redacted": strings.TrimSpace(cfg.RefreshToken) != "",
+	if cfg.AgentID != "" {
+		data["agent_id"] = cfg.AgentID
 	}
 	if strings.TrimSpace(cfg.AccessToken) != "" {
-		out["access_token"] = "(redacted)"
-	} else {
-		out["access_token"] = ""
+		data["access_token_redacted"] = true
 	}
-	if strings.TrimSpace(cfg.RefreshToken) != "" {
-		out["refresh_token"] = "(redacted)"
-	} else {
-		out["refresh_token"] = ""
-	}
-	if strings.TrimSpace(cfg.TokenType) != "" {
-		out["token_type"] = cfg.TokenType
-	}
-	if strings.TrimSpace(cfg.AccessTokenExpiresAt) != "" {
-		out["access_token_expires_at"] = cfg.AccessTokenExpiresAt
-	}
-	if strings.TrimSpace(cfg.AgentID) != "" {
-		out["agent_id"] = cfg.AgentID
-	}
-	if strings.TrimSpace(cfg.ActorID) != "" {
-		out["actor_id"] = cfg.ActorID
-	}
-	if strings.TrimSpace(cfg.KeyID) != "" {
-		out["key_id"] = cfg.KeyID
-	}
-	if strings.TrimSpace(cfg.Username) != "" {
-		out["username"] = cfg.Username
-	}
-	if strings.TrimSpace(cfg.PrivateKeyPath) != "" {
-		out["private_key_path"] = cfg.PrivateKeyPath
-	}
-	out["revoked"] = cfg.Revoked
-	envVars := make([]map[string]any, 0, len(cliEnvironmentVariables()))
-	for _, envVar := range cliEnvironmentVariables() {
-		envVars = append(envVars, map[string]any{
-			"name":      envVar.Name,
-			"summary":   envVar.Summary,
-			"overrides": envVar.Overrides,
-			"example":   envVar.Example,
-		})
-	}
-	out["precedence"] = []string{"flags", "environment", "profile/default/autodiscovery", "built-in defaults"}
-	out["environment_overrides_available"] = envVars
-	if strings.TrimSpace(cfg.CoreInstanceID) != "" {
-		out["core_instance_id"] = cfg.CoreInstanceID
-	}
-	return out
+	return data
 }

@@ -146,9 +146,9 @@ func conceptsGuideText() string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString("\nConfiguration and profiles:\n")
-	b.WriteString("- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.\n")
-	b.WriteString("- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.\n")
+	b.WriteString("\nConfiguration and identity:\n")
+	b.WriteString("- Enroll this machine with `anx host enroll`; use `--as` or `ANX_AS` to select a derived agent.\n")
+	b.WriteString("- Precedence is command flags > environment variables > agentctl run context > harness detection > built-in defaults.\n")
 	b.WriteString("- Read next: anx meta doc profiles ; anx meta doc env ; anx config show\n")
 	b.WriteString("\nFor the fuller operating model, read `anx meta doc agent-guide`.\n")
 	return strings.TrimSpace(b.String())

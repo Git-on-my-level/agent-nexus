@@ -12,13 +12,4 @@ After the seeded **human operator** completes bootstrap via passkey dev registra
 
 Each `make serve` run **removes** `*.generated.json` here before seeding, then repopulates when identity seeding succeeds.
 
-### Example
-
-```bash
-INV="$(jq -r '.invites[0].token' cli/dogfood-resources/invites.generated.json)"
-anx --base-url http://127.0.0.1:8000 --agent my-cli auth register \
-  --username "cli.dogfood" \
-  --invite-token "$INV"
-```
-
-Use distinct `--agent` profile names if you consume more than one invite. Each token is single-use.
+Agent identity now comes from an enrolled host. Use `anx host enroll --token <headless-token>` for unattended setup, then select a derived agent with `anx --as <name>`. The invite fixtures in this directory are retained for the older dogfood seed data and are not host enrollment tokens.

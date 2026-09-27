@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"agent-nexus-cli/internal/bridgeconfig"
 	"agent-nexus-cli/internal/profile"
 )
 
@@ -22,7 +20,7 @@ const (
 type Overrides struct {
 	JSON    *bool
 	BaseURL *string
-	Agent   *string
+	As      *string
 	NoColor *bool
 	Verbose *bool
 	Headers *bool
@@ -52,6 +50,12 @@ type Resolved struct {
 	JSON                 bool
 	BaseURL              string
 	Agent                string
+	As                   string
+	IdentitySource       string
+	HostID               string
+	HostKeyID            string
+	HostKeyPath          string
+	RunID                string
 	NoColor              bool
 	Verbose              bool
 	Headers              bool
@@ -91,9 +95,7 @@ func Defaults(overrides Overrides) Resolved {
 	if overrides.BaseURL != nil && strings.TrimSpace(*overrides.BaseURL) != "" {
 		r.BaseURL = strings.TrimSpace(*overrides.BaseURL)
 	}
-	if overrides.Agent != nil && strings.TrimSpace(*overrides.Agent) != "" {
-		r.Agent = strings.TrimSpace(*overrides.Agent)
-	}
+
 	if overrides.NoColor != nil {
 		r.NoColor = *overrides.NoColor
 	}
@@ -113,10 +115,6 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	getenv := env.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
-	}
-	userHomeDir := env.UserHomeDir
-	if userHomeDir == nil {
-		userHomeDir = os.UserHomeDir
 	}
 	readFile := env.ReadFile
 	if readFile == nil {
@@ -142,62 +140,26 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		},
 	}
 
-	explicitAgent := false
-	if envAgent := strings.TrimSpace(getenv("ANX_AGENT")); envAgent != "" {
-		resolved.Agent = envAgent
-		resolved.Sources["agent"] = "env:ANX_AGENT"
-		explicitAgent = true
+	resolved.As = strings.TrimSpace(getenv("ANX_AS"))
+	if resolved.As != "" {
+		resolved.IdentitySource = "env:ANX_AS"
 	}
-	if overrides.Agent != nil && strings.TrimSpace(*overrides.Agent) != "" {
-		resolved.Agent = strings.TrimSpace(*overrides.Agent)
-		resolved.Sources["agent"] = "flag:--agent"
-		explicitAgent = true
-	}
-
-	homeDir, err := userHomeDir()
-	if err != nil {
-		return Resolved{}, fmt.Errorf("resolve home directory: %w", err)
-	}
-
-	if !explicitAgent {
-		defaultAgent, ok, err := profile.LoadDefaultAgent(homeDir)
-		if err != nil {
-			return Resolved{}, fmt.Errorf("load default profile: %w", err)
-		}
-		if ok {
-			if _, profileExists, err := profile.Load(profile.ProfilePath(homeDir, defaultAgent)); err != nil {
-				return Resolved{}, fmt.Errorf("load default profile %q: %w", defaultAgent, err)
-			} else if profileExists {
-				resolved.Agent = defaultAgent
-				resolved.Sources["agent"] = "profile:default"
-			} else {
-				ok = false
-			}
-		}
-		if !ok {
-			agents, err := profile.ListAgents(homeDir)
-			if err != nil {
-				return Resolved{}, fmt.Errorf("list local profiles: %w", err)
-			}
-			if len(agents) == 1 {
-				resolved.Agent = agents[0]
-				resolved.Sources["agent"] = "profile:auto-single"
-			}
-			if len(agents) > 1 {
-				return Resolved{}, fmt.Errorf("multiple local profiles found (%s); select one using --agent, ANX_AGENT, or `anx auth default <profile>`", strings.Join(agents, ", "))
-			}
-		}
+	if overrides.As != nil {
+		resolved.As = strings.TrimSpace(*overrides.As)
+		resolved.IdentitySource = "flag:--as"
 	}
 
 	profilePath := strings.TrimSpace(getenv("ANX_PROFILE_PATH"))
-	if profilePath == "" {
-		profilePath = DefaultProfilePath(homeDir, resolved.Agent)
-	}
 	resolved.ProfilePath = profilePath
 
-	profile, profileLoaded, err := loadProfile(readFile, profilePath)
-	if err != nil {
-		return Resolved{}, err
+	profile := Profile{}
+	profileLoaded := false
+	if profilePath != "" {
+		var err error
+		profile, profileLoaded, err = loadProfile(readFile, profilePath)
+		if err != nil {
+			return Resolved{}, err
+		}
 	}
 	if profileLoaded {
 		if strings.TrimSpace(profile.BaseURL) != "" {
@@ -243,28 +205,7 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	if overrides.BaseURL != nil {
 		flagBaseURL = strings.TrimSpace(*overrides.BaseURL)
 	}
-	if resolved.Sources["base_url"] == "default" && envBaseURL == "" && flagBaseURL == "" {
-		configs, err := bridgeconfig.Discover(homeDir)
-		if err != nil {
-			return Resolved{}, fmt.Errorf("scan bridge configs: %w", err)
-		}
-		switch len(configs) {
-		case 1:
-			resolved.BaseURL = configs[0].BaseURL
-			resolved.Sources["base_url"] = "bridge:auto-single"
-		case 0:
-		default:
-			labels := make([]string, 0, len(configs))
-			for _, cfg := range configs {
-				label, relErr := filepath.Rel(bridgeconfig.RootDir(homeDir), cfg.Path)
-				if relErr != nil {
-					label = cfg.Path
-				}
-				labels = append(labels, label)
-			}
-			return Resolved{}, fmt.Errorf("multiple bridge configs found (%s); select a profile with `--agent` or `anx auth default <profile>`, or pass --base-url", strings.Join(labels, ", "))
-		}
-	}
+
 	if envBaseURL != "" {
 		resolved.BaseURL = envBaseURL
 		resolved.Sources["base_url"] = "env:ANX_BASE_URL"
@@ -327,6 +268,10 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	}
 	if resolved.Timeout <= 0 {
 		return Resolved{}, fmt.Errorf("timeout must be greater than zero")
+	}
+	if resolved.As != "" {
+		resolved.Agent = resolved.As
+		resolved.Sources["agent"] = resolved.IdentitySource
 	}
 	return resolved, nil
 }

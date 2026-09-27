@@ -138,7 +138,7 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "--base-url", server.URL, "--agent", "agent-a",
+		"--json", "--base-url", server.URL, "--as", "agent-a",
 		"ask", "--from-file", path,
 	})
 	assertEnvelopeOK(t, raw)
@@ -236,7 +236,7 @@ func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
 			writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 			raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-				"--json", "--base-url", server.URL, "--agent", "agent-a",
+				"--json", "--base-url", server.URL, "--as", "agent-a",
 				"ask", "Which launch date?",
 				"--subject-ref", tc.subjectRef,
 				"--recommend", "Use May 15.",

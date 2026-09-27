@@ -968,7 +968,7 @@ Daily loop:
 
 Setup: anx host enroll; anx doctor; anx install skill --path ./SKILL.md
 Help: anx help onboarding; anx help <command>; anx help --all
-Global flags: --json, --base-url, --agent, --timeout`) + "\n"
+Global flags: --json, --base-url, --as, --timeout`) + "\n"
 }
 
 func (a *App) rootUsageTextAll() string {
@@ -1041,7 +1041,7 @@ Onboarding:
 Global Flags:
   --json
   --base-url <url>
-  --agent <name>
+  --as <name>
   --no-color
   --verbose
   --headers
@@ -1121,44 +1121,12 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return envDocText() + "\n", true
 	}
 	if topic == "config" {
-		return strings.TrimSpace(`Config surface for the active CLI profile
-
-Use this group to set or inspect which local profile supplies base URL and auth when you omit --agent / --base-url.
-
-Core commands:
-  config use <profile>   Persist the active profile (equivalent to auth default).
-  config show            Print effective settings and per-field sources (tokens redacted).
-  config unset           Remove the default profile marker (~/.config/anx/default-profile).
-
-Related:
-  auth list              List profiles and which is active.
-  auth default <profile> Same selection as config use.
-
-Docs:
-  anx meta doc profiles
-  anx meta doc env`) + "\n", true
+		return "Config: anx config show prints the workspace URL, selected agent name, and sources (secrets redacted).\n", true
 	}
 	if topic == "auth" {
-		return strings.TrimSpace(`Auth lifecycle and registration surface
-
-Use this group to register a profile, inspect the active identity, and manage local auth state.
-
-Core commands:
-  auth register       Create or register a profile.
-  auth whoami         Inspect the active profile.
-  auth list           List local profiles.
-  auth default        Select the default profile.
-  auth update-username  Rename the current principal locally.
-  auth rotate         Rotate the active agent key.
-  auth revoke         Revoke the current profile.
-  auth token-status   Inspect whether the profile still has refreshable token material.
-
-	Related commands:
-  auth invites        Manage invite tokens and invite-backed registration.
-  auth bootstrap      Inspect bootstrap status before first registration.
-  auth principals     Inspect or revoke principals.
-  auth audit          Inspect audit records for auth activity.`) + "\n", true
+		return "Auth: anx auth whoami reports the enrolled host, derived agent and resolution source. Enroll with anx host enroll.\n", true
 	}
+
 	if topic == "auth principals" {
 		return strings.TrimSpace(`Auth principal administration
 
@@ -1540,16 +1508,8 @@ Canonical card workflow:
    Tip: use ` + "`cards message card:<handle> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.
    Board context is an input (` + "`--board`" + `) or filter (` + "`--board`" + `), not the card command namespace.`)
 	case "auth":
-		return strings.TrimSpace(`Local auth lifecycle helpers:
-  auth whoami             Validate the active profile against the server and show resolved identity.
-  auth list               List local CLI profiles and which one is active.
-  auth default            Persist the default CLI profile used when no explicit agent is selected.
-  auth update-username    Update the current principal username and sync the local profile.
-  auth rotate             Rotate the active agent key and refresh stored credentials.
-  auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
-  auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
-  auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use ` + "`anx auth bootstrap status`" + ` before first registration, ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`anx auth invites create --kind human|agent`" + ` before later registrations.`)
+		return "auth whoami  Show enrolled host, derived agent and identity resolution source.\n"
+
 	default:
 		return ""
 	}
@@ -1671,7 +1631,7 @@ func formatGlobalFlagUsage(topic string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
+  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
 func formatInputSchemaBlock(cmd registry.Command) string {
@@ -1881,7 +1841,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 		return strings.TrimSpace(`View scoping:
   - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
   - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`ANX_AGENT`" + ` before reading or acting.
+  - Switch perspective with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + ` before reading or acting.
 
 Inbox kinds:
   - ` + "`ask`" + `: A requesting agent needs an answer, judgment, or missing context.
@@ -1943,12 +1903,8 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
-		{
-			command:  "auth",
-			valid:    []string{"register"},
-			examples: authSubcommandSpec.examples,
-			aliases:  authSubcommandSpec.aliases,
-		},
+		{command: "runs", valid: []string{"list", "get", "ingest"}},
+		{command: "host", valid: []string{"list"}},
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
 		authPrincipalsSubcommandSpec,
@@ -2093,7 +2049,6 @@ func runtimePathFromRegistryPath(path string) string {
 	rewrites := map[string]string{
 		"pm conversations messages create": "pm conversations message",
 		"pm turns decisions create":        "pm turns propose",
-		"auth agents register":             "auth register",
 		"meta commands list":               "meta commands",
 		"meta commands get":                "meta command",
 		"meta concepts list":               "meta concepts",
@@ -2126,7 +2081,6 @@ func generatedCommandByID(commandID string) (registry.Command, bool) {
 
 func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.TrimSpace(command)
-	command = strings.ReplaceAll(command, "anx auth agents register", "anx auth register")
 	command = strings.ReplaceAll(command, "anx events stream", "anx events tail")
 	command = strings.ReplaceAll(command, "anx inbox stream", "anx inbox tail")
 	command = strings.ReplaceAll(command, "anx meta commands get", "anx meta command")
@@ -2143,20 +2097,11 @@ func configLocalHelpText(topic string) (string, bool) {
 		examples []string
 	}
 	topics := map[string]configTopic{
-		"config use": {
-			summary:  "Persist the named profile as the active default used when --agent and ANX_AGENT are omitted.",
-			usage:    "anx config use <profile>",
-			examples: []string{"anx config use agent-a", "anx --json config use agent-a"},
-		},
+
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",
 			usage:    "anx config show",
 			examples: []string{"anx config show", "anx --json config show"},
-		},
-		"config unset": {
-			summary:  "Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.",
-			usage:    "anx config unset",
-			examples: []string{"anx config unset", "anx --json config unset"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
@@ -2187,20 +2132,11 @@ func authLocalHelpText(topic string) (string, bool) {
 	}
 	topics := map[string]authTopic{
 		"auth whoami": {
-			summary:  "Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.",
+			summary:  "Show the enrolled host, derived agent and identity resolution source.",
 			usage:    "anx auth whoami",
 			examples: []string{"anx auth whoami", "anx --json auth whoami"},
 		},
-		"auth list": {
-			summary:  "List local CLI profiles and identify the active one.",
-			usage:    "anx auth list",
-			examples: []string{"anx auth list", "anx --json auth list"},
-		},
-		"auth default": {
-			summary:  "Persist the default profile used when no explicit agent is selected.",
-			usage:    "anx auth default <profile>",
-			examples: []string{"anx auth default agent-a", "anx --json auth default agent-a"},
-		},
+
 		"auth invites": {
 			summary:  "Manage invite tokens and invite-backed registration for later principals.",
 			usage:    "anx auth invites",
@@ -2210,26 +2146,6 @@ func authLocalHelpText(topic string) (string, bool) {
 			summary:  "Inspect whether bootstrap registration is still available for the first principal.",
 			usage:    "anx auth bootstrap status",
 			examples: []string{"anx auth bootstrap status", "anx --json auth bootstrap status"},
-		},
-		"auth update-username": {
-			summary:  "Update the authenticated agent username and sync the local profile copy.",
-			usage:    "anx auth update-username --username <username>",
-			examples: []string{"anx auth update-username --username renamed_agent"},
-		},
-		"auth rotate": {
-			summary:  "Rotate the active agent key and refresh stored credentials.",
-			usage:    "anx auth rotate",
-			examples: []string{"anx auth rotate", "anx --json auth rotate"},
-		},
-		"auth revoke": {
-			summary:  "Revoke the active agent and mark the local profile revoked.",
-			usage:    "anx auth revoke",
-			examples: []string{"anx auth revoke", "anx --json auth revoke"},
-		},
-		"auth token-status": {
-			summary:  "Inspect whether the local profile still has refreshable token material.",
-			usage:    "anx auth token-status",
-			examples: []string{"anx auth token-status", "anx --json auth token-status"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]

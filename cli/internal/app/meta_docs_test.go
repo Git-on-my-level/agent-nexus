@@ -92,20 +92,20 @@ func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
 	t.Parallel()
 
 	profiles := runHelpCommand(t, "debug", "meta", "doc", "profiles")
-	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Active profile resolution") {
+	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Host identity") {
 		t.Fatalf("expected profiles docs output=%s", profiles)
 	}
-	if !strings.Contains(profiles, "command flags > environment variables") {
+	if !strings.Contains(profiles, "anx host enroll --plan") {
 		t.Fatalf("expected precedence guidance output=%s", profiles)
 	}
 
 	env := runHelpCommand(t, "debug", "meta", "doc", "environment")
-	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_PROFILE_PATH") || !strings.Contains(env, "ANX_JSON") {
+	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_AS") || !strings.Contains(env, "ANX_JSON") {
 		t.Fatalf("expected env docs via alias output=%s", env)
 	}
 
 	config := runHelpCommand(t, "debug", "meta", "doc", "configuration")
-	if !strings.Contains(config, "## `config`") || !strings.Contains(config, "Config surface for the active CLI profile") {
+	if !strings.Contains(config, "## `config`") || !strings.Contains(config, "anx config show") {
 		t.Fatalf("expected config docs via alias output=%s", config)
 	}
 }

@@ -19,7 +19,6 @@ import (
 
 	contractsclient "agent-nexus-contracts-go-client/client"
 
-	"agent-nexus-cli/internal/authcli"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
@@ -613,20 +612,10 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 }
 
 func (a *App) cfgWithResolvedAuthToken(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
-	svc := authcli.New(cfg)
-	prof, err := svc.EnsureAccessToken(ctx)
-	if err != nil {
-		normalized := errnorm.Normalize(err)
-		if normalized != nil && normalized.Code == "profile_not_found" {
-			return cfg, nil
-		}
-		return config.Resolved{}, err
-	}
-	cfg.AccessToken = strings.TrimSpace(prof.AccessToken)
-	if cfg.AccessToken == "" {
+	if cfg.AccessToken != "" {
 		return cfg, nil
 	}
-	return cfg, nil
+	return a.resolveHostAgent(ctx, cfg)
 }
 
 func generatedHeaders(cfg config.Resolved) map[string]string {
@@ -639,6 +628,9 @@ func generatedHeaders(cfg config.Resolved) map[string]string {
 	}
 	if strings.TrimSpace(cfg.AccessToken) != "" {
 		headers["Authorization"] = "Bearer " + strings.TrimSpace(cfg.AccessToken)
+	}
+	if cfg.RunID != "" {
+		headers["X-ANX-Run-Id"] = cfg.RunID
 	}
 	return headers
 }

@@ -45,16 +45,8 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@handle` wake routing works, including self-registration, verification, and troubleshooting."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},
-	{Path: "auth whoami", Kind: "manual", Summary: "Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps."},
-	{Path: "auth list", Kind: "manual", Summary: "List local CLI profiles and the active profile."},
-	{Path: "auth default", Kind: "manual", Summary: "Persist the default CLI profile used when no explicit agent is selected."},
-	{Path: "config use", Kind: "manual", Summary: "Set the active CLI profile used when --agent and ANX_AGENT are omitted."},
+	{Path: "auth whoami", Kind: "manual", Summary: "Show the enrolled host, derived agent and resolution source."},
 	{Path: "config show", Kind: "manual", Summary: "Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted)."},
-	{Path: "config unset", Kind: "manual", Summary: "Clear the persisted default profile marker (~/.config/anx/default-profile)."},
-	{Path: "auth update-username", Kind: "manual", Summary: "Rename the authenticated agent and sync the local profile."},
-	{Path: "auth rotate", Kind: "manual", Summary: "Rotate the active agent key and refresh stored credentials."},
-	{Path: "auth revoke", Kind: "manual", Summary: "Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery."},
-	{Path: "auth token-status", Kind: "manual", Summary: "Inspect whether the local profile still has refreshable token material."},
 }
 
 func runtimeHelpCatalogSnapshot() runtimeHelpCatalog {
