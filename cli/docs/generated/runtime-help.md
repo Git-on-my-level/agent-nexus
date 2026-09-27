@@ -2909,9 +2909,9 @@ Generated Help: inbox respond
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+- Why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
 - Output: Returns `{ event, notify }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
 - Concepts: `inbox`, `write`
 - Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox stream`
 
@@ -2922,6 +2922,7 @@ Inputs:
   - body `response_text` (string)
   Optional:
   - body `actor_id` (string)
+  - body `idempotency_key` (string)
   - body `inbox_item_id` (string)
   - body `notify_mode` (string)
   - body `notify_target_actor_id` (string)

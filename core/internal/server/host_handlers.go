@@ -142,6 +142,8 @@ func hostError(w http.ResponseWriter, err error) {
 		status, code = http.StatusGone, "enrollment_expired"
 	case errors.Is(err, auth.ErrEnrollmentConsumed):
 		status, code = http.StatusConflict, "enrollment_consumed"
+	case errors.Is(err, auth.ErrEnrollmentCapacity):
+		status, code = http.StatusTooManyRequests, "enrollment_capacity"
 	}
 	writeError(w, status, code, code)
 }

@@ -5627,7 +5627,9 @@ export const commandRegistry = [
             "invalid_request",
             "host_slug_taken",
             "adoption_proof_invalid",
-            "adoption_conflict"
+            "adoption_conflict",
+            "enrollment_capacity",
+            "rate_limited"
         ],
         "concepts": [
             "auth",
@@ -6123,7 +6125,7 @@ export const commandRegistry = [
         "path": "/inbox/{inbox_id}/respond",
         "operation_id": "respondInboxItem",
         "summary": "Respond to human attention inbox item",
-        "why": "Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.",
+        "why": "A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -6131,10 +6133,13 @@ export const commandRegistry = [
         "output_envelope": "Returns `{ event, notify }`.",
         "error_codes": [
             "auth_required",
+            "human_required",
             "invalid_request",
             "invalid_token",
             "notification_target_required",
-            "not_found"
+            "not_found",
+            "conflict",
+            "idempotency_conflict"
         ],
         "concepts": [
             "inbox",
@@ -6162,6 +6167,10 @@ export const commandRegistry = [
             "optional": [
                 {
                     "name": "actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "idempotency_key",
                     "type": "string"
                 },
                 {

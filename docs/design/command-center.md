@@ -279,6 +279,18 @@ routes remain.
 
 (Append dated entries here: decision, reason, files.)
 
+- 2026-09-27 (core review): Inbox responses require a human principal. Core
+  claims each source request once in the same transaction as its response event;
+  a repeated idempotency key and body returns that event without sending a
+  second notification. The web undo queue creates the key when it queues a
+  response and keeps it across retries. Public host enrollment starts have a
+  dedicated rate limit, pending-request caps, one-hour terminal retention on
+  subsequent enrollment activity, and no per-start audit row. Run observations
+  allow two minutes of future clock skew; active roster runs require an alive
+  observation within five minutes. (`core/internal/server`,
+  `core/internal/auth/hosts.go`, `core/internal/commandcenter/store.go`,
+  `web-ui/src/lib/inboxResponseQueue.js`.)
+
 - 2026-09-27 (core fixes): `/stream/agents` is a process-local SSE invalidation
   stream. It sends an initial `agents_changed` signal and coalesced signals after
   roster-affecting writes; revisions are connection hints, not event-log cursors.

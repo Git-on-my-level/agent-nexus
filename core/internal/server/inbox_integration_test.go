@@ -12,7 +12,7 @@ import (
 func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
@@ -64,19 +64,19 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 
 	itemID := asString(item["id"])
 	for _, bad := range []string{
-		`{"actor_id":"actor-1","response_text":"Approved.","notify_mode":"none"}`,
-		`{"actor_id":"actor-1","response_text":"Approved.","outcome":"maybe","notify_mode":"none"}`,
+		`{"actor_id":"human-purge-principal-actor","response_text":"Approved.","notify_mode":"none"}`,
+		`{"actor_id":"human-purge-principal-actor","response_text":"Approved.","outcome":"maybe","notify_mode":"none"}`,
 	} {
-		invalid := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", bad, http.StatusBadRequest)
+		invalid := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", json.RawMessage(bad), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusBadRequest)
 		assertErrorCode(t, invalid, "invalid_request")
 	}
-	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", `{
-		"actor_id":"actor-1",
+	resp := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Ship Friday with a rollback plan.",
 		"outcome":"answered",
 		"notify_mode":"none",
 		"related_refs":["artifact:decision_note"]
-	}`, http.StatusCreated)
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated)
 	defer resp.Body.Close()
 
 	var response struct {
@@ -118,7 +118,7 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
 		"title":           "Human attention kinds",
@@ -149,12 +149,12 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 		t.Fatalf("expected escalation inbox item, got %#v", items)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(escalation["id"]))+"/respond", `{
-		"actor_id":"actor-1",
+	postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(escalation["id"]))+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Investigating now.",
 		"outcome":"answered",
 		"notify_mode":"none"
-	}`, http.StatusCreated).Body.Close()
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated).Body.Close()
 }
 
 func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
@@ -237,7 +237,7 @@ func TestInboxReadDoesNotRecomputePendingProjection(t *testing.T) {
 func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
 		"title":           "Notification target thread",
@@ -264,11 +264,11 @@ func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing
 		t.Fatalf("expected human ask item, got %#v", items)
 	}
 
-	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", `{
-		"actor_id":"actor-1",
+	resp := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Answer text"
 		,"outcome":"answered"
-	}`, http.StatusConflict)
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusConflict)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "notification_target_required")
 }

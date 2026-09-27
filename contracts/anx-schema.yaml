@@ -968,6 +968,9 @@ command_center:
     enrollment_denied: { status: 403, meaning: Human denied this enrollment. }
     enrollment_expired: { status: 410, meaning: Enrollment expired after ten minutes. }
     enrollment_consumed: { status: 409, meaning: Enrollment was already completed or otherwise finalized. }
+    enrollment_capacity: { status: 429, meaning: Too many pending host enrollment requests for this workspace or requester source. }
+    human_required: { status: 403, meaning: This action requires a human principal. }
+    idempotency_conflict: { status: 409, meaning: An idempotency key was reused with a different response body or target. }
     host_revoked: { status: 403, meaning: Host or its key was revoked. }
     agent_excluded: { status: 403, meaning: This host excludes the requested agent name. }
     agent_revoked: { status: 403, meaning: The derived agent principal was revoked and cannot receive new tokens. }

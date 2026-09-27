@@ -293,6 +293,18 @@ func requireAuthAdminPrincipal(w http.ResponseWriter, r *http.Request, opts hand
 	return principal, true
 }
 
+func requireHumanPrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, bool) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return nil, false
+	}
+	if !isHumanPrincipal(principal) {
+		writeError(w, http.StatusForbidden, "human_required", "a human principal is required")
+		return nil, false
+	}
+	return principal, true
+}
+
 func isAuthAdminPrincipal(principal *auth.Principal) bool {
 	if principal == nil {
 		return false

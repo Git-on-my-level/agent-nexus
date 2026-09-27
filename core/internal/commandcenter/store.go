@@ -22,6 +22,8 @@ var ErrInvalid = errors.New("invalid_request")
 const PresenceFreshness = 30 * time.Minute
 const SignalStaleness = 24 * time.Hour
 const BridgeFreshness = 5 * time.Minute
+const RunObservationFutureSkew = 2 * time.Minute
+const ActiveRunFreshness = 5 * time.Minute
 
 var agentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
@@ -86,7 +88,13 @@ func validState(s string) bool {
 	return false
 }
 func terminal(s string) bool { return s == "completed" || s == "failed" || s == "cancelled" }
-func active(r Run) bool      { return !terminal(r.State) && r.Liveness == "alive" }
+func activeAt(r Run, now time.Time) bool {
+	if terminal(r.State) || r.Liveness != "alive" {
+		return false
+	}
+	observed, err := parseTime(r.LastObservedAt)
+	return err == nil && !observed.After(now.Add(RunObservationFutureSkew)) && now.Sub(observed) <= ActiveRunFreshness
+}
 func parseTime(s string) (time.Time, error) {
 	t, e := time.Parse(time.RFC3339Nano, s)
 	if e != nil {
@@ -116,12 +124,14 @@ func ValidateRun(r *Run) error {
 	if r.Launcher != "agentctl" || r.ExternalID == "" || r.HostID == "" || r.AgentID == "" || !agentNamePattern.MatchString(r.Adapter) || !validState(r.State) || (r.Liveness != "alive" && r.Liveness != "stale" && r.Liveness != "unknown") {
 		return ErrInvalid
 	}
-	if _, e := parseTime(r.LastObservedAt); e != nil {
+	observed, e := parseTime(r.LastObservedAt)
+	if e != nil || observed.After(time.Now().UTC().Add(RunObservationFutureSkew)) {
 		return ErrInvalid
 	}
 	for _, p := range []*string{r.StartedAt, r.EndedAt} {
 		if p != nil {
-			if _, e := parseTime(*p); e != nil {
+			value, e := parseTime(*p)
+			if e != nil || value.After(time.Now().UTC().Add(RunObservationFutureSkew)) {
 				return ErrInvalid
 			}
 		}
@@ -226,7 +236,8 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 	if !terminal(old.State) && in.State != "unknown" && old.State != "unknown" && (in.State == "starting" && old.State != "starting" || in.State == "running" && terminal(old.State)) {
 		return Run{}, false, false, ErrStateRegression
 	}
-	if newAt.Before(oldAt) && old.State != "unknown" {
+	terminalIncoming := terminal(in.State) && !terminal(old.State)
+	if newAt.Before(oldAt) && old.State != "unknown" && !terminalIncoming {
 		if e = tx.Commit(); e != nil {
 			return Run{}, false, false, e
 		}
@@ -239,6 +250,15 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 	if !terminal(old.State) && in.State != "unknown" {
 		if !(old.State == "running" && in.State == "starting") {
 			merged.State = in.State
+		}
+	}
+	if terminalIncoming {
+		merged.Liveness = in.Liveness
+		merged.ResultCollected = old.ResultCollected || in.ResultCollected
+		if in.EndedAt != nil {
+			merged.EndedAt = in.EndedAt
+		} else if merged.EndedAt == nil {
+			merged.EndedAt = &in.LastObservedAt
 		}
 	}
 	if !newAt.Before(oldAt) || old.State == "unknown" {

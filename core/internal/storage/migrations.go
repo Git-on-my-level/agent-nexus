@@ -846,6 +846,23 @@ var migrations = []migration{
 		},
 		AfterApply: applyMigration40HostIdentity,
 	},
+	{
+		Version: 41,
+		Statements: []string{
+			`CREATE TABLE human_attention_response_claims (
+				request_event_id TEXT PRIMARY KEY,
+				inbox_item_id TEXT NOT NULL,
+				actor_id TEXT NOT NULL,
+				request_key TEXT NOT NULL,
+				request_hash TEXT NOT NULL,
+				response_event_id TEXT NOT NULL UNIQUE,
+				response_json TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);`,
+			`CREATE UNIQUE INDEX human_attention_response_key ON human_attention_response_claims(actor_id,request_key) WHERE request_key<>'';`,
+			`CREATE INDEX human_attention_response_inbox ON human_attention_response_claims(inbox_item_id);`,
+		},
+	},
 }
 
 func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {

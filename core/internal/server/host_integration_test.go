@@ -593,3 +593,77 @@ func TestRevokedDerivedAgentGrantCreatesNoToken(t *testing.T) {
 		t.Fatalf("revoked host grant created token: %d to %d", before, after)
 	}
 }
+
+func TestInteractiveEnrollmentBoundsAndRetention(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
+	ctx := context.Background()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := auth.HostEnrollmentInput{PublicKey: base64.StdEncoding.EncodeToString(pub), RequestedSlug: "host-0", OSUser: "tester", Hostname: "laptop", DiscoveredAdapters: []string{}, RequestNonce: base64.RawURLEncoding.EncodeToString(pub[:16]), Adoptions: []auth.AdoptionProof{}}
+	oversized := base
+	oversized.OSUser = string(bytes.Repeat([]byte("x"), 129))
+	if _, err := env.authStore.StartHostEnrollment(ctx, oversized, "192.0.2.1"); err != auth.ErrInvalidRequest {
+		t.Fatalf("oversized user accepted: %v", err)
+	}
+	oversized = base
+	oversized.DiscoveredAdapters = make([]string, 17)
+	for i := range oversized.DiscoveredAdapters {
+		oversized.DiscoveredAdapters[i] = "name-" + string(rune('a'+i))
+	}
+	if _, err := env.authStore.StartHostEnrollment(ctx, oversized, "192.0.2.1"); err != auth.ErrInvalidRequest {
+		t.Fatalf("oversized adapters accepted: %v", err)
+	}
+	oversized = base
+	oversized.Adoptions = make([]auth.AdoptionProof, 17)
+	if _, err := env.authStore.StartHostEnrollment(ctx, oversized, "192.0.2.1"); err != auth.ErrInvalidRequest {
+		t.Fatalf("oversized adoptions accepted: %v", err)
+	}
+	startedIDs := []string{}
+	for i := 0; i < 4; i++ {
+		in := base
+		in.RequestedSlug = "host-" + string(rune('a'+i))
+		started, err := env.authStore.StartHostEnrollment(ctx, in, "192.0.2.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		startedIDs = append(startedIDs, started.EnrollmentID)
+	}
+	base.RequestedSlug = "host-over-cap"
+	if _, err := env.authStore.StartHostEnrollment(ctx, base, "192.0.2.1"); err != auth.ErrEnrollmentCapacity {
+		t.Fatalf("source cap: %v", err)
+	}
+	var auditCount int
+	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM auth_audit_events WHERE event_type='host_enroll_started'`).Scan(&auditCount); err != nil || auditCount != 0 {
+		t.Fatalf("unauthenticated start audit grew: %d %v", auditCount, err)
+	}
+	old := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339Nano)
+	for i, status := range []string{"denied", "expired", "completed"} {
+		if _, err := env.workspace.DB().Exec(`UPDATE host_enrollments SET status=?,created_at=?,expires_at=? WHERE id=?`, status, old, old, startedIDs[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base.RequestedSlug = "host-after-purge"
+	if _, err := env.authStore.StartHostEnrollment(ctx, base, "192.0.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	var remaining int
+	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM host_enrollments WHERE id IN (?,?,?)`, startedIDs[0], startedIDs[1], startedIDs[2]).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("old terminal enrollments retained: %d %v", remaining, err)
+	}
+	if err := env.workspace.DB().QueryRow(`SELECT COUNT(*) FROM host_enrollments WHERE status='pending'`).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	for i := remaining; i < 64; i++ {
+		in := base
+		in.RequestedSlug = "workspace-cap-" + string(rune('a'+i/26)) + string(rune('a'+i%26))
+		if _, err := env.authStore.StartHostEnrollment(ctx, in, "198.51.100."+string(rune('A'+i))); err != nil {
+			t.Fatalf("fill workspace cap %d: %v", i, err)
+		}
+	}
+	base.RequestedSlug = "workspace-over-cap"
+	if _, err := env.authStore.StartHostEnrollment(ctx, base, "203.0.113.1"); err != auth.ErrEnrollmentCapacity {
+		t.Fatalf("workspace cap: %v", err)
+	}
+}

@@ -87,7 +87,7 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
   const entry = {
     id: ++sequence,
     itemId: id,
-    request: { ...request },
+    request: { ...request, idempotency_key: crypto.randomUUID() },
     message: String(message ?? "Response sent"),
     restore: restore ?? null,
     deadline: Date.now() + UNDO_WINDOW_MS,

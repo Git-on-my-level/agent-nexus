@@ -4979,11 +4979,11 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: inbox.respond
       x-anx-cli-path: inbox respond
-      x-anx-why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+      x-anx-why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event, notify }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, notification_target_required, not_found]
+      x-anx-error-codes: [auth_required, human_required, invalid_request, invalid_token, notification_target_required, not_found, conflict, idempotency_conflict]
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       parameters:
@@ -5004,6 +5004,10 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
@@ -5349,7 +5353,7 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: Returns `HostEnrollmentStartResponse`; poll_token is secret and shown only once.
-      x-anx-error-codes: [invalid_request, host_slug_taken, adoption_proof_invalid, adoption_conflict]
+      x-anx-error-codes: [invalid_request, host_slug_taken, adoption_proof_invalid, adoption_conflict, enrollment_capacity, rate_limited]
       x-anx-concepts: [auth, hosts]
       x-anx-stability: beta
       x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
@@ -5359,6 +5363,7 @@ paths:
         '400': {$ref: '#/components/responses/ErrorResponse'}
         '401': {$ref: '#/components/responses/ErrorResponse'}
         '409': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/ErrorResponse'}
 
   /auth/hosts/enrollments/{enrollment_id}:
     get:
@@ -6966,10 +6971,10 @@ components:
       additionalProperties: false
       description: 'Proof of possession for an existing active standalone agent key. Sign UTF-8 `anx-host-adopt|<request_nonce>|<host_public_key>|<agent_id>|<agent_name>` with that Ed25519 key; signature is standard base64. request_nonce is client-generated random base64url (at least 128 bits). No agent may be adopted twice or mapped to a duplicate host/name. The server re-parents the same actor ID and history, renames handle, and revokes the old agent key/sessions atomically. An excluded local profile is omitted from this list and remains standalone.'
       properties:
-        agent_id: {type: string}
-        key_id: {type: string}
+        agent_id: {type: string, maxLength: 128}
+        key_id: {type: string, maxLength: 128}
         agent_name: {$ref: '#/components/schemas/AgentName'}
-        signature: {type: string, contentEncoding: base64}
+        signature: {type: string, contentEncoding: base64, maxLength: 128}
       required: [agent_id, key_id, agent_name, signature]
     HostEnrollmentStartRequest:
       type: object
@@ -6977,11 +6982,11 @@ components:
       properties:
         public_key: {type: string, contentEncoding: base64, description: Raw 32-byte Ed25519 host public key.}
         requested_slug: {$ref: '#/components/schemas/HostSlug'}
-        os_user: {type: string, minLength: 1}
-        hostname: {type: string, minLength: 1}
-        discovered_adapters: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
-        request_nonce: {type: string, minLength: 22, description: Random base64url value with at least 128 bits entropy.}
-        adoptions: {type: array, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
+        os_user: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, minLength: 1, maxLength: 255}
+        discovered_adapters: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
+        request_nonce: {type: string, minLength: 22, maxLength: 128, description: Random base64url value with at least 128 bits entropy.}
+        adoptions: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
       required: [public_key, requested_slug, os_user, hostname, discovered_adapters, request_nonce, adoptions]
     HostEnrollment:
       type: object
@@ -7075,11 +7080,11 @@ components:
       properties:
         public_key: {type: string, contentEncoding: base64}
         requested_slug: {$ref: '#/components/schemas/HostSlug'}
-        os_user: {type: string, minLength: 1}
-        hostname: {type: string, minLength: 1}
-        discovered_adapters: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
-        request_nonce: {type: string, minLength: 22}
-        adoptions: {type: array, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
+        os_user: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, minLength: 1, maxLength: 255}
+        discovered_adapters: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
+        request_nonce: {type: string, minLength: 22, maxLength: 128}
+        adoptions: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
         enrollment_token: {type: string}
         signature: {type: string, contentEncoding: base64}
       required: [public_key, requested_slug, os_user, hostname, discovered_adapters, request_nonce, adoptions, enrollment_token, signature]
@@ -7204,7 +7209,7 @@ components:
     RunUpsertRequest:
       type: object
       additionalProperties: false
-      description: 'card_ref may be explicit or derived from exactly one `anx.card.<card-slug>` label (maps to `card:<card-slug>`); explicit value wins when both are present. Times are RFC3339 UTC. Preserve earliest started_at, latest last_observed_at and terminal ended_at. Terminal states completed, failed, cancelled never regress; starting may advance to running or terminal; running may advance to terminal; unknown may advance to any observed state. Duplicate identical requests replay; older observations cannot erase newer optional fields.'
+      description: 'card_ref may be explicit or derived from exactly one `anx.card.<card-slug>` label (maps to `card:<card-slug>`); explicit value wins when both are present. Times are RFC3339 UTC and cannot be more than two minutes ahead of server time. Preserve earliest started_at, latest last_observed_at and terminal ended_at. A terminal observation closes a nonterminal run despite a modest prior clock skew; terminal states never regress. Active roster runs require an alive observation within five minutes. Duplicate identical requests replay; older nonterminal observations cannot erase newer optional fields.'
       properties:
         launcher: {type: string, enum: [agentctl]}
         external_id: {type: string, minLength: 1}
@@ -9599,6 +9604,7 @@ components:
         Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
       properties:
+        idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }
         inbox_item_id:
           type: string

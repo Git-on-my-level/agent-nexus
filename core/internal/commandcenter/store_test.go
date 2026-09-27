@@ -25,7 +25,7 @@ func observation(agent, external string, at time.Time) cc.Run {
 func TestRunUpsertAndFilters(t *testing.T) {
 	s := fixture(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Now().UTC().Add(-11 * time.Minute)
 	in := observation("agent-1", "exec-one", now)
 	first, created, replayed, e := s.UpsertRun(ctx, in)
 	if e != nil || !created || replayed || first.CardRef == nil || *first.CardRef != "card:fix-login" {
@@ -96,10 +96,39 @@ func TestRunUpsertAndFilters(t *testing.T) {
 		t.Fatalf("provisional callback: %+v %v", filled, e)
 	}
 }
-func TestPresenceAndDerivedStates(t *testing.T) {
+
+func TestRunFutureObservationAndTerminalClockSkew(t *testing.T) {
 	s := fixture(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
+	future := observation("agent-1", "future-run", now.Add(cc.RunObservationFutureSkew+time.Minute))
+	if _, _, _, err := s.UpsertRun(ctx, future); !errors.Is(err, cc.ErrInvalid) {
+		t.Fatalf("future observation accepted: %v", err)
+	}
+	var count int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("future observation persisted: count=%d err=%v", count, err)
+	}
+	running := observation("agent-1", "skewed-run", now.Add(time.Minute))
+	if _, _, _, err := s.UpsertRun(ctx, running); err != nil {
+		t.Fatal(err)
+	}
+	completed := running
+	completed.State = "completed"
+	completed.Liveness = "stale"
+	completed.LastObservedAt = now.Format(time.RFC3339Nano)
+	closed, _, replayed, err := s.UpsertRun(ctx, completed)
+	if err != nil || replayed || closed.State != "completed" || closed.Liveness != "stale" || closed.EndedAt == nil {
+		t.Fatalf("terminal update lost to modest skew: %#v replay=%v err=%v", closed, replayed, err)
+	}
+	if closed.LastObservedAt != running.LastObservedAt {
+		t.Fatalf("run observation regressed: %#v", closed)
+	}
+}
+func TestPresenceAndDerivedStates(t *testing.T) {
+	s := fixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Add(-63 * time.Minute)
 	db := s.DB
 	agents := []struct{ id, actor string }{{"working", "actor-working"}, {"waiting", "actor-waiting"}, {"idle", "actor-idle"}, {"stale", "actor-stale"}}
 	if _, e := db.ExecContext(ctx, `INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host-1','host','Host','test','host','["generic"]',?)`, now.Format(time.RFC3339Nano)); e != nil {
@@ -154,6 +183,15 @@ func TestPresenceAndDerivedStates(t *testing.T) {
 			if a.WaitingAsk == nil || a.WaitingAsk.ID != "ask-1" || a.WaitingAsk.InboxItemID == nil || *a.WaitingAsk.InboxItemID != "inbox-ask-1" || a.WaitingAsk.Title != "Approve launch" || a.WaitingAsk.Severity == nil || *a.WaitingAsk.Severity != "high" || a.WaitingAsk.CreatedAt == "" {
 				t.Fatalf("waiting ask summary: %#v", a.WaitingAsk)
 			}
+		}
+	}
+	staleRunRoster, e := s.Roster(ctx, now.Add(10*time.Minute))
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, a := range staleRunRoster {
+		if a.ID == "working" && a.ActiveRun != nil {
+			t.Fatalf("stale run remains active: %#v", a.ActiveRun)
 		}
 	}
 	detail, e := s.AgentDetail(ctx, "waiting", now.Add(time.Minute))
