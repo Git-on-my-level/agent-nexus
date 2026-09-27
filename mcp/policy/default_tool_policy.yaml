@@ -91,18 +91,18 @@ commands:
   "agent.notifications.read":
     classification: exposed_write
     reason: "ordinary authenticated agent notification state write"
+  "agents.get":
+    classification: exposed_read
+    reason: "agent roster detail is workspace presence data"
+  "agents.list":
+    classification: exposed_read
+    reason: "agent roster is workspace presence data"
   "agents.me.get":
     classification: exposed_read
     reason: "authenticated caller self-inspection"
-  "agents.me.keys.rotate":
-    classification: gated_sensitive
-    reason: "agent key rotation changes credential material"
-  "agents.me.patch":
-    classification: gated_admin
-    reason: "agent profile mutation changes principal metadata"
-  "agents.me.revoke":
-    classification: gated_sensitive
-    reason: "revocation disables credentials"
+  "agents.me.presence":
+    classification: exposed_write
+    reason: "an agent may report its current task and progress note"
   "artifacts.archive":
     classification: exposed_write
     reason: "ordinary reversible artifact lifecycle write"
@@ -133,9 +133,6 @@ commands:
   "artifacts.unarchive":
     classification: exposed_write
     reason: "ordinary reversible artifact lifecycle write"
-  "auth.agents.register":
-    classification: unsupported_bootstrap_auth
-    reason: "agent registration is an auth bootstrap flow"
   "auth.audit.list":
     classification: gated_admin
     reason: "auth audit inventory is administrative"
@@ -346,6 +343,51 @@ commands:
   "home.unread":
     classification: exposed_read
     reason: "home unread projection"
+  "hosts.bridge.check_in":
+    classification: unsupported_other
+    reason: "bridge check-in is host-signed infrastructure traffic"
+  "hosts.enroll.approve":
+    classification: gated_admin
+    reason: "approving a host grants machine-level credentials"
+  "hosts.enroll.complete":
+    classification: unsupported_bootstrap_auth
+    reason: "host enrollment is a local machine ceremony"
+  "hosts.enroll.deny":
+    classification: gated_admin
+    reason: "enrollment decisions are auth administration"
+  "hosts.enroll.headless":
+    classification: unsupported_bootstrap_auth
+    reason: "host enrollment is a local machine ceremony"
+  "hosts.enroll.pending":
+    classification: gated_admin
+    reason: "pending enrollments are auth administration"
+  "hosts.enroll.poll":
+    classification: unsupported_bootstrap_auth
+    reason: "host enrollment is a local machine ceremony"
+  "hosts.enroll.start":
+    classification: unsupported_bootstrap_auth
+    reason: "host enrollment is a local machine ceremony"
+  "hosts.get":
+    classification: exposed_read
+    reason: "host detail without secrets is workspace presence data"
+  "hosts.list":
+    classification: exposed_read
+    reason: "host inventory without secrets is workspace presence data"
+  "hosts.patch":
+    classification: gated_admin
+    reason: "host exclusions and names are auth administration"
+  "hosts.revoke":
+    classification: gated_admin
+    reason: "host revocation cascades to derived agent credentials"
+  "hosts.tokens.create":
+    classification: gated_sensitive
+    reason: "headless enrollment tokens are one-time secrets"
+  "hosts.tokens.list":
+    classification: gated_admin
+    reason: "enrollment token inventory is auth administration"
+  "hosts.tokens.revoke":
+    classification: gated_admin
+    reason: "enrollment token revocation is auth administration"
   "inbox.get":
     classification: exposed_read
     reason: "inbox item read"
@@ -397,6 +439,15 @@ commands:
   "ref_edges.list":
     classification: exposed_read
     reason: "reference edge inventory read"
+  "runs.get":
+    classification: exposed_read
+    reason: "run reports are workspace presence data"
+  "runs.list":
+    classification: exposed_read
+    reason: "run reports are workspace presence data"
+  "runs.upsert":
+    classification: unsupported_other
+    reason: "runs are reported by local launchers through anx runs ingest, not by MCP clients"
   "secrets.create":
     classification: gated_sensitive
     reason: "secret payload write is sensitive"
