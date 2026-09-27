@@ -7179,7 +7179,7 @@ components:
     RunUpsertRequest:
       type: object
       additionalProperties: false
-      description: 'card_ref may be explicit or derived from exactly one `anx:card:<ref>` label; explicit value wins when both are present. Times are RFC3339 UTC. Preserve earliest started_at, latest last_observed_at and terminal ended_at. Terminal states completed, failed, cancelled never regress; starting may advance to running or terminal; running may advance to terminal; unknown may advance to any observed state. Duplicate identical requests replay; older observations cannot erase newer optional fields.'
+      description: 'card_ref may be explicit or derived from exactly one `anx.card.<card-slug>` label (maps to `card:<card-slug>`); explicit value wins when both are present. Times are RFC3339 UTC. Preserve earliest started_at, latest last_observed_at and terminal ended_at. Terminal states completed, failed, cancelled never regress; starting may advance to running or terminal; running may advance to terminal; unknown may advance to any observed state. Duplicate identical requests replay; older observations cannot erase newer optional fields.'
       properties:
         launcher: {type: string, enum: [agentctl]}
         external_id: {type: string, minLength: 1}
