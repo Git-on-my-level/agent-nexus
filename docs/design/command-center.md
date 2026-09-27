@@ -343,6 +343,12 @@ routes remain.
   config paths for the same enrollment cannot start separate daemons.
   (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
   `adapters/agent-bridge/README.md`, `cli/internal/app/bridge_lifecycle.go`.)
+- 2026-09-27 (S7 review): The bridge keeps unresolved wake outcome reports in
+  memory and retries them on later polls. Reporting failures do not change a
+  successful runtime launch into a failed wake or relaunch it while the bridge
+  remains running. Check-in TTL grows with the refresh interval within core's
+  five-minute limit. (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
+  `adapters/agent-bridge/anx_agent_bridge/anx_client.py`.)
 
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and

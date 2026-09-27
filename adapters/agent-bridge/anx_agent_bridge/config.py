@@ -1,6 +1,7 @@
 """One runtime configuration per enrolled host. No credentials live in this file."""
 from __future__ import annotations
 
+import math
 import os
 import re
 import tomllib
@@ -85,7 +86,7 @@ def load_config(path: str | Path) -> Config:
         raise ValueError("at least one enabled runtime is required")
     poll = float(host.get("poll_seconds", 3))
     checkin = float(host.get("checkin_seconds", 60))
-    if poll <= 0 or not 5 <= checkin <= 240:
+    if not math.isfinite(poll) or poll <= 0 or not math.isfinite(checkin) or not 5 <= checkin <= 240:
         raise ValueError("poll_seconds must be positive; checkin_seconds must be 5..240")
     config_dir_value = host.get("config_dir") or os.environ.get("ANX_CONFIG_DIR")
     if not config_dir_value:
