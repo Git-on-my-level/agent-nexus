@@ -73,7 +73,7 @@ Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts:
 
 **Popover / menu dismiss:** `use:dismissOnEscape` from `src/lib/actions/dismissOnEscape.js` on the popover root while open (`enabled`, `onDismiss`). Capture-phase document listener; stops propagation so other handlers do not run.
 
-**Inbox respond form:** The response composer is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit` → `submitResponse()`). No per-field Mod+Enter handler is required.
+**Inbox respond form:** `InboxRespondPanel` (shared by the Inbox pane and `/inbox/{id}`) is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit`). No per-field Mod+Enter handler is required. Sends go through `lib/inboxResponseQueue.js` (undo window) rather than calling `respondInboxItem` directly, and triage keys go through `lib/inboxShortcuts.js`.
 
 - `make -C web-ui check`
 - `./scripts/test`
