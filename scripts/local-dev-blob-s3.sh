@@ -64,17 +64,30 @@ anx_local_s3_start() {
 		-e MINIO_ROOT_USER="${ANX_LOCAL_MINIO_ROOT_USER}" \
 		-e MINIO_ROOT_PASSWORD="${ANX_LOCAL_MINIO_ROOT_PASSWORD}" \
 		-v "${ANX_LOCAL_MINIO_VOLUME}:/data" \
-		minio/minio:latest server /data --console-address ":9001" >/dev/null
+		minio/minio:latest server /data --console-address ":9001" >/dev/null || {
+		echo "local-dev-blob-s3: could not start the MinIO container" >&2
+		return 1
+	}
 
-	local _i
+	local _i _live=0
 	for ((_i = 0; _i < 40; _i++)); do
 		if curl -fsS "http://127.0.0.1:${ANX_LOCAL_MINIO_PORT}/minio/health/live" >/dev/null 2>&1; then
+			_live=1
 			break
 		fi
 		sleep 0.25
 	done
+	if [[ "${_live}" != "1" ]]; then
+		echo "local-dev-blob-s3: MinIO did not become healthy on port ${ANX_LOCAL_MINIO_PORT}" >&2
+		docker rm -f "${ANX_LOCAL_MINIO_CONTAINER_NAME}" >/dev/null 2>&1 || true
+		return 1
+	fi
 
-	anx_local_s3_mc_run mb --ignore-existing "local/${ANX_BLOB_S3_BUCKET}"
+	anx_local_s3_mc_run mb --ignore-existing "local/${ANX_BLOB_S3_BUCKET}" || {
+		echo "local-dev-blob-s3: could not create bucket ${ANX_BLOB_S3_BUCKET}" >&2
+		docker rm -f "${ANX_LOCAL_MINIO_CONTAINER_NAME}" >/dev/null 2>&1 || true
+		return 1
+	}
 
 	export ANX_BLOB_BACKEND=s3
 	export ANX_BLOB_S3_BUCKET="${ANX_BLOB_S3_BUCKET}"

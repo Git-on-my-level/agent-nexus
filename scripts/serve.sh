@@ -136,11 +136,12 @@ ANX_LOCAL_MINIO_CONTAINER_NAME="${ANX_LOCAL_MINIO_CONTAINER_NAME:-anx-dev-minio}
 if [[ "${ANX_DEV_BLOB_BACKEND}" == "s3" ]]; then
 	# shellcheck source=/dev/null
 	source "${REPO_ROOT}/scripts/local-dev-blob-s3.sh"
-	if ! anx_local_s3_start; then
-		echo "Failed to start local MinIO. Install Docker or run with ANX_DEV_BLOB_BACKEND=filesystem." >&2
-		exit 1
+	if anx_local_s3_start; then
+		export ANX_LOCAL_MINIO_STARTED=1
+	else
+		echo "Local MinIO is unavailable; falling back to ANX_DEV_BLOB_BACKEND=filesystem." >&2
+		ANX_DEV_BLOB_BACKEND=filesystem
 	fi
-	export ANX_LOCAL_MINIO_STARTED=1
 fi
 
 if [ "$RESET_DEV_WORKSPACE" = "1" ]; then
