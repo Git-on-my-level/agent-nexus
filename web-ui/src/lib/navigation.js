@@ -10,6 +10,8 @@ export const navigationItems = [
     href: "/inbox",
     icon: "inbox",
     hint: "Needs attention",
+    // The shell shows how many rows sit in Needs you beside this item.
+    count: "inbox-needs-you",
   },
   {
     label: "Tasks",

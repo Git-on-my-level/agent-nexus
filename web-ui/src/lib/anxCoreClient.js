@@ -1127,6 +1127,19 @@ export function createAnxCoreClient(options = {}) {
       });
       await consumeSSEStream(response, { onEvent, signal });
     },
+    /**
+     * Workspace-wide event feed (`/stream/events` without a thread filter).
+     * Without `lastEventId` core replays history first, so live views should
+     * resume from the newest event they already know.
+     */
+    streamWorkspaceEvents: async ({ lastEventId, signal, onEvent }) => {
+      const response = await invokeDirectRaw("/stream/events", {
+        query: { last_event_id: lastEventId || undefined },
+        accept: "text/event-stream",
+        signal,
+      });
+      await consumeSSEStream(response, { onEvent, signal });
+    },
     streamNotificationReceipts: async ({
       threadId,
       lastEventId,

@@ -117,6 +117,7 @@ test("inbox triage lists actionable rows and responding removes an item", async 
 }) => {
   const actorId = "actor-e2e";
   let inboxRequestCount = 0;
+  let respondCount = 0;
   let inboxItems = [
     {
       id: "inbox-001",
@@ -184,6 +185,7 @@ test("inbox triage lists actionable rows and responding removes an item", async 
       pathnameRaw.length - suffix.length,
     );
     const id = decodeURIComponent(middle).trim();
+    respondCount += 1;
     inboxItems = inboxItems.filter((item) => item.id !== id);
 
     await route.fulfill({
@@ -268,10 +270,21 @@ test("inbox triage lists actionable rows and responding removes an item", async 
 
   const targetRow = page.getByTestId("inbox-row-inbox-001");
   await expect(targetRow).toBeVisible();
-  await expect(
-    page.locator("[data-inbox-row][aria-current='page']"),
-  ).toHaveCount(0);
+  // The row blocked longest (30h) is first and selected without a click.
+  await expect(targetRow).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("[data-inbox-row]").first()).toHaveAttribute(
+    "data-testid",
+    "inbox-row-inbox-001",
+  );
+  await expect(page.locator("[data-inbox-blocked-for]")).toHaveText("1d 6h");
 
+  // J/K move the selection; the standalone item behaves like the pane.
+  await page.keyboard.press("j");
+  await expect(page.getByTestId("inbox-row-inbox-002")).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await page.keyboard.press("k");
   await targetRow.click();
   await expect(targetRow).toHaveAttribute("aria-current", "page");
   await expect(
@@ -289,9 +302,16 @@ test("inbox triage lists actionable rows and responding removes an item", async 
 
   await page.getByLabel("Your response").fill("Approved.");
   await page.getByRole("button", { name: "Send response" }).click();
-  await expect(page).toHaveURL(/responded=/);
+  // Back in the Inbox behind an undo toast; nothing is sent yet.
+  await expect(page).toHaveURL(/\/inbox$/);
+  await expect(page.locator('[data-inbox-toast="pending"]')).toBeVisible();
+  expect(respondCount).toBe(0);
+  await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
+  // The window closes and the response is committed once.
+  await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(1);
 
   await page.goto("/o/local/w/local/inbox");
+  await expect(page.getByTestId("inbox-row-inbox-002")).toBeVisible();
   await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
 });
 
@@ -535,7 +555,7 @@ test("completed inbox tab renders history rows", async ({ page }) => {
 
   await mockPmSurfaces(page);
 
-  await page.goto("/o/local/w/local/inbox?status=completed&mailbox=handled");
+  await page.goto("/o/local/w/local/inbox?mailbox=handled");
   await expect.poll(() => inboxRequestCount).toBeGreaterThan(0);
 
   await expect(

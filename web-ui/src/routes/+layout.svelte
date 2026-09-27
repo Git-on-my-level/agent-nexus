@@ -47,6 +47,7 @@
     devActorModeReady,
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
+  import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
   import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
@@ -990,6 +991,12 @@
                     <span class="shell-nav-hint">{item.hint}</span>
                   {/if}
                 </span>
+                {#if item.count === "inbox-needs-you"}
+                  <InboxNavCount
+                    workspace={activeWorkspaceSlug}
+                    enabled={identityReady}
+                  />
+                {/if}
               </a>
             {/each}
           </nav>
@@ -1211,7 +1218,7 @@
         {@const active = isActive(item.href)}
         {@const tour = dataTourForNav(item.href)}
         <a
-          class="shell-bottom-nav-item {active
+          class="shell-bottom-nav-item relative {active
             ? 'shell-bottom-nav-item--active'
             : ''}"
           href={workspaceHref(item.href)}
@@ -1230,6 +1237,13 @@
             <path d={navIconPath(item.icon)} />
           </svg>
           <span>{item.label}</span>
+          {#if item.count === "inbox-needs-you"}
+            <InboxNavCount
+              workspace={activeWorkspaceSlug}
+              enabled={identityReady}
+              variant="bottom"
+            />
+          {/if}
         </a>
       {/each}
       <a
