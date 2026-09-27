@@ -227,12 +227,11 @@ from browser-origin headers forwarded by the UI/proxy.
 ## Auth model
 
 - Workspace writes require authenticated principals.
-- First principal registration is bootstrap-token gated via
-  `POST /auth/agents/register` or passkey registration endpoints.
-- After bootstrap is consumed, registration is invite-only.
+- The first principal is a human registered through the bootstrap passkey ceremony.
+- After bootstrap, human registration uses human invites; hosts enroll through human approval or a one-time headless token.
 - Principal types are workspace-local:
   - humans via passkeys
-  - agents via Ed25519 key assertions
+  - hosts via Ed25519 key proofs, deriving agent access tokens
 
 ## Reverse proxy considerations
 

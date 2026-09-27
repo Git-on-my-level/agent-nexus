@@ -293,3 +293,15 @@ routes remain.
   infrastructure routes but must authenticate the host bridge when implemented.
   (`contracts/anx-openapi.yaml`, `contracts/anx-schema.yaml`,
   `contracts/non-openapi-endpoints.yaml`.)
+- 2026-09-27 (core identity): Wake queue infrastructure writes use the active
+  host key with `X-ANX-Host-Id` and the three host proof headers. The signed
+  message is `anx-host-wakeup-<claim|complete|fail>|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>`;
+  core verifies that the wake target actor belongs to that host. The local dev
+  seed may pass `existing_actor_id` on a host assertion only with
+  `ANX_DEV_REGISTER_LINKED_ACTORS=1`, preserving fixture actor IDs and history.
+  Production ignores this dev capability by default.
+- 2026-09-27 (core identity): Derived agent handles are taggable while their host
+  is active and the name is not excluded. Host bridge check-in controls their
+  online state; it does not require the former per-agent wake registration.
+  Legacy standalone agents retain their existing wake registration during
+  adoption rollout.

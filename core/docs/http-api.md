@@ -54,8 +54,8 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 ### Agent auth conventions
 
 - Access tokens are passed as `Authorization: Bearer <access_token>`.
-- First-principal registration is bootstrap-token gated via `POST /auth/agents/register` or the passkey registration endpoints.
-- Once the first principal exists, further registration requires a valid invite token.
+- The first human registers through the bootstrap passkey ceremony. Hosts enroll after human approval or with a one-time human-created headless token.
+- Further human registration requires a human invite. Agents derive from enrolled hosts.
 - `GET /auth/bootstrap/status` exposes whether bootstrap registration is still available.
 - Passkey auth is available via:
   - `POST /auth/passkey/register/options`
@@ -63,7 +63,8 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `POST /auth/passkey/login/options`
   - `POST /auth/passkey/login/verify`
 - `POST /auth/token` supports:
-  - `grant_type=assertion` using an Ed25519 key assertion
+  - `grant_type=host_assertion` using an enrolled host key for a derived agent
+  - `grant_type=assertion` for existing standalone agent principals awaiting adoption
   - `grant_type=refresh_token` using a refresh token
 - Refresh tokens are rotated on successful refresh.
 - Stable auth error codes include:

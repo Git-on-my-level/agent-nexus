@@ -20,8 +20,6 @@ CARD_B_TOPIC_ID="topic-smoke-card-b"
 PRIMARY_DOC_ID="doc-smoke-primary"
 CARD_DOC_ID="doc-smoke-card"
 BOARD_ID="board-smoke"
-RECEIPT_ID="artifact-smoke-receipt"
-REVIEW_ID="artifact-smoke-review"
 
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -103,6 +101,11 @@ wait_for_ready() {
 }
 
 echo "starting anx-core on ${BASE_URL}"
+mkdir -p "$WORKSPACE_ROOT"
+touch "$WORKSPACE_ROOT/.anx-dev-insecure-auth"
+ANX_ALLOW_PASSKEY_DEV_BYPASS=1 \
+ANX_ENABLE_DEV_ACTOR_MODE=1 \
+ANX_HOSTED_DEV_MODE=1 \
 ANX_BOOTSTRAP_TOKEN="${BOOTSTRAP_TOKEN}" \
 go run ./cmd/anx-core \
   --listen-addr "$LISTEN_ADDR" \
@@ -120,19 +123,11 @@ fi
 VERSION_JSON="$(get_json "/version")"
 echo "version: ${VERSION_JSON}"
 
-PUBLIC_KEY_B64="$(node -e '
-const { generateKeyPairSync } = require("node:crypto");
-const { publicKey } = generateKeyPairSync("ed25519");
-const der = publicKey.export({ format: "der", type: "spki" });
-process.stdout.write(der.subarray(der.length - 32).toString("base64"));
-')"
-
-echo "registering bootstrap agent"
+echo "registering bootstrap human"
 REGISTER_RESP_FILE="$TMP_DIR/register.json"
-post_json "/auth/agents/register" "$(cat <<JSON
+post_json "/auth/passkey/dev/register" "$(cat <<JSON
 {
-  "username": "smoke-agent",
-  "public_key": "${PUBLIC_KEY_B64}",
+  "display_name": "Smoke Operator",
   "bootstrap_token": "${BOOTSTRAP_TOKEN}"
 }
 JSON
@@ -147,7 +142,6 @@ MAIN_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
   "topic": {
     "id": "${MAIN_TOPIC_ID}",
     "type": "initiative",
-    "status": "active",
     "title": "Smoke coordination topic",
     "summary": "Smoke workflow in progress",
     "owner_refs": ["actor:${ACTOR_ID}"],
@@ -167,7 +161,6 @@ CARD_A_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
   "topic": {
     "id": "${CARD_A_TOPIC_ID}",
     "type": "initiative",
-    "status": "active",
     "title": "Smoke work item A",
     "summary": "Card A topic",
     "owner_refs": ["actor:${ACTOR_ID}"],
@@ -187,7 +180,6 @@ CARD_B_TOPIC_RESP="$(post_json "/topics" "$(cat <<JSON
   "topic": {
     "id": "${CARD_B_TOPIC_ID}",
     "type": "initiative",
-    "status": "active",
     "title": "Smoke work item B",
     "summary": "Card B topic",
     "owner_refs": ["actor:${ACTOR_ID}"],
@@ -215,8 +207,7 @@ post_json "/docs" "$(cat <<JSON
   "actor_id": "${ACTOR_ID}",
   "document": {
     "id": "${PRIMARY_DOC_ID}",
-    "title": "Smoke Board Primary Doc",
-    "labels": ["smoke", "board"]
+    "title": "Smoke Board Primary Doc"
   },
   "refs": ["topic:${MAIN_TOPIC_ID}", "thread:${MAIN_TOPIC_THREAD_ID}"],
   "content": "Primary board document",
@@ -230,8 +221,7 @@ post_json "/docs" "$(cat <<JSON
   "actor_id": "${ACTOR_ID}",
   "document": {
     "id": "${CARD_DOC_ID}",
-    "title": "Smoke Board Card Doc",
-    "labels": ["smoke", "board"]
+    "title": "Smoke Board Card Doc"
   },
   "refs": ["topic:${CARD_A_TOPIC_ID}", "thread:${CARD_A_THREAD_ID}"],
   "content": "Pinned card document",
@@ -247,8 +237,6 @@ BOARD_RESP="$(post_json "/boards" "$(cat <<JSON
   "board": {
     "id": "${BOARD_ID}",
     "title": "Smoke Board",
-    "status": "active",
-    "labels": ["smoke", "board"],
     "owners": ["${ACTOR_ID}"],
     "primary_topic_ref": "topic:${MAIN_TOPIC_ID}",
     "thread_id": "${BOARD_ID}",
@@ -272,11 +260,10 @@ CARD_A_RESP="$(post_json "/boards/${BOARD_ID}/cards" "$(cat <<JSON
   "actor_id": "${ACTOR_ID}",
   "if_board_updated_at": "${BOARD_UPDATED_AT}",
   "card_id": "card-smoke-a",
-  "thread_id": "${CARD_A_THREAD_ID}",
   "column_key": "backlog",
   "title": "Smoke work item A",
   "body": "Smoke work item A",
-  "pinned_document_id": "${CARD_DOC_ID}"
+  "document_ref": "document:${CARD_DOC_ID}"
 }
 JSON
 )")"
@@ -287,54 +274,10 @@ post_json "/boards/${BOARD_ID}/cards" "$(cat <<JSON
   "actor_id": "${ACTOR_ID}",
   "if_board_updated_at": "${BOARD_UPDATED_AT}",
   "card_id": "card-smoke-b",
-  "thread_id": "${CARD_B_THREAD_ID}",
   "column_key": "backlog",
   "title": "Smoke work item B",
   "body": "Smoke work item B",
-  "after_thread_id": "${CARD_A_THREAD_ID}"
-}
-JSON
-)" >/dev/null
-
-echo "creating packets"
-post_json "/packets/receipts" "$(cat <<JSON
-{
-  "actor_id": "${ACTOR_ID}",
-  "artifact": {
-    "id": "${RECEIPT_ID}",
-    "refs": ["card:card-smoke-a"],
-    "summary": "Smoke receipt",
-    "provenance": {"sources": ["event:smoke"]}
-  },
-  "packet": {
-    "receipt_id": "${RECEIPT_ID}",
-    "subject_ref": "card:card-smoke-a",
-    "outputs": ["document:${PRIMARY_DOC_ID}"],
-    "verification_evidence": ["document:${PRIMARY_DOC_ID}"],
-    "changes_summary": "Smoke flow completed",
-    "known_gaps": []
-  }
-}
-JSON
-)" >/dev/null
-
-post_json "/packets/reviews" "$(cat <<JSON
-{
-  "actor_id": "${ACTOR_ID}",
-  "artifact": {
-    "id": "${REVIEW_ID}",
-    "refs": ["card:card-smoke-a", "artifact:${RECEIPT_ID}"],
-    "summary": "Smoke review",
-    "provenance": {"sources": ["event:smoke"]}
-  },
-  "packet": {
-    "review_id": "${REVIEW_ID}",
-    "subject_ref": "card:card-smoke-a",
-    "receipt_ref": "artifact:${RECEIPT_ID}",
-    "outcome": "accept",
-    "notes": "Smoke review accepted",
-    "evidence_refs": ["artifact:${RECEIPT_ID}"]
-  }
+  "after_card_id": "card-smoke-a"
 }
 JSON
 )" >/dev/null
@@ -353,8 +296,6 @@ fi
 echo "smoke summary:"
 echo "  main_topic_id: ${MAIN_TOPIC_ID}"
 echo "  board_id: ${BOARD_ID}"
-echo "  receipt_id: ${RECEIPT_ID}"
-echo "  review_id: ${REVIEW_ID}"
 echo "  board_card_count: ${BOARD_CARD_COUNT:-0}"
 echo "  topics_response_size: ${TOPIC_COUNT:-0}"
 echo "  cards_response_size: ${CARD_COUNT:-0}"

@@ -12,7 +12,6 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/router"
 )
 
 type principalContextKey struct{}
@@ -36,54 +35,6 @@ func cacheAuthenticatedPrincipal(r *http.Request, principal *auth.Principal) {
 	*r = *r.WithContext(ctx)
 }
 
-func handleRegisterAgent(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	if opts.authStore == nil {
-		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "auth store is not configured")
-		return
-	}
-
-	var req struct {
-		Username        string `json:"username"`
-		PublicKey       string `json:"public_key"`
-		BootstrapToken  string `json:"bootstrap_token"`
-		InviteToken     string `json:"invite_token"`
-		ExistingActorID string `json:"existing_actor_id"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	claim, ok := resolveOnboardingClaim(w, r, opts, req.BootstrapToken, req.InviteToken, auth.PrincipalKindAgent)
-	if !ok {
-		return
-	}
-
-	agent, key, tokens, err := opts.authStore.RegisterAgent(r.Context(), auth.RegisterAgentInput{
-		Username:        req.Username,
-		PublicKey:       req.PublicKey,
-		ExistingActorID: req.ExistingActorID,
-	}, claim)
-	if err != nil {
-		switch {
-		case errors.Is(err, auth.ErrUsernameTaken):
-			writeError(w, http.StatusConflict, "username_taken", "username is already taken")
-		case errors.Is(err, auth.ErrInvalidRequest):
-			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
-		case isOnboardingTokenError(err):
-			writeError(w, http.StatusUnauthorized, "invalid_token", "bootstrap or invite token is invalid, expired, revoked, or already consumed")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to register agent")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"agent":  agent,
-		"key":    key,
-		"tokens": tokens,
-	})
-}
-
 func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.authStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "auth_unavailable", "auth store is not configured")
@@ -91,13 +42,16 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 
 	var req struct {
-		GrantType    string `json:"grant_type"`
-		RefreshToken string `json:"refresh_token"`
-		AgentID      string `json:"agent_id"`
-		KeyID        string `json:"key_id"`
-		SignedAt     string `json:"signed_at"`
-		Signature    string `json:"signature"`
-		Assertion    string `json:"assertion"`
+		GrantType       string `json:"grant_type"`
+		RefreshToken    string `json:"refresh_token"`
+		AgentID         string `json:"agent_id"`
+		HostID          string `json:"host_id"`
+		ExistingActorID string `json:"existing_actor_id"`
+		AgentName       string `json:"agent_name"`
+		KeyID           string `json:"key_id"`
+		SignedAt        string `json:"signed_at"`
+		Signature       string `json:"signature"`
+		Assertion       string `json:"assertion"`
 	}
 	if !decodeJSONBody(w, r, &req) {
 		return
@@ -108,6 +62,14 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 		err    error
 	)
 	switch strings.TrimSpace(req.GrantType) {
+	case "host_assertion":
+		agent, issued, issueErr := opts.authStore.IssueHostAgentToken(r.Context(), req.HostID, req.KeyID, req.AgentName, req.SignedAt, req.Signature, req.ExistingActorID)
+		if issueErr != nil {
+			hostError(w, issueErr)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"agent": agent, "tokens": issued})
+		return
 	case "refresh_token":
 		tokens, err = opts.authStore.IssueTokenFromRefresh(r.Context(), req.RefreshToken)
 	case "assertion":
@@ -236,198 +198,16 @@ func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
-
-	agent, err := opts.authStore.GetAgent(r.Context(), principal.AgentID)
-	if err != nil {
-		if errors.Is(err, auth.ErrAgentNotFound) {
-			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load agent profile")
-		return
-	}
-
-	keys, err := opts.authStore.ListKeys(r.Context(), principal.AgentID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load agent keys")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"agent": agent, "keys": keys})
-}
-
-func handlePatchCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		Username     string                  `json:"username"`
-		Registration *auth.AgentRegistration `json:"registration"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	if strings.TrimSpace(req.Username) != "" && req.Registration != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "username and registration cannot be updated in the same request")
-		return
-	}
-	if strings.TrimSpace(req.Username) == "" && req.Registration == nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "username or registration is required")
-		return
-	}
-
-	var (
-		agent auth.Agent
-		err   error
-	)
-	if req.Registration != nil {
-		agent, err = opts.authStore.UpdateRegistration(r.Context(), principal.AgentID, *req.Registration)
-	} else {
-		agent, err = opts.authStore.UpdateUsername(r.Context(), principal.AgentID, req.Username)
-	}
-	if err != nil {
-		switch {
-		case errors.Is(err, auth.ErrInvalidRequest):
-			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
-		case errors.Is(err, auth.ErrUsernameTaken):
-			writeError(w, http.StatusConflict, "username_taken", "username is already taken")
-		case errors.Is(err, auth.ErrAgentNotFound):
-			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update agent profile")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"agent": agent})
-}
-
-func handleBridgeCheckIn(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
 	if !isAgentPrincipal(principal) {
-		writeError(w, http.StatusForbidden, "invalid_request", "bridge check-in is only available to authenticated agents")
+		writeError(w, http.StatusForbidden, "forbidden", "derived agent required")
 		return
 	}
-	var req router.AgentBridgeCheckin
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-	req.Handle = strings.TrimSpace(req.Handle)
-	req.ActorID = strings.TrimSpace(req.ActorID)
-	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
-	req.BridgeInstanceID = strings.TrimSpace(req.BridgeInstanceID)
-	req.CheckedInAt = strings.TrimSpace(req.CheckedInAt)
-	req.ExpiresAt = strings.TrimSpace(req.ExpiresAt)
-	req.ProofSignatureB64 = strings.TrimSpace(req.ProofSignatureB64)
-	if req.Handle == "" || req.ActorID == "" || req.BridgeInstanceID == "" || req.CheckedInAt == "" || req.ExpiresAt == "" || req.ProofSignatureB64 == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "bridge check-in requires handle, actor_id, bridge_instance_id, checked_in_at, expires_at, and proof_signature_b64")
-		return
-	}
-	if req.Handle != principal.Username || req.ActorID != principal.ActorID {
-		writeError(w, http.StatusForbidden, "invalid_request", "bridge check-in does not match authenticated agent")
-		return
-	}
-	agent, err := opts.authStore.GetAgent(r.Context(), principal.AgentID)
+	agent, err := opts.authStore.GetDerivedAgent(r.Context(), principal.AgentID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load agent profile")
+		hostError(w, err)
 		return
 	}
-	if agent.Registration == nil {
-		writeError(w, http.StatusConflict, "missing_registration", "agent wake registration is missing")
-		return
-	}
-	registration := *agent.Registration
-	if !router.VerifyBridgeCheckinSignature(registration.BridgeSigningPublicKeySPKI, req) {
-		writeError(w, http.StatusUnauthorized, "invalid_signature", "bridge check-in signature is invalid")
-		return
-	}
-	registration.Status = "active"
-	registration.BridgeInstanceID = req.BridgeInstanceID
-	registration.BridgeCheckedInAt = req.CheckedInAt
-	registration.BridgeExpiresAt = req.ExpiresAt
-	registration.BridgeWorkspaceIDs = req.WorkspaceIDs
-	if req.WorkspaceID != "" {
-		registration.BridgeWorkspaceIDs = append([]string{req.WorkspaceID}, registration.BridgeWorkspaceIDs...)
-	}
-	registration.BridgeProofSignatureB64 = req.ProofSignatureB64
-	updated, err := opts.authStore.UpdateRegistration(r.Context(), principal.AgentID, registration)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update bridge presence")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent": updated, "registration": updated.Registration})
-}
-
-func handleRotateCurrentAgentKey(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
-
-	var req struct {
-		PublicKey string `json:"public_key"`
-	}
-	if !decodeJSONBody(w, r, &req) {
-		return
-	}
-
-	key, err := opts.authStore.RotateKey(r.Context(), principal.AgentID, req.PublicKey)
-	if err != nil {
-		switch {
-		case errors.Is(err, auth.ErrInvalidRequest):
-			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
-		case errors.Is(err, auth.ErrAgentRevoked):
-			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
-		case errors.Is(err, auth.ErrAgentNotFound):
-			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to rotate agent key")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"key": key})
-}
-
-func handleRevokeCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
-	if !ok {
-		return
-	}
-
-	req, ok := decodeRevokePrincipalRequest(w, r)
-	if !ok {
-		return
-	}
-
-	result, err := opts.authStore.RevokeAgent(r.Context(), principal.AgentID, auth.RevokeAgentInput{
-		Actor:              *principal,
-		Mode:               auth.RevocationModeSelf,
-		AllowHumanLockout:  req.AllowHumanLockout,
-		HumanLockoutReason: req.HumanLockoutReason,
-	})
-	if err != nil {
-		switch {
-		case errors.Is(err, auth.ErrAgentNotFound):
-			writeError(w, http.StatusUnauthorized, "invalid_token", "authenticated agent no longer exists")
-		case errors.Is(err, auth.ErrLastActivePrincipal):
-			writeError(w, http.StatusConflict, "last_active_principal", "refusing to revoke the last active human principal without allow_human_lockout=true and human_lockout_reason")
-		case errors.Is(err, auth.ErrInvalidRequest):
-			writeError(w, http.StatusBadRequest, "invalid_request", sanitizeAuthError(err))
-		case errors.Is(err, auth.ErrAuthRequired):
-			writeError(w, http.StatusUnauthorized, "auth_required", "authorization header is required")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to revoke agent")
-		}
-		return
-	}
-
-	writeRevokePrincipalResponse(w, result, opts.workspaceID)
+	writeJSON(w, http.StatusOK, map[string]any{"agent": agent})
 }
 
 func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {

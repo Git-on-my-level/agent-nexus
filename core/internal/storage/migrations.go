@@ -804,6 +804,33 @@ var migrations = []migration{
 		Version:    28,
 		AfterApply: applyMigration28DocumentFTS,
 	},
+	// Command-center host identity uses a separate version band from run/presence work.
+	{
+		Version: 40,
+		Statements: []string{
+			`CREATE TABLE hosts (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, os_user TEXT NOT NULL, hostname TEXT NOT NULL, discovered_adapters_json TEXT NOT NULL, created_at TEXT NOT NULL, revoked_at TEXT, bridge_instance_id TEXT, bridge_checked_in_at TEXT, bridge_expires_at TEXT);`,
+			`CREATE TABLE host_keys (id TEXT PRIMARY KEY, host_id TEXT NOT NULL REFERENCES hosts(id), public_key TEXT NOT NULL, created_at TEXT NOT NULL, revoked_at TEXT);`,
+			`CREATE UNIQUE INDEX host_active_key ON host_keys(host_id) WHERE revoked_at IS NULL;`,
+			`CREATE TABLE host_exclusions (host_id TEXT NOT NULL REFERENCES hosts(id), name TEXT NOT NULL, PRIMARY KEY(host_id,name));`,
+			`CREATE TABLE host_agents (host_id TEXT NOT NULL REFERENCES hosts(id), name TEXT NOT NULL, agent_id TEXT NOT NULL UNIQUE REFERENCES agents(id), identity_kind TEXT NOT NULL, PRIMARY KEY(host_id,name));`,
+			`CREATE TABLE host_enrollments (id TEXT PRIMARY KEY, user_code TEXT NOT NULL UNIQUE, poll_token_hash TEXT NOT NULL, public_key TEXT NOT NULL, requested_slug TEXT NOT NULL, os_user TEXT NOT NULL, hostname TEXT NOT NULL, discovered_adapters_json TEXT NOT NULL, request_nonce TEXT NOT NULL, adoptions_json TEXT NOT NULL, requesting_ip TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, completed_host_id TEXT);`,
+			`CREATE UNIQUE INDEX host_reserved_slug ON host_enrollments(requested_slug) WHERE status='approved';`,
+			`CREATE TABLE host_enrollment_tokens (id TEXT PRIMARY KEY, label TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, revoked_at TEXT, created_by_agent_id TEXT NOT NULL);`,
+		},
+		AfterApply: applyMigration40HostIdentity,
+	},
+}
+
+func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='auth_invites'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE auth_invites SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE kind<>'human' AND revoked_at IS NULL`)
+	return err
 }
 
 func applyMigration25ResourceHandles(ctx context.Context, tx *sql.Tx) error {

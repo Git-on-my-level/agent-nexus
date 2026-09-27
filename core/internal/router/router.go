@@ -266,6 +266,13 @@ func (s *Service) refreshPrincipal(ctx context.Context, handle string) (auth.Aut
 }
 
 func routingRegistrationFailure(principal auth.AuthPrincipalSummary, workspaceID string) (*auth.AgentRegistration, string, string) {
+	if principal.HostID != "" {
+		if principal.HostExcluded {
+			return nil, "agent_excluded", fmt.Sprintf("Tagged agent @%s is excluded on its host", principal.Username)
+		}
+		registration := &auth.AgentRegistration{Handle: principal.Username, ActorID: principal.ActorID, Status: "active", WorkspaceBindings: []auth.AgentRegistrationWorkspaceBinding{{WorkspaceID: workspaceID, Enabled: true}}}
+		return registration, "", ""
+	}
 	registration := principal.Registration
 	if registration == nil {
 		return nil, "missing_agent_registration", fmt.Sprintf("Tagged agent @%s has no registration", principal.Username)
