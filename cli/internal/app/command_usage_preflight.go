@@ -25,6 +25,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
+	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
+		name := "work " + args[1]
+		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])
+	}
 	if isWorkCommandRoot(args[0]) {
 		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
 			commandName := "pm " + args[1]
@@ -127,8 +131,8 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], draftSubcommandSpec)
 	case "provenance":
 		return preflightSubcommand(args[1:], provenanceSubcommandSpec)
-	case "human":
-		return preflightHumanSubcommand(args[1:])
+	case "orient", "ask", "review", "escalate", "await":
+		return nil
 	case "secret":
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
 	case "workspace":
@@ -203,19 +207,6 @@ func preflightThreadsSubcommand(args []string) error {
 		return nil
 	}
 	return preflightSubcommand(args, threadsSubcommandSpec)
-}
-
-func preflightHumanSubcommand(args []string) error {
-	if len(args) == 0 || isHelpToken(args[0]) {
-		return nil
-	}
-	sub := strings.TrimSpace(args[0])
-	switch sub {
-	case "ask", "review", "escalate":
-		return nil
-	default:
-		return errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown human subcommand %q; valid subcommands: ask, review, escalate; examples: `anx human ask --question 'Need approval?'`", sub))
-	}
 }
 
 func preflightWorkspaceSubcommand(args []string) error {
@@ -368,7 +359,7 @@ func preflightDocsIngestArgs(args []string) error {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "help": {}, "--help": {}, "-h": {},
 	}
@@ -387,6 +378,26 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 				current[name] = spec
 			}
 		}
+	}
+	addLayer(map[string]map[string]preflightFlagSpec{
+		"orient":     {"stale-hours": {kind: preflightFlagString}},
+		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}},
+		"work start": {},
+		"work note":  {},
+		"work block": {"ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}},
+		"work done":  {"evidence": {kind: preflightFlagString}},
+	})
+	for _, kind := range []string{"ask", "review", "escalate"} {
+		addLayer(map[string]map[string]preflightFlagSpec{kind: {
+			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
+			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},
+			"thread-id": {kind: preflightFlagString}, "ref": {kind: preflightFlagString},
+			"body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString},
+			"title": {kind: preflightFlagString}, "request-id": {kind: preflightFlagString},
+			"requester-actor-id": {kind: preflightFlagString}, "requester-agent-id": {kind: preflightFlagString},
+			"requester-label": {kind: preflightFlagString}, "coverage-hint": {kind: preflightFlagString},
+			"severity": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
+		}})
 	}
 	// Lowest precedence: lifecycle verbs derived from the resource registry.
 	// `manualPreflightFlagSpecs` and `localHelperTopics` may still override.

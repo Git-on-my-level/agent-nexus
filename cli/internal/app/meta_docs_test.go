@@ -74,17 +74,17 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	if !strings.Contains(output, "## `agent-guide`") {
 		t.Fatalf("expected agent-guide markdown header output=%s", output)
 	}
-	if !strings.Contains(output, "Operating posture") {
-		t.Fatalf("expected operating posture section output=%s", output)
+	if !strings.Contains(output, "Daily loop") {
+		t.Fatalf("expected daily loop section output=%s", output)
 	}
-	if !strings.Contains(output, "`boards`") || !strings.Contains(output, "`docs`") {
-		t.Fatalf("expected higher-level abstractions in agent guide output=%s", output)
+	if !strings.Contains(output, "anx work start") || !strings.Contains(output, "anx await") {
+		t.Fatalf("expected daily commands in agent guide output=%s", output)
 	}
-	if !strings.Contains(output, "Prefer **default (non-JSON) output**") || !strings.Contains(output, "code, a shell script, CI, `jq`") {
-		t.Fatalf("expected text-first output guidance output=%s", output)
+	if !strings.Contains(output, "Text output is compact") || !strings.Contains(output, "`--json` for scripts") {
+		t.Fatalf("expected output guidance output=%s", output)
 	}
-	if !strings.Contains(output, "risky or broad mutations") {
-		t.Fatalf("expected prescriptive draft guidance output=%s", output)
+	if !strings.Contains(output, "anx.card.<card-slug>") {
+		t.Fatalf("expected agentctl run label guidance output=%s", output)
 	}
 }
 

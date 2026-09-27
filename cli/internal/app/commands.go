@@ -54,6 +54,22 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
+	if args[0] == "orient" {
+		result, err := a.runOrient(ctx, args[1:], cfg)
+		return "orient", result, err
+	}
+	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
+		result, err := a.runDailyWork(ctx, args[1], args[2:], cfg)
+		return "work " + args[1], result, err
+	}
+	if args[0] == "ask" || args[0] == "review" || args[0] == "escalate" {
+		result, err := a.runHumanAttentionCommand(ctx, args[0], args[1:], cfg)
+		return args[0], result, err
+	}
+	if args[0] == "await" {
+		result, err := a.runAwait(ctx, args[1:], cfg)
+		return "await", result, err
+	}
 	if isWorkCommandRoot(args[0]) {
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err
@@ -94,9 +110,6 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return name, result, err
 	case "provenance":
 		result, name, err := a.runProvenanceCommand(ctx, args[1:], cfg)
-		return name, result, err
-	case "human":
-		result, name, err := a.runHumanCommand(ctx, args[1:], cfg)
 		return name, result, err
 	case "secret":
 		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)

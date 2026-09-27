@@ -503,17 +503,23 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-a",
-		"human", "ask", "Should we ship Friday?",
+		"ask", "Should we ship Friday?",
 		"--thread-id", "thread_1",
 		"--subject-ref", "topic:launch",
 		"--ref", "artifact:receipt_1",
 		"--coverage-hint", "thin - 0 decisions",
-		"--recommended-response", "Ship Friday with a rollback plan ready.",
-		"--proposal", "Delay until Monday for extra QA.",
+		"--recommend", "Ship Friday with a rollback plan ready.",
+		"--alt", "Delay until Monday for extra QA.",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "human ask" {
+	if got := anyStringValue(payload["command"]); got != "ask" {
 		t.Fatalf("expected human ask command, got %#v", payload)
+	}
+	if got := anyStringValue(asMap(payload["result"])["ask_id"]); got != "event:event_ask_1" {
+		t.Fatalf("expected stable ask id, got %#v", payload)
+	}
+	if len(asSlice(payload["next_actions"])) == 0 {
+		t.Fatalf("expected await next action, got %#v", payload)
 	}
 	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
 		t.Fatalf("expected events.create command id, got %#v", payload)
@@ -587,9 +593,9 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-a",
-		"human", "ask", "Should we ship Friday?",
+		"ask", "Should we ship Friday?",
 		"--subject-ref", "topic:launch",
-		"--recommended-response", "Ship Friday with a rollback plan ready.",
+		"--recommend", "Ship Friday with a rollback plan ready.",
 	})
 	assertEnvelopeOK(t, raw)
 
@@ -610,20 +616,17 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 	}
 }
 
-func TestHumanCommandRequiresSubjectRef(t *testing.T) {
+func TestAskWithoutSubjectRequiresCurrentTask(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "ask", "Need a decision",
+		"--json", "ask", "Need a decision", "--recommend", "Proceed",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
-	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
-		t.Fatalf("expected invalid_request, got %#v", payload)
-	}
-	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "--subject-ref is required") {
-		t.Fatalf("expected subject ref validation message, got %#v", payload)
+	if got := anyStringValue(errObj["code"]); got != "identity_unresolved" {
+		t.Fatalf("expected identity_unresolved, got %#v", payload)
 	}
 }
 
@@ -4503,27 +4506,21 @@ func TestWorkspaceSummaryAllowsPartialOptionalReadFailure(t *testing.T) {
 	}
 }
 
-func TestAgentGuideDocumentsRefNativeIdentity(t *testing.T) {
+func TestAgentGuideDocumentsDailyIdentity(t *testing.T) {
 	t.Parallel()
 
 	guide := agentGuideText()
-	if !strings.Contains(guide, "typed refs and handles") || !strings.Contains(guide, "`ref` and `handle`") {
-		t.Fatalf("agent guide no longer documents ref-native identity behavior; update coverage assumptions")
+	if !strings.Contains(guide, "host enroll") || !strings.Contains(guide, "ANX_AS") || !strings.Contains(guide, "anx orient") {
+		t.Fatalf("agent guide must document host and daily identity: %s", guide)
 	}
 }
 
-func TestAgentGuideRoutesOperatorInboxThroughHumanAskNotPmDecisions(t *testing.T) {
+func TestAgentGuideDocumentsAskAwaitAndRunLabel(t *testing.T) {
 	t.Parallel()
 
 	guide := agentGuideText()
-	if !strings.Contains(guide, "`anx human ask|review|escalate` is the way to put something in the operator's Inbox") {
-		t.Fatalf("expected Inbox routing guidance output=%s", guide)
-	}
-	if !strings.Contains(guide, "A PM decision (`anx pm decisions create`, `pm.turns.decisions.create`) is part of a PM conversation and is not an operator request") {
-		t.Fatalf("expected PM decision contrast output=%s", guide)
-	}
-	if !strings.Contains(guide, "the two surfaces are layered, not aliases") {
-		t.Fatalf("expected cards vs work layering output=%s", guide)
+	if !strings.Contains(guide, "anx await <ask-id>") || !strings.Contains(guide, "anx.card.<card-slug>") {
+		t.Fatalf("expected await and run label guidance output=%s", guide)
 	}
 }
 

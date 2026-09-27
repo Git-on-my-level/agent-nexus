@@ -24,6 +24,9 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "version" || parts[0] == "doctor" || parts[0] == "workspace" || parts[0] == "read" || parts[0] == "url" || parts[0] == "concepts" || parts[0] == "primitives" || parts[0] == "provenance" {
 		return "read_only"
 	}
+	if parts[0] == "orient" || parts[0] == "await" {
+		return "read_only"
+	}
 	if parts[0] == "update" {
 		return "local_operational_write"
 	}
@@ -68,6 +71,20 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
+		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
+	}
+	if command == "await" && anyString(root["subject_ref"]) != "" && anyString(root["answer"]) != "" {
+		actions = append(actions, action("Record follow-up", "anx", "work", "note", anyString(root["answer"]), anyString(root["subject_ref"])))
+	}
+	if command == "orient" {
+		for _, raw := range asSlice(root["next"]) {
+			argv := stringList(raw)
+			if len(argv) >= 2 && argv[0] == "anx" && !strings.Contains(strings.Join(argv, " "), "<") {
+				actions = append(actions, action("Continue work", argv...))
+			}
+		}
+	}
 	if cursor := firstNonEmpty(anyString(root["next_cursor"]), anyString(root["cursor_next"])); cursor != "" && root["has_more"] != false {
 		next := append([]string{"anx"}, argv...)
 		for i := 0; i < len(next); i++ {
@@ -229,6 +246,14 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		}
 	}
 	switch err.Code {
+	case "no_current_task":
+		return []output.NextAction{action("Orient", "anx", "orient"), action("Find work", "anx", "work", "list")}
+	case "timeout":
+		if details, ok := err.Details.(map[string]any); ok {
+			if target := anyString(details["target"]); target != "" {
+				return []output.NextAction{action("Keep waiting", "anx", "await", target)}
+			}
+		}
 	case "cli_outdated":
 		return []output.NextAction{action("Update CLI", "anx", "update")}
 	case "unknown_command", "unknown_subcommand":

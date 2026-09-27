@@ -326,6 +326,10 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			filtered = append(filtered, token)
 			continue
 		}
+		if name == "timeout" && len(filtered) > 0 && filtered[0] == "await" {
+			filtered = append(filtered, token)
+			continue
+		}
 
 		readValue := func(flagName string) (string, error) {
 			if hasValue {
