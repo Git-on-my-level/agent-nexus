@@ -29,7 +29,7 @@ def setup_bridge(tmp_path, monkeypatch, agentctl=False):
         executable(tmp_path / "agentctl", "#!/usr/bin/env python3\nimport json,os,sys,subprocess\na=sys.argv[1:]\nwith open(os.environ['TEST_CTL_CALLS'],'a') as f:f.write(json.dumps(a)+'\\n')\nif a[:3]==['id','generate','exec']:print(json.dumps({'result':{'id':'exec-test-test-test-test-test-test'}}))\nelif a[0]=='run':\n cmd=a[a.index('--')+1:];p=subprocess.run(cmd,input=sys.stdin.read(),text=True,env={**os.environ,'AGENTCTL_ADAPTER':'codex'});sys.exit(p.returncode)\nelse:print(json.dumps({'ok':True}))\n")
         monkeypatch.setenv("TEST_CTL_CALLS", str(tmp_path / "agentctl.jsonl"))
     config_path = tmp_path / "bridge.toml"
-    config_path.write_text(f'''[host]\nbase_url = "http://core.test"\nid = "host-1"\nslug = "test-host"\nanx = "{anx}"\nagentctl = "{tmp_path / 'agentctl'}"\nstate_dir = "{tmp_path}"\n[agents.codex]\ncommand = ["{runtime}"]\ncwd = "{tmp_path}"\n''')
+    config_path.write_text(f'''[host]\nbase_url = "http://core.test"\nid = "host-1"\nslug = "test-host"\nanx = "{anx}"\nagentctl = "{tmp_path / 'agentctl'}"\n[agents.codex]\ncommand = ["{runtime}"]\ncwd = "{tmp_path}"\n''')
     config = load_config(config_path)
     cli = HostCLI(config)
     client = Client(config, cli)

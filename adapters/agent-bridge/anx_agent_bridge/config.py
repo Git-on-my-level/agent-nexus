@@ -27,7 +27,6 @@ class Config:
     host_slug: str
     anx: str
     agentctl: str
-    state_dir: Path
     poll_seconds: float
     checkin_seconds: float
     runtimes: dict[str, Runtime]
@@ -39,9 +38,15 @@ def load_config(path: str | Path) -> Config:
         data = tomllib.load(stream)
     if any(key in data for key in ("agent_home", "wake_config", "adapter", "auth")):
         raise ValueError("obsolete per-agent bridge configuration")
+    unexpected = set(data) - {"host", "agents"}
+    if unexpected:
+        raise ValueError(f"unknown bridge config sections: {sorted(unexpected)}")
     host = data.get("host", {})
     if not isinstance(host, dict):
         raise ValueError("[host] is required")
+    unexpected = set(host) - {"base_url", "id", "slug", "anx", "agentctl", "poll_seconds", "checkin_seconds"}
+    if unexpected:
+        raise ValueError(f"unknown [host] keys: {sorted(unexpected)}")
     base_url = str(host.get("base_url", "")).rstrip("/")
     host_id = str(host.get("id", "")).strip()
     host_slug = str(host.get("slug", "")).strip()
@@ -56,6 +61,9 @@ def load_config(path: str | Path) -> Config:
     for name, entry in runtime_data.items():
         if not NAME.fullmatch(name) or not isinstance(entry, dict):
             raise ValueError(f"invalid runtime name: {name!r}")
+        unexpected = set(entry) - {"command", "adapter", "cwd", "env", "enabled"}
+        if unexpected:
+            raise ValueError(f"unknown [agents.{name}] keys: {sorted(unexpected)}")
         if not entry.get("enabled", True):
             continue
         command = entry.get("command")
@@ -74,12 +82,9 @@ def load_config(path: str | Path) -> Config:
         runtimes[name] = Runtime(name, adapter, tuple(command), cwd.resolve(), env)
     if not runtimes:
         raise ValueError("at least one enabled runtime is required")
-    state = Path(os.path.expandvars(str(host.get("state_dir", "~/.local/state/anx/bridge")))).expanduser()
-    if not state.is_absolute():
-        state = path.parent / state
     poll = float(host.get("poll_seconds", 3))
     checkin = float(host.get("checkin_seconds", 60))
     if poll <= 0 or not 5 <= checkin <= 240:
         raise ValueError("poll_seconds must be positive; checkin_seconds must be 5..240")
     return Config(path, base_url, host_id, host_slug, str(host.get("anx", "anx")),
-                  str(host.get("agentctl", "agentctl")), state.resolve(), poll, checkin, runtimes)
+                  str(host.get("agentctl", "agentctl")), poll, checkin, runtimes)

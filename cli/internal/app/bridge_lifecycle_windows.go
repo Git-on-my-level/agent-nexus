@@ -29,7 +29,7 @@ func inferBridgeRuntimeKind(root map[string]any, configPath string) (runtimeKind
 	return "", "", "", errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
 }
 
-func bridgeManagerDir(configPath string) string {
+func bridgeManagerDir(baseURL, hostID string) string {
 	return ""
 }
 

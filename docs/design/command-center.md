@@ -285,8 +285,10 @@ routes remain.
   so the bridge refuses to advertise readiness when even one lacks a runtime.
   The agentctl subscription is created for a preallocated execution ID before
   launching the runtime, so short runs cannot finish before subscription
-  creation. (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
-  `adapters/agent-bridge/README.md`.)
+  creation. CLI managed process state is keyed by core URL and host ID, so two
+  config paths for the same enrollment cannot start separate daemons.
+  (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
+  `adapters/agent-bridge/README.md`, `cli/internal/app/bridge_lifecycle.go`.)
 
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and

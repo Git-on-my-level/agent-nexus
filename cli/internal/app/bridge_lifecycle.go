@@ -282,7 +282,8 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 	if err != nil {
 		return bridgeManagedConfig{}, err
 	}
-	managerDir := bridgeManagerDir(absPath)
+	host, _ := root["host"].(map[string]any)
+	managerDir := bridgeManagerDir(bridgeTomlString(host["base_url"]), bridgeTomlString(host["id"]))
 
 	return bridgeManagedConfig{
 		RuntimeKind:      runtimeKind,
@@ -309,13 +310,14 @@ func inferBridgeRuntimeKind(root map[string]any, configPath string) (string, str
 	return "host", "", bridgeTomlString(host["slug"]), nil
 }
 
-func bridgeManagerDir(configPath string) string {
-	base := strings.TrimSuffix(filepath.Base(configPath), filepath.Ext(configPath))
-	base = sanitizeBridgeManagerName(base)
-	if base == "" {
-		base = "bridge"
+func bridgeManagerDir(baseURL, hostID string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.TempDir()
 	}
-	return filepath.Join(filepath.Dir(configPath), ".anx-bridge", base+"-"+shortBridgeHash(configPath))
+	return filepath.Join(home, ".local", "state", "anx", "bridge",
+		sanitizeBridgeManagerName(hostID)+"-"+shortBridgeHash(baseURL+"|"+hostID))
 }
 
 func sanitizeBridgeManagerName(value string) string {

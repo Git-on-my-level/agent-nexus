@@ -34,6 +34,14 @@ func TestBridgeHostConfig(t *testing.T) {
 	if cfg.RuntimeKind != "host" || cfg.ConfigPath != path {
 		t.Fatalf("%+v", cfg)
 	}
+	otherPath := filepath.Join(t.TempDir(), "other.toml")
+	if err := os.WriteFile(otherPath, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	other, err := loadBridgeManagedConfig(otherPath)
+	if err != nil || other.ManagerDir != cfg.ManagerDir {
+		t.Fatalf("same host must share manager state: %+v %+v %v", cfg, other, err)
+	}
 	if _, _, _, err := inferBridgeRuntimeKind(map[string]any{"agent_home": "old"}, path); err == nil {
 		t.Fatal("old agent home accepted")
 	}

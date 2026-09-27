@@ -14,7 +14,6 @@ Create one host config (keep it owner writable):
 base_url = "http://127.0.0.1:8093"
 id = "<host id returned by enrollment>"
 slug = "m5-mbp"
-state_dir = "~/.local/state/anx/bridge"
 
 [agents.codex]
 command = ["codex", "exec", "-"]
@@ -74,3 +73,5 @@ exit does not complete the underlying card.
 Host check-in advertises the host's enabled derived agents as online for 180
 seconds. The bridge refreshes at most every 60 seconds by default. A stopped
 bridge becomes offline when the check-in expires; durable wakes stay queued.
+Managed process state lives under `~/.local/state/anx/bridge/`, keyed by the
+enrolled host ID and core URL across config paths.
