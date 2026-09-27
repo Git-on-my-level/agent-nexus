@@ -30,6 +30,18 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "update" {
 		return "local_operational_write"
 	}
+	if parts[0] == "bridge" && len(parts) > 1 {
+		switch parts[1] {
+		case "install", "stop":
+			return "local_operational_write"
+		case "start":
+			return "external_side_effect"
+		case "doctor":
+			return "remote_coordination_write"
+		case "status":
+			return "read_only"
+		}
+	}
 	if parts[0] == "import" {
 		if len(parts) > 1 && parts[1] == "apply" {
 			return "remote_coordination_write"
