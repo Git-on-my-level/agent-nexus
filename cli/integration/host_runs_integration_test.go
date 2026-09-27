@@ -49,8 +49,22 @@ func TestHostHeadlessTokenAndRuns(t *testing.T) {
 		"sent_at": time.Now().UTC().Format(time.RFC3339Nano), "expires_at": time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano), "nonce": "local-test",
 		"event": map[string]any{"schema_version": 1, "id": "event-alpha-bravo-charlie-delta-echo-foxtrot", "execution_id": "exec-alpha-bravo-charlie-delta-echo-foxtrot", "origin_host_id": "host-alpha-bravo-charlie-delta-echo-foxtrot", "adapter": "codex", "observed_at": time.Now().UTC().Format(time.RFC3339Nano), "state": "running", "kind": "progress", "authority": "native", "ordering": "observation", "sequence": 1, "dedupe_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "dedupe_version": 1, "occurred_at": nil, "payload": map[string]any{}},
 	}
-	callbackRun := h.runCLIExpectOK(t, "codex", callback, "runs", "ingest")
-	if mustStringPath(t, callbackRun.Payload, "result.run.id") != runID {
+	callbackJSON, err := json.Marshal(callback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ingest := exec.Command(h.cliBin, "--json", "--base-url", h.baseURL, "runs", "ingest")
+	ingest.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_AS=", "ANX_ACCESS_TOKEN=", "AGENTCTL_ADAPTER=", "AGENTCTL_EXECUTION_ID=", "AGENTCTL_HOST_ID=", "CLAUDECODE=", "CODEX_THREAD_ID=", "CURSOR_AGENT_COMPLETED_PATH=", "AGENT=")
+	ingest.Stdin = bytes.NewReader(callbackJSON)
+	callbackOutput, err := ingest.CombinedOutput()
+	if err != nil {
+		t.Fatalf("callback ingest without run environment failed: %v %s", err, callbackOutput)
+	}
+	var callbackPayload map[string]any
+	if err := json.Unmarshal(callbackOutput, &callbackPayload); err != nil {
+		t.Fatal(err)
+	}
+	if mustStringPath(t, callbackPayload, "result.run.id") != runID {
 		t.Fatalf("callback replay changed run")
 	}
 	h.runCLIExpectOK(t, "codex", nil, "runs", "get", runID)
