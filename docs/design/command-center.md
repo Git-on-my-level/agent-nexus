@@ -112,7 +112,7 @@ context, not an agent.
 - Fields: `launcher` (`agentctl`), `external_id` (agentctl `exec-*` id, unique per
   launcher+host), `host`, `agent` (derived principal), `adapter`, `model` (optional),
   `state` (`starting|running|completed|failed|cancelled|unknown`), `liveness`,
-  `result_collected` (bool), `labels`, `card_ref` (from label `anx:card:<ref>` or explicit),
+  `result_collected` (bool), `labels`, `card_ref` (from label `anx.card.<card-slug>` or explicit),
   `repository`/`branch`, `started_at`, `ended_at`, `last_observed_at`.
 - Writes are idempotent upserts keyed by `(launcher, host, external_id)` with
   monotonic-state guarding (a late `running` never overwrites `completed`).
@@ -195,7 +195,7 @@ optional short note.
   and serves wakes for every derived agent handle on that host that the operator enabled
   for wake routing.
 - When `agentctl` is installed, the bridge launches woken runtimes through `agentctl run`
-  with the label `anx:card:<ref>` (when the wake has a subject) and a subscription that
+  with the label `anx.card.<card-slug>` (when the wake has a subject) and a subscription that
   runs `anx runs ingest`, so wake-launched work shows up as runs automatically. The
   launched process resolves its ANX identity from the agentctl run context.
 - Delete the per-agent agent-home bridge model and its docs rather than keeping both.
@@ -204,7 +204,7 @@ optional short note.
 
 - `agentctl run` exports non-secret run context to the child: `AGENTCTL_EXECUTION_ID`,
   `AGENTCTL_ADAPTER`, `AGENTCTL_HOST_ID`, `AGENTCTL_LABELS`, `AGENTCTL_AUTHORITY`.
-- Docs: the ANX integration recipe (label `anx:card:<ref>`, `command` destination running
+- Docs: the ANX integration recipe (label `anx.card.<card-slug>`, `command` destination running
   `anx runs ingest`). No credentials in agentctl, per its rules.
 
 ## Hosted (controlplane, private repo)
