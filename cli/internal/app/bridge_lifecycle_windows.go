@@ -17,15 +17,7 @@ func (a *App) runBridgeStop(args []string) (*commandResult, error) {
 	return nil, errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
 }
 
-func (a *App) runBridgeRestart(ctx context.Context, args []string) (*commandResult, error) {
-	return nil, errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
-}
-
 func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResult, error) {
-	return nil, errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
-}
-
-func (a *App) runBridgeLogs(args []string) (*commandResult, error) {
 	return nil, errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
 }
 
@@ -35,10 +27,6 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 
 func inferBridgeRuntimeKind(root map[string]any, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
 	return "", "", "", errnorm.New(errnorm.KindLocal, "not_supported", "bridge commands are not supported on Windows")
-}
-
-func bridgeConfigHasSection(content string, section string) bool {
-	return false
 }
 
 func bridgeManagerDir(configPath string) string {

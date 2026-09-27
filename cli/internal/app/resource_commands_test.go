@@ -4082,22 +4082,11 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 	}
 }
 
-func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
+func TestPreConfigUsagePreflightRejectsObsoleteBridgeCommand(t *testing.T) {
 	t.Parallel()
-
-	command, err := preflightConfigIndependentUsage([]string{
-		"bridge", "restart",
-		"--config", "./bridge.toml",
-		"--install-dir", "/tmp/anx-bridge",
-		"--bin-dir", "/tmp/anx-bin",
-		"--timeout-seconds", "5",
-		"--force",
-	})
-	if err != nil {
-		t.Fatalf("expected bridge restart parser flags to pass preflight, got %v", err)
-	}
-	if command != "bridge restart" {
-		t.Fatalf("expected bridge restart command, got %q", command)
+	_, err := preflightConfigIndependentUsage([]string{"bridge", "restart", "--config", "./bridge.toml"})
+	if err == nil {
+		t.Fatal("obsolete bridge restart accepted")
 	}
 }
 
