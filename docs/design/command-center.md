@@ -279,6 +279,15 @@ routes remain.
 
 (Append dated entries here: decision, reason, files.)
 
+- 2026-09-27 (S7): A host bridge checks its configured runtime names against
+  all active, non-excluded derived agents returned by `GET /hosts/{id}` before
+  each signed check-in. Core's existing check-in marks every such child online,
+  so the bridge refuses to advertise readiness when even one lacks a runtime.
+  The agentctl subscription is created for a preallocated execution ID before
+  launching the runtime, so short runs cannot finish before subscription
+  creation. (`adapters/agent-bridge/anx_agent_bridge/bridge.py`,
+  `adapters/agent-bridge/README.md`.)
+
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and
   `adapter`. Event reads expose the same object. Presence and progress notes
