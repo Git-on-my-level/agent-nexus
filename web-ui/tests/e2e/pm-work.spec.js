@@ -404,8 +404,9 @@ test("board and table preserve source states and show the same commitments", asy
   const tableRefs = await page
     .locator("[data-work-ref]")
     .evaluateAll((rows) => rows.map((row) => row.dataset.workRef).sort());
+  // The status cell; the two-line phone row repeats it, hidden on desktop.
   await expect(
-    page.getByText("Custom waiting state", { exact: true }),
+    page.getByRole("cell").getByText("Custom waiting state", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Board", exact: true }).click();
   await expect(
@@ -480,7 +481,13 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
   await expect(
     page.getByRole("heading", { name: "Release the sample workspace" }),
   ).toBeVisible();
-  await expect(page.getByText("Reported claim", { exact: true })).toBeVisible();
+  // One source line: what was read, how often, when; the claim badge is on
+  // it, and the read-by-read history is a disclosure.
+  const sourceLine = page.locator("[data-evidence-source]");
+  await expect(sourceLine).toContainText("GitHub #12 · 1 observation");
+  await expect(
+    page.getByText("Reported claim", { exact: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText("Serving revision not observed")).toBeVisible();
   await expect(
     page.getByText("Verified evidence", { exact: true }),
@@ -497,10 +504,12 @@ test("failed refresh retains last-good evidence and never promotes a claim to ve
   ).toEqual(["/work/card:release/refresh"]);
 });
 
-test("failed list reload keeps visible work and names stale display", async ({
+test("a live task event re-reads the list; a failed re-read keeps visible work", async ({
   page,
 }) => {
   let fail = false;
+  let release;
+  const released = new Promise((resolve) => (release = resolve));
   await setup(page, {
     handle: async ({ path, method, reply }) => {
       if (fail && path === "/work" && method === "GET") {
@@ -512,10 +521,36 @@ test("failed list reload keeps visible work and names stale display", async ({
       }
     },
   });
+  // Registered first: Playwright tries the newest route first, and the
+  // stream URL below also contains "/events?".
+  await page.route("**/events?**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ events: [] }),
+    }),
+  );
+  // The list subscribes to /stream/events; the stream stays open until the
+  // test sends one card event down it.
+  await page.route("**/stream/events**", async (route) => {
+    await released;
+    const event = {
+      id: "evt-live-1",
+      type: "card_moved",
+      ts: new Date().toISOString(),
+      refs: ["card:docs"],
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `id: evt-live-1\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+    });
+  });
   await page.goto(`${root}/tasks`);
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
   fail = true;
-  await page.getByRole("button", { name: "Reload", exact: true }).click();
+  release();
   await expect(
     page.getByText("Showing the previously loaded records.", { exact: false }),
   ).toBeVisible();
@@ -643,3 +678,70 @@ for (const viewport of [
     }
   });
 }
+
+test("the ⌘K palette acts on the task in view and navigates by keyboard", async ({
+  page,
+}) => {
+  const { work } = await setup(page);
+  const task = work.find((item) => item.ref === "card:docs");
+  task.board_ref = "board:sample";
+  task.updated_at = stamp(1);
+  const writes = [];
+  await page.route("**/boards/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        board: { ref: "board:sample", updated_at: stamp(1) },
+      }),
+    }),
+  );
+  await page.route("**/cards/**", async (route) => {
+    const request = route.request();
+    writes.push({
+      path: decodeURIComponent(new URL(request.url()).pathname),
+      method: request.method(),
+      body: request.postDataJSON(),
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ card: { ref: "card:docs" } }),
+    });
+  });
+  await page.goto(`${root}/tasks/card%3Adocs`);
+  await expect(
+    page.getByRole("heading", { name: "Document the sample outcome" }),
+  ).toBeVisible();
+
+  // M opens the palette on "Move to"; typing narrows, Enter moves.
+  await page.keyboard.press("m");
+  const palette = page.getByRole("dialog", { name: "Command palette" });
+  await expect(palette.getByRole("button", { name: "Move to" })).toBeVisible();
+  await expect(
+    palette.getByRole("option", { name: "Move to In review" }),
+  ).toBeVisible();
+  await page.keyboard.type("review");
+  await page.keyboard.press("Enter");
+  await expect(palette).toHaveCount(0);
+  await expect(
+    page.getByText("Moved “Document the sample outcome” to In review."),
+  ).toBeVisible();
+  const move = writes.find((write) => write.path.endsWith("/move"));
+  expect(move?.body).toMatchObject({ column_key: "review" });
+
+  // ⌘K lists actions on this task, then destinations with their shortcuts.
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(palette.getByRole("option", { name: /Move to…/ })).toBeVisible();
+  await expect(palette.getByRole("option", { name: /^Inbox/ })).toContainText(
+    "GI",
+  );
+  await page.keyboard.type("audit");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/events$/);
+
+  // G then D goes to Docs from anywhere outside a text field.
+  await page.keyboard.press("g");
+  await page.keyboard.press("d");
+  await expect(page).toHaveURL(/\/docs$/);
+});

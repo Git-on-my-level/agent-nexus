@@ -818,7 +818,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.documents = deferred();
       api.hold.work = deferred();
       await page.getByRole("combobox").fill(LONG_HASH);
-      await expect(page.getByText("Searching...")).toBeVisible();
+      await expect(page.getByText("Searching…")).toBeVisible();
       await expectCleanLayout(page, "palette searching");
       api.hold.documents.resolve();
       api.hold.work.resolve();
@@ -900,7 +900,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.documents = [];
       api.work = [];
       await page.getByRole("combobox").fill("zzz-nothing-matches");
-      await expect(page.getByText("No results found")).toBeVisible();
+      await expect(page.getByText("No matches")).toBeVisible();
       await expectCleanLayout(page, "palette empty results");
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
