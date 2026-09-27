@@ -113,7 +113,8 @@ func TestHostHeadlessTokenAndRuns(t *testing.T) {
 }
 
 func TestHostInteractiveEnrollment(t *testing.T) {
-	h := newLiveCoreHarness(t)
+	verificationURL := "http://127.0.0.1:5291/o/local/w/local/access/hosts/enroll"
+	h := newLiveCoreHarnessEnv(t, []string{"ANX_PUBLIC_WEB_UI_WORKSPACE_URL=http://127.0.0.1:5291/o/local/w/local"})
 	admin := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "Interactive admin", "bootstrap_token": h.bootstrapToken})
 	bearer := mustStringPath(t, admin, "tokens.access_token")
 	cmd := exec.Command(h.cliBin, "--base-url", h.baseURL, "host", "enroll", "--name", "interactive-host")
@@ -151,7 +152,7 @@ func TestHostInteractiveEnrollment(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("enroll: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "user_code=") || !strings.Contains(stdout.String(), "verification_url=") {
+	if !strings.Contains(stdout.String(), "user_code=") || !strings.Contains(stdout.String(), "verification_url="+verificationURL) || strings.Contains(stdout.String(), h.baseURL+"/access/hosts/enroll") {
 		t.Fatalf("missing interactive instructions: stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 	dirs, err := os.ReadDir(filepath.Join(h.homeDir, ".config", "anx", "hosts"))

@@ -28,6 +28,7 @@ variables.
 | Schema path | `--schema-path` | `ANX_SCHEMA_PATH` | `../contracts/anx-schema.yaml` |
 | Core instance identifier | `--core-instance-id` | `ANX_CORE_INSTANCE_ID` | `core-local` |
 | Core base URL for wake-packet links | n/a | `ANX_CORE_BASE_URL` | derived from listen address |
+| Public workspace web UI URL for host enrollment (for example `https://example.com/o/acme/w/main`) | `--public-web-ui-workspace-url` | `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` | unset; enrollment returns the code without a link |
 | Durable workspace id for wake routing | n/a | `ANX_WORKSPACE_ID` | `ws_main` |
 | Workspace display name for wake packets | n/a | `ANX_WORKSPACE_NAME` | `Main` |
 | Enable embedded wake-routing sidecar | n/a | `ANX_SIDECAR_ROUTER_ENABLED` | `true` |
@@ -126,8 +127,9 @@ storage.
 
 From the repo root, `make serve` starts `anx-core`, seeds a local workspace,
 and starts the web UI. For the default game-dev-studio scenario it also seeds
-the Studio PM agent (`actor-gds-pm` / `dev.pm`), sets `ANX_PM_AGENT_ACTOR_ID`
-and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
+the Studio PM agent (`actor-gds-pm` / `pm.dev-host`), sets `ANX_PM_AGENT_ACTOR_ID`
+and `ANX_PM_AGENT_HANDLE`. `make serve` also configures the local workspace web
+URL so interactive host enrollment links to the web UI port.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
 `lease_token`. Runners must renew through `POST /pm/turns/{turn_id}/heartbeat`

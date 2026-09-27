@@ -44,6 +44,7 @@ type authIntegrationOptions struct {
 	webAuthnConfig                WebAuthnConfig
 	workspaceID                   string
 	workspaceAccessMode           string
+	hostEnrollmentVerificationURL string
 	workspaceHumanGrantVerifier   auth.WorkspaceHumanGrantIdentityVerifier
 	workspaceManagedGrantVerifier auth.WorkspaceManagedAgentGrantIdentityVerifier
 	accountStatusChecker          auth.AccountStatusChecker
@@ -120,6 +121,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithWebAuthnConfig(options.webAuthnConfig),
 		WithWorkspaceID(workspaceID),
 		WithWorkspaceAccessMode(options.workspaceAccessMode),
+		WithHostEnrollmentVerificationURL(options.hostEnrollmentVerificationURL),
 		WithEnableDevActorMode(options.enableDevActorMode),
 		WithAllowPasskeyDevBypass(options.allowPasskeyDevBypass),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),

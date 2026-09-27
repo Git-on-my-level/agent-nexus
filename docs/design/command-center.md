@@ -223,7 +223,7 @@ routes remain.
 
 | Route | Contract |
 | --- | --- |
-| `POST /auth/hosts/enrollments` | Public interactive start; returns code, verification path, secret poll token, interval, expiry. |
+| `POST /auth/hosts/enrollments` | Public interactive start; returns code, optional full web UI verification URL, secret poll token, interval, expiry. |
 | `GET /auth/hosts/enrollments/{enrollment_id}` | Poll with `X-ANX-Enrollment-Token`. |
 | `POST /auth/hosts/enrollments/{enrollment_id}/complete` | Complete approved request with poll token and host-key signature; adopt proved agents atomically. |
 | `GET /auth/hosts/enrollments/pending` | Human auth-admin sees pending requests and requesting IP. |
@@ -278,6 +278,16 @@ routes remain.
 ## Workstream decisions
 
 (Append dated entries here: decision, reason, files.)
+
+- 2026-09-27 (CLI review): Interactive host enrollment returns an optional full
+  `verification_url` built from the deployment's
+  `ANX_PUBLIC_WEB_UI_WORKSPACE_URL`, which must identify the workspace web UI
+  route. Without this config the CLI prints the code and tells the operator to
+  open Access → Hosts. The API origin cannot determine the web UI origin or
+  hosted workspace path. Long-running CLI streams renew derived credentials
+  from the host token cache before reconnecting; ordinary requests refresh
+  near-expiry derived credentials. (`contracts/anx-openapi.yaml`,
+  `core/internal/server/host_handlers.go`, `cli/internal/app/`.)
 
 - 2026-09-27 (core fixes): `/stream/agents` is a process-local SSE invalidation
   stream. It sends an initial `agents_changed` signal and coalesced signals after
@@ -469,8 +479,9 @@ routes remain.
   summaries without derived state (all `stale`, no signal).
 - **Deliberate approvals.** Approve opens an inline confirmation that repeats the user
   code; revoking a host requires typing its slug, inside the host card. Pending requests
-  poll every 5 s while Access is visible. `/access/hosts/enroll` (the CLI's verification
-  path) redirects to `/access#host-requests`.
+  poll every 5 s while Access is visible. The configured workspace web UI
+  verification URL ends in `/access/hosts/enroll` and redirects to
+  `/access#host-requests`.
 - **Per-agent controls on the agent page: exclude (reversible) and revoke (permanent).**
   "Exclude on <host>" edits the host's exclusion list (core ends the name's sessions and
   refuses it; removing the exclusion lets it back). "Revoke agent…" revokes the principal:

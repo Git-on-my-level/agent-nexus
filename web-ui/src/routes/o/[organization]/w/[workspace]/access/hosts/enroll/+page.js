@@ -3,8 +3,8 @@ import { redirect } from "@sveltejs/kit";
 import { workspacePath } from "$lib/workspacePaths";
 
 /**
- * The verification URL `anx host enroll` prints (`/access/hosts/enroll`)
- * lands on the pending requests in Access.
+ * Core's configured workspace web URL leads here from `anx host enroll`.
+ * Redirect to the pending requests in Access.
  */
 export function load({ params }) {
   redirect(

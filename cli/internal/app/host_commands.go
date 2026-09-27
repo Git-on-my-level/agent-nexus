@@ -52,6 +52,17 @@ func (a *App) hostCall(ctx context.Context, cfg config.Resolved, method, path st
 	return parsed, nil
 }
 
+func writeEnrollmentInstructions(progress io.Writer, start map[string]any) {
+	code := anyString(start["user_code"])
+	verify := anyString(start["verification_url"])
+	parsed, err := url.Parse(verify)
+	if err == nil && parsed != nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != "" {
+		fmt.Fprintf(progress, "enrollment user_code=%s verification_url=%s\nnext open %s\n", code, verify, verify)
+		return
+	}
+	fmt.Fprintf(progress, "enrollment user_code=%s\ninstruction open Access → Hosts in the workspace web UI and approve this code\n", code)
+}
+
 func discoveredAdapters() []string {
 	known := map[string]string{"claude": "claude", "codex": "codex", "cursor": "cursor-agent", "omp": "omp"}
 	found := []string{}
@@ -278,12 +289,11 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 			return nil, e
 		}
 		id, poll := anyString(start["enrollment_id"]), anyString(start["poll_token"])
-		verify := strings.TrimRight(cfg.BaseURL, "/") + anyString(start["verification_url_path"])
 		var progress io.Writer = a.Stdout
 		if cfg.JSON {
 			progress = a.Stderr
 		}
-		fmt.Fprintf(progress, "enrollment user_code=%s verification_url=%s\nnext open %s\n", anyString(start["user_code"]), verify, verify)
+		writeEnrollmentInstructions(progress, start)
 		interval := time.Duration(hostInt(start["poll_interval_seconds"])) * time.Second
 		if interval < time.Second {
 			interval = time.Second

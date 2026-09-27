@@ -262,7 +262,8 @@ func TestHostIdentityLifecycle(t *testing.T) {
 }
 
 func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
-	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
+	verificationURL := "https://example.com/o/acme/w/main/access/hosts/enroll"
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true, hostEnrollmentVerificationURL: verificationURL})
 	url := env.server.URL
 	status, p := hostHTTP(t, "POST", url+"/auth/passkey/dev/register", "", map[string]any{"display_name": "Admin", "bootstrap_token": testBootstrapToken})
 	hostStatus(t, status, 201, p)
@@ -277,6 +278,12 @@ func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
 		status, p := hostHTTP(t, "POST", url+"/auth/hosts/enrollments", "", map[string]any{"public_key": public, "requested_slug": slug, "os_user": "operator", "hostname": "laptop", "discovered_adapters": []string{}, "request_nonce": nonce, "adoptions": []any{}})
 		hostStatus(t, status, 201, p)
 		code := p["user_code"].(string)
+		if p["verification_url"] != verificationURL {
+			t.Fatalf("verification URL = %v", p["verification_url"])
+		}
+		if _, exists := p["verification_url_path"]; exists {
+			t.Fatalf("obsolete path returned: %#v", p)
+		}
 		if !regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$`).MatchString(code) {
 			t.Fatalf("ambiguous enrollment user code: %q", code)
 		}

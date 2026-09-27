@@ -25,19 +25,20 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
 
-	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	client, err := httpclient.New(authCfg)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
-	}
-
+	authCfg := cfg
 	cursor := strings.TrimSpace(lastEventID)
 	received := 0
 
 	for {
+		var err error
+		authCfg, err = a.cfgWithResolvedAuthToken(ctx, authCfg)
+		if err != nil {
+			return nil, err
+		}
+		client, err := httpclient.New(authCfg)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+		}
 		callCtx := ctx
 		headers := map[string]string{"Accept": "text/event-stream"}
 		if cursor != "" {
