@@ -328,7 +328,7 @@ describe("anxCoreClient error messaging", () => {
       },
     });
 
-    await client.streamThreadEvents({
+    await client.streamEvents({
       threadId: "thread-1",
       onEvent: (event) => events.push(event),
     });
