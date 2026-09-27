@@ -13,11 +13,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/filelock"
 	"agent-nexus-cli/internal/hostidentity"
 	"agent-nexus-cli/internal/httpclient"
 )
@@ -155,15 +155,15 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 	}
 	dir := filepath.Dir(host.PrivateKeyPath)
 	lockPath := filepath.Join(dir, "token-"+name+".lock")
-	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	lock, err := filelock.OpenNoFollow(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return cfg, err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(lock); err != nil {
 		return cfg, err
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer filelock.Unlock(lock)
 	cachePath := filepath.Join(dir, "token-"+name+".json")
 	var cached tokenCache
 	if raw, readErr := os.ReadFile(cachePath); readErr == nil {
