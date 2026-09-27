@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `163`
+- Commands: `180`
 
 ## `actors.create`
 
@@ -78,6 +78,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns `{ event, notification }`.
 
+## `agents.get`
+
+- CLI path: `agents get`
+- HTTP: `GET /agents/{agent_id}`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Inspect one agent's state and recent activity.
+- Concepts: `agents`, `runs`, `cards`, `inbox`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ agent, recent_cards, recent_runs, open_asks, recent_notes }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `agents.list`
+
+- CLI path: `agents list`
+- HTTP: `GET /agents`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: See who is working or waiting.
+- Concepts: `agents`, `runs`, `inbox`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ agents }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
 ## `agents.me.get`
 
 - CLI path: `agents me`
@@ -85,46 +111,23 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
-- Why: Resolve bearer principal to agent profile and keys.
+- Why: Resolve a derived-agent bearer to its host, name, handle, and actor ID; retained for agent self-identification.
 - Concepts: `auth`, `agents`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ agent, keys }`.
+- Output: Returns `{ agent }`; derived agents have no independent signing keys.
 
-## `agents.me.keys.rotate`
+## `agents.me.presence`
 
-- CLI path: `agents me keys rotate`
-- HTTP: `POST /agents/me/keys/rotate`
+- CLI path: `work presence`
+- HTTP: `PATCH /agents/me/presence`
 - Stability: `beta`
-- Surface: `utility`
+- Surface: `canonical`
 - Input mode: `json-body`
-- Why: Add a new Ed25519 key for assertions.
-- Concepts: `auth`, `agents`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ key }`.
-
-## `agents.me.patch`
-
-- CLI path: `agents me patch`
-- HTTP: `PATCH /agents/me`
-- Stability: `beta`
-- Surface: `utility`
-- Input mode: `json-body`
-- Why: Rename or adjust profile fields for the authenticated agent.
-- Concepts: `auth`, `agents`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Output: Returns `{ agent }`.
-
-## `agents.me.revoke`
-
-- CLI path: `agents me revoke`
-- HTTP: `POST /agents/me/revoke`
-- Stability: `beta`
-- Surface: `utility`
-- Input mode: `json-body`
-- Why: Self-revocation or admin-style revocation flow for the active principal.
-- Concepts: `auth`, `agents`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`
-- Output: Returns `{ ok: true }`.
+- Why: Report current card and progress.
+- Concepts: `agents`, `cards`, `runs`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
+- Output: Returns `{ presence }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
 ## `artifacts.archive`
 
@@ -247,18 +250,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Output: Returns `{ artifact }`.
 
-## `auth.agents.register`
-
-- CLI path: `auth agents register`
-- HTTP: `POST /auth/agents/register`
-- Stability: `beta`
-- Surface: `utility`
-- Input mode: `json-body`
-- Why: Bootstrap or invite-gated agent registration with key material.
-- Concepts: `auth`, `agents`
-- Error codes: `invalid_request`, `invalid_token`, `auth_required`
-- Output: Returns `{ agent, tokens, ... }` per core auth handlers.
-
 ## `auth.audit.list`
 
 - CLI path: `auth audit list`
@@ -278,7 +269,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
-- Why: Report whether first-principal bootstrap registration is still available.
+- Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Concepts: `auth`
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 
@@ -289,9 +280,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: Issue a one-time invite for human or agent principals.
+- Why: Issue a one-time invite for a human principal; kind must be human.
 - Concepts: `auth`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
 - Output: Returns `{ invite, token }`.
 
 ## `auth.invites.list`
@@ -373,7 +364,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `json-body`
-- Why: WebAuthn registration challenge for workspace agents.
+- Why: WebAuthn registration challenge for workspace humans.
 - Concepts: `auth`, `passkeys`
 - Error codes: `invalid_request`
 - Output: Returns `{ session_id, options }`.
@@ -388,7 +379,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Why: Verify WebAuthn attestation and issue tokens.
 - Concepts: `auth`, `passkeys`
 - Error codes: `invalid_request`, `invalid_token`
-- Output: Returns `{ agent, tokens }`.
+- Output: Returns `{ agent, tokens }` for a human passkey principal.
 
 ## `auth.principals.list`
 
@@ -423,8 +414,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Assertion or refresh-token exchange for bearer access.
 - Concepts: `auth`
-- Error codes: `invalid_request`, `invalid_token`
-- Output: Returns `{ tokens }` envelope.
+- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`
+- Output: Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope.
 
 ## `boards.archive`
 
@@ -1142,6 +1133,201 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ groups, unread_count, group_count, generated_at }`.
 
+## `hosts.bridge.check_in`
+
+- CLI path: `host bridge check-in`
+- HTTP: `POST /hosts/{host_id}/bridge/check-in`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Record a host bridge heartbeat for wake routing.
+- Concepts: `hosts`, `agents`
+- Error codes: `auth_required`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`
+- Output: Returns `{ bridge }`.
+- Agent notes: Host proof is required; no agent bearer or per-agent bridge proof is accepted.
+
+## `hosts.enroll.approve`
+
+- CLI path: `host enroll approve`
+- HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/approve`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Approve a verified machine.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
+- Output: Returns `HostEnrollmentStatusResponse`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.complete`
+
+- CLI path: `host enroll complete`
+- HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/complete`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Finish an approved host enrollment.
+- Concepts: `auth`, `hosts`
+- Error codes: `invalid_request`, `invalid_token`, `enrollment_pending`, `enrollment_denied`, `enrollment_expired`, `enrollment_consumed`, `adoption_conflict`, `host_slug_taken`, `not_found`
+- Output: Returns `{ host }` with adopted agents.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.deny`
+
+- CLI path: `host enroll deny`
+- HTTP: `POST /auth/hosts/enrollments/{enrollment_id}/deny`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Reject an untrusted machine.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `enrollment_expired`, `enrollment_consumed`
+- Output: Returns `HostEnrollmentStatusResponse`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.headless`
+
+- CLI path: `host enroll headless`
+- HTTP: `POST /auth/hosts/enrollments/headless`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Enroll a CI or cloud host without polling.
+- Concepts: `auth`, `hosts`
+- Error codes: `invalid_request`, `invalid_token`, `host_slug_taken`, `adoption_proof_invalid`, `adoption_conflict`
+- Output: Returns `{ host }`; never issues host bearer credentials.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.pending`
+
+- CLI path: `host enroll pending`
+- HTTP: `GET /auth/hosts/enrollments/pending`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Review host enrollment requests.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ enrollments }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.poll`
+
+- CLI path: `host enroll poll`
+- HTTP: `GET /auth/hosts/enrollments/{enrollment_id}`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Wait for an auth-admin to decide the host request.
+- Concepts: `auth`, `hosts`
+- Error codes: `invalid_request`, `invalid_token`, `enrollment_expired`, `not_found`
+- Output: Returns `HostEnrollmentStatusResponse`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.enroll.start`
+
+- CLI path: `host enroll start`
+- HTTP: `POST /auth/hosts/enrollments`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Obtain a user code for human host approval.
+- Concepts: `auth`, `hosts`
+- Error codes: `invalid_request`, `host_slug_taken`, `adoption_proof_invalid`, `adoption_conflict`
+- Output: Returns `HostEnrollmentStartResponse`; poll_token is secret and shown only once.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.get`
+
+- CLI path: `host get`
+- HTTP: `GET /hosts/{host_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Inspect one machine and its agents.
+- Concepts: `hosts`, `agents`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ host }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.list`
+
+- CLI path: `host list`
+- HTTP: `GET /hosts`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Inspect enrolled machines.
+- Concepts: `hosts`, `agents`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ hosts }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.patch`
+
+- CLI path: `host patch`
+- HTTP: `PATCH /hosts/{host_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Name a host or block agent names on it.
+- Concepts: `hosts`, `agents`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `key_mismatch`, `host_revoked`, `not_found`
+- Output: Returns `{ host }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.revoke`
+
+- CLI path: `host revoke`
+- HTTP: `DELETE /hosts/{host_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Cut off a compromised machine.
+- Concepts: `hosts`, `auth`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`
+- Output: Returns `{ host }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.tokens.create`
+
+- CLI path: `host tokens create`
+- HTTP: `POST /auth/hosts/enrollment-tokens`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `json-body`
+- Why: Authorize one headless host enrollment.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`
+- Output: Returns `{ enrollment_token, token }` once.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.tokens.list`
+
+- CLI path: `host tokens list`
+- HTTP: `GET /auth/hosts/enrollment-tokens`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Inspect headless host enrollment grants.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`
+- Output: Returns `{ enrollment_tokens }` without secrets.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `hosts.tokens.revoke`
+
+- CLI path: `host tokens revoke`
+- HTTP: `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`
+- Stability: `beta`
+- Surface: `utility`
+- Input mode: `none`
+- Why: Invalidate an unused headless grant.
+- Concepts: `auth`, `hosts`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`
+- Output: Returns `{ enrollment_token }` without secret.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
 ## `inbox.get`
 
 - CLI path: `inbox get`
@@ -1652,6 +1838,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `refs`, `inspection`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ ref_edges }`.
+
+## `runs.get`
+
+- CLI path: `runs get`
+- HTTP: `GET /runs/{run_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Inspect execution attribution and outcome.
+- Concepts: `runs`, `agents`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ run }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `runs.list`
+
+- CLI path: `runs list`
+- HTTP: `GET /runs`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: See current and recent agent executions.
+- Concepts: `runs`, `agents`, `cards`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
+- Output: Returns `{ runs, next_cursor? }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `runs.upsert`
+
+- CLI path: `runs ingest`
+- HTTP: `POST /runs`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Map one agentctl execution envelope to a durable run.
+- Concepts: `runs`, `agents`, `cards`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `host_revoked`, `run_identity_conflict`, `run_state_regression`
+- Output: Returns `{ run, created, replayed }`.
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
 ## `secrets.create`
 

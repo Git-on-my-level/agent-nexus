@@ -214,6 +214,82 @@ optional short note.
   creation are human/org-gated; `/runs`, `/agents`, `/hosts` read families pass for core
   bearers; `POST /auth/token` host assertion grant keeps the existing wake behavior.
 
+## Contract summary
+
+Canonical shapes and access rules are in `contracts/anx-openapi.yaml`; durable invariants
+and new error meanings are in `contracts/anx-schema.yaml`. `GET /agents/me` remains the
+derived agent's self-identification endpoint. Existing human passkey and human invite
+routes remain.
+
+| Route | Contract |
+| --- | --- |
+| `POST /auth/hosts/enrollments` | Public interactive start; returns code, verification path, secret poll token, interval, expiry. |
+| `GET /auth/hosts/enrollments/{enrollment_id}` | Poll with `X-ANX-Enrollment-Token`. |
+| `POST /auth/hosts/enrollments/{enrollment_id}/complete` | Complete approved request with poll token and host-key signature; adopt proved agents atomically. |
+| `GET /auth/hosts/enrollments/pending` | Human auth-admin sees pending requests and requesting IP. |
+| `POST /auth/hosts/enrollments/{enrollment_id}/approve` | Human auth-admin approves and reserves slug. |
+| `POST /auth/hosts/enrollments/{enrollment_id}/deny` | Human auth-admin denies. |
+| `GET /auth/hosts/enrollment-tokens` | Human auth-admin lists headless token metadata, without secrets. |
+| `POST /auth/hosts/enrollment-tokens` | Human auth-admin creates one-time headless token. |
+| `POST /auth/hosts/enrollment-tokens/{token_id}/revoke` | Human auth-admin revokes unused headless token. |
+| `POST /auth/hosts/enrollments/headless` | Public one-shot enrollment with token, host-key signature, and adoption proofs. |
+| `GET /hosts` | Any workspace principal lists hosts. |
+| `GET /hosts/{host_id}` | Any workspace principal reads host, exclusions, and child agents. |
+| `PATCH /hosts/{host_id}` | Human auth-admin or signed host updates display name and exclusions. |
+| `DELETE /hosts/{host_id}` | Human auth-admin revokes host and all child credentials in one audited transaction. |
+| `POST /hosts/{host_id}/bridge/check-in` | Signed host bridge heartbeat for all enabled child handles. |
+| `GET /runs` | Any workspace principal filters runs by card, agent, host, state, or active. |
+| `POST /runs` | Derived agent upserts its run by `(launcher, host_id, external_id)` with monotonic state. |
+| `GET /runs/{run_id}` | Any workspace principal reads one run. |
+| `GET /agents` | Any workspace principal reads the derived-state roster. |
+| `GET /agents/{agent_id}` | Any workspace principal reads agent detail, recent work, runs, asks, and notes. |
+| `PATCH /agents/me/presence` | Derived agent sets current card and optional progress note. |
+| `POST /auth/agents/register` (removed) | No agent invite or public-key self-registration. |
+| `PATCH /agents/me` (removed) | Derived handles cannot be renamed independently of their hosts. |
+| `POST /agents/me/keys/rotate` (removed) | Derived agents have no independent signing keys. |
+| `POST /agents/me/revoke` (removed) | Human auth-admin revokes the host or principal through admin routes. |
+| `POST /agent-bridge/check-in` (removed) | Host-signed bridge check-in replaces per-agent bridge identity. |
+
+| Grant or header | Contract |
+| --- | --- |
+| `POST /auth/token` `host_assertion` | Host signs `anx-host-agent-token|host_id|key_id|agent_name|signed_at`; one-use, five-minute skew, short-lived derived-agent access token without refresh. |
+| `X-ANX-Enrollment-Token` | Secret interactive poll credential; sent as a header. |
+| `X-ANX-Host-Key-Id` | Active host key ID for host self-access. |
+| `X-ANX-Host-Signed-At` | RFC3339 timestamp for host self-access, at most five minutes skew. |
+| `X-ANX-Host-Signature` | Base64 Ed25519 request-bound signature for host self-access. |
+| `X-ANX-Run-Id` | Optional authenticated-write attribution `agentctl/<external_id>`; core resolves or creates a provisional run and records run, host, agent, adapter. |
+
+| New error code | Meaning |
+| --- | --- |
+| `host_slug_taken` | Host slug already enrolled or reserved. |
+| `adoption_proof_invalid` | Existing principal key or adoption signature is invalid. |
+| `adoption_conflict` | Principal or target host/name cannot be adopted. |
+| `enrollment_pending` | Completion preceded approval. |
+| `enrollment_denied` | Human denied the request. |
+| `enrollment_expired` | Interactive request expired. |
+| `enrollment_consumed` | Interactive request already finalized. |
+| `host_revoked` | Host or active key is revoked. |
+| `agent_excluded` | Host excludes requested agent name. |
+| `agent_handle_taken` | A standalone principal already owns the derived handle. |
+| `run_identity_conflict` | Existing run key belongs to another immutable identity. |
+| `run_state_regression` | Observation would regress run state. |
+| `run_attribution_invalid` | Run header is malformed or belongs to another agent/host. |
+
 ## Workstream decisions
 
-(Append dated entries here: decision, reason, files.)
+- 2026-09-27: Adoption proofs bind a client-generated 128-bit request nonce and host
+  public key because the enrollment ID does not exist when start is submitted; core
+  freezes proved adoptions before human approval. Local `--exclude` omits profiles
+  from the request, leaving those standalone principals active until revoked.
+  (`contracts/anx-openapi.yaml`, `contracts/anx-schema.yaml`.)
+- 2026-09-27: Host self-access uses timestamped Ed25519 proof headers over the exact
+  request body. Headless token lifetime is 10 minutes to 24 hours. Newly excluded
+  child names lose outstanding sessions while retaining actor/history. These close
+  unspecified replay and exclusion windows. (`contracts/anx-openapi.yaml`,
+  `contracts/anx-schema.yaml`.)
+- 2026-09-27: An attributed write may precede callback ingest, so the run header
+  creates an unknown-state provisional run keyed by the caller's host and external
+  ID. Host bridge check-in moves to a host-signed route; wake queue paths remain
+  infrastructure routes but must authenticate the host bridge when implemented.
+  (`contracts/anx-openapi.yaml`, `contracts/anx-schema.yaml`,
+  `contracts/non-openapi-endpoints.yaml`.)

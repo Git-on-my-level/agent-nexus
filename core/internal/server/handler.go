@@ -883,6 +883,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		handleRegisterAgent(w, r, opts)
 	})
+	registerRoute("/auth/hosts/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/auth/hosts/enrollments", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/auth/hosts/enrollment-tokens", commandCenterStubRouteAccess, handleCommandCenterStub)
 
 	registerRoute("/auth/bootstrap/status", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -1138,6 +1141,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
 		}
 	})
+	registerRoute("/agents", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/agents/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/hosts", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/hosts/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/runs", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/runs/", commandCenterStubRouteAccess, handleCommandCenterStub)
 
 	registerRoute("/agents/me/keys/rotate", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
