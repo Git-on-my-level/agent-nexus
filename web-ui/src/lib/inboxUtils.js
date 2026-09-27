@@ -136,16 +136,13 @@ export function decisionGroundingRefForInboxItem(item) {
   return "";
 }
 
-export function getInboxSubjectLabel(item) {
-  const subjectRef = getInboxSubjectRef(item);
-  if (!subjectRef) {
-    return "";
-  }
-
-  const { prefix, id } = splitTypedRef(subjectRef);
-  const label = INBOX_SUBJECT_LABELS[prefix] ?? prefix;
-  const title = String(item?.subject_title ?? item?.subject_name ?? "").trim();
-  return title ? `${label}: ${title}` : `${label}: ${id}`;
+/**
+ * The operator noun for a subject ref prefix ("Task" for `card:`, "Project"
+ * for `topic:`). This is the Inbox's one ref-type noun map (UI spec §1.8).
+ */
+export function inboxSubjectNoun(prefix) {
+  const key = String(prefix ?? "").trim();
+  return INBOX_SUBJECT_LABELS[key] ?? key;
 }
 
 export function getInboxUrgencyLabel(level) {

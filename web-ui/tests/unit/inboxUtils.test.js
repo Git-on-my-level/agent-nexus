@@ -5,7 +5,7 @@ import {
   decodeInboxItemId,
   deriveInboxUrgency,
   enrichInboxItem,
-  getInboxSubjectLabel,
+  inboxSubjectNoun,
   getInboxSubjectRef,
   getInboxUrgencyLabel,
   inboxItemMailboxId,
@@ -225,12 +225,9 @@ describe("inbox typed-ref rendering targets", () => {
   });
 
   it("labels inbox subjects with operator nouns", () => {
-    expect(getInboxSubjectLabel({ subject_ref: "card:card-1" })).toBe(
-      "Task: card-1",
-    );
-    expect(getInboxSubjectLabel({ subject_ref: "topic:topic-1" })).toBe(
-      "Project: topic-1",
-    );
+    expect(inboxSubjectNoun("card")).toBe("Task");
+    expect(inboxSubjectNoun("topic")).toBe("Project");
+    expect(inboxSubjectNoun("mystery")).toBe("mystery");
   });
 });
 

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildInboxRows,
   filterMailbox,
+  formatWait,
+  inboxItemSubject,
   inboxRowBadge,
+  rowMatchesWorkRef,
+  shortIdLabel,
 } from "../../src/lib/inboxMailbox.js";
 
 describe("inbox mailboxes", () => {
@@ -378,7 +382,7 @@ describe("inbox mailbox row ids", () => {
 });
 
 describe("inbox subject fallback labels", () => {
-  it("names a card subject as Task when no work title is known", () => {
+  it("names a card subject as Task, humanizing the handle when no work title is known", () => {
     const rows = buildInboxRows({
       inboxItems: [
         {
@@ -391,6 +395,199 @@ describe("inbox subject fallback labels", () => {
       ],
     });
     const row = rows.find((item) => item.id === "inbox:in-card");
-    expect(row.source).toBe("Task: card-1");
+    expect(row.source).toBe("Task: Card 1");
+  });
+});
+
+describe("Needs you triage order", () => {
+  const minutesAgo = (now, minutes) =>
+    new Date(now - minutes * 60_000).toISOString();
+
+  it("puts whoever has waited longest first, then the louder severity", () => {
+    const now = Date.parse("2026-09-27T12:00:30Z");
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "fresh-critical",
+          kind: "escalate",
+          title: "Fresh but critical",
+          severity: "critical",
+          source_event_time: minutesAgo(now, 5),
+        },
+        {
+          id: "old-ask",
+          kind: "ask",
+          title: "Waiting three hours",
+          source_event_time: minutesAgo(now, 192),
+        },
+        {
+          id: "same-minute-high",
+          kind: "ask",
+          title: "Same minute, high",
+          severity: "high",
+          source_event_time: minutesAgo(now, 5),
+        },
+      ],
+      now,
+    });
+    expect(filterMailbox(rows, "needs-you").map((row) => row.item.id)).toEqual([
+      "old-ask",
+      "fresh-critical",
+      "same-minute-high",
+    ]);
+  });
+
+  it("formats waits the way an operator reads them", () => {
+    expect(formatWait(20_000)).toBe("<1m");
+    expect(formatWait(41 * 60_000)).toBe("41m");
+    expect(formatWait((3 * 60 + 12) * 60_000)).toBe("3h 12m");
+    expect(formatWait(3 * 60 * 60_000)).toBe("3h");
+    expect(formatWait((2 * 24 + 4) * 60 * 60_000)).toBe("2d 4h");
+    expect(formatWait(Number.NaN)).toBe("");
+  });
+});
+
+describe("inbox names", () => {
+  it("names the requester and falls back to a short id, never a raw UUID", () => {
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "named",
+          kind: "ask",
+          title: "Named",
+          requester_actor_id: "actor-omar",
+        },
+        {
+          id: "unknown",
+          kind: "ask",
+          title: "Unknown",
+          requester_agent_id: "agent_6400c2d2-1111-2222-3333-444455556666",
+        },
+      ],
+      actorName: (id) => (id === "actor-omar" ? "Omar Reed" : ""),
+    });
+    const named = rows.find((row) => row.item.id === "named");
+    const unknown = rows.find((row) => row.item.id === "unknown");
+    expect(named.requesterLabel).toBe("Omar Reed");
+    expect(unknown.requesterLabel).toBe("agent 6400c2d2");
+    expect(unknown.requester.id).toBe(
+      "agent_6400c2d2-1111-2222-3333-444455556666",
+    );
+  });
+
+  it("shortens only identifiers, not readable handles", () => {
+    expect(shortIdLabel("actor:actor-gds-qa")).toBe("actor-gds-qa");
+    expect(shortIdLabel("6400c2d2-1111-2222-3333-444455556666")).toBe(
+      "id 6400c2d2",
+    );
+    expect(shortIdLabel("")).toBe("");
+  });
+
+  it("drops core's 'Human response recorded' prefix from handled rows", () => {
+    const rows = buildInboxRows({
+      inboxItems: [
+        {
+          id: "completed:e1",
+          status: "completed",
+          kind: "ask",
+          title: "Human response recorded: Confirm quest path",
+        },
+      ],
+    });
+    expect(rows[0].title).toBe("Confirm quest path");
+  });
+});
+
+describe("inbox subjects", () => {
+  it("prefers the task an ask names over the project it was filed on", () => {
+    const subject = inboxItemSubject(
+      {
+        subject_ref: "topic:vertical-slice",
+        related_refs: ["thread:t1", "card:lock-hub-quest"],
+      },
+      {
+        work: [
+          {
+            ref: "card:lock-hub-quest",
+            title: "Lock hub quest path",
+            phase: "in_progress",
+          },
+        ],
+      },
+    );
+    expect(subject).toMatchObject({
+      ref: "card:lock-hub-quest",
+      kind: "card",
+      noun: "Task",
+      title: "Lock hub quest path",
+      phaseLabel: "In progress",
+    });
+  });
+
+  it("scopes rows to one task for ?work_ref= links", () => {
+    const rows = buildInboxRows({
+      decisions: [
+        { id: "d1", status: "awaiting_answer", work_ref: "card:one" },
+        { id: "d2", status: "awaiting_answer", work_ref: "card:two" },
+      ],
+      inboxItems: [
+        {
+          id: "i1",
+          kind: "ask",
+          title: "About one",
+          related_refs: ["card:one"],
+        },
+      ],
+    });
+    expect(
+      rows
+        .filter((row) => rowMatchesWorkRef(row, "card:one"))
+        .map((row) => row.id)
+        .sort(),
+    ).toEqual(["decision:d1", "inbox:i1"]);
+  });
+});
+
+describe("update rows", () => {
+  it("say what changed instead of a core noun and a bare count", () => {
+    const rows = buildInboxRows({
+      updates: [
+        {
+          group_ref: "board:studio",
+          group_type: "board",
+          display_name: "Studio board",
+          unread_count: 3,
+          newest_event: { ts: "2026-09-01T11:00:00Z" },
+          events: [
+            {
+              id: "e3",
+              type: "card_moved",
+              actor_id: "actor-leo",
+              payload: { column_key: "review" },
+              refs: ["card:a"],
+            },
+            {
+              id: "e2",
+              type: "card_moved",
+              actor_id: "actor-leo",
+              payload: { column_key: "review" },
+              refs: ["card:b"],
+            },
+            {
+              id: "e1",
+              type: "message_posted",
+              actor_id: "actor-nina",
+              payload: { text: "Looks good" },
+            },
+          ],
+        },
+      ],
+      actorName: (id) =>
+        ({ "actor-leo": "Leo Park", "actor-nina": "Nina Vale" })[id] || "",
+    });
+    const row = rows.find((item) => item.kind === "update");
+    expect(row.source).toBe("Leo moved 2 tasks to review · Nina commented");
+    expect(row.source).not.toMatch(/Board updates|Thread updates/);
+    expect(inboxRowBadge(row)).toBeNull();
   });
 });
