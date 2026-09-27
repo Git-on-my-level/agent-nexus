@@ -7,12 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"agent-nexus-cli/internal/authcli"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
@@ -79,7 +77,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, err := a.runVersion(cfg)
 		return "version", result, err
 	case "doctor":
-		result, err := a.runDoctor(ctx, cfg)
+		result, err := a.runHostDoctor(ctx, cfg)
 		return "doctor", result, err
 	case "update":
 		result, err := a.runUpdate(ctx, args[1:], cfg)
@@ -89,6 +87,12 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return name, result, err
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
+		return name, result, err
+	case "host":
+		result, name, err := a.runHost(ctx, args[1:], cfg)
+		return name, result, err
+	case "runs":
+		result, name, err := a.runRuns(ctx, args[1:], cfg)
 		return name, result, err
 	case "config":
 		result, name, err := a.runConfig(ctx, args[1:], cfg)
@@ -208,161 +212,6 @@ type doctorCheck struct {
 	DurationMS int64  `json:"duration_ms"`
 }
 
-func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResult, error) {
-	checks := make([]doctorCheck, 0, 4)
-	hasFailure := false
-
-	addCheck := func(name string, fn func() (bool, string, error)) {
-		started := time.Now()
-		ok, message, err := fn()
-		if err != nil {
-			ok = false
-			if strings.TrimSpace(message) == "" {
-				message = err.Error()
-			}
-		}
-		if !ok {
-			hasFailure = true
-		}
-		checks = append(checks, doctorCheck{Name: name, OK: ok, Message: message, DurationMS: time.Since(started).Milliseconds()})
-	}
-
-	addCheck("profile_path", func() (bool, string, error) {
-		_, err := os.Stat(cfg.ProfilePath)
-		if err == nil {
-			return true, "profile loaded from " + cfg.ProfilePath, nil
-		}
-		if os.IsNotExist(err) {
-			return true, "profile file not found; using defaults/env/flags", nil
-		}
-		return false, "", err
-	})
-
-	addCheck("base_url", func() (bool, string, error) {
-		parsed, err := url.Parse(cfg.BaseURL)
-		if err != nil {
-			return false, "", err
-		}
-		if parsed.Scheme == "" || parsed.Host == "" {
-			return false, "base url must include scheme and host", nil
-		}
-		return true, "base url parsed", nil
-	})
-
-	addCheck("auth_recovery", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		_, err := authcli.New(cfg).EnsureAccessToken(callCtx)
-		if err == nil {
-			return true, "local auth profile has usable access token material or refreshed via /auth/token", nil
-		}
-		normalized := errnorm.Normalize(err)
-		if normalized == nil {
-			return false, "", err
-		}
-		switch strings.TrimSpace(normalized.Code) {
-		case "profile_not_found":
-			return true, "no local auth profile; auth recovery is unavailable until registration", nil
-		case "profile_invalid":
-			return false, "profile is missing agent_id/key_id; re-register or select the correct --agent profile", nil
-		case "key_load_failed", "key_invalid":
-			return false, "profile key material is missing or invalid; restore the private key, rotate if you still have a valid token, or re-register", nil
-		case "invalid_token":
-			return false, "auth recovery reached /auth/token but local refresh/assertion material is invalid; run `anx auth rotate` or re-register with an invite", nil
-		case "key_mismatch":
-			return false, "auth recovery reached /auth/token but the server rejected the key assertion; run `anx auth rotate` if possible or re-register with an invite", nil
-		case "agent_revoked":
-			return false, "local profile is revoked; register a new agent profile with an invite", nil
-		case "wake_proof_required":
-			return false, "hosted workspace wake still blocked /auth/token; update the hosted control plane or use the web dashboard/admin recovery path", nil
-		default:
-			return false, firstNonEmpty(strings.TrimSpace(normalized.Hint), normalized.Error()), nil
-		}
-	})
-
-	client, err := httpclient.New(cfg)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
-	}
-
-	addCheck("core_health", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/readyz"})
-		if callErr != nil {
-			return false, "", callErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return false, doctorHTTPFailureMessage("health", resp), nil
-		}
-		return true, "core health endpoint reachable", nil
-	})
-
-	addCheck("core_handshake", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/meta/handshake"})
-		if callErr != nil {
-			return false, "", callErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return false, doctorHTTPFailureMessage("handshake", resp), nil
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(resp.Body, &payload); err != nil {
-			return false, "invalid JSON handshake response", err
-		}
-		if _, ok := payload["min_cli_version"]; !ok {
-			return false, "handshake response missing min_cli_version", nil
-		}
-		base := strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
-		if base == "" {
-			base = "(base-url)"
-		}
-		return true, fmt.Sprintf("handshake metadata available (GET %s/meta/handshake; not under /v1/...)", base), nil
-	})
-
-	summary := map[string]any{
-		"base_url": cfg.BaseURL,
-		"agent":    cfg.Agent,
-		"checks":   checks,
-	}
-	textLines := make([]string, 0, len(checks)+1)
-	textLines = append(textLines, fmt.Sprintf("Doctor checks for %s", cfg.BaseURL))
-	for _, check := range checks {
-		state := "PASS"
-		if !check.OK {
-			state = "FAIL"
-		}
-		textLines = append(textLines, fmt.Sprintf("[%s] %s (%dms): %s", state, check.Name, check.DurationMS, check.Message))
-	}
-
-	result := &commandResult{Data: summary, Text: strings.Join(textLines, "\n")}
-	if hasFailure {
-		return result, errnorm.WithDetails(errnorm.Local("doctor_failed", "doctor found failing checks"), summary)
-	}
-	return result, nil
-}
-
-func doctorHTTPFailureMessage(label string, resp httpclient.RawResponse) string {
-	base := fmt.Sprintf("%s status %d", label, resp.StatusCode)
-	normalized := errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-	if normalized == nil {
-		return base
-	}
-	parts := []string{base}
-	if code := strings.TrimSpace(normalized.Code); code != "" && code != "remote_error" {
-		parts = append(parts, "code="+code)
-	}
-	if msg := strings.TrimSpace(normalized.Message); msg != "" && !strings.HasPrefix(msg, "request failed with status") {
-		parts = append(parts, msg)
-	}
-	if hint := strings.TrimSpace(normalized.Hint); hint != "" {
-		parts = append(parts, "Hint: "+hint)
-	}
-	return strings.Join(parts, " — ")
-}
-
 func apiCallUsageText() string {
 	return strings.TrimSpace(`Local Help: api call
 
@@ -425,16 +274,19 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		return nil, errnorm.Usage("invalid_header", err.Error())
 	}
 	if _, hasAuthorization := headersMap["Authorization"]; !hasAuthorization && shouldAutoAttachAuth(requestPath) {
-		authService := authcli.New(cfg)
-		prof, authErr := authService.EnsureAccessToken(ctx)
-		if authErr == nil {
-			headersMap["Authorization"] = "Bearer " + prof.AccessToken
-		} else {
-			normalized := errnorm.Normalize(authErr)
-			if normalized == nil || normalized.Code != "profile_not_found" {
-				return nil, authErr
+		if cfg.AccessToken == "" {
+			if _, _, identityErr := a.identityName(cfg); identityErr == nil {
+				if resolved, resolveErr := a.resolveHostAgent(ctx, cfg); resolveErr == nil {
+					cfg = resolved
+				}
 			}
 		}
+		if cfg.AccessToken != "" {
+			headersMap["Authorization"] = "Bearer " + cfg.AccessToken
+		}
+	}
+	if cfg.RunID != "" && strings.ToUpper(method) != "GET" && strings.ToUpper(method) != "HEAD" {
+		headersMap["X-ANX-Run-Id"] = cfg.RunID
 	}
 	requestBody, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
 	if err != nil {

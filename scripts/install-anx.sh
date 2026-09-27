@@ -100,7 +100,8 @@ main() {
   fi
 
   printf '\nQuick start:\n'
-  info "anx --base-url http://<core-host>:8000 --agent <name> auth register --username <username>"
+  info "anx --base-url http://<core-host>:8000 host enroll --name <host-slug>"
+  info "anx --base-url http://<core-host>:8000 --as <name> auth whoami"
   info "anx bridge install"
   info "anx version"
 }

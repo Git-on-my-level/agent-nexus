@@ -49,11 +49,15 @@ func TestBridgeHostConfig(t *testing.T) {
 
 func TestBridgeSideEffectClasses(t *testing.T) {
 	for command, want := range map[string]string{
-		"bridge install": "local_operational_write",
-		"bridge start":   "external_side_effect",
-		"bridge stop":    "local_operational_write",
-		"bridge status":  "read_only",
-		"bridge doctor":  "remote_coordination_write",
+		"bridge install":            "local_operational_write",
+		"bridge start":              "external_side_effect",
+		"bridge stop":               "local_operational_write",
+		"bridge status":             "read_only",
+		"bridge doctor":             "remote_coordination_write",
+		"host bridge check-in":      "remote_coordination_write",
+		"host bridge wake claim":    "remote_coordination_write",
+		"host bridge wake complete": "remote_coordination_write",
+		"host bridge wake fail":     "remote_coordination_write",
 	} {
 		if got := commandSideEffectClass(command); got != want {
 			t.Fatalf("%s: got %s want %s", command, got, want)

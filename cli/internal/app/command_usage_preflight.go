@@ -92,6 +92,8 @@ func preflightKnownCommandShape(args []string) error {
 	}
 
 	switch root {
+	case "host", "runs":
+		return nil
 	case "api":
 		return preflightSubcommand(args[1:], apiSubcommandSpec)
 	case "auth":
@@ -358,7 +360,7 @@ func preflightDocsIngestArgs(args []string) error {
 
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
-		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "debug": {}, "notifications": {},
+		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "help": {}, "--help": {}, "-h": {},
@@ -473,15 +475,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"path":      valueFlag,
 			"from-file": valueFlag,
 			"header":    valueFlag,
-		},
-		"auth register": {
-			"username":          valueFlag,
-			"bootstrap-token":   valueFlag,
-			"invite-token":      valueFlag,
-			"existing-actor-id": valueFlag,
-		},
-		"auth update-username": {
-			"username": valueFlag,
 		},
 		"auth invites create": {
 			"kind": valueFlag,
@@ -742,10 +735,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"threads reply":     {"thread": valueFlag, "thread-id": valueFlag},
 		"boards workspace":  {"board-id": valueFlag},
 		"boards cards list": {"board-id": valueFlag},
-		"auth list":         {},
-		"auth default":      {},
-		"config use":        {},
-		"config unset":      {},
 		"workspace summary": {"full-id": boolFlag},
 	}
 }

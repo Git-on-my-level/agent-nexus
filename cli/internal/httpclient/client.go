@@ -24,6 +24,7 @@ type Client struct {
 	httpClient  *http.Client
 	accessToken string
 	agent       string
+	runID       string
 	generated   *contractsclient.Client
 }
 
@@ -54,6 +55,7 @@ func New(resolved config.Resolved) (*Client, error) {
 		httpClient:  httpClient,
 		accessToken: strings.TrimSpace(resolved.AccessToken),
 		agent:       strings.TrimSpace(resolved.Agent),
+		runID:       strings.TrimSpace(resolved.RunID),
 		generated:   contractsclient.New(strings.TrimRight(baseURL, "/"), httpClient),
 	}, nil
 }
@@ -89,6 +91,9 @@ func (c *Client) RawCall(ctx context.Context, req RawRequest) (RawResponse, erro
 
 	for key, value := range c.defaultHeaders() {
 		httpReq.Header.Set(key, value)
+	}
+	if method != http.MethodGet && method != http.MethodHead && c.runID != "" {
+		httpReq.Header.Set("X-ANX-Run-Id", c.runID)
 	}
 	for key, value := range req.Headers {
 		if strings.TrimSpace(key) == "" {
@@ -136,6 +141,9 @@ func (c *Client) OpenStream(ctx context.Context, req RawRequest) (*http.Response
 
 	for key, value := range c.defaultHeaders() {
 		httpReq.Header.Set(key, value)
+	}
+	if method != http.MethodGet && method != http.MethodHead && c.runID != "" {
+		httpReq.Header.Set("X-ANX-Run-Id", c.runID)
 	}
 	for key, value := range req.Headers {
 		if strings.TrimSpace(key) == "" {

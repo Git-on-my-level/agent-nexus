@@ -34,7 +34,7 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.registerAgentBootstrap(t, "worker", "worker."+runToken())
 	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createInviteTokenKind(t, "worker", "human"))
-	id := mustStringPath(t, h.runCLIExpectOK(t, "worker", nil, "auth", "whoami").Payload, "result.profile.agent_id")
+	id := mustStringPath(t, h.runCLIExpectOK(t, "worker", nil, "auth", "whoami").Payload, "result.agent.id")
 	sqlite, err := exec.LookPath("sqlite3")
 	if err != nil {
 		t.Fatalf("sqlite3 is required for the derived-agent integration fixture: %v", err)

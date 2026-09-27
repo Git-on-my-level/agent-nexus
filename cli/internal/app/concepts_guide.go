@@ -97,7 +97,7 @@ func conceptsGuideData() map[string]any {
 		"summary":           "Quick guide to the core ANX primitives and when to use each.",
 		"primitives":        primitives,
 		"selection_rules":   conceptsSelectionRules(),
-		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc profiles", "anx meta doc env"},
+		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc host identity", "anx meta doc env"},
 	}
 }
 
@@ -146,18 +146,18 @@ func conceptsGuideText() string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString("\nConfiguration and profiles:\n")
-	b.WriteString("- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.\n")
-	b.WriteString("- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.\n")
-	b.WriteString("- Read next: anx meta doc profiles ; anx meta doc env ; anx config show\n")
+	b.WriteString("\nConfiguration and identity:\n")
+	b.WriteString("- Enroll this machine with `anx host enroll`; use `--as` or `ANX_AS` to select a derived agent.\n")
+	b.WriteString("- Precedence is command flags > environment variables > agentctl run context > harness detection > built-in defaults.\n")
+	b.WriteString("- Read next: anx meta doc host identity ; anx meta doc env ; anx config show\n")
 	b.WriteString("\nFor the fuller operating model, read `anx meta doc agent-guide`.\n")
 	return strings.TrimSpace(b.String())
 }
 
 func viewingAsData(cfg config.Resolved) map[string]any {
 	out := map[string]any{}
-	if profile := strings.TrimSpace(cfg.Agent); profile != "" {
-		out["profile"] = profile
+	if agent := strings.TrimSpace(cfg.Agent); agent != "" {
+		out["agent"] = agent
 	}
 	if username := strings.TrimSpace(cfg.Username); username != "" {
 		out["username"] = username
@@ -174,8 +174,8 @@ func formatViewingAsSummary(raw any) string {
 		return ""
 	}
 	parts := make([]string, 0, 3)
-	if profile := strings.TrimSpace(anyString(viewing["profile"])); profile != "" {
-		parts = append(parts, "profile="+profile)
+	if agent := strings.TrimSpace(anyString(viewing["agent"])); agent != "" {
+		parts = append(parts, "agent="+agent)
 	}
 	if username := strings.TrimSpace(anyString(viewing["username"])); username != "" {
 		parts = append(parts, "username="+username)

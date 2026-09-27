@@ -124,7 +124,7 @@ Useful `make serve` toggles:
 - `DEV_SEED_SCENARIO=game-dev-studio` (default): use the realistic game-studio scenario with 4 topics, 3 boards, 5 docs, 10+ cards, and 100+ topic/doc/card messages
 - `DEV_SEED_SCENARIO=ops-lemonade`: use the previous ops/lemon supply fixture explicitly
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate kids lemonade dev seed scenario with all checked-in chapters applied in order
-- `ANX_DEV_SEED_IDENTITIES=0`: skip registering fixture principals during seed (bootstrap stays available for manual `anx auth register --bootstrap-token`; no auto-generated `cli/dogfood-resources/invites.generated.json` or `web-ui/.dev/local-identities.json` refresh)
+- `ANX_DEV_SEED_IDENTITIES=0`: skip fixture principals during seed. Enroll a host with `anx host enroll` to derive agents.
 
 Validate the running seeded scenario with:
 
@@ -132,18 +132,15 @@ Validate the running seeded scenario with:
 make scenario-validate
 ```
 
-Materialize temporary CLI profile homes for every seeded persona (humans and
-agents) with:
+Enroll this machine as a host, then select a derived agent:
 
 ```bash
-make dev-profile-homes
-HOME="$PWD/.tmp/anx-dev-profile-homes/maya" anx --agent maya auth whoami
-HOME="$PWD/.tmp/anx-dev-profile-homes/leo" anx --agent leo auth whoami
+anx --base-url http://127.0.0.1:8000 host enroll --name my-host
+anx --base-url http://127.0.0.1:8000 --as leo auth whoami
 ```
 
-Profiles include `agent_id`, `key_id`, and a local Ed25519 key so assertion
-refresh works after the seeded access token expires. Re-run `make serve` to
-refresh the identity bundle, then `make dev-profile-homes`.
+The host key stays in `~/.config/anx/hosts/`; short-lived derived-agent tokens
+are cached there with owner-only permissions.
 
 ## Local HTTP Recording
 
@@ -160,7 +157,7 @@ curation, run the local recording proxy:
 Then point the CLI at the proxy instead of core directly:
 
 ```bash
-ANX_BASE_URL=http://127.0.0.1:8010 anx --agent support-lead topics list
+ANX_BASE_URL=http://127.0.0.1:8010 anx --as support-lead topics list
 ```
 
 Compile a successful recording into a replay artifact and seed a fresh core:

@@ -9,11 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
-
-	"agent-nexus-cli/internal/profile"
 )
 
 func TestRunVersionJSON(t *testing.T) {
@@ -95,48 +92,6 @@ func TestRunVersionFlagFalseShowsRootHelp(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "CLI version:") {
 		t.Fatalf("did not expect version output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
-	}
-}
-
-func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
-	// Not parallel: clears process env so inherited ANX_BASE_URL does not override profile.
-	t.Setenv("ANX_BASE_URL", "")
-	t.Setenv("ANX_AGENT", "")
-
-	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
-	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
-		t.Fatalf("mkdir profiles dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{"base_url":"http://profile:8000","json":true}`), 0o600); err != nil {
-		t.Fatalf("write profile: %v", err)
-	}
-
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	cli := New()
-	cli.Stdout = stdout
-	cli.Stderr = stderr
-	cli.Stdin = strings.NewReader("")
-	cli.StdinIsTTY = func() bool { return true }
-	cli.UserHomeDir = func() (string, error) { return home, nil }
-	cli.ReadFile = os.ReadFile
-
-	exitCode := cli.Run([]string{"--agent", "agent-a", "version"})
-	if exitCode != 0 {
-		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
-	}
-
-	var payload map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("decode stdout json: %v", err)
-	}
-	if payload["ok"] != true {
-		t.Fatalf("expected ok=true payload=%#v", payload)
-	}
-	data, _ := payload["result"].(map[string]any)
-	if data == nil || data["base_url"] != "http://profile:8000" {
-		t.Fatalf("unexpected version payload: %#v", payload)
 	}
 }
 
@@ -271,21 +226,15 @@ func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
-	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
-		t.Fatalf("mkdir profiles dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{"base_url":"`+server.URL+`","access_token":"access-token-1","access_token_expires_at":"2099-01-01T00:00:00Z"}`), 0o600); err != nil {
-		t.Fatalf("write profile: %v", err)
-	}
+	writeDerivedAgentFixture(t, home, "agent-a", `{"base_url":"`+server.URL+`","access_token":"access-token-1","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
-	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "debug", "meta", "livez"})
+	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--as", "agent-a", "debug", "meta", "livez"})
 	livezPayload := assertEnvelopeOK(t, livezRaw)
 	if got := anyStringValue(livezPayload["command"]); got != "debug meta livez" {
 		t.Fatalf("unexpected livez envelope: %#v", livezPayload)
 	}
 
-	opsRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "debug", "meta", "ops", "health"})
+	opsRaw := runCLIForTest(t, home, map[string]string{"ANX_ACCESS_TOKEN": "access-token-1"}, nil, []string{"--json", "--as", "agent-a", "debug", "meta", "ops", "health"})
 	opsPayload := assertEnvelopeOK(t, opsRaw)
 	if got := anyStringValue(opsPayload["command"]); got != "debug meta ops health" {
 		t.Fatalf("unexpected ops health envelope: %#v", opsPayload)
@@ -410,7 +359,7 @@ func TestParseGlobalFlagsSupportsTrailingValueAndBoolFlags(t *testing.T) {
 	overrides, remaining, helpRequested, err := parseGlobalFlags([]string{
 		"doctor",
 		"--base-url", "http://127.0.0.1:8000",
-		"--agent", "agent-late",
+		"--as", "agent-late",
 		"--headers",
 		"--timeout", "2s",
 	})
@@ -426,7 +375,7 @@ func TestParseGlobalFlagsSupportsTrailingValueAndBoolFlags(t *testing.T) {
 	if overrides.BaseURL == nil || *overrides.BaseURL != "http://127.0.0.1:8000" {
 		t.Fatalf("expected trailing base-url override, got %#v", overrides)
 	}
-	if overrides.Agent == nil || *overrides.Agent != "agent-late" {
+	if overrides.As == nil || *overrides.As != "agent-late" {
 		t.Fatalf("expected trailing agent override, got %#v", overrides)
 	}
 	if overrides.Headers == nil || !*overrides.Headers {
@@ -485,78 +434,6 @@ func TestRunDoctorJSON(t *testing.T) {
 	}
 	if len(payload.Data.Checks) < 4 {
 		t.Fatalf("expected 4 checks, got %d", len(payload.Data.Checks))
-	}
-}
-
-func TestRunDoctorRefreshesProfileBeforePublicWakeProofChecks(t *testing.T) {
-	t.Parallel()
-
-	var woke atomic.Bool
-	var tokenCalls atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/auth/token":
-			tokenCalls.Add(1)
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode token body: %v", err)
-			}
-			if body["grant_type"] != "refresh_token" || body["refresh_token"] != "refresh-token" {
-				t.Fatalf("unexpected token body: %#v", body)
-			}
-			woke.Store(true)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"tokens":{"access_token":"fresh-access","refresh_token":"fresh-refresh","token_type":"Bearer","expires_in":3600}}`))
-		case "/readyz":
-			if !woke.Load() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"error":{"code":"wake_proof_required","message":"validated workspace wake proof is required"}}`))
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ok":true}`))
-		case "/meta/handshake":
-			if !woke.Load() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"error":{"code":"wake_proof_required","message":"validated workspace wake proof is required"}}`))
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	home := t.TempDir()
-	if err := profile.Save(profile.ProfilePath(home, "sleepy"), profile.Profile{
-		Agent:                "sleepy",
-		BaseURL:              server.URL,
-		AccessToken:          "expired-access",
-		RefreshToken:         "refresh-token",
-		TokenType:            "Bearer",
-		AccessTokenExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-		AgentID:              "agent_sleepy",
-		KeyID:                "key_sleepy",
-	}); err != nil {
-		t.Fatalf("save profile: %v", err)
-	}
-
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "sleepy", "doctor"})
-	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["result"].(map[string]any)
-	checks, _ := data["checks"].([]any)
-	if tokenCalls.Load() != 1 {
-		t.Fatalf("expected doctor to refresh via /auth/token once, got %d calls; output=%s", tokenCalls.Load(), raw)
-	}
-	if !doctorCheckMessageContains(checks, "auth_recovery", "/auth/token") {
-		t.Fatalf("expected auth_recovery check to mention /auth/token, checks=%#v", checks)
-	}
-	if !doctorCheckOK(checks, "core_health") || !doctorCheckOK(checks, "core_handshake") {
-		t.Fatalf("expected public checks to pass after auth recovery, checks=%#v", checks)
 	}
 }
 

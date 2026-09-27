@@ -46,7 +46,7 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
+	for _, needle := range []string{"What needs my decision?", "anx --as pm work list", "anx --as pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
@@ -556,21 +556,17 @@ func TestPMChannelsDoctorProbesWebhooksWithGETOnly(t *testing.T) {
 	}
 }
 
-func TestHarnessChildEnvRestoresPasswdHomeAndProfile(t *testing.T) {
+func TestHarnessChildEnvRestoresPasswdHomeAndAgent(t *testing.T) {
 	got := harnessChildEnv(config.Resolved{
-		Agent:       "pm",
-		BaseURL:     "http://127.0.0.1:8000",
-		ProfilePath: "/tmp/pm.json",
+		Agent:   "pm",
+		BaseURL: "http://127.0.0.1:8000",
 	}, []string{"HOME=/fake/profile-home", "PATH=/bin", "ZAI_API_KEY=already-set"})
 	home := envValue(got, "HOME")
 	if home == "/fake/profile-home" {
 		t.Fatal("child HOME stayed on the isolated profile home; omp needs the operator home for models.yml")
 	}
-	if envValue(got, "ANX_PROFILE_PATH") != "/tmp/pm.json" {
-		t.Fatalf("ANX_PROFILE_PATH=%q", envValue(got, "ANX_PROFILE_PATH"))
-	}
-	if envValue(got, "ANX_AGENT") != "pm" || envValue(got, "ANX_BASE_URL") != "http://127.0.0.1:8000" {
-		t.Fatalf("agent/base %q %q", envValue(got, "ANX_AGENT"), envValue(got, "ANX_BASE_URL"))
+	if envValue(got, "ANX_AS") != "pm" || envValue(got, "ANX_BASE_URL") != "http://127.0.0.1:8000" {
+		t.Fatalf("agent/base %q %q", envValue(got, "ANX_AS"), envValue(got, "ANX_BASE_URL"))
 	}
 	if envValue(got, "ZAI_API_KEY") != "already-set" {
 		t.Fatal("existing ZAI_API_KEY was rewritten")
@@ -579,9 +575,8 @@ func TestHarnessChildEnvRestoresPasswdHomeAndProfile(t *testing.T) {
 
 func TestHarnessChildEnvDoesNotInjectZAIAPIKey(t *testing.T) {
 	got := harnessChildEnv(config.Resolved{
-		Agent:       "pm",
-		BaseURL:     "http://127.0.0.1:8000",
-		ProfilePath: "/tmp/pm.json",
+		Agent:   "pm",
+		BaseURL: "http://127.0.0.1:8000",
 	}, []string{"PATH=/bin"})
 	if envValue(got, "ZAI_API_KEY") != "" {
 		t.Fatal("harness injected ZAI_API_KEY from disk")
@@ -1448,7 +1443,7 @@ func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 		t.Fatalf("claims=%d", claims)
 	}
 	logs := stderr.String()
-	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this profile is maya"
+	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this agent is maya"
 	if !strings.Contains(logs, wantWhy) {
 		t.Fatalf("missing first forbidden explanation: %s", logs)
 	}

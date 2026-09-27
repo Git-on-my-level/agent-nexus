@@ -38,36 +38,23 @@ var notificationsSubcommandSpec = subcommandSpec{
 
 var configSubcommandSpec = subcommandSpec{
 	command: "config",
-	valid:   []string{"use", "show", "unset"},
+	valid:   []string{"show"},
 	examples: []string{
-		"anx config use agent-a",
 		"anx config show",
 		"anx config show --json   # optional: JSON envelope for scripts",
-		"anx config unset",
 	},
 }
 
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
-	valid:   []string{"register", "whoami", "list", "default", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},
+	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit"},
 	examples: []string{
-		"anx auth register --username <username> --bootstrap-token <token>",
-		"anx auth register --username <username> --invite-token <token>",
 		"anx auth whoami",
-		"anx auth list",
-		"anx auth default <profile>",
 		"anx auth invites list",
-		"anx auth invites create --kind agent",
+		"anx auth invites create --kind human",
 		"anx auth bootstrap status",
 		"anx auth principals list",
-		"anx auth principals revoke --agent-id <agent-id>",
-		"anx auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'",
 		"anx auth audit list",
-	},
-	aliases: map[string]string{
-		"status":   "token-status",
-		"profiles": "list",
-		"ls":       "list",
 	},
 }
 

@@ -105,3 +105,27 @@ func TestResolveURL_preservesHostedWorkspacePrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestRunAttributionHeaderOnWrites(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		want := ""
+		if r.Method == http.MethodPost {
+			want = "agentctl/exec-test"
+		}
+		if got := r.Header.Get("X-ANX-Run-Id"); got != want {
+			t.Errorf("%s attribution=%q want %q", r.Method, got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	c, err := New(config.Resolved{BaseURL: server.URL, Timeout: time.Second, RunID: "agentctl/exec-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		if _, err := c.RawCall(context.Background(), RawRequest{Method: method, Path: "/test"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

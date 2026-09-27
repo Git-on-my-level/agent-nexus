@@ -63,7 +63,7 @@ If `agentctl` is on PATH, the bridge generates an execution ID with `agentctl id
 generate exec`, launches the configured argv via `agentctl run --execution-id
 ... --adapter ... --prompt-stdin --prompt-delivery stdin`, and creates a
 `command` subscription for that execution. The command destination runs the
-absolute `anx` executable with `--as <name> runs ingest`; agentctl supplies
+absolute `anx` executable with `--as <name> --config-dir <absolute-path> --base-url <url> runs ingest`; agentctl supplies
 the event file path as the final argv element. Card subjects add
 `--label anx.card.<slug>`.
 Without agentctl, the bridge launches the argv directly with `ANX_AS=<name>`.

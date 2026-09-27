@@ -18,7 +18,7 @@ import (
 func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 	home := t.TempDir()
 	for _, name := range []string{"one", "two"} {
-		writeAgentProfile(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+		writeDerivedAgentFixture(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	}
 	for _, tc := range []struct {
 		args []string
@@ -262,7 +262,7 @@ func TestWorkAndPMMetadataDocsAreDiscoverable(t *testing.T) {
 func TestWorkGroupHelpDoesNotRequireProfileSelection(t *testing.T) {
 	home := t.TempDir()
 	for _, name := range []string{"one", "two"} {
-		writeAgentProfile(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture"}`)
+		writeDerivedAgentFixture(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture"}`)
 	}
 	for _, args := range [][]string{{"work"}, {"work", "observations"}, {"work", "refresh"}, {"pm"}, {"pm", "decisions"}} {
 		assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json"}, args...)))
@@ -1303,9 +1303,9 @@ func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
 			args := []string{"--base-url", server.URL}
 			env := map[string]string{"ANX_ACCESS_TOKEN": "fixture"}
 			if tc.agent {
-				writeAgentProfile(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				writeDerivedAgentFixture(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 				env = map[string]string{}
-				args = []string{"--agent", "pm", "--base-url", server.URL}
+				args = []string{"--as", "pm", "--base-url", server.URL}
 			}
 			args = append(args, "pm", "turns", "claim")
 			args = append(args, tc.args...)

@@ -1876,7 +1876,7 @@ func (a *App) runEventsListCommand(ctx context.Context, args []string, cfg confi
 	fs.Var(&eventGroupFlags, "event-group", "Filter by event group (repeatable)")
 	fs.Var(&backingScopeFlag, "backing-scope", "Filter backing events: all, standalone, or backing_only")
 	fs.Var(&actorIDFlag, "actor-id", "Filter by actor id")
-	fs.Var(&mineFlag, "mine", "Filter to events authored by active profile actor_id")
+	fs.Var(&mineFlag, "mine", "Filter to events authored by resolved agent actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full IDs in default text output (non-JSON)")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching events (0 means unlimited)")
 	fs.Var(&maxEventsFlag, "max", "Alias for --max-events")
@@ -3602,7 +3602,7 @@ func resolveActorIDAlias(raw string, cfg config.Resolved) (string, error) {
 	}
 	return "", errnorm.Usage(
 		"invalid_request",
-		fmt.Sprintf("--actor-id me requires actor_id in active profile (%s)", strings.TrimSpace(cfg.ProfilePath)),
+		"--actor-id me requires actor_id from the resolved derived agent",
 	)
 }
 
@@ -4946,7 +4946,7 @@ func ensureDocsRevisionActorIdentity(body any, cfg config.Resolved) (any, error)
 
 	return nil, errnorm.Usage(
 		"invalid_request",
-		"No active actor identity. Run: anx auth register --username <name> or anx auth whoami to inspect current profile.",
+		"No active actor identity. Run: anx host enroll, then anx --as <name> auth whoami.",
 	)
 }
 

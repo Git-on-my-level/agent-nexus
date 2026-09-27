@@ -1232,7 +1232,7 @@ func ensureDraftTargetMatchesConfig(draft persistedDraft, cfg config.Resolved) e
 	if draftAgent == currentAgent && draftBaseURL == currentBaseURL {
 		return nil
 	}
-	return errnorm.WithDetails(errnorm.Usage("draft_target_mismatch", "draft target does not match active --agent/--base-url"), map[string]any{
+	return errnorm.WithDetails(errnorm.Usage("draft_target_mismatch", "draft target does not match active --as/--base-url"), map[string]any{
 		"draft_agent":     draftAgent,
 		"active_agent":    currentAgent,
 		"draft_base_url":  draftBaseURL,

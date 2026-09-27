@@ -27,6 +27,18 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "orient" || parts[0] == "await" {
 		return "read_only"
 	}
+	if command == "host token" {
+		return "local_operational_write"
+	}
+	if command == "host enroll" || command == "host exclude" || command == "host include" || command == "runs ingest" {
+		return "remote_coordination_write"
+	}
+	if strings.HasPrefix(command, "host bridge ") {
+		return "remote_coordination_write"
+	}
+	if command == "host enroll --plan" {
+		return "read_only"
+	}
 	if parts[0] == "update" {
 		return "local_operational_write"
 	}
@@ -83,6 +95,23 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if command == "host enroll --plan" {
+		actions = append(actions, action("Enroll host", "anx", "host", "enroll"))
+	}
+	if command == "host enroll" {
+		actions = append(actions, action("Check host", "anx", "host", "status"))
+	}
+	if command == "host token" {
+		actions = append(actions, action("Check identity", "anx", "auth", "whoami"))
+	}
+	if command == "host bridge check-in" {
+		actions = append(actions, action("Check host", "anx", "host", "status"))
+	}
+	if command == "runs ingest" {
+		if run := asMap(root["run"]); anyString(run["id"]) != "" {
+			actions = append(actions, action("Read run", "anx", "runs", "get", anyString(run["id"])))
+		}
+	}
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
 		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
 	}
@@ -235,7 +264,7 @@ func normalizeActorArgs(args []string, cfg config.Resolved) ([]string, error) {
 		}
 		if value == "me" {
 			if cfg.ActorID == "" {
-				return nil, errnorm.Usage("actor_required", "me requires an actor in the active profile")
+				return nil, errnorm.Usage("actor_required", "me requires a resolved derived agent; pass --as <name>")
 			}
 			value = cfg.ActorID
 		}
@@ -274,6 +303,10 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		}
 	}
 	switch err.Code {
+	case "identity_unresolved":
+		return []output.NextAction{action("Select agent", "anx", "--as", "codex", "auth", "whoami")}
+	case "host_not_enrolled":
+		return []output.NextAction{action("Enroll host", "anx", "host", "enroll")}
 	case "no_current_task":
 		return []output.NextAction{action("Orient", "anx", "orient"), action("Find work", "anx", "work", "list")}
 	case "timeout":

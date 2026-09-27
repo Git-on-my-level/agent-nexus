@@ -13,13 +13,17 @@ import (
 func dailyTestApp(t *testing.T, serverURL string) (*App, *bytes.Buffer) {
 	t.Helper()
 	home := t.TempDir()
-	writeAgentProfile(t, home, "worker", `{"agent_id":"agent-1","actor_id":"actor-1","username":"worker.host","access_token":"test-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "worker", `{"agent_id":"agent-1","actor_id":"actor-1","username":"worker.host","access_token":"test-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	_ = runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", serverURL, "--as", "worker", "version"})
 	out := &bytes.Buffer{}
 	a := New()
 	a.Stdout = out
 	a.Stderr = &bytes.Buffer{}
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(k string) string {
+		if k == "HOME" {
+			return home
+		}
 		if k == "ANX_BASE_URL" {
 			return serverURL
 		}
@@ -56,7 +60,7 @@ func TestOrientIncludesSecondaryAssigneeAndAnswers(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--agent", "worker", "orient"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "orient"}); exit != 0 {
 		t.Fatalf("orient exit=%d output=%s", exit, out.String())
 	}
 	result := asMap(dailyJSON(t, out)["result"])
@@ -113,7 +117,7 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 			}))
 			defer server.Close()
 			a, out := dailyTestApp(t, server.URL)
-			exit := a.Run([]string{"--json", "--agent", "worker", "await", "event:ask-1", "--timeout", "700ms"})
+			exit := a.Run([]string{"--json", "--as", "worker", "await", "event:ask-1", "--timeout", "700ms"})
 			if exit != tc.wantExit {
 				t.Fatalf("exit=%d want=%d output=%s", exit, tc.wantExit, out.String())
 			}
@@ -142,7 +146,7 @@ func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 
 func TestHumanGroupRemoved(t *testing.T) {
 	a, out := dailyTestApp(t, "http://127.0.0.1:1")
-	exit := a.Run([]string{"--json", "--agent", "worker", "human", "ask"})
+	exit := a.Run([]string{"--json", "--as", "worker", "human", "ask"})
 	if exit != 2 || anyString(asMap(dailyJSON(t, out)["error"])["code"]) != "unknown_command" {
 		t.Fatalf("old group dispatched: %s", out.String())
 	}
@@ -169,7 +173,7 @@ func TestAwaitCardState(t *testing.T) {
 	}))
 	defer server.Close()
 	a, out := dailyTestApp(t, server.URL)
-	if exit := a.Run([]string{"--json", "--agent", "worker", "await", "card:task", "--until", "state=done", "--timeout", "1s"}); exit != 0 {
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:task", "--until", "state=done", "--timeout", "1s"}); exit != 0 {
 		t.Fatalf("exit=%d %s", exit, out.String())
 	}
 	result := asMap(dailyJSON(t, out)["result"])

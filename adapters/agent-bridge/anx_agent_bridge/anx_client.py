@@ -19,7 +19,8 @@ class HostCLI:
         self.config = config
 
     def _call(self, *args: str) -> Any:
-        result = subprocess.run([self.config.anx, "--json", *args], capture_output=True, text=True, timeout=30)
+        result = subprocess.run([self.config.anx, "--json", "--config-dir", str(self.config.config_dir),
+                                 "--base-url", self.config.base_url, *args], capture_output=True, text=True, timeout=30)
         try:
             envelope = json.loads(result.stdout)
         except json.JSONDecodeError as exc:

@@ -52,43 +52,12 @@ extract_inbox_items_json() {
 
 require_command curl go python3 sed
 
-generate_ed25519_public_key_base64() {
-  local go_file
-  go_file="$(mktemp "${TMP_DIR}/genkey.XXXXXX.go")"
-  cat >"$go_file" <<'EOF'
-package main
-import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
-	"fmt"
-	"os"
-)
-func main() {
-	for i := 0; i < 4; i++ {
-		publicKey, _, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to generate key: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println(base64.StdEncoding.EncodeToString(publicKey))
-	}
-}
-EOF
-  go run "$go_file"
-  rm -f "$go_file"
-}
-
-echo "Building core binary..."
+echo "Building core and CLI binaries..."
 CORE_BIN="$(build_core_binary "$TMP_DIR/anx-core")"
+CLI_BIN="$TMP_DIR/anx"
+(cd "$REPO_ROOT/cli" && go build -o "$CLI_BIN" ./cmd/anx)
 SCHEMA_PATH="$(resolve_schema_path)"
-
-echo "Generating Ed25519 key pairs for test agents..."
-KEYS=$(generate_ed25519_public_key_base64)
-PUBKEY1=$(echo "$KEYS" | sed -n '1p')
-PUBKEY2=$(echo "$KEYS" | sed -n '2p')
-PUBKEY3=$(echo "$KEYS" | sed -n '3p')
-PUBKEY4=$(echo "$KEYS" | sed -n '4p')
+CONFIG_DIR="$TMP_DIR/anx-config"
 
 echo "Starting core in hosted mode (no dev flags)..."
 mkdir -p "$WORKSPACE_ROOT"
@@ -137,109 +106,46 @@ fi
 echo "✓ Legacy actor flows correctly unavailable"
 
 echo ""
-echo "=== Test 3: Bootstrap-gated onboarding works ==="
-echo "Attempting agent registration without bootstrap token..."
-NO_BOOTSTRAP_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"test-agent\",\"public_key\":\"$PUBKEY1\"}" \
-  "$CORE_BASE_URL/auth/agents/register" || true)
-if [[ "$NO_BOOTSTRAP_STATUS" != "400" ]] && [[ "$NO_BOOTSTRAP_STATUS" != "401" ]]; then
-  echo "assertion failed: expected registration without bootstrap token to fail, got HTTP $NO_BOOTSTRAP_STATUS" >&2
-  exit 1
-fi
+echo "=== Test 3: Human bootstrap and host enrollment ==="
+# Synthetic passkey onboarding is enabled only for this temporary bootstrap phase.
+# The workspace is restarted in hosted mode for the authorization checks below.
+stop_background_process "$CORE_PID"
+touch "$WORKSPACE_ROOT/.anx-dev-insecure-auth"
+export ANX_ALLOW_PASSKEY_DEV_BYPASS=1
+start_core_server CORE_PID "$CORE_BIN" "$WORKSPACE_ROOT" "$SCHEMA_PATH" "$CORE_HOST" "$CORE_PORT" "$CORE_LOG" "" set "$BOOTSTRAP_TOKEN" true false false
+wait_for_http_ok "$CORE_BASE_URL/readyz" "$SMOKE_TIMEOUT_SECONDS" || die "bootstrap core failed to start"
 
-echo "Attempting agent registration with invalid bootstrap token..."
-BAD_BOOTSTRAP_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"test-agent\",\"public_key\":\"$PUBKEY2\",\"bootstrap_token\":\"wrong-token\"}" \
-  "$CORE_BASE_URL/auth/agents/register" || true)
-assert_http_status "401" "$BAD_BOOTSTRAP_STATUS" "registration with wrong bootstrap token"
+BAD_BOOTSTRAP_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -X POST \
+  -d '{"display_name":"Bad bootstrap","bootstrap_token":"wrong-token"}' "$CORE_BASE_URL/auth/passkey/dev/register" || true)
+assert_http_status "401" "$BAD_BOOTSTRAP_STATUS" "invalid human bootstrap token"
+HUMAN_RESPONSE=$(curl -fsS -H 'content-type: application/json' -X POST \
+  -d "{\"display_name\":\"Hosted smoke operator\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" "$CORE_BASE_URL/auth/passkey/dev/register")
+HUMAN_TOKEN="$(json_get "$HUMAN_RESPONSE" tokens.access_token)"
+BOOTSTRAP_REPLAY_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -X POST \
+  -d "{\"display_name\":\"Replay\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" "$CORE_BASE_URL/auth/passkey/dev/register" || true)
+assert_http_status "401" "$BOOTSTRAP_REPLAY_STATUS" "replayed human bootstrap token"
+TOKEN_EXPIRY="$(python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(minutes=20)).isoformat())')"
+ENROLLMENT_RESPONSE=$(curl -fsS -H 'content-type: application/json' -H "authorization: Bearer $HUMAN_TOKEN" -X POST \
+  -d "{\"label\":\"Hosted smoke host\",\"expires_at\":\"$TOKEN_EXPIRY\"}" "$CORE_BASE_URL/auth/hosts/enrollment-tokens")
+ENROLLMENT_TOKEN="$(json_get "$ENROLLMENT_RESPONSE" token)"
+"$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host enroll --name hosted-smoke --token "$ENROLLMENT_TOKEN" >"$TMP_DIR/host-enroll.json"
+stop_background_process "$CORE_PID"
+unset ANX_ALLOW_PASSKEY_DEV_BYPASS
+rm -f "$WORKSPACE_ROOT/.anx-dev-insecure-auth"
+start_core_server CORE_PID "$CORE_BIN" "$WORKSPACE_ROOT" "$SCHEMA_PATH" "$CORE_HOST" "$CORE_PORT" "$CORE_LOG" "" set "$BOOTSTRAP_TOKEN" false false false
+wait_for_http_ok "$CORE_BASE_URL/readyz" "$SMOKE_TIMEOUT_SECONDS" || die "hosted core failed to restart"
 
-echo "Registering first agent with valid bootstrap token..."
-REGISTER1_RESPONSE=$(curl -sS \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"hosted-agent-1\",\"public_key\":\"$PUBKEY3\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" \
-  "$CORE_BASE_URL/auth/agents/register")
+echo "=== Test 4: Derived host agents are distinct ==="
+TOKEN1_RESPONSE=$("$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host token --as hosted-agent-1)
+TOKEN3_RESPONSE=$("$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host token --as hosted-agent-3)
+AGENT1_TOKEN="$(json_get "$TOKEN1_RESPONSE" result.token)"
+AGENT3_TOKEN="$(json_get "$TOKEN3_RESPONSE" result.token)"
+[[ -n "$AGENT1_TOKEN" && -n "$AGENT3_TOKEN" && "$AGENT1_TOKEN" != "$AGENT3_TOKEN" ]] || die "derived agent tokens are missing or identical"
+AGENT1_RESPONSE=$(curl -fsS -H "authorization: Bearer $AGENT1_TOKEN" "$CORE_BASE_URL/agents/me")
+AGENT1_ACTOR_ID="$(json_get "$AGENT1_RESPONSE" agent.actor_id)"
+[[ -n "$AGENT1_ACTOR_ID" ]] || die "derived agent actor id missing"
+echo "✓ Human-approved host and distinct derived agents work"
 
-AGENT1_TOKEN="$(json_get_first "$REGISTER1_RESPONSE" access_token tokens.access_token || true)"
-AGENT1_ACTOR_ID="$(json_get_first "$REGISTER1_RESPONSE" actor_id agent.actor_id || true)"
-if [[ -z "$AGENT1_TOKEN" ]]; then
-  echo "failed to extract access token from bootstrap registration" >&2
-  echo "response: $REGISTER1_RESPONSE" >&2
-  exit 1
-fi
-if [[ -z "$AGENT1_ACTOR_ID" ]]; then
-  echo "failed to extract actor id from bootstrap registration" >&2
-  echo "response: $REGISTER1_RESPONSE" >&2
-  exit 1
-fi
-
-echo "Verifying bootstrap token was consumed..."
-BOOTSTRAP_REPLAY_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"hosted-agent-2\",\"public_key\":\"$PUBKEY4\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" \
-  "$CORE_BASE_URL/auth/agents/register" || true)
-assert_http_status "401" "$BOOTSTRAP_REPLAY_STATUS" "replayed bootstrap token"
-
-echo "✓ Bootstrap-gated onboarding works correctly"
-
-echo ""
-echo "=== Test 4: Invite-gated onboarding works ==="
-echo "Creating invite token..."
-INVITE_RESPONSE=$(curl -sS \
-  -H "content-type: application/json" \
-  -H "authorization: Bearer $AGENT1_TOKEN" \
-  -X POST \
-  -d '{"kind":"agent","note":"hosted smoke invite"}' \
-  "$CORE_BASE_URL/auth/invites")
-
-INVITE_TOKEN="$(json_get "$INVITE_RESPONSE" token || true)"
-if [[ -z "$INVITE_TOKEN" ]]; then
-  echo "failed to extract invite token" >&2
-  echo "response: $INVITE_RESPONSE" >&2
-  exit 1
-fi
-
-echo "Attempting registration without invite token..."
-NO_INVITE_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"hosted-agent-3\",\"public_key\":\"$PUBKEY1\"}" \
-  "$CORE_BASE_URL/auth/agents/register" || true)
-if [[ "$NO_INVITE_STATUS" != "400" ]] && [[ "$NO_INVITE_STATUS" != "401" ]]; then
-  echo "assertion failed: expected registration without invite token to fail, got HTTP $NO_INVITE_STATUS" >&2
-  exit 1
-fi
-
-echo "Registering second agent with invite token..."
-REGISTER3_RESPONSE=$(curl -sS \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"hosted-agent-3\",\"public_key\":\"$PUBKEY2\",\"invite_token\":\"$INVITE_TOKEN\"}" \
-  "$CORE_BASE_URL/auth/agents/register")
-
-AGENT3_TOKEN="$(json_get_first "$REGISTER3_RESPONSE" access_token tokens.access_token || true)"
-if [[ -z "$AGENT3_TOKEN" ]]; then
-  echo "failed to extract access token from invite registration" >&2
-  echo "response: $REGISTER3_RESPONSE" >&2
-  exit 1
-fi
-
-echo "Verifying invite token was consumed..."
-INVITE_REPLAY_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "content-type: application/json" \
-  -X POST \
-  -d "{\"username\":\"hosted-agent-4\",\"public_key\":\"$PUBKEY3\",\"invite_token\":\"$INVITE_TOKEN\"}" \
-  "$CORE_BASE_URL/auth/agents/register" || true)
-assert_http_status "401" "$INVITE_REPLAY_STATUS" "replayed invite token"
-
-echo "✓ Invite-gated onboarding works correctly"
-
-echo ""
 echo "=== Test 5: Authenticated workspace read/write works ==="
 echo "Creating topic with authenticated agent..."
 THREAD_RESPONSE=$(curl -sS \
@@ -402,49 +308,24 @@ fi
 echo "✓ Ops-health endpoint works correctly"
 
 echo ""
-echo "=== Test 8: Agent self-revoke offboarding path ==="
-echo "Verifying invite creation still works before revoke..."
-INVITE2_RESPONSE=$(curl -sS \
-  -H "content-type: application/json" \
-  -H "authorization: Bearer $AGENT1_TOKEN" \
-  -X POST \
-  -d '{"kind":"agent","note":"pre-revoke invite"}' \
-  "$CORE_BASE_URL/auth/invites")
-INVITE2_TOKEN="$(json_get "$INVITE2_RESPONSE" token || true)"
-if [[ -z "$INVITE2_TOKEN" ]]; then
-  echo "failed to create invite before revoke test" >&2
-  exit 1
+echo "=== Test 8: Host exclusion blocks derived token grants ==="
+"$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host exclude hosted-agent-3 >"$TMP_DIR/host-exclude.json"
+if "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --config-dir "$CONFIG_DIR" host token --as hosted-agent-3 >"$TMP_DIR/excluded-token.json"; then
+  die "excluded derived agent received a token"
 fi
-
-echo "Self-revoking agent3 to test offboarding path..."
-REVOKE_RESPONSE=$(curl -sS \
-  -H "authorization: Bearer $AGENT3_TOKEN" \
-  -X POST \
-  "$CORE_BASE_URL/agents/me/revoke")
-REVOKE_OK=$(json_get "$REVOKE_RESPONSE" ok || true)
-if [[ "$REVOKE_OK" != "true" ]]; then
-  echo "expected self-revoke to return ok=true, got: $REVOKE_RESPONSE" >&2
-  exit 1
-fi
-
-echo "Verifying revoked agent cannot authenticate..."
-REVOKED_THREAD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
-  -H "authorization: Bearer $AGENT3_TOKEN" \
-  "$CORE_BASE_URL/threads" || true)
-assert_http_status "403" "$REVOKED_THREAD_STATUS" "revoked agent thread access"
-
-echo "✓ Agent self-revoke offboarding path works correctly"
+[[ "$(json_get "$(cat "$TMP_DIR/excluded-token.json")" error.code)" == "agent_excluded" ]] || die "unexpected exclusion error"
+echo "✓ Host exclusion blocks derived identity"
 
 echo ""
 cat >"$TMP_DIR/summary.txt" <<SUMMARY
 core_base_url=${CORE_BASE_URL}
 bootstrap_token_used=true
-invite_token_used=true
+host_enrolled=true
 authenticated_agent=hosted-agent-1
 second_thread_id=${SECOND_THREAD_ID}
 ops_health_tested=true
-revoke_path_tested=true
-coverage=auth,onboarding,workspace,derived-rebuild,ops-health,revoke
+host_exclusion_tested=true
+coverage=auth,host-enrollment,workspace,derived-rebuild,ops-health,exclusion
 artifacts_dir=${TMP_DIR}
 SUMMARY
 

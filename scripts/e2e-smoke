@@ -21,7 +21,7 @@ HOME_DIR="$TMP_DIR/home"
 mkdir -p "$HOME_DIR"
 CLI_BIN="$TMP_DIR/anx"
 AGENT_NAME="smoke-agent"
-USERNAME="smoke.agent"
+USERNAME="smoke-agent.smoke-host"
 
 cleanup() {
   local code=$?
@@ -120,6 +120,7 @@ const path = process.argv[2].split(".");
 const input = fs.readFileSync(file, "utf8").trim();
 if (!input) process.exit(2);
 const json = JSON.parse(input);
+if (path[0] === "data") path[0] = "result";
 let cur = json;
 for (const key of path) {
   if (key === "") continue;
@@ -160,7 +161,7 @@ assert_contains() {
 run_cli_json() {
   local outfile="$1"
   shift
-  HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" "$@" >"$outfile"
+  HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" "$@" >"$outfile"
 }
 
 run_cli_json_payload_retry() {
@@ -171,7 +172,7 @@ run_cli_json_payload_retry() {
 
   local attempt error_code status_code
   for attempt in $(seq 1 "$max_attempts"); do
-    if printf '%s\n' "$payload" | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" "$@" >"$outfile"; then
+    if printf '%s\n' "$payload" | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" "$@" >"$outfile"; then
       return 0
     fi
 
@@ -190,7 +191,7 @@ run_cli_json_payload_retry() {
 board_create_attempt() {
   printf '{"board":{"id":"%s","title":"Smoke Board","owners":["%s"],"primary_topic_ref":"topic:%s","thread_id":"%s","document_refs":["document:%s"],"pinned_refs":["document:%s"],"provenance":{"sources":["event:smoke-board-create"]}}}\n' \
     "$BOARD_ID" "$USERNAME" "$MAIN_TOPIC_ID" "$BOARD_ID" "$PRIMARY_DOC_ID" "$PRIMARY_DOC_ID" \
-    | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
+    | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" boards create >"$TMP_DIR/board-create.json"
 }
 
 ensure_board_created() {
@@ -241,9 +242,11 @@ UI_ORG_SLUG="${ANX_DEFAULT_ORGANIZATION:-local}"
 EXPECTED_VERSION="$("${ROOT_DIR}/scripts/read-version.sh")"
 
 # Start core.
+mkdir -p "$TMP_DIR/workspace"
+touch "$TMP_DIR/workspace/.anx-dev-insecure-auth"
 (
   cd "$ROOT_DIR/core"
-  ANX_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" go run ./cmd/anx-core \
+  ANX_BOOTSTRAP_TOKEN="$BOOTSTRAP_TOKEN" ANX_ALLOW_PASSKEY_DEV_BYPASS=1 ANX_HOSTED_DEV_MODE=1 ANX_ENABLE_DEV_ACTOR_MODE=1 go run ./cmd/anx-core \
     --listen-addr "${CORE_HOST}:${CORE_PORT}" \
     --workspace-root "$TMP_DIR/workspace" \
     --schema-path "$ROOT_DIR/contracts/anx-schema.yaml" \
@@ -316,43 +319,16 @@ if [[ "$UI_VERSION_HEADER" != "$EXPECTED_VERSION" ]]; then
   exit 1
 fi
 
-# Register + whoami.
-run_cli_json "$TMP_DIR/register.json" auth register --username "$USERNAME" --bootstrap-token "$BOOTSTRAP_TOKEN"
+# Enroll a host through a one-time token issued by the bootstrap human.
+curl -fsS -H 'Content-Type: application/json' -d "{\"display_name\":\"Smoke operator\",\"bootstrap_token\":\"$BOOTSTRAP_TOKEN\"}" "$CORE_BASE_URL/auth/passkey/dev/register" >"$TMP_DIR/human.json"
+HUMAN_TOKEN="$(json_get "$TMP_DIR/human.json" 'tokens.access_token')"
+TOKEN_EXPIRY="$(node -e 'process.stdout.write(new Date(Date.now()+20*60*1000).toISOString())')"
+curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $HUMAN_TOKEN" -d "{\"label\":\"Smoke host\",\"expires_at\":\"$TOKEN_EXPIRY\"}" "$CORE_BASE_URL/auth/hosts/enrollment-tokens" >"$TMP_DIR/enrollment-token.json"
+ENROLLMENT_TOKEN="$(json_get "$TMP_DIR/enrollment-token.json" 'token')"
+run_cli_json "$TMP_DIR/enroll.json" host enroll --name smoke-host --token "$ENROLLMENT_TOKEN"
 run_cli_json "$TMP_DIR/whoami.json" auth whoami
-
-# Explicit refresh token grant (API fallback) to exercise token lifecycle endpoint.
-PROFILE_PATH="$HOME_DIR/.config/anx/profiles/${AGENT_NAME}.json"
-REFRESH_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.refresh_token||""));' "$PROFILE_PATH")"
-if [[ -z "$REFRESH_TOKEN" ]]; then
-  echo "missing refresh token in profile: $PROFILE_PATH" >&2
-  exit 1
-fi
-printf '{"grant_type":"refresh_token","refresh_token":"%s"}\n' "$REFRESH_TOKEN" | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" api call --method POST --path /auth/token >"$TMP_DIR/token-refresh-explicit.json"
-assert_contains "$TMP_DIR/token-refresh-explicit.json" '"access_token"'
-
-# Force automatic refresh path by expiring local access token.
-node -e '
-const fs = require("fs");
-const file = process.argv[1];
-const profile = JSON.parse(fs.readFileSync(file, "utf8"));
-profile.access_token_expires_at = "2000-01-01T00:00:00Z";
-fs.writeFileSync(file, JSON.stringify(profile, null, 2) + "\n");
-' "$PROFILE_PATH"
-
-run_cli_json "$TMP_DIR/token-status-before.json" auth token-status
+run_cli_json "$TMP_DIR/host-token.json" host token --as "$AGENT_NAME"
 run_cli_json "$TMP_DIR/topics-list-before.json" topics list
-run_cli_json "$TMP_DIR/token-status-after.json" auth token-status
-
-NEEDS_REFRESH_BEFORE="$(json_get "$TMP_DIR/token-status-before.json" 'data.needs_refresh' || true)"
-NEEDS_REFRESH_AFTER="$(json_get "$TMP_DIR/token-status-after.json" 'data.needs_refresh' || true)"
-if [[ "$NEEDS_REFRESH_BEFORE" != "true" ]]; then
-  echo "expected needs_refresh=true before auto-refresh, got: ${NEEDS_REFRESH_BEFORE:-<missing>}" >&2
-  exit 1
-fi
-if [[ "$NEEDS_REFRESH_AFTER" != "false" ]]; then
-  echo "expected needs_refresh=false after auto-refresh, got: ${NEEDS_REFRESH_AFTER:-<missing>}" >&2
-  exit 1
-fi
 
 # Typed command flow: topic -> board -> cards -> packets.
 MAIN_TOPIC_PAYLOAD='{"topic":{"id":"topic-smoke-main","title":"Smoke coordination topic","summary":"Smoke workflow in progress","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-main"],"provenance":{"sources":["event:smoke-topic-main"]}}}'
@@ -372,7 +348,7 @@ if [[ -z "$MAIN_TOPIC_ID" || -z "$MAIN_TOPIC_THREAD_ID" ]]; then
 fi
 
 printf '{"patch":{"summary":"smoke updated"}}\n' \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics patch "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" topics patch "$MAIN_TOPIC_ID" >"$TMP_DIR/topic-update.json"
 
 THREAD_ID="$MAIN_TOPIC_THREAD_ID"
 
@@ -510,16 +486,16 @@ if [[ -z "$BOARD_UPDATED_AT" ]]; then
   exit 1
 fi
 
-HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" cards move \
   "$BOARD_CARD_B_ID" --column review --if-board-updated-at "$BOARD_UPDATED_AT" >"$TMP_DIR/board-card-b-move.json"
 BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.board.updated_at' || true)"
 if [[ -z "$BOARD_UPDATED_AT" ]]; then
   BOARD_UPDATED_AT="$(json_get "$TMP_DIR/board-card-b-move.json" 'data.body.board.updated_at' || true)"
 fi
 
-ACCESS_TOKEN="$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(p.access_token||""));' "$PROFILE_PATH")"
+ACCESS_TOKEN="$(json_get "$TMP_DIR/host-token.json" 'result.token')"
 if [[ -z "$ACCESS_TOKEN" ]]; then
-  echo "missing access token in profile: $PROFILE_PATH" >&2
+  echo "missing derived-agent token" >&2
   exit 1
 fi
 
@@ -557,7 +533,7 @@ fi
 
 printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke terminal resolution evidence","refs":["thread:%s","card:%s"],"payload":{"body":"work completed"},"provenance":{"sources":["event:smoke-terminal-resolution"]}}}\n' \
   "$CARD_A_THREAD_ID" "$CARD_A_THREAD_ID" "$BOARD_CARD_A_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/terminal-resolution-event.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" debug events create >"$TMP_DIR/terminal-resolution-event.json"
 TERMINAL_RESOLUTION_EVENT_ID="$(json_get "$TMP_DIR/terminal-resolution-event.json" 'data.event.id' || true)"
 if [[ -z "$TERMINAL_RESOLUTION_EVENT_ID" ]]; then
   TERMINAL_RESOLUTION_EVENT_ID="$(json_get "$TMP_DIR/terminal-resolution-event.json" 'data.body.event.id' || true)"
@@ -571,7 +547,7 @@ fi
 # Spec §8.4: done lane uses resolution done + evidence refs; abandonment uses trash/archive, not resolution=canceled.
 printf '{"column_key":"done","resolution":"done","resolution_refs":["event:%s"],"if_board_updated_at":"%s"}\n' "$TERMINAL_RESOLUTION_EVENT_ID" "$BOARD_UPDATED_AT" \
   >"$TMP_DIR/card-a-terminal-done-move.json"
-HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards move \
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" cards move \
   "$BOARD_CARD_A_ID" --from-file "$TMP_DIR/card-a-terminal-done-move.json" >"$TMP_DIR/board-card-a-terminal-done.json"
 
 run_cli_json "$TMP_DIR/board-after-terminal.json" boards get "$BOARD_ID"
@@ -587,7 +563,7 @@ fi
 
 run_cli_json "$TMP_DIR/card-a-after-terminal-done.json" cards get "$BOARD_CARD_A_ID"
 assert_contains "$TMP_DIR/card-a-after-terminal-done.json" '"resolution"[[:space:]]*:[[:space:]]*"done"'
-node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const card=data?.data?.card ?? data?.data?.body?.card; const refs=Array.isArray(card?.resolution_refs) ? card.resolution_refs : []; const expected=`event:${process.argv[2]}`; if (!refs.includes(expected)) process.exit(1);' "$TMP_DIR/card-a-after-terminal-done.json" "$TERMINAL_RESOLUTION_EVENT_ID" || {
+node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const card=data?.result?.card ?? data?.result?.body?.card; const refs=Array.isArray(card?.resolution_refs) ? card.resolution_refs : []; const expected=`event:${process.argv[2]}`; if (!refs.includes(expected)) process.exit(1);' "$TMP_DIR/card-a-after-terminal-done.json" "$TERMINAL_RESOLUTION_EVENT_ID" || {
   echo "missing expected resolution ref event:${TERMINAL_RESOLUTION_EVENT_ID}" >&2
   cat "$TMP_DIR/card-a-after-terminal-done.json" >&2 || true
   exit 1
@@ -596,19 +572,19 @@ node -e 'const fs=require("fs"); const data=JSON.parse(fs.readFileSync(process.a
 # Trash lane (operational lifecycle) — topics support trash; default topic list hides trashed rows.
 TRASH_TOPIC_PAYLOAD='{"topic":{"id":"topic-smoke-trash","title":"Smoke trashed topic","summary":"Disposed after smoke","owner_refs":[],"board_refs":[],"document_refs":[],"related_refs":["topic:topic-smoke-trash"],"provenance":{"sources":["event:smoke-topic-trash"]}}}'
 run_cli_json_payload_retry "$TMP_DIR/trash-topic-create.json" "$TRASH_TOPIC_PAYLOAD" 3 topics create
-HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" topics trash topic-smoke-trash \
+HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" topics trash topic-smoke-trash \
   --reason "e2e-smoke trash lane assertion" >"$TMP_DIR/topic-trash.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/topics?state=trashed" >"$TMP_DIR/topics-trashed-only.json"
 assert_contains "$TMP_DIR/topics-trashed-only.json" 'topic-smoke-trash'
 
 # Card trash lane (archive / archived_only inventory).
 printf '{"if_board_updated_at":"%s"}\n' "$BOARD_UPDATED_AT" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" cards archive "$BOARD_CARD_B_ID" --from-file=- >"$TMP_DIR/board-card-b-archive.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" cards archive "$BOARD_CARD_B_ID" --from-file=- >"$TMP_DIR/board-card-b-archive.json"
 curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "${CORE_BASE_URL}/cards?state=archived" >"$TMP_DIR/cards-archived-only.json"
 assert_contains "$TMP_DIR/cards-archived-only.json" "\"${BOARD_CARD_B_ID}\""
 
 printf '{"event":{"type":"message_posted","thread_id":"%s","summary":"smoke stream event","refs":["thread:%s"],"payload":{"body":"hello"},"provenance":{"sources":["event:smoke-stream-event"]}}}\n' "$THREAD_ID" "$THREAD_ID" \
-  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --agent "$AGENT_NAME" events create >"$TMP_DIR/event-create.json"
+  | HOME="$HOME_DIR" "$CLI_BIN" --json --base-url "$CORE_BASE_URL" --as "$AGENT_NAME" debug events create >"$TMP_DIR/event-create.json"
 
 # Basic UI compatibility check after typed flow.
 curl -fsS -H "x-anx-organization-slug: ${UI_ORG_SLUG}" -H "x-anx-workspace-slug: ${UI_WORKSPACE_SLUG}" "$UI_BASE_URL/meta/handshake" >"$TMP_DIR/ui-handshake.json"
@@ -620,7 +596,7 @@ ui_base_url=${UI_BASE_URL}
 thread_id=${THREAD_ID}
 board_id=${BOARD_ID}
 agent=${AGENT_NAME}
-profile_path=${PROFILE_PATH}
+host_config_dir=${HOME_DIR}/.config/anx
 artifacts_dir=${TMP_DIR}
 SUMMARY
 
