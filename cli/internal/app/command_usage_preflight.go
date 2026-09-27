@@ -608,6 +608,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"from-file":     valueFlag,
 			"inbox-item-id": valueFlag,
 			"response-text": valueFlag,
+			"outcome":       valueFlag,
 			"notify-mode":   valueFlag,
 			"actor-id":      valueFlag,
 		},

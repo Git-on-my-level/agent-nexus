@@ -410,7 +410,10 @@
    * Queues the response behind the undo toast and returns to the Inbox. The
    * committed request is this page's `inbox.respond` call, unchanged.
    */
-  function submitResponseWithText(responseText, { acknowledge = false } = {}) {
+  function submitResponseWithText(
+    responseText,
+    { acknowledge = false, outcome = "answered" } = {},
+  ) {
     if (!item) return;
     const text = String(responseText ?? "").trim();
     if (!text) {
@@ -431,9 +434,10 @@
 
     submitError = "";
     const request = acknowledge
-      ? { response_text: text, notify_mode: "none" }
+      ? { response_text: text, outcome: "acknowledged", notify_mode: "none" }
       : {
           response_text: text,
+          outcome,
           related_refs: responseAttachmentRefs,
           notify_mode: notifyMode,
           notify_target_actor_id:
@@ -792,7 +796,7 @@
           placeholder="Write the response the agent should rely on."
           tall
           sendLabel="Send response"
-          onSend={(text) => submitResponseWithText(text)}
+          onSend={(text, outcome) => submitResponseWithText(text, { outcome })}
           onAcknowledge={() =>
             submitResponseWithText("Acknowledged from inbox", {
               acknowledge: true,

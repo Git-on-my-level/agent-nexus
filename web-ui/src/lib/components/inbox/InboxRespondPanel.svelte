@@ -7,7 +7,7 @@
    * suggested response selects it and sends it (with undo); the first
    * suggestion is the requester's recommendation.
    *
-   * Sending is the caller's job (`onSend(text)`); it queues the response
+   * Sending is the caller's job (`onSend(text, outcome)`); it queues the response
    * behind the undo toast.
    */
   let {
@@ -30,10 +30,10 @@
   const MAX_KEYED = 5;
   let isReview = $derived(String(kind ?? "").toLowerCase() === "review");
 
-  function send(text) {
+  function send(text, outcome = "answered") {
     const body = String(text ?? "").trim();
     if (!body || busy) return;
-    onSend?.(body);
+    onSend?.(body, outcome);
   }
 </script>
 
@@ -44,13 +44,13 @@
         class="ui-btn-secondary"
         type="button"
         disabled={busy}
-        onclick={() => send("Approved.")}>Approve</button
+        onclick={() => send("Approved.", "approved")}>Approve</button
       >
       <button
         class="ui-btn-secondary"
         type="button"
         disabled={busy}
-        onclick={() => send("Rejected.")}>Reject</button
+        onclick={() => send("Rejected.", "rejected")}>Reject</button
       >
     </div>
   {/if}

@@ -11,6 +11,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
+	"agent-nexus-core/internal/schema"
 )
 
 func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, pathInboxItemID string) {
@@ -27,6 +28,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		ActorID             string   `json:"actor_id"`
 		InboxItemID         string   `json:"inbox_item_id"`
 		ResponseText        string   `json:"response_text"`
+		Outcome             string   `json:"outcome"`
 		RelatedRefs         []string `json:"related_refs"`
 		NotifyMode          string   `json:"notify_mode"`
 		NotifyTargetActorID string   `json:"notify_target_actor_id"`
@@ -57,6 +59,10 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	responseText := strings.TrimSpace(req.ResponseText)
+	if err := schema.ValidateEnum(opts.contract, "human_attention_response_outcome", req.Outcome); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	if responseText == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "response_text is required")
 		return
@@ -151,6 +157,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 			"request_event_ref":   requestEventRef,
 			"kind":                kind,
 			"response_text":       responseText,
+			"outcome":             req.Outcome,
 			"subject_ref":         subjectRef,
 			"related_refs":        responseRefs,
 			"requester_actor_id":  requesterActorID,

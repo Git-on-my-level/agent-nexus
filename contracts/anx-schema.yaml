@@ -46,6 +46,13 @@ enums:
     enum_policy: strict
     values: [waiting_on_human, working, idle, stale]
 
+  human_attention_response_outcome:
+    enum_policy: strict
+    description: >
+      A proposal or free reply is answered; explicit review Approve and Reject actions
+      are approved and rejected; closing without an answer is acknowledged.
+    values: [answered, approved, rejected, acknowledged]
+
   board_column_key:
     enum_policy: strict
     values: [backlog, ready, in_progress, blocked, review, done]
@@ -733,7 +740,7 @@ reference_conventions:
 
     human_attention_responded:
       refs_must_include: ["inbox:<inbox_item_id>"]
-      payload_must_include: ["inbox_item_id", "kind", "response_text", "responding_actor_id"]
+      payload_must_include: ["inbox_item_id", "kind", "response_text", "outcome", "responding_actor_id"]
 
     agent_notification_read:
       refs_must_include: ["artifact:<wakeup_id>"]

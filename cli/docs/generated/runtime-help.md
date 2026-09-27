@@ -350,7 +350,7 @@ Daily loop
 2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.
 3. Run `anx work note "What changed"` after meaningful progress.
 4. When blocked, run `anx work block "Why" --ask --recommend "Preferred answer"` or `anx ask "Question" --recommend "Preferred answer" [--alt "Alternative"]`. Use `anx review` for review and `anx escalate` for urgent intervention.
-5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result. Exit 8 means timeout; exit 9 means declined.
+5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
 6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.
 
 
@@ -3497,6 +3497,7 @@ Generated Help: inbox respond
 Inputs:
   Required:
   - path `inbox_id`
+  - body `outcome` (string)
   - body `response_text` (string)
   Optional:
   - body `actor_id` (string)
@@ -3505,16 +3506,17 @@ Inputs:
   - body `notify_target_actor_id` (string)
   - body `notify_target_agent_id` (string)
   - body `related_refs` (list<any>)
-  Enum values: notify_mode: none, original, replacement
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, rejected
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `inbox list`).
   --response-text <text>  Freeform response text.
+  --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (`me` uses the active profile's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, optional fields).
+  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, `outcome`, optional fields).
 
 Global flags:
   Global flags can appear before or after the command path.

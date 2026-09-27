@@ -837,6 +837,14 @@ func validateDraftInboxRespond(body map[string]any) []string {
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
 	requiredStringField(body, "inbox_item_id", "inbox_item_id", true, &out)
 	requiredStringField(body, "response_text", "response_text", true, &out)
+	requiredStringField(body, "outcome", "outcome", true, &out)
+	if outcome := anyString(body["outcome"]); outcome != "" {
+		switch outcome {
+		case "answered", "approved", "rejected", "acknowledged":
+		default:
+			out = append(out, "outcome must be answered, approved, rejected, or acknowledged")
+		}
+	}
 	return out
 }
 

@@ -137,6 +137,9 @@ func completedInboxItemPayload(ctx context.Context, store PrimitiveStore, respEv
 		"requester_label":          strings.TrimSpace(anyString(payload["requester_label"])),
 		"original_request_missing": requestMissing,
 	}
+	if outcome := strings.TrimSpace(anyString(payload["outcome"])); outcome != "" {
+		row["outcome"] = outcome
+	}
 	return row
 }
 

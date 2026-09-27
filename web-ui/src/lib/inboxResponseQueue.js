@@ -33,7 +33,7 @@ export const inboxResponseToast = writable(
  * under Handled before core's projection says so.
  */
 export const inboxResponseOverlay = writable(
-  /** @type {Record<string, { status: string, response_text: string, responded_at: string, until?: number }>} */ ({}),
+  /** @type {Record<string, { status: string, response_text: string, outcome: string, responded_at: string, until?: number }>} */ ({}),
 );
 
 let sequence = 0;
@@ -75,6 +75,13 @@ function showToast(toast) {
 export function queueInboxResponse({ itemId, request, message, restore }) {
   const id = String(itemId ?? "").trim();
   if (!id) throw new Error("queueInboxResponse requires itemId");
+  if (
+    !["answered", "approved", "rejected", "acknowledged"].includes(
+      request?.outcome,
+    )
+  ) {
+    throw new Error("queueInboxResponse requires a valid outcome");
+  }
   if (pending) void commit(pending);
   failed = null;
   const entry = {
@@ -91,6 +98,7 @@ export function queueInboxResponse({ itemId, request, message, restore }) {
   setOverlay(id, {
     status: "pending",
     response_text: String(entry.request?.response_text ?? ""),
+    outcome: String(entry.request?.outcome ?? ""),
     responded_at: new Date().toISOString(),
   });
   showToast({
@@ -139,6 +147,7 @@ export function retryInboxResponse() {
   setOverlay(entry.itemId, {
     status: "pending",
     response_text: String(entry.request?.response_text ?? ""),
+    outcome: String(entry.request?.outcome ?? ""),
     responded_at: new Date().toISOString(),
   });
   return commit(entry);
@@ -170,6 +179,7 @@ async function commit(entry) {
     setOverlay(entry.itemId, {
       status: "committed",
       response_text: String(entry.request?.response_text ?? ""),
+      outcome: String(entry.request?.outcome ?? ""),
       responded_at: new Date().toISOString(),
       until: Date.now() + COMMITTED_OVERLAY_MS,
     });
@@ -230,6 +240,7 @@ export function applyResponseOverlay(items, overlay, now = Date.now()) {
       status: "completed",
       responded_at: item?.responded_at || entry.responded_at,
       response_text: item?.response_text || entry.response_text,
+      outcome: item?.outcome || entry.outcome,
     };
   });
 }

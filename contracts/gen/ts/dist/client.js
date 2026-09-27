@@ -6109,6 +6109,16 @@ export const commandRegistry = [
         "body_schema": {
             "required": [
                 {
+                    "name": "outcome",
+                    "type": "string",
+                    "enum_values": [
+                        "acknowledged",
+                        "answered",
+                        "approved",
+                        "rejected"
+                    ]
+                },
+                {
                     "name": "response_text",
                     "type": "string"
                 }

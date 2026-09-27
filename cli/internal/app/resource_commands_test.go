@@ -997,6 +997,7 @@ func TestInboxRespondPostsGenericResponse(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", inboxID,
 		"--response-text", "Approved.",
+		"--outcome", "approved",
 	})
 	assertEnvelopeOK(t, raw)
 }
@@ -5066,6 +5067,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "Approved.",
+		"--outcome", "approved",
 		"--actor-id", "me",
 	})
 	assertEnvelopeOK(t, raw)
@@ -5138,6 +5140,7 @@ func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
+		"--outcome", "answered",
 	})
 	assertEnvelopeOK(t, raw)
 }
@@ -5179,6 +5182,7 @@ func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
+		"--outcome", "answered",
 		"--actor-id", "me",
 	})
 	payload := assertEnvelopeError(t, raw)

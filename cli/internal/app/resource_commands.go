@@ -3345,10 +3345,11 @@ func (a *App) parseDerivedRebuildBodyInput(args []string, cfg config.Resolved) (
 
 func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, error) {
 	fs := newSilentFlagSet("inbox respond")
-	var fromFileFlag, inboxItemIDFlag, responseTextFlag, notifyModeFlag, actorIDFlag trackedString
+	var fromFileFlag, inboxItemIDFlag, responseTextFlag, outcomeFlag, notifyModeFlag, actorIDFlag trackedString
 	fs.Var(&fromFileFlag, "from-file", "Load JSON body from file path or stdin with -")
 	fs.Var(&inboxItemIDFlag, "inbox-item-id", "Inbox item id")
 	fs.Var(&responseTextFlag, "response-text", "Freeform response text")
+	fs.Var(&outcomeFlag, "outcome", "Response outcome: answered, approved, rejected, acknowledged")
 	fs.Var(&notifyModeFlag, "notify-mode", "Notification mode: original, target, none")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id")
 	if err := fs.Parse(args); err != nil {
@@ -3386,6 +3387,9 @@ func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, er
 	if responseText := strings.TrimSpace(responseTextFlag.value); responseText != "" {
 		body["response_text"] = responseText
 	}
+	if outcomeFlag.set {
+		body["outcome"] = strings.TrimSpace(outcomeFlag.value)
+	}
 	if notifyMode := strings.TrimSpace(notifyModeFlag.value); notifyMode != "" {
 		body["notify_mode"] = notifyMode
 	}
@@ -3397,6 +3401,11 @@ func (a *App) parseRespondBodyInput(args []string, cfg config.Resolved) (any, er
 	}
 	if strings.TrimSpace(anyString(body["response_text"])) == "" {
 		return nil, errnorm.Usage("invalid_request", "response_text is required")
+	}
+	switch anyString(body["outcome"]) {
+	case "answered", "approved", "rejected", "acknowledged":
+	default:
+		return nil, errnorm.Usage("invalid_request", "outcome must be answered, approved, rejected, or acknowledged")
 	}
 	actorID, err := resolveActorIDAlias(actorIDFlag.value, cfg)
 	if err != nil {

@@ -127,6 +127,7 @@ describe("eventRefRules", () => {
         inbox_item_id: "inbox-1",
         kind: "ask",
         response_text: "Approved",
+        outcome: "answered",
         responding_actor_id: "actor-1",
       };
 

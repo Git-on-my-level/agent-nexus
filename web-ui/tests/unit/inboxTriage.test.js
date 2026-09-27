@@ -117,7 +117,11 @@ describe("inbox response queue", () => {
     vi.useRealTimers();
   });
 
-  const request = { response_text: "Ship it", notify_mode: "original" };
+  const request = {
+    response_text: "Ship it",
+    outcome: "answered",
+    notify_mode: "original",
+  };
 
   it("commits the exact request once the undo window closes", async () => {
     queueInboxResponse({ itemId: "inbox:a", request, message: "Sent to Omar" });
@@ -125,6 +129,7 @@ describe("inbox response queue", () => {
     expect(get(inboxResponseToast)).toMatchObject({ state: "pending" });
     expect(get(inboxResponseOverlay)["inbox:a"]).toMatchObject({
       status: "pending",
+      outcome: "answered",
     });
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(client.respondInboxItem).toHaveBeenCalledTimes(1);
@@ -178,11 +183,16 @@ describe("inbox response queue", () => {
       "inbox:a": {
         status: "pending",
         response_text: "Ship it",
+        outcome: "rejected",
         responded_at: "t",
       },
     };
     const [a, b] = applyResponseOverlay(items, overlay);
-    expect(a).toMatchObject({ status: "completed", response_text: "Ship it" });
+    expect(a).toMatchObject({
+      status: "completed",
+      response_text: "Ship it",
+      outcome: "rejected",
+    });
     expect(b.status).toBe("open");
   });
 

@@ -74,8 +74,24 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
 		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
 	}
-	if command == "await" && anyString(root["subject_ref"]) != "" && anyString(root["answer"]) != "" {
-		actions = append(actions, action("Record follow-up", "anx", "work", "note", anyString(root["answer"]), anyString(root["subject_ref"])))
+	if command == "await" {
+		subject := anyString(root["subject_ref"])
+		if strings.HasPrefix(subject, "card:") {
+			switch anyString(root["outcome"]) {
+			case "answered", "approved":
+				if answer := anyString(root["answer"]); answer != "" {
+					label := "Record answer"
+					if anyString(root["outcome"]) == "approved" {
+						label = "Record approval"
+					}
+					actions = append(actions, action(label, "anx", "work", "note", answer, subject))
+				}
+			case "acknowledged":
+				actions = append(actions, action("Review acknowledged work", "anx", "work", "get", subject))
+			}
+		} else {
+			actions = append(actions, action("Orient after response", "anx", "orient"))
+		}
 	}
 	if command == "orient" {
 		for _, raw := range asSlice(root["next"]) {
@@ -254,6 +270,13 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 				return []output.NextAction{action("Keep waiting", "anx", "await", target)}
 			}
 		}
+	case "rejected":
+		if details, ok := err.Details.(map[string]any); ok {
+			if subject := anyString(details["subject_ref"]); strings.HasPrefix(subject, "card:") {
+				return []output.NextAction{action("Revise rejected work", "anx", "work", "get", subject)}
+			}
+		}
+		return []output.NextAction{action("Orient after rejection", "anx", "orient")}
 	case "cli_outdated":
 		return []output.NextAction{action("Update CLI", "anx", "update")}
 	case "unknown_command", "unknown_subcommand":

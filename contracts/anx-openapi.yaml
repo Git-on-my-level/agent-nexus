@@ -8569,6 +8569,7 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on new responses.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
@@ -9230,6 +9231,7 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on write.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [type, actor_id, refs, summary, provenance]
 
@@ -9533,7 +9535,7 @@ components:
     RespondInboxItemRequest:
       type: object
       description: >
-        Records a freeform human response to a human attention inbox item. The response target must be
+        Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
       properties:
         actor_id: { type: string }
@@ -9541,6 +9543,7 @@ components:
           type: string
           description: Must match path inbox_id when both are provided.
         response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -9550,7 +9553,26 @@ components:
           description: Defaults to original requester when resolvable.
         notify_target_actor_id: { type: string }
         notify_target_agent_id: { type: string }
-      required: [response_text]
+      required: [response_text, outcome]
+
+    HumanAttentionResponseOutcome:
+      type: string
+      enum: [answered, approved, rejected, acknowledged]
+      description: >
+        answered means a chosen proposal or free reply; approved and rejected mean the
+        explicit review Approve and Reject actions; acknowledged means the operator
+        closed the item without answering it. The response text remains the audit note.
+
+    HumanAttentionRespondedPayload:
+      type: object
+      description: Payload of a human_attention_responded event.
+      properties:
+        inbox_item_id: { type: string }
+        kind: { type: string }
+        response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
+        responding_actor_id: { type: string }
+      required: [inbox_item_id, kind, response_text, outcome, responding_actor_id]
 
     TopicLifecycleMutationRequest:
       type: object
@@ -10244,6 +10266,7 @@ components:
         request_event_ref: { $ref: '#/components/schemas/TypedRef' }
         response_event_ref: { $ref: '#/components/schemas/TypedRef' }
         response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
         response_summary: { type: string }
         responded_at: { type: string }
         responding_actor_id: { type: string }

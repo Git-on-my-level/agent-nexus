@@ -246,7 +246,7 @@ All workspace data routes require authenticated principals. Writes require an
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
 - Request human attention (emits `human_attention_requested`; prefer `anx ask|review|escalate` over raw event authoring)
-- Respond to inbox item (emits `human_attention_responded` event with `inbox:<inbox_item_id>` in refs)
+- Respond to inbox item (requires `outcome`: `answered` for a proposal or free reply, `approved`/`rejected` for explicit review actions, `acknowledged` for close without an answer; emits `human_attention_responded` with the outcome and `inbox:<inbox_item_id>` in refs). Completed Inbox reads expose that outcome.
 
 ### 7.4 Derived views
 - Derived views are asynchronously materialized from canonical writes; GET endpoints remain side-effect free.
