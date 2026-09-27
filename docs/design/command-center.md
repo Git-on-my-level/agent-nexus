@@ -393,3 +393,44 @@ routes remain.
 
 - 2026-09-27, S6: `orient` composes five existing reads: agent detail, one 200-row work page, two 100-event pages for requests and responses, and unread notifications. It filters all assignees locally because the work owner's server filter sees only the first assignee. It reports page limits and matched/returned counts. The profile-based agent lookup is isolated in `dailyAgent` for S5 to replace. (`cli/internal/app/daily_loop.go`.)
 - 2026-09-27, S6: A top-level ask returns its immutable `event:<id>` as `ask_id`; `await` accepts that or the bare event id and waits on the request's backing thread. Responses are matched by the source event id in the inbox item id because `request_event_ref` can be a nonunique public event handle. The current inbox response contract contains freeform `response_text` but no structured decline field, so exit 9 means the trimmed response text is exactly `declined` (case-insensitive). Other responses exit 0 with the exact text. (`cli/internal/app/human_command.go`, `cli/internal/app/daily_loop.go`.)
+
+### 2026-09-27 · O3 Agents view, agent page and Access → Hosts (`cc/web-agents`)
+
+- **One live helper, one shared connection.** `inboxLiveUpdates.js` and
+  `anxCoreClient.streamWorkspaceEvents` are gone; the Inbox, the sidebar Inbox count, the
+  agent roster and the list pages all use `liveWorkspaceEvents`. Workspace-wide
+  subscriptions on the same client share one `/stream/events` connection (a thread-scoped
+  subscription gets its own), so the stream is no longer filtered by `type` on the server;
+  each subscriber filters by type and predicate. The resume cursor is the newest event of
+  any type. Reason: the Inbox needed one connection per workspace and the list pages
+  needed per-page filters; sharing gives both. Files: `web-ui/src/lib/liveWorkspaceEvents.js`,
+  `inboxCount.js`, `inbox/+page.svelte`, `anxCoreClient.js`.
+- **The roster is loaded once by the shell.** `lib/agentRoster.js` keeps `GET /agents` for
+  the nav badge, the Agents page and the name registry. It re-reads on workspace events and
+  every 30 s while visible, because presence notes and run upserts write no workspace
+  event. The Agents badge counts **working** agents; waiting agents are already the Inbox
+  badge.
+- **Derived agents are named "codex on m5-mbp" everywhere** by adding the roster to
+  `buildActorNameMap` (`actorSession.agentRegistry`); a host-derived agent's
+  `display_name` outranks its actor record's name, and the Inbox requester prefers it over
+  core's stored `requester_label`. Events with `run_attribution` show "via run exec-…" on
+  message items, linking to `/agents/{handle}?run={run_id}#runs`.
+- **Waiting rows join two reads.** `AgentSummary` has no ask title or wait start, and
+  `GET /agents/{id}` `open_asks` are keyed by request event id without a time, so the
+  roster reads `GET /inbox` (matched by requester actor id; wait = `source_event_time`,
+  link = Inbox item id) and each waiting agent's detail for the ask's task title.
+- **Host agent rows take state from the roster**, because `GET /hosts` embeds agent
+  summaries without derived state (all `stale`, no signal).
+- **Deliberate approvals.** Approve opens an inline confirmation that repeats the user
+  code; revoking a host requires typing its slug, inside the host card. Pending requests
+  poll every 5 s while Access is visible. `/access/hosts/enroll` (the CLI's verification
+  path) redirects to `/access#host-requests`.
+- **Per-agent controls on the agent page: exclude (reversible) and revoke (permanent).**
+  "Exclude on <host>" edits the host's exclusion list (core ends the name's sessions and
+  refuses it; removing the exclusion lets it back). "Revoke agent…" revokes the principal:
+  core still mints tokens for a revoked derived agent on the next host assertion, but
+  authentication rejects them, so the `(host, name)` pair is dead for good. The page says
+  so and points to exclusion as the pause. Revoking every agent on a machine is host
+  revoke in Access.
+- **Navigation order** is Inbox, Agents, Tasks, Docs (sidebar and bottom bar); ⌘K binds
+  G then A.

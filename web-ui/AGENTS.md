@@ -14,7 +14,7 @@ Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on du
 ## Module Purpose
 `web-ui` is the operator control surface for Agent Nexus.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, Tasks (work projection), Docs, Ask PM, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, the Agents presence roster, Tasks (work projection), Docs, Ask PM, and settings (including host enrollment in Access). Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
 - Treat `anx-core` as the single source of truth for all durable state.
