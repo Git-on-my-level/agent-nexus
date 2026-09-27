@@ -11,11 +11,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/filelock"
 )
 
 func (a *App) runRuns(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -132,15 +132,15 @@ func appendRunsIngestError(configDir string, runErr error) error {
 		return fmt.Errorf("unsafe runs ingest log directory")
 	}
 	path := filepath.Join(dir, "runs-ingest.log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	f, err := filelock.OpenNoFollow(path, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(f); err != nil {
 		return err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer filelock.Unlock(f)
 	stat, err := f.Stat()
 	if err != nil {
 		return err

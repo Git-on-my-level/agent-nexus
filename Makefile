@@ -145,6 +145,7 @@ e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 
 platform-constraints: ## Check for Unix-only syscalls without build constraints
 	./scripts/check-platform-constraints.sh
+	./scripts/test-platform-constraints.sh
 
 release-check: ## Validate release readiness (check + e2e + cross-platform build)
 	$(MAKE) check
