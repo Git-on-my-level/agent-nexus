@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,6 +18,24 @@ import (
 type hostRosterView struct {
 	auth.Host
 	Agents []commandcenter.Summary `json:"agents"`
+}
+
+// HostEnrollmentVerificationURL accepts a public, workspace-scoped web UI URL.
+// It is deployment configuration; core does not infer web routes from its API origin.
+func HostEnrollmentVerificationURL(workspaceURL string) (string, error) {
+	workspaceURL = strings.TrimSpace(workspaceURL)
+	if workspaceURL == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(workspaceURL)
+	if err != nil || parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || strings.ContainsAny(workspaceURL, "?#") {
+		return "", errors.New("ANX_PUBLIC_WEB_UI_WORKSPACE_URL must be an absolute HTTP(S) workspace URL without credentials, query, or fragment")
+	}
+	parts := strings.Split(strings.TrimRight(parsed.EscapedPath(), "/"), "/")
+	if len(parts) != 5 || parts[0] != "" || parts[1] != "o" || parts[2] == "" || parts[3] != "w" || parts[4] == "" {
+		return "", errors.New("ANX_PUBLIC_WEB_UI_WORKSPACE_URL must end in /o/<organization>/w/<workspace>")
+	}
+	return strings.TrimRight(parsed.String(), "/") + "/access/hosts/enroll", nil
 }
 
 func hostRoster(ctx context.Context, opts handlerOptions) (map[string]commandcenter.Summary, error) {
@@ -197,7 +216,11 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			hostError(w, err)
 			return
 		}
-		writeJSON(w, 201, map[string]any{"enrollment_id": out.EnrollmentID, "user_code": out.UserCode, "verification_url_path": out.VerificationURLPath, "poll_token": out.PollToken, "poll_interval_seconds": out.PollIntervalSeconds, "expires_at": out.ExpiresAt})
+		response := map[string]any{"enrollment_id": out.EnrollmentID, "user_code": out.UserCode, "poll_token": out.PollToken, "poll_interval_seconds": out.PollIntervalSeconds, "expires_at": out.ExpiresAt}
+		if opts.hostEnrollmentVerificationURL != "" {
+			response["verification_url"] = opts.hostEnrollmentVerificationURL
+		}
+		writeJSON(w, 201, response)
 		return
 	}
 	if path == "/auth/hosts/enrollments/headless" && r.Method == http.MethodPost {

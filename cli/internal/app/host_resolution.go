@@ -171,7 +171,7 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 			_ = json.Unmarshal(raw, &cached)
 		}
 	}
-	if cached.Token == "" || time.Until(cached.ExpiresAt) < 30*time.Second {
+	if cached.Token == "" || cached.ExpiresAt.Sub(a.clockNow()) < 30*time.Second {
 		signed := time.Now().UTC().Format(time.RFC3339Nano)
 		msg := "anx-host-agent-token|" + host.ID + "|" + host.KeyID + "|" + name + "|" + signed
 		body, _ := json.Marshal(map[string]any{"grant_type": "host_assertion", "host_id": host.ID, "key_id": host.KeyID, "agent_name": name, "signed_at": signed, "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(key, []byte(msg)))})
@@ -199,7 +199,7 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 		if grant.Tokens.AccessToken == "" || grant.Tokens.ExpiresIn < 1 {
 			return cfg, fmt.Errorf("invalid host token response")
 		}
-		cached = tokenCache{Token: grant.Tokens.AccessToken, ExpiresAt: time.Now().Add(time.Duration(grant.Tokens.ExpiresIn) * time.Second), Agent: grant.Agent}
+		cached = tokenCache{Token: grant.Tokens.AccessToken, ExpiresAt: a.clockNow().Add(time.Duration(grant.Tokens.ExpiresIn) * time.Second), Agent: grant.Agent}
 		raw, _ := json.Marshal(cached)
 		tmp, err := os.CreateTemp(dir, ".token-"+name+"-")
 		if err != nil {

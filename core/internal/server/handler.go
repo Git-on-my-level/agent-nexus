@@ -189,6 +189,7 @@ type handlerOptions struct {
 	minCLIVersion                  string
 	recommendedCLIVersion          string
 	cliDownloadURL                 string
+	hostEnrollmentVerificationURL  string
 	coreInstanceID                 string
 	metaCommandsPath               string
 	streamPollInterval             time.Duration
@@ -364,6 +365,12 @@ func WithRecommendedCLIVersion(version string) HandlerOption {
 func WithCLIDownloadURL(downloadURL string) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.cliDownloadURL = strings.TrimSpace(downloadURL)
+	}
+}
+
+func WithHostEnrollmentVerificationURL(verificationURL string) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.hostEnrollmentVerificationURL = verificationURL
 	}
 }
 

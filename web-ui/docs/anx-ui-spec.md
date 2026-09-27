@@ -314,7 +314,7 @@ Access (`/access`, under Settings) is where machines and people get and lose acc
 
 - Lists pending host enrollments (`GET /auth/hosts/enrollments/pending`): requested host name, `os_user@hostname`, requesting IP, agents found on the machine, adopted agent names, age and expiry, and the user code the machine printed, set large.
 - Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on m5-mbp.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
-- The list polls every few seconds while the page is visible, so a request shows up while the operator is looking. Host cards re-read on the roster stream (`liveAgentChanges`). The CLI's verification path (`/access/hosts/enroll`) redirects here (`#host-requests`).
+- The list polls every few seconds while the page is visible, so a request shows up while the operator is looking. Host cards re-read on the roster stream (`liveAgentChanges`). Core may return a full workspace web UI verification URL ending in `/access/hosts/enroll`; that route redirects here (`#host-requests`). Without a configured URL, the CLI tells the operator to open Access → Hosts.
 
 **Hosts:**
 

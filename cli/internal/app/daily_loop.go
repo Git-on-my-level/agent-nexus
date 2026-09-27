@@ -486,18 +486,20 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	} else if done {
 		return &commandResult{Data: result}, nil
 	}
-	authCfg, err := a.cfgWithResolvedAuthToken(waitCtx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	authCfg.Timeout = 0
-	client, err := httpclient.New(authCfg)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "cannot initialize stream client", err)
-	}
+	authCfg := cfg
 	cursor := ""
 	backoff := 250 * time.Millisecond
 	for waitCtx.Err() == nil {
+		var err error
+		authCfg, err = a.cfgWithResolvedAuthToken(waitCtx, authCfg)
+		if err != nil {
+			return nil, err
+		}
+		authCfg.Timeout = 0
+		client, err := httpclient.New(authCfg)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "cannot initialize stream client", err)
+		}
 		path := streamPathForCommand("events.stream", nil, cursor)
 		if threadID != "" {
 			path = streamPathForCommand("events.stream", []queryParam{{name: "thread_id", values: []string{threadID}}}, cursor)

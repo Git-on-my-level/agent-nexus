@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	contractsclient "agent-nexus-contracts-go-client/client"
 
@@ -612,6 +613,12 @@ func (a *App) invokeArtifactAttachmentCreate(ctx context.Context, cfg config.Res
 }
 
 func (a *App) cfgWithResolvedAuthToken(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
+	if cfg.HostID != "" {
+		expiresAt, err := time.Parse(time.RFC3339Nano, cfg.AccessTokenExpiresAt)
+		if err != nil || !a.clockNow().Add(30*time.Second).Before(expiresAt) {
+			return a.resolveHostAgent(ctx, cfg)
+		}
+	}
 	if cfg.AccessToken != "" {
 		return cfg, nil
 	}

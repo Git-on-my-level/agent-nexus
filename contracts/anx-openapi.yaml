@@ -7005,11 +7005,11 @@ components:
       properties:
         enrollment_id: {type: string}
         user_code: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$', description: Independent 40-bit Crockford-style code shown to the human; excludes ambiguous letters.}
-        verification_url_path: {type: string, description: Local path such as `/access/hosts/enroll`; client joins its core origin.}
+        verification_url: {type: string, format: uri, description: Absolute workspace-scoped web UI URL for Access → Hosts, present only when the core deployment config supplies the public web UI workspace URL. Clients must not derive this from the core origin.}
         poll_token: {type: string, description: High-entropy secret shown once.}
         poll_interval_seconds: {type: integer, minimum: 1}
         expires_at: {type: string, format: date-time}
-      required: [enrollment_id, user_code, verification_url_path, poll_token, poll_interval_seconds, expires_at]
+      required: [enrollment_id, user_code, poll_token, poll_interval_seconds, expires_at]
     HostEnrollmentStatusResponse:
       type: object
       additionalProperties: false

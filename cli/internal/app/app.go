@@ -24,7 +24,15 @@ type App struct {
 	ReadFile       func(string) ([]byte, error)
 	StdinIsTTY     func() bool
 	hasOMPAncestor func() bool
+	now            func() time.Time
 	pmTurns        *pmTurnMemory
+}
+
+func (a *App) clockNow() time.Time {
+	if a != nil && a.now != nil {
+		return a.now()
+	}
+	return time.Now()
 }
 
 func isAPICallHelpOnly(remaining []string) bool {

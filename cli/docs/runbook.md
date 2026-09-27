@@ -11,7 +11,7 @@ anx --as codex auth whoami
 anx doctor
 ```
 
-Interactive enrollment prints a user code and verification URL. A human approves the request in Access → Hosts; the CLI polls at the server interval. For unattended hosts, create a one-time enrollment token in the Access page and run `anx host enroll --token <token>`. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
+Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` configured, the full workspace-scoped verification URL. Set that config to the public web UI workspace path, such as `http://127.0.0.1:5291/o/local/w/local`. In hosted deployments, a core API at `https://example.com/ws/acme/main` uses `https://example.com/o/acme/w/main` as its web UI workspace URL. Without it, open Access → Hosts in the workspace web UI and approve the printed code. The CLI polls at the server interval. For unattended hosts, create a one-time enrollment token in the Access page and run `anx host enroll --token <token>`. A host key and record are stored under `~/.config/anx/hosts/<workspace-key>/` with owner-only permissions.
 
 Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
 

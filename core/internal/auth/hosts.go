@@ -155,7 +155,6 @@ type HostEnrollment struct {
 type EnrollmentStart struct {
 	EnrollmentID        string `json:"enrollment_id"`
 	UserCode            string `json:"user_code"`
-	VerificationURLPath string `json:"verification_url_path"`
 	PollToken           string `json:"poll_token"`
 	PollIntervalSeconds int    `json:"poll_interval_seconds"`
 	ExpiresAt           string `json:"expires_at"`
@@ -283,7 +282,7 @@ func (s *Store) StartHostEnrollment(ctx context.Context, in HostEnrollmentInput,
 	if err = tx.Commit(); err != nil {
 		return EnrollmentStart{}, err
 	}
-	return EnrollmentStart{EnrollmentID: id, UserCode: code, VerificationURLPath: "/access/hosts/enroll", PollToken: poll, PollIntervalSeconds: 3, ExpiresAt: expires}, nil
+	return EnrollmentStart{EnrollmentID: id, UserCode: code, PollToken: poll, PollIntervalSeconds: 3, ExpiresAt: expires}, nil
 }
 func readEnrollment(row *sql.Row, admin bool) (HostEnrollment, error) {
 	var e HostEnrollment

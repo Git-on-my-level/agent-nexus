@@ -11,6 +11,10 @@ CORE_PORT="${CORE_PORT:-8000}"
 CORE_BASE_URL="${CORE_BASE_URL:-http://${CORE_HOST}:${CORE_PORT}}"
 CORE_WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT:-${REPO_ROOT}/core/.anx-workspace}"
 WEB_UI_PORT="${WEB_UI_PORT:-5173}"
+# Core returns this workspace-scoped web route to interactive host enrollment.
+# Override it when serving a non-default workspace catalog or public origin.
+ANX_PUBLIC_WEB_UI_WORKSPACE_URL="${ANX_PUBLIC_WEB_UI_WORKSPACE_URL:-http://127.0.0.1:${WEB_UI_PORT}/o/local/w/local}"
+export ANX_PUBLIC_WEB_UI_WORKSPACE_URL
 RESET_DEV_WORKSPACE="${RESET_DEV_WORKSPACE:-1}"
 SEED_CORE="${SEED_CORE:-1}"
 FORCE_SEED="${FORCE_SEED:-0}"

@@ -86,6 +86,7 @@ func main() {
 		blobS3ForcePathStyle        = envBool("ANX_BLOB_S3_FORCE_PATH_STYLE", false)
 		coreVersion                 = envString("ANX_CORE_VERSION", buildinfo.Current)
 		coreBaseURL                 = envString("ANX_CORE_BASE_URL", "")
+		publicWebUIWorkspaceURL     = envString("ANX_PUBLIC_WEB_UI_WORKSPACE_URL", "")
 		apiVersion                  = envString("ANX_API_VERSION", defaultAPIVersion)
 		minCLIVersion               = envString("ANX_MIN_CLI_VERSION", buildinfo.Current)
 		recommendedCLIVersion       = envString("ANX_RECOMMENDED_CLI_VERSION", buildinfo.Current)
@@ -153,6 +154,7 @@ func main() {
 	flag.StringVar(&minCLIVersion, "min-cli-version", minCLIVersion, "minimum compatible CLI version")
 	flag.StringVar(&recommendedCLIVersion, "recommended-cli-version", recommendedCLIVersion, "recommended CLI version")
 	flag.StringVar(&cliDownloadURL, "cli-download-url", cliDownloadURL, "CLI download URL included in compatibility metadata")
+	flag.StringVar(&publicWebUIWorkspaceURL, "public-web-ui-workspace-url", publicWebUIWorkspaceURL, "public workspace-scoped web UI URL used for host enrollment verification")
 	flag.StringVar(&coreInstanceID, "core-instance-id", coreInstanceID, "stable core instance identifier for handshake metadata")
 	flag.StringVar(&metaCommandsPath, "meta-commands-path", metaCommandsPath, "path to generated commands metadata JSON")
 	flag.DurationVar(&streamPollInterval, "stream-poll-interval", streamPollInterval, "poll interval used by SSE stream endpoints")
@@ -192,6 +194,11 @@ func main() {
 
 	if err := auth.ValidateBootstrapTokenForNonDevDeploy(bootstrapToken); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	verificationURL, err := server.HostEnrollmentVerificationURL(publicWebUIWorkspaceURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -539,6 +546,7 @@ func main() {
 		server.WithMinCLIVersion(minCLIVersion),
 		server.WithRecommendedCLIVersion(recommendedCLIVersion),
 		server.WithCLIDownloadURL(cliDownloadURL),
+		server.WithHostEnrollmentVerificationURL(verificationURL),
 		server.WithCoreInstanceID(coreInstanceID),
 		server.WithMetaCommandsPath(metaCommandsPath),
 		server.WithStreamPollInterval(streamPollInterval),
