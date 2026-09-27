@@ -38,15 +38,15 @@ var runtimeHelpManualDocTopics = []runtimeHelpDocTopic{
 	{Path: "onboarding", Kind: "manual", Summary: "Offline quick-start mental model and first command flow."},
 	{Path: "concepts", Kind: "manual", Summary: "Quick guide to the core ANX primitives and when to use each."},
 	{Path: "agent-guide", Kind: "manual", Summary: "Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well."},
-	{Path: "profiles", Kind: "manual", Summary: "CLI profile resolution, same-machine multi-agent setup, and active profile inspection."},
+	{Path: "host identity", Kind: "manual", Summary: "Host enrollment and derived-agent identity resolution."},
 	{Path: "env", Kind: "manual", Summary: "Supported ANX_* environment variables and precedence."},
-	{Path: "config", Kind: "manual", Summary: "CLI config surface: default profile selection, effective settings, and clearing the persisted marker."},
+	{Path: "config", Kind: "manual", Summary: "CLI config surface: effective settings and their sources."},
 	{Path: "agent-bridge", Kind: "manual", Summary: "Install and operate one `anx-agent-bridge` runtime per enrolled host."},
 	{Path: "wake-routing", Kind: "manual", Summary: "How `@name.host` wake routing and host bridge presence work."},
 	{Path: "draft", Kind: "manual", Summary: "Local draft staging, listing, commit, and discard workflow."},
 	{Path: "provenance", Kind: "manual", Summary: "Deterministic provenance walk reference and examples."},
 	{Path: "auth whoami", Kind: "manual", Summary: "Show the enrolled host, derived agent and resolution source."},
-	{Path: "config show", Kind: "manual", Summary: "Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted)."},
+	{Path: "config show", Kind: "manual", Summary: "Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted)."},
 }
 
 func runtimeHelpCatalogSnapshot() runtimeHelpCatalog {
@@ -210,8 +210,8 @@ func canonicalRuntimeHelpDocTopic(path string) string {
 	switch strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(path)), " ")) {
 	case "environment", "environments", "environment variables", "env vars", "env var":
 		return "env"
-	case "profile", "profiles", "config profiles", "configuration profiles":
-		return "profiles"
+	case "host", "hosts", "host identity":
+		return "host identity"
 	case "configuration":
 		return "config"
 	default:

@@ -20,7 +20,7 @@ The CLI is **for agents and automation** (LLM tooling, CI, scripts, integrations
 
 - Map stable command identities to contract-defined API behavior.
 - Optimize for agent and script use: no prompts, no hidden interactivity, and explicit side effects.
-- Preserve deterministic I/O across flags, env vars, profiles, stdin, stdout, stderr, and exit codes.
+- Preserve deterministic I/O across flags, env vars, host credentials, stdin, stdout, stderr, and exit codes.
 - Provide dual output modes: concise **text by default** (direct consumption, including LLM tool output) and strict **`--json` envelopes** for programmatic use (scripts, services, `jq`).
 - Normalize transport and API errors into stable local behavior that orchestrators can reason about.
 
@@ -68,7 +68,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 - Default text output is the preferred agent readback mode. Use JSON for code/script parsing, CI, or `jq`, not as the default way to inspect state.
 - Public refs/handles are the primary identity contract. Board-card text rows lead with the card ref/title and show assignees; backing `thread_ref` or `thread_id` is available in JSON.
 - Remote API failures use the same renderer as success. `error.details.hint` carries supplementary human guidance; runnable repairs belong in `error.next_actions`. `error.details` may include `anx_cli_recovery` with a typed `kind` and fields for the specific repair. Deeper fields under `error.details.parsed` mirror the raw API payload.
-- Usage and command-shape errors must beat profile/config resolution whenever they can be detected without side effects. When adding a command or flag, update `internal/app/command_usage_preflight.go` alongside the real parser/help so agents with multiple local profiles see `invalid_flags` or `unknown_subcommand` instead of a misleading `config_resolution_failed`.
+- Usage and command-shape errors must beat host/config resolution whenever they can be detected without side effects. When adding a command or flag, update `internal/app/command_usage_preflight.go` alongside the real parser/help so unenrolled hosts see `invalid_flags` or `unknown_subcommand` instead of a misleading identity error.
 
 ## What CLI Does Not Own
 
@@ -89,7 +89,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 
 - Shared API or schema changes start in [../contracts/AGENTS.md](../contracts/AGENTS.md).
 - Command behavior changes should preserve command identity, compatibility expectations, and output invariants unless an intentional contract change is being made.
-- Auth, profile, transport, output, and streaming changes should be reviewed for automation safety first, then for default text clarity.
+- Auth, host identity, transport, output, and streaming changes should be reviewed for automation safety first, then for default text clarity.
 - Dogfood-only workflow rules belong in narrower local guides such as [dogfood/pi/AGENTS.md](dogfood/pi/AGENTS.md).
 
 ## Validation

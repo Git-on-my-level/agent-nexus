@@ -33,6 +33,9 @@ func commandSideEffectClass(command string) string {
 	if command == "host enroll" || command == "host exclude" || command == "host include" || command == "runs ingest" {
 		return "remote_coordination_write"
 	}
+	if strings.HasPrefix(command, "host bridge ") {
+		return "remote_coordination_write"
+	}
 	if command == "host enroll --plan" {
 		return "read_only"
 	}
@@ -100,6 +103,9 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	}
 	if command == "host token" {
 		actions = append(actions, action("Check identity", "anx", "auth", "whoami"))
+	}
+	if command == "host bridge check-in" {
+		actions = append(actions, action("Check host", "anx", "host", "status"))
 	}
 	if command == "runs ingest" {
 		if run := asMap(root["run"]); anyString(run["id"]) != "" {

@@ -88,12 +88,12 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	}
 }
 
-func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
+func TestRunMetaDocPrintsHostIdentityAndEnvDocs(t *testing.T) {
 	t.Parallel()
 
-	profiles := runHelpCommand(t, "debug", "meta", "doc", "profiles")
-	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Host identity") {
-		t.Fatalf("expected profiles docs output=%s", profiles)
+	profiles := runHelpCommand(t, "debug", "meta", "doc", "host", "identity")
+	if !strings.Contains(profiles, "## `host identity`") || !strings.Contains(profiles, "Host identity") {
+		t.Fatalf("expected host identity docs output=%s", profiles)
 	}
 	if !strings.Contains(profiles, "anx host enroll --plan") {
 		t.Fatalf("expected precedence guidance output=%s", profiles)
@@ -114,13 +114,13 @@ func TestRunMetaDocsListAndSearch(t *testing.T) {
 	t.Parallel()
 
 	listOutput := runHelpCommand(t, "debug", "meta", "docs", "--list")
-	if !strings.Contains(listOutput, "# ANX Runtime Help Topics") || !strings.Contains(listOutput, "`profiles`") {
+	if !strings.Contains(listOutput, "# ANX Runtime Help Topics") || !strings.Contains(listOutput, "`host identity`") {
 		t.Fatalf("expected topic list output=%s", listOutput)
 	}
 
-	searchOutput := runHelpCommand(t, "debug", "meta", "docs", "--search", "profile")
-	if !strings.Contains(searchOutput, "`profiles`") || !strings.Contains(searchOutput, "`config show`") {
-		t.Fatalf("expected profile search output=%s", searchOutput)
+	searchOutput := runHelpCommand(t, "debug", "meta", "docs", "--search", "identity")
+	if !strings.Contains(searchOutput, "`host identity`") || !strings.Contains(searchOutput, "`auth whoami`") {
+		t.Fatalf("expected identity search output=%s", searchOutput)
 	}
 	if strings.Contains(searchOutput, "## `threads`") {
 		t.Fatalf("expected search index, not full docs output=%s", searchOutput)
@@ -132,7 +132,7 @@ func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"--json", "debug", "meta", "docs", "--list", "--write-dir", t.TempDir()},
-		{"--json", "debug", "meta", "docs", "--search", "profile", "--write-dir", t.TempDir()},
+		{"--json", "debug", "meta", "docs", "--search", "identity", "--write-dir", t.TempDir()},
 	} {
 		stdout := runCLIForTestJSONError(t, t.TempDir(), map[string]string{}, args)
 		if !strings.Contains(stdout, "use --write-dir only with full") {

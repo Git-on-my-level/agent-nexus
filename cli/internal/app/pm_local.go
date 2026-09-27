@@ -660,7 +660,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 				nonRetryableStreak = 0
 				forbiddenStreak++
 				if forbiddenStreak == 1 {
-					a.pmLog("pm serve: claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this profile is %s\n", firstNonEmpty(cfg.Agent, "unknown"))
+					a.pmLog("pm serve: claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this agent is %s\n", firstNonEmpty(cfg.Agent, "unknown"))
 				}
 				if forbiddenStreak >= claimForbiddenLimit {
 					msg := fmt.Sprintf("Claim failed with a forbidden error %d times. Exiting.", claimForbiddenLimit)

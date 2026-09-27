@@ -30,8 +30,14 @@ func TestHostIdentityErrorsOfferNextActions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := New()
-			a.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
-			a.Getenv = func(string) string { return "" }
+			home := t.TempDir()
+			a.UserHomeDir = func() (string, error) { return home, nil }
+			a.Getenv = func(key string) string {
+				if key == "HOME" {
+					return home
+				}
+				return ""
+			}
 			var stdout bytes.Buffer
 			a.Stdout = &stdout
 			if code := a.Run(tc.args); code == 0 {

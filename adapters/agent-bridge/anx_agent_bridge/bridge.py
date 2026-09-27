@@ -117,6 +117,8 @@ class Bridge:
             subscription = [agentctl, "subscribe", "create", "--execution", execution_id,
                             "--destination", "command", "--target", anx_bin,
                             "--arg", "--as", "--arg", runtime.name,
+                            "--arg", "--config-dir", "--arg", str(self.config.config_dir),
+                            "--arg", "--base-url", "--arg", self.config.base_url,
                             "--arg", "runs", "--arg", "ingest"]
             # Subscriptions can bind a preallocated ID before the run exists.
             subprocess.run(subscription, cwd=runtime.cwd, env=env, capture_output=True, text=True, check=True)

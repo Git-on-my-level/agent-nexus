@@ -53,12 +53,18 @@ func TestHostHeadlessTokenAndRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ingest := exec.Command(h.cliBin, "--json", "--base-url", h.baseURL, "runs", "ingest")
-	ingest.Env = append(os.Environ(), "HOME="+h.homeDir, "ANX_AS=", "ANX_ACCESS_TOKEN=", "AGENTCTL_ADAPTER=", "AGENTCTL_EXECUTION_ID=", "AGENTCTL_HOST_ID=", "CLAUDECODE=", "CODEX_THREAD_ID=", "CURSOR_AGENT_COMPLETED_PATH=", "AGENT=")
-	ingest.Stdin = bytes.NewReader(callbackJSON)
+	eventPath := filepath.Join(h.homeDir, "callback.json")
+	if err := os.WriteFile(eventPath, callbackJSON, 0600); err != nil {
+		t.Fatal(err)
+	}
+	configDir := filepath.Join(h.homeDir, ".config", "anx")
+	// agentctl command destinations append the event path and expose exactly
+	// PATH and LANG to the child: no HOME, stdin, or run-context variables.
+	ingest := exec.Command(h.cliBin, "--json", "--config-dir", configDir, "runs", "ingest", eventPath)
+	ingest.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
 	callbackOutput, err := ingest.CombinedOutput()
 	if err != nil {
-		t.Fatalf("callback ingest without run environment failed: %v %s", err, callbackOutput)
+		t.Fatalf("callback ingest with agentctl environment failed: %v %s", err, callbackOutput)
 	}
 	var callbackPayload map[string]any
 	if err := json.Unmarshal(callbackOutput, &callbackPayload); err != nil {
@@ -66,6 +72,23 @@ func TestHostHeadlessTokenAndRuns(t *testing.T) {
 	}
 	if mustStringPath(t, callbackPayload, "result.run.id") != runID {
 		t.Fatalf("callback replay changed run")
+	}
+	badPath := filepath.Join(h.homeDir, "bad-callback.json")
+	if err := os.WriteFile(badPath, []byte("{invalid"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bad := exec.Command(h.cliBin, "--json", "--config-dir", configDir, "runs", "ingest", badPath)
+	bad.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	if output, err := bad.CombinedOutput(); err == nil {
+		t.Fatalf("invalid callback succeeded: %s", output)
+	}
+	logPath := filepath.Join(configDir, "logs", "runs-ingest.log")
+	logData, err := os.ReadFile(logPath)
+	if err != nil || !strings.Contains(string(logData), "invalid_envelope") {
+		t.Fatalf("missing safe callback failure log: %v %s", err, logData)
+	}
+	if stat, err := os.Stat(logPath); err != nil || stat.Mode().Perm() != 0600 {
+		t.Fatalf("unsafe callback log: %v %v", stat, err)
 	}
 	h.runCLIExpectOK(t, "codex", nil, "runs", "get", runID)
 	h.runCLIExpectOK(t, "codex", nil, "runs", "list", "--host-id", hostID)

@@ -20,7 +20,7 @@ def executable(path: Path, content: str) -> Path:
 def setup_bridge(tmp_path, monkeypatch, agentctl=False):
     output = tmp_path / "runtime.json"
     runtime = executable(tmp_path / "runtime", "#!/usr/bin/env python3\nimport json,os,sys\nopen(os.environ['WAKE_OUTPUT'],'w').write(json.dumps({'prompt':sys.stdin.read(),'as':os.getenv('ANX_AS'),'adapter':os.getenv('AGENTCTL_ADAPTER')}))\n")
-    anx = executable(tmp_path / "anx", "#!/usr/bin/env python3\nimport json,sys,os\na=sys.argv[2:]\nwith open(os.environ['ANX_CALLS'],'a') as f:f.write(json.dumps(a)+'\\n')\nr={'token':'test-token','expires_at':'tomorrow','agent':{'id':'agent-1','handle':'codex.test-host'}} if a[:2]==['host','token'] else {}\nprint(json.dumps({'ok':True,'result':r}))\n")
+    anx = executable(tmp_path / "anx", "#!/usr/bin/env python3\nimport json,sys,os\na=sys.argv[sys.argv.index('host'):]\nwith open(os.environ['ANX_CALLS'],'a') as f:f.write(json.dumps(a)+'\\n')\nr={'token':'test-token','expires_at':'tomorrow','agent':{'id':'agent-1','handle':'codex.test-host'}} if a[:2]==['host','token'] else {}\nprint(json.dumps({'ok':True,'result':r}))\n")
     calls = tmp_path / "calls.jsonl"
     monkeypatch.setenv("ANX_CALLS", str(calls))
     monkeypatch.setenv("WAKE_OUTPUT", str(output))

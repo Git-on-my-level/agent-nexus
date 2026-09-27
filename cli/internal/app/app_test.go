@@ -226,13 +226,7 @@ func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
-	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
-		t.Fatalf("mkdir profiles dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(profilesDir, "agent-a.json"), []byte(`{"base_url":"`+server.URL+`","access_token":"access-token-1","access_token_expires_at":"2099-01-01T00:00:00Z"}`), 0o600); err != nil {
-		t.Fatalf("write profile: %v", err)
-	}
+	writeDerivedAgentFixture(t, home, "agent-a", `{"base_url":"`+server.URL+`","access_token":"access-token-1","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--as", "agent-a", "debug", "meta", "livez"})
 	livezPayload := assertEnvelopeOK(t, livezRaw)
@@ -240,7 +234,7 @@ func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 		t.Fatalf("unexpected livez envelope: %#v", livezPayload)
 	}
 
-	opsRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--as", "agent-a", "debug", "meta", "ops", "health"})
+	opsRaw := runCLIForTest(t, home, map[string]string{"ANX_ACCESS_TOKEN": "access-token-1"}, nil, []string{"--json", "--as", "agent-a", "debug", "meta", "ops", "health"})
 	opsPayload := assertEnvelopeOK(t, opsRaw)
 	if got := anyStringValue(opsPayload["command"]); got != "debug meta ops health" {
 		t.Fatalf("unexpected ops health envelope: %#v", opsPayload)

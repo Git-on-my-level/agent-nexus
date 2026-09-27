@@ -1,14 +1,12 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"agent-nexus-cli/internal/profile"
 )
 
 const (
@@ -18,32 +16,14 @@ const (
 )
 
 type Overrides struct {
-	JSON    *bool
-	BaseURL *string
-	As      *string
-	NoColor *bool
-	Verbose *bool
-	Headers *bool
-	Timeout *time.Duration
-}
-
-type Profile struct {
-	BaseURL              string `json:"base_url"`
-	Timeout              string `json:"timeout"`
-	NoColor              *bool  `json:"no_color,omitempty"`
-	JSON                 *bool  `json:"json,omitempty"`
-	AccessToken          string `json:"access_token"`
-	RefreshToken         string `json:"refresh_token"`
-	TokenType            string `json:"token_type,omitempty"`
-	AccessTokenExpiresAt string `json:"access_token_expires_at,omitempty"`
-	AgentID              string `json:"agent_id,omitempty"`
-	ActorID              string `json:"actor_id,omitempty"`
-	KeyID                string `json:"key_id,omitempty"`
-	Username             string `json:"username,omitempty"`
-	PrivateKeyPath       string `json:"private_key_path,omitempty"`
-	WorkspaceID          string `json:"workspace_id,omitempty"`
-	Revoked              bool   `json:"revoked,omitempty"`
-	CoreInstanceID       string `json:"core_instance_id,omitempty"`
+	JSON      *bool
+	BaseURL   *string
+	As        *string
+	ConfigDir *string
+	NoColor   *bool
+	Verbose   *bool
+	Headers   *bool
+	Timeout   *time.Duration
 }
 
 type Resolved struct {
@@ -51,6 +31,7 @@ type Resolved struct {
 	BaseURL              string
 	Agent                string
 	As                   string
+	ConfigDir            string
 	IdentitySource       string
 	HostID               string
 	HostKeyID            string
@@ -61,25 +42,16 @@ type Resolved struct {
 	Headers              bool
 	Timeout              time.Duration
 	AccessToken          string
-	RefreshToken         string
-	TokenType            string
 	AccessTokenExpiresAt string
 	AgentID              string
 	ActorID              string
-	KeyID                string
 	Username             string
-	PrivateKeyPath       string
-	WorkspaceID          string
-	Revoked              bool
-	CoreInstanceID       string
-	ProfilePath          string
 	Sources              map[string]string
 }
 
 type Environment struct {
 	Getenv      func(string) string
 	UserHomeDir func() (string, error)
-	ReadFile    func(string) ([]byte, error)
 }
 
 func Defaults(overrides Overrides) Resolved {
@@ -94,6 +66,9 @@ func Defaults(overrides Overrides) Resolved {
 	}
 	if overrides.BaseURL != nil && strings.TrimSpace(*overrides.BaseURL) != "" {
 		r.BaseURL = strings.TrimSpace(*overrides.BaseURL)
+	}
+	if overrides.ConfigDir != nil {
+		r.ConfigDir = strings.TrimSpace(*overrides.ConfigDir)
 	}
 
 	if overrides.NoColor != nil {
@@ -116,11 +91,6 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	readFile := env.ReadFile
-	if readFile == nil {
-		readFile = os.ReadFile
-	}
-
 	resolved := Resolved{
 		JSON:    false,
 		BaseURL: DefaultBaseURL,
@@ -148,56 +118,12 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		resolved.As = strings.TrimSpace(*overrides.As)
 		resolved.IdentitySource = "flag:--as"
 	}
-
-	profilePath := strings.TrimSpace(getenv("ANX_PROFILE_PATH"))
-	resolved.ProfilePath = profilePath
-
-	profile := Profile{}
-	profileLoaded := false
-	if profilePath != "" {
-		var err error
-		profile, profileLoaded, err = loadProfile(readFile, profilePath)
-		if err != nil {
-			return Resolved{}, err
-		}
+	resolved.ConfigDir = strings.TrimSpace(getenv("ANX_CONFIG_DIR"))
+	if overrides.ConfigDir != nil {
+		resolved.ConfigDir = strings.TrimSpace(*overrides.ConfigDir)
 	}
-	if profileLoaded {
-		if strings.TrimSpace(profile.BaseURL) != "" {
-			resolved.BaseURL = strings.TrimSpace(profile.BaseURL)
-			resolved.Sources["base_url"] = "profile"
-		}
-		if strings.TrimSpace(profile.Timeout) != "" {
-			dur, err := time.ParseDuration(strings.TrimSpace(profile.Timeout))
-			if err != nil {
-				return Resolved{}, fmt.Errorf("parse profile timeout %q: %w", profile.Timeout, err)
-			}
-			resolved.Timeout = dur
-			resolved.Sources["timeout"] = "profile"
-		}
-		if profile.NoColor != nil {
-			resolved.NoColor = *profile.NoColor
-			resolved.Sources["no_color"] = "profile"
-		}
-		if profile.JSON != nil {
-			resolved.JSON = *profile.JSON
-			resolved.Sources["json"] = "profile"
-		}
-		if strings.TrimSpace(profile.AccessToken) != "" {
-			resolved.AccessToken = strings.TrimSpace(profile.AccessToken)
-		}
-		if strings.TrimSpace(profile.RefreshToken) != "" {
-			resolved.RefreshToken = strings.TrimSpace(profile.RefreshToken)
-		}
-		resolved.TokenType = strings.TrimSpace(profile.TokenType)
-		resolved.AccessTokenExpiresAt = strings.TrimSpace(profile.AccessTokenExpiresAt)
-		resolved.AgentID = strings.TrimSpace(profile.AgentID)
-		resolved.ActorID = strings.TrimSpace(profile.ActorID)
-		resolved.KeyID = strings.TrimSpace(profile.KeyID)
-		resolved.Username = strings.TrimSpace(profile.Username)
-		resolved.PrivateKeyPath = strings.TrimSpace(profile.PrivateKeyPath)
-		resolved.WorkspaceID = strings.TrimSpace(profile.WorkspaceID)
-		resolved.Revoked = profile.Revoked
-		resolved.CoreInstanceID = strings.TrimSpace(profile.CoreInstanceID)
+	if resolved.ConfigDir != "" && (!filepath.IsAbs(resolved.ConfigDir) || filepath.Clean(resolved.ConfigDir) != resolved.ConfigDir) {
+		return Resolved{}, fmt.Errorf("config dir must be an absolute clean path")
 	}
 
 	envBaseURL := strings.TrimSpace(getenv("ANX_BASE_URL"))
@@ -274,23 +200,4 @@ func Resolve(overrides Overrides, env Environment) (Resolved, error) {
 		resolved.Sources["agent"] = resolved.IdentitySource
 	}
 	return resolved, nil
-}
-
-func loadProfile(readFile func(string) ([]byte, error), path string) (Profile, bool, error) {
-	content, err := readFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return Profile{}, false, nil
-		}
-		return Profile{}, false, fmt.Errorf("read profile %s: %w", path, err)
-	}
-	var profile Profile
-	if err := json.Unmarshal(content, &profile); err != nil {
-		return Profile{}, false, fmt.Errorf("parse profile %s: %w", path, err)
-	}
-	return profile, true, nil
-}
-
-func DefaultProfilePath(homeDir string, agent string) string {
-	return profile.ProfilePath(homeDir, agent)
 }

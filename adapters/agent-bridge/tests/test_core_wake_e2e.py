@@ -1,5 +1,6 @@
 """Real core, human-approved host, derived mention, fake runtime (no model)."""
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ from anx_agent_bridge.config import load_config
 
 REPO = Path(__file__).resolve().parents[3]
 CORE = REPO / "core"
+CLI = REPO / "cli"
 PORT = 8093
 BASE = f"http://127.0.0.1:{PORT}"
 
@@ -46,6 +48,10 @@ def test_real_core_host_mention_wakes_stub(tmp_path, monkeypatch, agentctl):
         build = subprocess.run(["go", "build", "-o", str(binary), "./cmd/anx-core"], cwd=CORE,
                                env={**os.environ, "GOCACHE": "/private/tmp/anx-cc-go-cache"}, capture_output=True, text=True)
         assert build.returncode == 0, build.stderr
+        anx = work / "anx"
+        cli_build = subprocess.run(["go", "build", "-o", str(anx), "./cmd/anx"], cwd=CLI,
+                                   env={**os.environ, "GOCACHE": "/private/tmp/anx-cc-go-cache"}, capture_output=True, text=True)
+        assert cli_build.returncode == 0, cli_build.stderr
         (work / "workspace").mkdir()
         (work / "workspace" / ".anx-dev-insecure-auth").touch()
         core_env = {**os.environ, "ANX_PORT": str(PORT), "ANX_WORKSPACE_ROOT": str(work / "workspace"),
@@ -75,34 +81,18 @@ def test_real_core_host_mention_wakes_stub(tmp_path, monkeypatch, agentctl):
                     post(http, f"/auth/hosts/enrollments/{enrollment}/approve", {}, admin)
                     signature = base64.b64encode(private.sign(f"anx-host-enroll-complete|{enrollment}|{poll}".encode())).decode()
                     host = post(http, f"/auth/hosts/enrollments/{enrollment}/complete", {"poll_token":poll, "signature":signature}, status=201)["host"]
-                    monkeypatch.setenv("TEST_CORE", BASE)
-                    monkeypatch.setenv("TEST_HOST_ID", host["id"])
-                    monkeypatch.setenv("TEST_KEY_ID", host["key_id"])
-                    monkeypatch.setenv("TEST_HOST_SEED", base64.b64encode(seed).decode())
-                    fake_anx = executable(work / "anx", '''#!/usr/bin/env python3
-import base64,datetime,hashlib,json,os,sys
-import httpx
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-args=sys.argv[2:]
-key=Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ['TEST_HOST_SEED']))
-host=os.environ['TEST_HOST_ID']; kid=os.environ['TEST_KEY_ID']; base=os.environ['TEST_CORE']
-def sign(value): return base64.b64encode(key.sign(value.encode())).decode()
-def now(): return datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')
-with httpx.Client(base_url=base) as client:
- if args[:2]==['host','token']:
-  name=args[3]; signed=now(); body={'grant_type':'host_assertion','host_id':host,'key_id':kid,'agent_name':name,'signed_at':signed,'signature':sign('anx-host-agent-token|'+host+'|'+kid+'|'+name+'|'+signed)}
-  r=client.post('/auth/token',json=body); result=r.json(); result={'token':result.get('tokens',{}).get('access_token'),'expires_at':now(),'agent':result.get('agent',{})} if r.is_success else result
- else:
-  op=args[2]; instance=args[args.index('--instance-id')+1]; signed=now()
-  if op=='check-in':
-   path='/hosts/'+host+'/bridge/check-in'; kind='bridge-check-in'; body={'bridge_instance_id':instance,'checked_in_at':signed,'expires_at':(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(seconds=180)).isoformat().replace('+00:00','Z')}
-  else:
-   action=args[3]; path='/agent-wakeups/'+action; kind='wakeup-'+action; body={'wakeup_id':args[args.index('--wakeup-id')+1],'bridge_instance_id':instance}
-   if '--error' in args: body['error']=args[args.index('--error')+1]
-  raw=json.dumps(body,separators=(',',':')).encode(); digest=base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).decode().rstrip('='); proof=sign('anx-host-'+kind+'|'+host+'|'+signed+'|'+digest)
-  r=client.post(path,content=raw,headers={'Content-Type':'application/json','X-ANX-Host-Id':host,'X-ANX-Host-Key-Id':kid,'X-ANX-Host-Signed-At':signed,'X-ANX-Host-Signature':proof}); result=r.json()
-print(json.dumps({'ok':r.is_success,'result':result,'error':result.get('error',{}) if not r.is_success else {}}));sys.exit(0 if r.is_success else 5)
-''')
+                    config_dir = work / "anx-config"
+                    workspace_id = host.get("workspace_id", "")
+                    workspace_key = workspace_id if workspace_id and workspace_id[0].isalnum() and all(c.isalnum() or c in "_-" for c in workspace_id) and len(workspace_id) <= 128 else hashlib.sha256(BASE.encode()).hexdigest()[:24]
+                    host_dir = config_dir / "hosts" / workspace_key
+                    host_dir.mkdir(parents=True, mode=0o700)
+                    key_path = host_dir / "host.ed25519"
+                    key_path.write_text(base64.b64encode(seed + public).decode() + "\n")
+                    key_path.chmod(0o600)
+                    record = {"id":host["id"], "key_id":host["key_id"], "slug":host["slug"],
+                              "workspace_id":workspace_id, "base_url":BASE, "private_key_path":str(key_path)}
+                    (host_dir / "host.json").write_text(json.dumps(record))
+                    (host_dir / "host.json").chmod(0o600)
                     output = work / "runtime.json"
                     monkeypatch.setenv("WAKE_OUTPUT", str(output))
                     runtime = executable(work / "runtime", '''#!/usr/bin/env python3
@@ -120,7 +110,7 @@ elif args[0]=='run':
 else:print(json.dumps({'ok':True}))
 ''')
                     config_path = work / "bridge.toml"
-                    config_path.write_text(f'[host]\nbase_url="{BASE}"\nid="{host["id"]}"\nslug="bridge-test"\nanx="{fake_anx}"\nagentctl="{ctl}"\n[agents.codex]\ncommand=["{runtime}"]\ncwd="{work}"\n')
+                    config_path.write_text(f'[host]\nbase_url="{BASE}"\nid="{host["id"]}"\nslug="bridge-test"\nconfig_dir="{config_dir}"\nanx="{anx}"\nagentctl="{ctl}"\n[agents.codex]\ncommand=["{runtime}"]\ncwd="{work}"\n')
                     bridge = Bridge(load_config(config_path))
                     bridge.checkin()  # derives codex, then checks in the host
                     topic = post(http, "/topics", {"actor_id":human["agent"]["actor_id"],"topic":{"title":"Wake topic","summary":"test","owner_refs":[],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["inferred"]}}}, admin, 201)["topic"]

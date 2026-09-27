@@ -41,8 +41,7 @@ func isAPICallHelpOnly(remaining []string) bool {
 
 // isTrailingHelpOnlyInvocation is true when the user only wants subcommand help:
 // a command prefix with no non-help flags, followed by one or more help tokens
-// (for example: inbox respond --help). This avoids requiring a resolvable agent profile
-// on hosts with multiple local profiles.
+// (for example: inbox respond --help). Help must work before host enrollment.
 func isTrailingHelpOnlyInvocation(remaining []string) bool {
 	if len(remaining) == 0 {
 		return false
@@ -129,16 +128,12 @@ func (a *App) Run(args []string) int {
 	resolved, err := config.Resolve(overrides, config.Environment{
 		Getenv:      a.Getenv,
 		UserHomeDir: a.UserHomeDir,
-		ReadFile:    a.ReadFile,
 	})
 	if err != nil {
 		if configLenient {
 			resolved = config.Defaults(overrides)
 		} else {
 			details := map[string]any{"cause": err.Error()}
-			if strings.Contains(err.Error(), "multiple local profiles") {
-				details["reason"] = "ambiguous_agent_profile"
-			}
 			wrapped := errnorm.WithDetails(errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err), details)
 			configErrorCommand := strings.TrimSpace(preflightCommandName)
 			if configErrorCommand == "" {
@@ -264,18 +259,20 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs := newSilentFlagSet("anx")
 	var (
-		jsonFlag    trackedBool
-		baseURLFlag trackedString
-		asFlag      trackedString
-		noColorFlag trackedBool
-		verboseFlag trackedBool
-		headersFlag trackedBool
-		timeoutFlag trackedDuration
-		versionFlag trackedBool
+		jsonFlag      trackedBool
+		baseURLFlag   trackedString
+		asFlag        trackedString
+		configDirFlag trackedString
+		noColorFlag   trackedBool
+		verboseFlag   trackedBool
+		headersFlag   trackedBool
+		timeoutFlag   trackedDuration
+		versionFlag   trackedBool
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
 	fs.Var(&asFlag, "as", "Derived agent name")
+	fs.Var(&configDirFlag, "config-dir", "Absolute ANX config directory")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
 	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
 	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
@@ -299,6 +296,9 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	}
 	if asFlag.set {
 		overrides.As = &asFlag.value
+	}
+	if configDirFlag.set {
+		overrides.ConfigDir = &configDirFlag.value
 	}
 	if noColorFlag.set {
 		overrides.NoColor = &noColorFlag.value
@@ -402,6 +402,13 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			}
 			parsed := strings.TrimSpace(rawValue)
 			overrides.As = &parsed
+		case "config-dir":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.ConfigDir = &parsed
 		case "timeout":
 			rawValue, err := readValue(name)
 			if err != nil {

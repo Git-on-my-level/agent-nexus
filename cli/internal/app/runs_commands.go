@@ -8,7 +8,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
+	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -104,6 +108,69 @@ func runLiveness(value string) string {
 }
 
 func (a *App) runIngest(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
+	if cfg.ConfigDir == "" && strings.TrimSpace(a.Getenv("HOME")) == "" {
+		return nil, errnorm.Local("config_dir_required", "runs ingest needs --config-dir <absolute-path> when HOME is unset")
+	}
+	result, err := a.runIngestInner(ctx, args, cfg)
+	if err != nil {
+		if dir, dirErr := a.configDir(cfg); dirErr == nil {
+			_ = appendRunsIngestError(dir, err)
+		}
+	}
+	return result, err
+}
+
+func appendRunsIngestError(configDir string, runErr error) error {
+	dir := filepath.Join(configDir, "logs")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return err
+	}
+	if st, err := os.Lstat(dir); err != nil || !st.IsDir() || st.Mode().Perm() != 0700 {
+		return fmt.Errorf("unsafe runs ingest log directory")
+	}
+	path := filepath.Join(dir, "runs-ingest.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if stat.Mode().Perm()&0077 != 0 || !stat.Mode().IsRegular() {
+		return fmt.Errorf("unsafe runs ingest log")
+	}
+	code := "error"
+	if normalized := errnorm.Normalize(runErr); normalized != nil && normalized.Code != "" {
+		code = normalized.Code
+	}
+	if !regexp.MustCompile(`^[a-z0-9_]{1,64}$`).MatchString(code) {
+		code = "error"
+	}
+	entry := fmt.Sprintf("%s code=%s\n", time.Now().UTC().Format(time.RFC3339), code)
+	if stat.Size()+int64(len(entry)) > 64*1024 {
+		if err := f.Truncate(0); err != nil {
+			return err
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+	} else if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return err
+	}
+	_, err = io.WriteString(f, entry)
+	return err
+}
+
+func (a *App) runIngestInner(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	var input io.Reader = a.Stdin
 	if len(args) > 1 {
 		return nil, errnorm.Usage("invalid_args", "expected one callback file path or stdin")
@@ -181,8 +248,10 @@ func (a *App) runIngest(ctx context.Context, args []string, cfg config.Resolved)
 	if !agentNamePattern.MatchString(name) {
 		return nil, errnorm.Usage("invalid_adapter", "agentctl adapter cannot be a derived agent name")
 	}
-	cfg.As = name
-	cfg.IdentitySource = "agentctl:envelope"
+	if cfg.As == "" {
+		cfg.As = name
+		cfg.IdentitySource = "agentctl:envelope"
+	}
 	auth, err := a.resolveHostAgent(ctx, cfg)
 	if err != nil {
 		return nil, err

@@ -482,7 +482,7 @@ func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 	if strings.Contains(generated, "\n  auth ") {
 		t.Fatalf("auth should not repeat under Generated Command Groups; output:\n%s", text)
 	}
-	if !strings.Contains(text, "Core Commands:") || !strings.Contains(text, "auth          Manage agent registration") {
+	if !strings.Contains(text, "Core Commands:") || !strings.Contains(text, "auth          Inspect enrolled host") {
 		t.Fatalf("expected auth under Core Commands only; output:\n%s", text)
 	}
 }

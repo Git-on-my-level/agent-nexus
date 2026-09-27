@@ -28,8 +28,7 @@ func isDailyWorkVerb(verb string) bool {
 	return false
 }
 
-// dailyAgent is the only profile identity seam for the daily loop. S5 can replace
-// this with the host assertion resolver without changing any of the verbs.
+// dailyAgent resolves the derived agent through the enrolled host.
 func (a *App) dailyAgent(ctx context.Context, cfg config.Resolved) (map[string]any, map[string]any, error) {
 	if cfg.AgentID == "" {
 		var err error
@@ -40,7 +39,7 @@ func (a *App) dailyAgent(ctx context.Context, cfg config.Resolved) (map[string]a
 	}
 	id := strings.TrimSpace(cfg.AgentID)
 	if id == "" {
-		return nil, nil, errnorm.Usage("identity_unresolved", "select an agent profile for this workspace")
+		return nil, nil, errnorm.Usage("identity_unresolved", "select a derived agent with --as <name>")
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, "agents get", "GET", "/agents/"+url.PathEscape(id), nil)
 	if err != nil {
@@ -222,8 +221,12 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	if len(next) == 0 {
 		next = append(next, []string{"anx", "work", "list"})
 	}
+	resolution := cfg.IdentitySource
+	if resolution == "" {
+		_, resolution, _ = a.identityName(cfg)
+	}
 	result := map[string]any{
-		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": "profile"},
+		"me":               map[string]any{"agent": agent["id"], "handle": agent["handle"], "host": agent["host_slug"], "current_card_ref": agent["current_card_ref"], "identity_resolved_by": resolution},
 		"my_work_by_phase": workByPhase, "my_work_matched": matched, "my_work_returned": min(matched, orientReturnLimit),
 		"work_page_limit": orientPageLimit, "work_has_more": anyString(workBody["next_cursor"]) != "", "work_next_cursor": workBody["next_cursor"],
 		"my_asks_and_answers": ownRequests, "my_asks_matched": askMatched, "my_asks_returned": len(ownRequests), "ask_page_limit": 100,

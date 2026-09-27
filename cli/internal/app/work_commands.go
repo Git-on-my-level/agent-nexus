@@ -82,7 +82,7 @@ func isWorkCommandRoot(root string) bool {
 }
 
 // Parsing is shared by preflight and execution, so malformed requests fail before
-// profile resolution, token refresh, file reads or network activity.
+// identity resolution, token grant, file reads or network activity.
 func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	out := parsedWorkCommand{query: url.Values{}}
 	if len(args) < 2 {
@@ -334,7 +334,7 @@ func workHelpText(topic string) (string, bool) {
 			fmt.Fprintf(&b, "Side effect class: %s\n\n", commandSideEffectClass(topic))
 		}
 	}
-	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.\n\n")
+	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.\n\n")
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
 		if spec.idFlag != "" {

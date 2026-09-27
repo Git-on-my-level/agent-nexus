@@ -25,7 +25,7 @@ func TestAsPrecedenceAndLegacyProfileIgnored(t *testing.T) {
 		return ""
 	}
 	flag := "flag-agent"
-	got, err := Resolve(Overrides{As: &flag}, Environment{Getenv: get, UserHomeDir: func() (string, error) { return home, nil }, ReadFile: os.ReadFile})
+	got, err := Resolve(Overrides{As: &flag}, Environment{Getenv: get, UserHomeDir: func() (string, error) { return home, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,7 @@ class Runtime:
 @dataclass(frozen=True)
 class Config:
     path: Path
+    config_dir: Path
     base_url: str
     host_id: str
     host_slug: str
@@ -44,7 +45,7 @@ def load_config(path: str | Path) -> Config:
     host = data.get("host", {})
     if not isinstance(host, dict):
         raise ValueError("[host] is required")
-    unexpected = set(host) - {"base_url", "id", "slug", "anx", "agentctl", "poll_seconds", "checkin_seconds"}
+    unexpected = set(host) - {"base_url", "id", "slug", "anx", "agentctl", "poll_seconds", "checkin_seconds", "config_dir"}
     if unexpected:
         raise ValueError(f"unknown [host] keys: {sorted(unexpected)}")
     base_url = str(host.get("base_url", "")).rstrip("/")
@@ -86,5 +87,14 @@ def load_config(path: str | Path) -> Config:
     checkin = float(host.get("checkin_seconds", 60))
     if poll <= 0 or not 5 <= checkin <= 240:
         raise ValueError("poll_seconds must be positive; checkin_seconds must be 5..240")
-    return Config(path, base_url, host_id, host_slug, str(host.get("anx", "anx")),
+    config_dir_value = host.get("config_dir") or os.environ.get("ANX_CONFIG_DIR")
+    if not config_dir_value:
+        home = os.environ.get("HOME")
+        if not home:
+            raise ValueError("[host].config_dir or ANX_CONFIG_DIR is required when HOME is absent")
+        config_dir_value = str(Path(home) / ".config" / "anx")
+    config_dir = Path(config_dir_value).expanduser()
+    if not config_dir.is_absolute():
+        raise ValueError("host.config_dir must be absolute")
+    return Config(path, config_dir.resolve(), base_url, host_id, host_slug, str(host.get("anx", "anx")),
                   str(host.get("agentctl", "agentctl")), poll, checkin, runtimes)

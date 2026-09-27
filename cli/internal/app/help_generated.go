@@ -31,7 +31,7 @@ type localHelperTopic struct {
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
-	{Path: "auth", Description: "Register, inspect, and manage auth state"},
+	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
 	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
@@ -81,7 +81,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Topic title."},
 			{Name: "--summary <text>", Description: "Topic summary."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--owner-ref <typed-ref>", Description: "Owner typed ref, repeatable."},
 			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
 			{Name: "--board-ref <typed-ref>", Description: "Linked board typed ref, repeatable."},
@@ -105,7 +105,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--title <text>", Description: "Topic title."},
 			{Name: "--summary <text>", Description: "Topic summary."},
 			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from topics get when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -123,7 +123,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<topic-id>", Description: "Topic id or unique prefix to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the topic."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -144,7 +144,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -160,7 +160,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Topic ref, handle, or id whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
@@ -183,7 +183,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -200,7 +200,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Board title."},
 			{Name: "--summary <text>", Description: "Optional board summary."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--topic <topic-ref-or-handle>", Description: "Primary topic typed ref or handle."},
 			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
 			{Name: "--ref <typed-ref>", Description: "Pinned/related typed ref, repeatable."},
@@ -244,7 +244,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--subject-ref <typed-ref>", Description: "Explicit document subject ref when not using --topic."},
 			{Name: "--title <text>", Description: "Document title for flag-built text docs."},
 			{Name: "--summary <text>", Description: "Optional document summary for list/detail headers."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref (repeatable)."},
 			{Name: "--body-file <path>", Description: "Load Markdown/text content from a local file, or stdin with `-`."},
 			{Name: "--body <text>", Description: "Inline document body text (Markdown/text) when not using --body-file."},
@@ -290,7 +290,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--handle <handle>", Description: "Public handle used as the idempotency key."},
 			{Name: "--body <text>", Description: "Inline body when not passing a path."},
 			{Name: "--body-file <path>", Description: "Load body from a file or stdin with `-`."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -307,7 +307,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--tags <tag>", Description: "Extra tags. `knowledge` is always applied."},
 			{Name: "--hosts <name>", Description: "Host names this knowledge tree applies to."},
 			{Name: "--verified-at <rfc3339>", Description: "When this knowledge tree was last verified."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -325,7 +325,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body <text>", Description: "Comment text."},
 			{Name: "--reply-to <comment-id>", Description: "Parent comment id for a reply."},
 			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -356,7 +356,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Parent comment ref (`event:<handle>`) or id."},
 			{Name: "--body <text>", Description: "Reply text."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -385,7 +385,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
 			{Name: "--body <text>", Description: "Replacement comment text."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent."},
 		},
 	},
 	{
@@ -399,7 +399,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent."},
 		},
 	},
 	{
@@ -443,14 +443,14 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Card summary/body."},
 			{Name: "--column-key <key>", Description: "Accepted for guidance only; use `anx cards move --column <key>` for placement."},
 			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from cards get when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 		},
 	},
 	{
 		Path:        "cards message",
 		Summary:     "Post a message to a Card conversation without hand-authoring event JSON.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, derived agent actor, and payload text.",
 		Composition: "Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.",
 		Examples: []string{
 			"anx cards message card:implement-login --body \"Implemented in 0729e75\"",
@@ -463,7 +463,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -480,7 +480,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
@@ -501,7 +501,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -527,7 +527,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "threads message",
 		Summary:     "Escape hatch: post a message directly to a backing thread.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, derived agent actor, and payload text.",
 		Composition: "Writes directly to a backing thread. Prefer domain commands such as `cards message`, `topics message`, or `docs message` when you are working from a Card, Topic, or Doc.",
 		Examples: []string{
 			"anx threads message <thread-id> --body-file note.md",
@@ -539,7 +539,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -559,7 +559,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -617,7 +617,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Optional short evidence event summary."},
 			{Name: "--resolution <value>", Description: "Resolution value, default done."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -650,7 +650,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Card ref, handle, or id to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the card."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -668,7 +668,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <event-type>", Description: "Repeatable event type filter."},
 			{Name: "--types <csv>", Description: "Comma-separated event types."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
-			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
+			{Name: "--mine", Description: "Resolve to the resolved agent actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
 			{Name: "--max <n>", Description: "Alias for --max-events."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output (non-JSON)."},
@@ -720,7 +720,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
 			{Name: "--summary <text>", Description: "Optional attachment summary."},
 			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON artifact create body from file; cannot be combined with --file."},
 		},
 	},
@@ -739,7 +739,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
 			{Name: "--summary <text>", Description: "Optional attachment summary."},
 			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -842,7 +842,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Document ref, alias, or id to revise."},
 			{Name: "--body-file <path>", Description: "Load revised Markdown/text content from a local file or stdin with `-`."},
 			{Name: "--from-file <path>", Description: "Advanced JSON revision body from a file."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--apply", Description: "Apply immediately, or apply a staged proposal when combined with --proposal-id."},
 			{Name: "--proposal-id <proposal-id>", Description: "Staged proposal id to apply; must be combined with --apply."},
 			{Name: "--propose", Description: "Stage a proposal (default; included for explicitness)."},
@@ -862,7 +862,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Document ref, handle, or id to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the document."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -890,7 +890,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Document ref, alias, or id."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 			{Name: "--include-archived", Description: "Include archived message events."},
@@ -903,7 +903,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "docs message",
 		Summary:     "Post a message to a Document conversation without hand-authoring event JSON.",
 		QuickStart:  "Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, document/thread refs, derived agent actor, and payload text.",
 		Composition: "Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.",
 		Examples: []string{
 			`anx docs message doc:runbook --body-file note.md`,
@@ -915,7 +915,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -936,7 +936,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -990,8 +990,8 @@ Core Commands:
   update        Replace the installed CLI binary with the recommended or requested release
   concepts      Explain the core ANX primitives and when to use them
   bridge        Install, manage, and inspect the Python wake-routing bridge runtime
-  auth          Manage agent registration, profile auth, and token lifecycle
-  config        Inspect effective CLI config and set the active profile (base URL, agent)
+  auth          Inspect enrolled host and derived-agent identity
+  config        Inspect effective CLI config (base URL and derived agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
   install       Install local ANX helper artifacts, including the opinionated agent skill
   draft         Stage write requests locally and commit them later
@@ -1042,6 +1042,7 @@ Global Flags:
   --json
   --base-url <url>
   --as <name>
+  --config-dir <absolute-path>
   --no-color
   --verbose
   --headers
@@ -1114,8 +1115,8 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
 		return conceptsGuideText() + "\n", true
 	}
-	if topic == "profiles" {
-		return profilesDocText() + "\n", true
+	if topic == "host identity" {
+		return hostIdentityDocText() + "\n", true
 	}
 	if topic == "env" {
 		return envDocText() + "\n", true
@@ -1159,7 +1160,7 @@ Examples:
 	if topic == "notifications" {
 		return strings.TrimSpace(`Agent notification surface
 
-Use this group to inspect and clear durable wake notifications for the active agent profile.
+Use this group to inspect and clear durable wake notifications for the resolved derived agent.
 
 Core commands:
   notifications list       List queued notifications, usually with --status unread.
@@ -1631,7 +1632,7 @@ func formatGlobalFlagUsage(topic string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
 func formatInputSchemaBlock(cmd registry.Command) string {
@@ -1738,7 +1739,7 @@ func fieldHelpText(commandID string, name string) string {
 	case name == "if_board_updated_at":
 		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response."
 	case name == "actor_id" && commandID == "boards.cards.batch_add":
-		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
+		return "Defaults from the resolved derived agent when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision" && strings.HasPrefix(commandID, "cards."):
@@ -1840,7 +1841,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 	case "inbox.list":
 		return strings.TrimSpace(`View scoping:
   - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
-  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
+  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved agent, username, and actor_id.
   - Switch perspective with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + ` before reading or acting.
 
 Inbox kinds:
@@ -1853,7 +1854,7 @@ Inbox kinds:
   --response-text <text>  Freeform response text.
   --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
-  --actor-id <id>         Actor id (` + "`me`" + ` uses the active profile's actor when configured).
+  --actor-id <id>         Actor id (` + "`me`" + ` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
   Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, ` + "`outcome`" + `, optional fields).`)
@@ -1861,7 +1862,7 @@ Inbox kinds:
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
   - Board target: a single positional ` + "`<board-ref-or-handle>`" + ` before flags (preferred), or ` + "`--board-id <board-ref-or-handle>`" + ` for compatibility.
-  - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
+  - ` + "`actor_id`" + ` defaults from the resolved agent when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
   - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
 
 Agent tip: run ` + "`anx boards get <board-ref-or-handle> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)

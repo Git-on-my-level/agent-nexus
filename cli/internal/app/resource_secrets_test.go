@@ -68,7 +68,7 @@ func TestSecretCreateAndUpdateRequireExplicitStdin(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	tests := []struct {
 		name    string
@@ -127,8 +127,8 @@ func TestSecretCommandMachineIdentities(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	tests := []struct {
 		name          string
@@ -189,7 +189,7 @@ func TestSecretGetRevealEnvelopeCommandID(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{"--json", "secret", "get", "--reveal", "KEY"})
 	payload := assertEnvelopeOK(t, raw)
@@ -220,7 +220,7 @@ func TestSecretGetRevealErrorEnvelopeCommandID(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{"--json", "secret", "get", "--reveal", "KEY"})
 	payload := assertEnvelopeError(t, raw)
@@ -249,7 +249,7 @@ func TestSecretUpdateEnvelopeCommandID(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, strings.NewReader("new-val\n"), []string{"--json", "secret", "update", "--from-stdin", "KEY"})
 	payload := assertEnvelopeOK(t, raw)
@@ -290,7 +290,7 @@ func TestSecretCreateAndUpdateFromStdin(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"`+server.URL+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, strings.NewReader("create-secret\n"), []string{
 		"--json", "secret", "create", "--from-stdin", "--description", "API key", "OPENAI_API_KEY",

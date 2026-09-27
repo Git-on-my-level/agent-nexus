@@ -1,7 +1,6 @@
 package app
 
 import (
-	"agent-nexus-cli/internal/profile"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -14,18 +13,19 @@ import (
 func dailyTestApp(t *testing.T, serverURL string) (*App, *bytes.Buffer) {
 	t.Helper()
 	home := t.TempDir()
-	writeAgentProfile(t, home, "worker", `{"agent_id":"agent-1","actor_id":"actor-1","username":"worker.host","access_token":"test-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "worker", `{"agent_id":"agent-1","actor_id":"actor-1","username":"worker.host","access_token":"test-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	_ = runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", serverURL, "--as", "worker", "version"})
 	out := &bytes.Buffer{}
 	a := New()
 	a.Stdout = out
 	a.Stderr = &bytes.Buffer{}
 	a.UserHomeDir = func() (string, error) { return home, nil }
 	a.Getenv = func(k string) string {
+		if k == "HOME" {
+			return home
+		}
 		if k == "ANX_BASE_URL" {
 			return serverURL
-		}
-		if k == "ANX_PROFILE_PATH" {
-			return profile.ProfilePath(home, "worker")
 		}
 		return ""
 	}

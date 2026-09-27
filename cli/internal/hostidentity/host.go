@@ -24,7 +24,8 @@ type Host struct {
 	PrivateKeyPath string `json:"private_key_path"`
 }
 
-func Root(home string) string { return filepath.Join(home, ".config", "anx", "hosts") }
+func Root(home string) string        { return RootAt(filepath.Join(home, ".config", "anx")) }
+func RootAt(configDir string) string { return filepath.Join(configDir, "hosts") }
 
 func WorkspaceKey(workspaceID, baseURL string) string {
 	if workspaceIDPattern.MatchString(workspaceID) {
@@ -35,11 +36,17 @@ func WorkspaceKey(workspaceID, baseURL string) string {
 }
 
 func Dir(home, workspaceID, baseURL string) string {
-	return filepath.Join(Root(home), WorkspaceKey(workspaceID, baseURL))
+	return DirAt(filepath.Join(home, ".config", "anx"), workspaceID, baseURL)
+}
+func DirAt(configDir, workspaceID, baseURL string) string {
+	return filepath.Join(RootAt(configDir), WorkspaceKey(workspaceID, baseURL))
 }
 
 func Save(home string, host Host, key ed25519.PrivateKey) error {
-	dir := Dir(home, host.WorkspaceID, host.BaseURL)
+	return SaveAt(filepath.Join(home, ".config", "anx"), host, key)
+}
+func SaveAt(configDir string, host Host, key ed25519.PrivateKey) error {
+	dir := DirAt(configDir, host.WorkspaceID, host.BaseURL)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
@@ -74,7 +81,10 @@ func Save(home string, host Host, key ed25519.PrivateKey) error {
 }
 
 func Load(home, baseURL string) (Host, bool, error) {
-	dirs, err := os.ReadDir(Root(home))
+	return LoadAt(filepath.Join(home, ".config", "anx"), baseURL)
+}
+func LoadAt(configDir, baseURL string) (Host, bool, error) {
+	dirs, err := os.ReadDir(RootAt(configDir))
 	if os.IsNotExist(err) {
 		return Host{}, false, nil
 	}
@@ -86,7 +96,7 @@ func Load(home, baseURL string) (Host, bool, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		dir := filepath.Join(Root(home), entry.Name())
+		dir := filepath.Join(RootAt(configDir), entry.Name())
 		data, err := os.ReadFile(filepath.Join(dir, "host.json"))
 		if os.IsNotExist(err) {
 			continue
@@ -98,7 +108,7 @@ func Load(home, baseURL string) (Host, bool, error) {
 		if err := json.Unmarshal(data, &h); err != nil {
 			return Host{}, false, fmt.Errorf("decode host %s: %w", dir, err)
 		}
-		if strings.TrimRight(h.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
+		if baseURL != "" && strings.TrimRight(h.BaseURL, "/") != strings.TrimRight(baseURL, "/") {
 			continue
 		}
 		if found.ID != "" {

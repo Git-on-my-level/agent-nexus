@@ -499,7 +499,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
@@ -526,7 +526,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	}
 
 	if got := strings.TrimSpace(anyStringValue(captured["actor_id"])); got != "actor_asker" {
-		t.Fatalf("expected actor_id from profile, got %#v", captured)
+		t.Fatalf("expected actor_id from derived agent, got %#v", captured)
 	}
 	event, _ := captured["event"].(map[string]any)
 	if got := strings.TrimSpace(anyStringValue(event["type"])); got != "human_attention_requested" {
@@ -589,7 +589,7 @@ func TestHumanAskCommandResolvesThreadIDFromTopicSubjectRef(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-a",
@@ -675,7 +675,7 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--as", "agent-a", "debug", "inbox", "get"})
 	payload := assertEnvelopeOK(t, raw)
 	if got := anyStringValue(payload["command"]); got != "debug inbox list" {
@@ -867,7 +867,7 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -878,8 +878,8 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 	payload := assertEnvelopeOK(t, raw)
 	data, _ := payload["result"].(map[string]any)
 	viewingAs, _ := data["viewing_as"].(map[string]any)
-	if got := anyStringValue(viewingAs["profile"]); got != "agent-a" {
-		t.Fatalf("expected viewing_as profile agent-a, got %#v", data)
+	if got := anyStringValue(viewingAs["agent"]); got != "agent-a" {
+		t.Fatalf("expected viewing_as agent agent-a, got %#v", data)
 	}
 	if got := anyStringValue(viewingAs["username"]); got != "agent.alpha" {
 		t.Fatalf("expected viewing_as username agent.alpha, got %#v", data)
@@ -900,7 +900,7 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 		"--as", "agent-a",
 		"debug", "inbox", "list",
 	})
-	if !strings.Contains(textOut, "result.viewing_as.profile=agent-a") || !strings.Contains(textOut, "result.viewing_as.username=agent.alpha") || !strings.Contains(textOut, "result.viewing_as.actor_id=actor_123") {
+	if !strings.Contains(textOut, "result.viewing_as.agent=agent-a") || !strings.Contains(textOut, "result.viewing_as.username=agent.alpha") || !strings.Contains(textOut, "result.viewing_as.actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
 	if strings.Contains(textOut, "category_reference:") || strings.Contains(textOut, "action_needed") {
@@ -1198,7 +1198,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"`+mineActorID+`","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"`+mineActorID+`","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -1408,7 +1408,7 @@ func TestDocsRevisionGetPassesTypedRefsAndHandlesToCore(t *testing.T) {
 	}
 }
 
-func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
+func TestDocsReviseInjectsActorIDFromDerivedAgent(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1427,7 +1427,7 @@ func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
 			t.Fatalf("decode docs revise body: %v body=%s", err, string(body))
 		}
 		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-docs" {
-			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
+			t.Fatalf("expected actor_id from derived agent, got %q body=%s", got, string(body))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"document":{"id":"doc_1","head_revision_id":"rev_2"},"revision":{"revision_id":"rev_2","revision_number":2}}`))
@@ -1435,7 +1435,7 @@ func TestDocsReviseInjectsActorIDFromProfile(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":"next","content_type":"text"}`), []string{
 		"--json",
@@ -1635,7 +1635,7 @@ func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.
 	const (
 		documentID   = "doc_message_123456"
 		threadID     = "thread_doc_message_123456"
-		profileActor = "actor_profile_doc_message"
+		derivedActor = "actor_profile_doc_message"
 		eventID      = "event_doc_message_123456"
 	)
 
@@ -1649,7 +1649,7 @@ func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				t.Fatalf("decode docs message body: %v", err)
 			}
-			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"document:" + documentID, "thread:" + threadID}, "Reviewed via domain command.")
+			assertMessagePostedMutation(t, posted, derivedActor, threadID, []string{"document:" + documentID, "thread:" + threadID}, "Reviewed via domain command.")
 			event, _ := posted["event"].(map[string]any)
 			payload, _ := event["payload"].(map[string]any)
 			if got := anyStringValue(payload["kind"]); got != "document_message" {
@@ -1667,7 +1667,7 @@ func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-doc-message", `{"agent":"agent-doc-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-doc-message", `{"agent":"agent-doc-message","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-doc-message",
@@ -1876,7 +1876,7 @@ func TestDocsReviseRejectsNullContentBeforeHTTP(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-docs-null-content", `{"agent":"agent-docs-null-content","actor_id":"actor-docs-null-content","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-null-content", `{"agent":"agent-docs-null-content","actor_id":"actor-docs-null-content","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"if_base_revision":"rev_1","content":null,"content_type":"text"}`), []string{
 		"--json",
 		"--base-url", server.URL,
@@ -1934,7 +1934,7 @@ func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 	if err := os.WriteFile(contentFile, []byte(content), 0o600); err != nil {
 		t.Fatalf("write content file: %v", err)
 	}
-	writeAgentProfile(t, home, "agent-docs-content-file", `{"agent":"agent-docs-content-file","actor_id":"actor-docs-content-file","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-content-file", `{"agent":"agent-docs-content-file","actor_id":"actor-docs-content-file","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -1990,7 +1990,7 @@ func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
 	if err := os.WriteFile(contentFile, []byte("new content\n"), 0o600); err != nil {
 		t.Fatalf("write content file: %v", err)
 	}
-	writeAgentProfile(t, home, "agent-docs-content-only", `{"agent":"agent-docs-content-only","actor_id":"actor-docs-content-only","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-content-only", `{"agent":"agent-docs-content-only","actor_id":"actor-docs-content-only","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -2034,7 +2034,7 @@ func TestDocsRevisePreservesStructuredContentInDiff(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-docs-structured", `{"agent":"agent-docs-structured","actor_id":"actor-docs-structured","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-structured", `{"agent":"agent-docs-structured","actor_id":"actor-docs-structured","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{
 		"if_base_revision":"rev_1",
@@ -2091,7 +2091,7 @@ func TestDocsReviseTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-docs-text-fallback", `{"agent":"agent-docs-text-fallback","actor_id":"actor-docs-text-fallback","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-text-fallback", `{"agent":"agent-docs-text-fallback","actor_id":"actor-docs-text-fallback","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{
 		"if_base_revision":"rev_1",
@@ -2784,7 +2784,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 		revisionID2  = "card_rev_cards_workflow_2"
 		cardUpdated  = "2026-04-20T00:00:00Z"
 		boardUpdated = "2026-04-20T00:05:00Z"
-		profileActor = "actor_cards_profile"
+		derivedActor = "actor_cards_profile"
 	)
 
 	var createSeen, reviseSeen, historySeen, revisionGetSeen, assignSeen, moveSeen, resolveSeen, reopenSeen bool
@@ -2799,8 +2799,8 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			if got := anyStringValue(payload["board_id"]); got != boardID {
 				t.Fatalf("expected board_id %q, got %#v", boardID, payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected derived agent actor_id %q, got %#v", derivedActor, payload)
 			}
 			card, _ := payload["card"].(map[string]any)
 			if got := anyStringValue(card["title"]); got != "Implement login" {
@@ -2833,8 +2833,8 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			if got := anyStringValue(payload["if_base_revision"]); got != revisionID {
 				t.Fatalf("expected discovered base revision %q, got %#v", revisionID, payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected derived agent actor_id %q, got %#v", derivedActor, payload)
 			}
 			revision, _ := payload["revision"].(map[string]any)
 			if got := anyStringValue(revision["summary"]); got != "Revised card body" {
@@ -2850,8 +2850,8 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			if got := anyStringValue(payload["if_updated_at"]); got != cardUpdated {
 				t.Fatalf("expected discovered card token %q, got %#v", cardUpdated, payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected derived agent actor_id %q, got %#v", derivedActor, payload)
 			}
 			patch, _ := payload["patch"].(map[string]any)
 			switch {
@@ -2869,8 +2869,8 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 			if got := anyStringValue(payload["if_board_updated_at"]); got != boardUpdated {
 				t.Fatalf("expected discovered board token %q, got %#v", boardUpdated, payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected derived agent actor_id %q, got %#v", derivedActor, payload)
 			}
 			switch anyStringValue(payload["column_key"]) {
 			case "review":
@@ -2897,7 +2897,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-cards", `{"agent":"agent-cards","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-cards", `{"agent":"agent-cards","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	cardFile := filepath.Join(home, "card.md")
 	if err := os.WriteFile(cardFile, []byte("Card body from disk\n"), 0o600); err != nil {
 		t.Fatalf("write card file: %v", err)
@@ -3003,7 +3003,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 		eventID      = "event_resolve_body_123456"
 		cardUpdated  = "2026-04-21T00:00:00Z"
 		boardUpdated = "2026-04-21T00:05:00Z"
-		profileActor = "actor_resolve_body"
+		derivedActor = "actor_resolve_body"
 	)
 
 	var postedEvidence, moved bool
@@ -3022,7 +3022,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				t.Fatalf("decode evidence body: %v", err)
 			}
-			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Evidence from disk.")
+			assertMessagePostedMutation(t, posted, derivedActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Evidence from disk.")
 			postedEvidence = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `"}}`))
@@ -3050,7 +3050,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-resolve-body", `{"agent":"agent-resolve-body","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-resolve-body", `{"agent":"agent-resolve-body","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	evidenceFile := filepath.Join(home, "evidence.md")
 	if err := os.WriteFile(evidenceFile, []byte("Evidence from disk.\n"), 0o600); err != nil {
 		t.Fatalf("write evidence file: %v", err)
@@ -3078,7 +3078,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 		eventID      = "event_resolve_reason_123456"
 		cardUpdated  = "2026-04-21T01:00:00Z"
 		boardUpdated = "2026-04-21T01:05:00Z"
-		profileActor = "actor_resolve_reason"
+		derivedActor = "actor_resolve_reason"
 	)
 
 	var postedEvidence, moved bool
@@ -3097,7 +3097,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				t.Fatalf("decode evidence body: %v", err)
 			}
-			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Validated in staging.")
+			assertMessagePostedMutation(t, posted, derivedActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Validated in staging.")
 			postedEvidence = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `"}}`))
@@ -3131,7 +3131,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-resolve-reason", `{"agent":"agent-resolve-reason","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-resolve-reason", `{"agent":"agent-resolve-reason","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-resolve-reason",
@@ -3148,7 +3148,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 func TestCardsResolveWithoutEvidenceFlagsRejected(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-resolve-empty", `{"agent":"agent-resolve-empty","actor_id":"actor","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-resolve-empty", `{"agent":"agent-resolve-empty","actor_id":"actor","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-resolve-empty",
 		"cards", "resolve", "card:foo",
@@ -3170,7 +3170,7 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 		cardID       = "card_move_file_column_123456"
 		boardID      = "board_move_file_column_123456"
 		boardUpdated = "2026-04-21T02:05:00Z"
-		profileActor = "actor_move_file_column"
+		derivedActor = "actor_move_file_column"
 	)
 
 	var moved bool
@@ -3192,8 +3192,8 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 			if got := anyStringValue(payload["if_board_updated_at"]); got != boardUpdated {
 				t.Fatalf("expected discovered board token %q, got %#v", boardUpdated, payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected profile actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected derived agent actor_id %q, got %#v", derivedActor, payload)
 			}
 			moved = true
 			_, _ = w.Write([]byte(`{"board":{"id":"` + boardID + `"},"card":{"id":"` + cardID + `","board_id":"` + boardID + `","column_key":"done"}}`))
@@ -3204,7 +3204,7 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-move-file-column", `{"agent":"agent-move-file-column","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-move-file-column", `{"agent":"agent-move-file-column","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	bodyFile := filepath.Join(home, "move.json")
 	if err := os.WriteFile(bodyFile, []byte(`{"column_key":"review"}`), 0o600); err != nil {
 		t.Fatalf("write move body: %v", err)
@@ -3228,11 +3228,11 @@ func TestCardsMoveDryRunSurfacesFlagOverlay(t *testing.T) {
 	const (
 		cardID       = "card_move_dry_overlay_123456"
 		boardUpdated = "2026-04-21T02:05:00Z"
-		profileActor = "actor_move_dry_overlay"
+		derivedActor = "actor_move_dry_overlay"
 	)
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-move-dry-overlay", `{"agent":"agent-move-dry-overlay","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-move-dry-overlay", `{"agent":"agent-move-dry-overlay","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	bodyFile := filepath.Join(home, "move.json")
 	bodyJSON := `{"column_key":"review","if_board_updated_at":"` + boardUpdated + `"}`
 	if err := os.WriteFile(bodyFile, []byte(bodyJSON), 0o600); err != nil {
@@ -3298,7 +3298,7 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 			t.Run(spec.resource+"_"+verb, func(t *testing.T) {
 				t.Parallel()
 				home := t.TempDir()
-				writeAgentProfile(t, home, "agent-lifecycle-matrix", `{"agent":"agent-lifecycle-matrix","actor_id":"actor_matrix_prof","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				writeDerivedAgentFixture(t, home, "agent-lifecycle-matrix", `{"agent":"agent-lifecycle-matrix","actor_id":"actor_matrix_prof","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 				base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-lifecycle-matrix"}
 				id := lifecycleMatrixSampleID(spec.resource)
 				prefix := append([]string(nil), base...)
@@ -3362,7 +3362,7 @@ func TestDocsTrashRequiresReasonFlagOrJSONBody(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-docs-trash", `{"agent":"agent-docs-trash","actor_id":"actor_docs_trash","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-docs-trash", `{"agent":"agent-docs-trash","actor_id":"actor_docs_trash","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--as", "agent-docs-trash", "docs", "trash", "document_docs_trash_1"}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(base, "--reason", "superseded", "--dry-run")))
@@ -3394,7 +3394,7 @@ func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 
 	const (
 		threadID     = "thread_topic_alias_123456"
-		profileActor = "actor_topic_alias"
+		derivedActor = "actor_topic_alias"
 	)
 
 	var posted bool
@@ -3406,7 +3406,7 @@ func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode topics thread message body: %v", err)
 			}
-			assertMessagePostedMutation(t, payload, profileActor, threadID, []string{"thread:" + threadID}, "Thread-scoped reply path.")
+			assertMessagePostedMutation(t, payload, derivedActor, threadID, []string{"thread:" + threadID}, "Thread-scoped reply path.")
 			posted = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"event_topic_alias_123456","type":"message_posted","thread_id":"` + threadID + `"}}`))
@@ -3417,7 +3417,7 @@ func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-topic-alias", `{"agent":"agent-topic-alias","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-topic-alias", `{"agent":"agent-topic-alias","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-topic-alias",
@@ -3438,7 +3438,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 		topicID      = "topic_cli_model_123456"
 		topicThread  = "thread_topic_cli_model_123456"
 		boardID      = "board_cli_model_123456"
-		profileActor = "actor_cli_model_profile"
+		derivedActor = "actor_cli_model_profile"
 	)
 
 	var topicCreateSeen, boardCreateSeen, messageSeen bool
@@ -3489,7 +3489,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 			if got := anyStringValue(event["type"]); got != "message_posted" {
 				t.Fatalf("expected message_posted, got %#v", payload)
 			}
-			assertMessagePostedMutation(t, payload, profileActor, topicThread, []string{"topic:" + topicID, "thread:" + topicThread}, "Discussion from disk")
+			assertMessagePostedMutation(t, payload, derivedActor, topicThread, []string{"topic:" + topicID, "thread:" + topicThread}, "Discussion from disk")
 			messageSeen = true
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"event_discuss_1","type":"message_posted","thread_id":"` + topicThread + `"}}`))
@@ -3500,7 +3500,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-model", `{"agent":"agent-model","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-model", `{"agent":"agent-model","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	messageFile := filepath.Join(home, "message.md")
 	if err := os.WriteFile(messageFile, []byte("Discussion from disk\n"), 0o600); err != nil {
 		t.Fatalf("write message file: %v", err)
@@ -3533,7 +3533,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 
 	messagePayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-model",
-		"topics", "message", topicID, "--body-file", messageFile, "--actor-id", profileActor,
+		"topics", "message", topicID, "--body-file", messageFile, "--actor-id", derivedActor,
 	}))
 	if got := anyStringValue(messagePayload["command"]); got != "topics message" {
 		t.Fatalf("expected topics message command, got %#v", messagePayload)
@@ -3554,7 +3554,7 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 
 	const (
 		topicID      = "topic_lifecycle_123456"
-		profileActor = "actor_lifecycle_profile"
+		derivedActor = "actor_lifecycle_profile"
 	)
 
 	seen := map[string]bool{}
@@ -3566,8 +3566,8 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode topics archive body: %v", err)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected archive actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected archive actor_id %q, got %#v", derivedActor, payload)
 			}
 			seen["archive"] = true
 			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
@@ -3576,8 +3576,8 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode topics unarchive body: %v", err)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected unarchive actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected unarchive actor_id %q, got %#v", derivedActor, payload)
 			}
 			seen["unarchive"] = true
 			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
@@ -3586,8 +3586,8 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode topics restore body: %v", err)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected restore actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected restore actor_id %q, got %#v", derivedActor, payload)
 			}
 			seen["restore"] = true
 			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
@@ -3599,8 +3599,8 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 			if got := anyStringValue(payload["reason"]); got != "cleanup" {
 				t.Fatalf("expected trash reason, got %#v", payload)
 			}
-			if got := anyStringValue(payload["actor_id"]); got != profileActor {
-				t.Fatalf("expected trash actor_id %q, got %#v", profileActor, payload)
+			if got := anyStringValue(payload["actor_id"]); got != derivedActor {
+				t.Fatalf("expected trash actor_id %q, got %#v", derivedActor, payload)
 			}
 			seen["trash"] = true
 			_, _ = w.Write([]byte(`{"topic":{"id":"` + topicID + `","title":"Lifecycle","updated_at":"2026-05-05T00:00:00Z"}}`))
@@ -3611,7 +3611,7 @@ func TestTopicLifecycleCommandsAvoidRequiredJSONBody(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-lifecycle", `{"agent":"agent-lifecycle","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-lifecycle", `{"agent":"agent-lifecycle","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	for _, args := range [][]string{
 		{"topics", "archive", topicID},
 		{"topics", "unarchive", topicID},
@@ -3637,7 +3637,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 		cardID       = "card_message_123456"
 		boardID      = "board_message_123456"
 		threadID     = "thread_card_message_123456"
-		profileActor = "actor_profile_message"
+		derivedActor = "actor_profile_message"
 		eventID      = "event_message_123456"
 	)
 
@@ -3651,7 +3651,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				t.Fatalf("decode cards message body: %v", err)
 			}
-			assertMessagePostedMutation(t, posted, profileActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Implemented via domain command.")
+			assertMessagePostedMutation(t, posted, derivedActor, threadID, []string{"card:" + cardID, "thread:" + threadID, "board:" + boardID}, "Implemented via domain command.")
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"event":{"id":"` + eventID + `","type":"message_posted","thread_id":"` + threadID + `","refs":["card:` + cardID + `","thread:` + threadID + `","board:` + boardID + `"]}}`))
 		default:
@@ -3661,7 +3661,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-message", `{"agent":"agent-message","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-message", `{"agent":"agent-message","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-message",
@@ -3750,7 +3750,7 @@ func TestCardsReplyRequiresTargetMessageOnCardThread(t *testing.T) {
 	const (
 		cardID       = "card_reply_123456"
 		threadID     = "thread_reply_123456"
-		profileActor = "actor_profile_reply"
+		derivedActor = "actor_profile_reply"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3782,7 +3782,7 @@ func TestCardsReplyRequiresTargetMessageOnCardThread(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-reply", `{"agent":"agent-reply","actor_id":"`+profileActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-reply", `{"agent":"agent-reply","actor_id":"`+derivedActor+`","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "--as", "agent-reply",
 		"cards", "reply", cardID, "--to", "event_parent_123456", "--body", "Reply from CLI",
@@ -3812,8 +3812,8 @@ func TestMessageCommandInvalidFlagsBeatAmbiguousProfileResolution(t *testing.T) 
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json",
@@ -3887,8 +3887,8 @@ func TestPreConfigUsagePreflightRejectsStaleManualResourceFlags(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-b", `{"agent":"agent-b","actor_id":"actor_b","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	tests := []struct {
 		name    string
@@ -4736,7 +4736,7 @@ func TestNotificationsReadPassesWakeupIDToCoreWithoutArtifactListFallback(t *tes
 	}
 }
 
-func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
+func TestInboxRespondActorIDMeAliasFromDerivedAgent(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -4753,7 +4753,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 			t.Fatalf("expected inbox_item_id in path only, got body=%s", string(body))
 		}
 		if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != "actor-profile-1" {
-			t.Fatalf("expected actor_id from profile, got %q body=%s", got, string(body))
+			t.Fatalf("expected actor_id from derived agent, got %q body=%s", got, string(body))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -4762,7 +4762,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor-profile-1","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor-profile-1","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -4835,7 +4835,7 @@ func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor-a1","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor-a1","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, failingStdinReader{}, []string{
 		"--json",
@@ -4874,11 +4874,11 @@ func TestInboxRespondRequiresResponseText(t *testing.T) {
 	}
 }
 
-func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
+func TestInboxRespondActorIDMeRequiresDerivedAgentActorID(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{}`)
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
@@ -4899,14 +4899,14 @@ func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 	}
 }
 
-func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
+func TestBoardCardsCreateBatchActorIDFromDerivedAgentAndFlagOverrides(t *testing.T) {
 	t.Parallel()
 
 	const boardID = "board_batch_test_123"
-	const profileActor = "actor_batch_profile"
+	const derivedActor = "actor_batch_profile"
 	const flagActor = "actor_batch_flag"
 
-	t.Run("profile_defaults_actor_id", func(t *testing.T) {
+	t.Run("derived_agent_defaults_actor_id", func(t *testing.T) {
 		t.Parallel()
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -4919,8 +4919,8 @@ func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
 			if err := json.Unmarshal(body, &payload); err != nil {
 				t.Fatalf("decode batch body: %v", err)
 			}
-			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != profileActor {
-				t.Fatalf("expected actor_id %q, got %q body=%s", profileActor, got, string(body))
+			if got := strings.TrimSpace(anyStringValue(payload["actor_id"])); got != derivedActor {
+				t.Fatalf("expected actor_id %q, got %q body=%s", derivedActor, got, string(body))
 			}
 			items, _ := payload["items"].([]any)
 			if len(items) != 1 {
@@ -4933,7 +4933,7 @@ func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
 		defer server.Close()
 
 		home := t.TempDir()
-		writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+profileActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+		writeDerivedAgentFixture(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+derivedActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 		stdin := strings.NewReader(`{"items":[{"title":"A"}]}`)
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
@@ -4972,7 +4972,7 @@ func TestBoardCardsCreateBatchActorIDFromProfileAndFlagOverrides(t *testing.T) {
 		defer server.Close()
 
 		home := t.TempDir()
-		writeAgentProfile(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+profileActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+		writeDerivedAgentFixture(t, home, "agent-b", `{"agent":"agent-b","actor_id":"`+derivedActor+`","access_token":"t","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 		stdin := strings.NewReader(`{"items":[{"title":"A"}],"actor_id":"actor_from_json","request_key":"req_json","if_board_updated_at":"1999-01-01T00:00:00Z"}`)
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
@@ -5229,7 +5229,7 @@ func TestArtifactsContentUnknownFlagFailsBeforeNetwork(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","actor_id":"actor_a","base_url":"http://127.0.0.1:1","access_token":"token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json",
@@ -5949,7 +5949,7 @@ func TestDocsCreateAndReviseBodyFileStdinNotConsumedAsJSON(t *testing.T) {
 		defer server.Close()
 
 		home := t.TempDir()
-		writeAgentProfile(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+		writeDerivedAgentFixture(t, home, "agent-docs", `{"agent":"agent-docs","actor_id":"actor-profile-docs","access_token":"token-docs","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 		stdin := strings.NewReader("revised from stdin")
 		raw := runCLIForTest(t, home, map[string]string{}, stdin, []string{
@@ -6042,15 +6042,15 @@ func Example_anxThreadsList() {
 	// Output: anx threads list --state active
 }
 
-func writeAgentProfile(t *testing.T, home string, agent string, profileJSON string) {
+func writeDerivedAgentFixture(t *testing.T, home string, agent string, fixtureJSON string) {
 	t.Helper()
-	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
-	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
-		t.Fatalf("mkdir profiles dir: %v", err)
+	fixtureDir := filepath.Join(home, ".test-derived-agents")
+	if err := os.MkdirAll(fixtureDir, 0o700); err != nil {
+		t.Fatalf("mkdir derived-agent fixtures: %v", err)
 	}
-	profilePath := filepath.Join(profilesDir, agent+".json")
-	if err := os.WriteFile(profilePath, []byte(profileJSON), 0o600); err != nil {
-		t.Fatalf("write profile: %v", err)
+	fixturePath := filepath.Join(fixtureDir, agent+".json")
+	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o600); err != nil {
+		t.Fatalf("write derived-agent fixture: %v", err)
 	}
 }
 

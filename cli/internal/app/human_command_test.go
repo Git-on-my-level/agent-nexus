@@ -129,7 +129,7 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 	path := filepath.Join(t.TempDir(), "req.md")
 	content := "---\ntitle: Confirm launch\ncoverage_hint: thin\nsubject_ref: topic:launch\nthread_id: thr1\nrecommended_response: Ship May 15\nproposals:\n  - Wait for legal\n---\n\nMore detail in markdown.\n"
@@ -233,7 +233,7 @@ func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
 			defer server.Close()
 
 			home := t.TempDir()
-			writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+			writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 
 			raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 				"--json", "--base-url", server.URL, "--as", "agent-a",

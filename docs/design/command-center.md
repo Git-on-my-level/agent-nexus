@@ -279,6 +279,19 @@ routes remain.
 
 (Append dated entries here: decision, reason, files.)
 
+- 2026-09-27 (S5 follow-up): Agentctl command callbacks have no HOME or ANX
+  environment and append one owner-only JSON event file as final argv. The
+  bridge passes absolute `--config-dir` and `--base-url` arguments. Ingest
+  records only bounded failure codes in an owner-only local log and exits
+  nonzero for retries. The CLI no longer loads `ANX_PROFILE_PATH`; old profiles
+  are read only during host adoption. (`cli/internal/app/runs_commands.go`,
+  `cli/internal/config/config.go`, `adapters/agent-bridge/anx_agent_bridge/bridge.py`.)
+- 2026-09-27 (S5 follow-up): The hosted smoke temporarily enables synthetic
+  human passkey bootstrap on a marked local workspace to enroll a host, then
+  restarts core in hosted mode for authorization and workspace assertions.
+  This keeps the hosted checks meaningful without agent registration or invites.
+  (`scripts/hosted-smoke`.)
+
 - 2026-09-27 (S5): The CLI uses the handshake workspace ID as the host key
   directory name when available, otherwise a stable hash of the core URL.
   This permits enrollment against a core whose generated metadata handshake is

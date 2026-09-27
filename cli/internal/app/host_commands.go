@@ -105,11 +105,11 @@ type localAdoption struct {
 }
 
 func (a *App) adoptionCandidates(cfg config.Resolved, exclude map[string]bool) ([]localAdoption, error) {
-	home, err := a.UserHomeDir()
+	configDir, err := a.configDir(cfg)
 	if err != nil {
 		return nil, err
 	}
-	names, err := profile.ListAgents(home)
+	names, err := profile.ListAgentsAt(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (a *App) adoptionCandidates(cfg config.Resolved, exclude map[string]bool) (
 		if exclude[name] {
 			continue
 		}
-		path := profile.ProfilePath(home, name)
+		path := profile.ProfilePathAt(configDir, name)
 		p, ok, err := profile.Load(path)
 		if err != nil {
 			return nil, err
@@ -135,7 +135,7 @@ func (a *App) adoptionCandidates(cfg config.Resolved, exclude map[string]bool) (
 		}
 		keyPath := p.PrivateKeyPath
 		if keyPath == "" {
-			keyPath = profile.KeyPath(home, name)
+			keyPath = profile.KeyPathAt(configDir, name)
 		}
 		result = append(result, localAdoption{Name: agentName, Path: path, KeyPath: keyPath, AgentID: p.AgentID, KeyID: p.KeyID})
 	}
@@ -172,6 +172,8 @@ func (a *App) runHost(ctx context.Context, args []string, cfg config.Resolved) (
 	case "token":
 		r, e := a.hostToken(ctx, args[1:], cfg)
 		return r, "host token", e
+	case "bridge":
+		return a.runHostBridge(ctx, args[1:], cfg)
 	case "status", "list":
 		if len(args) > 1 {
 			return nil, "host " + args[0], errnorm.Usage("invalid_args", "unexpected arguments")
@@ -233,11 +235,11 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 	if plan {
 		return &commandResult{Data: map[string]any{"host_slug": slug, "adopt": names, "exclude": excludes.values, "discovered_adapters": adapters}}, nil
 	}
-	home, err := a.UserHomeDir()
+	configDir, err := a.configDir(cfg)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok, err := hostidentity.Load(home, cfg.BaseURL); err != nil {
+	if _, ok, err := hostidentity.LoadAt(configDir, cfg.BaseURL); err != nil {
 		return nil, err
 	} else if ok {
 		return nil, errnorm.Local("host_already_enrolled", "this workspace already has an enrolled host")
@@ -321,14 +323,14 @@ func (a *App) hostEnroll(ctx context.Context, args []string, cfg config.Resolved
 	if host.ID == "" || host.KeyID == "" {
 		return nil, fmt.Errorf("invalid host enrollment response")
 	}
-	if err := hostidentity.Save(home, host, key); err != nil {
+	if err := hostidentity.SaveAt(configDir, host, key); err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "host_persist_failed", "host enrolled but local key could not be saved", err)
 	}
 	for _, p := range candidates {
 		if err := os.Remove(p.Path); err != nil {
 			return nil, err
 		}
-		rel, relErr := filepath.Rel(profile.KeysDir(home), p.KeyPath)
+		rel, relErr := filepath.Rel(profile.KeysDirAt(configDir), p.KeyPath)
 		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			if err := os.Remove(p.KeyPath); err != nil && !os.IsNotExist(err) {
 				return nil, err
@@ -373,6 +375,9 @@ func (a *App) hostExclusion(ctx context.Context, verb string, args []string, cfg
 	host, err := a.resolvedHost(cfg)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Sources["base_url"] == "default" {
+		cfg.BaseURL = host.BaseURL
 	}
 	key, err := hostidentity.Key(host)
 	if err != nil {

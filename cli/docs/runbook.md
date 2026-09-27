@@ -15,7 +15,9 @@ Interactive enrollment prints a user code and verification URL. A human approves
 
 Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
 
-`--as <name>` or `ANX_AS` chooses a derived agent. Otherwise `anx` checks `agentctl run` context and then known harness markers. `anx auth whoami` shows the host, agent and resolution source. `anx host token --as <name>` prints only the short-lived bearer in text mode; JSON mode returns `{token, expires_at, agent: {id, handle}}` for the bridge. Protect its stdout as a secret.
+`--as <name>` or `ANX_AS` chooses a derived agent. Otherwise `anx` checks `agentctl run` context and then known harness markers. `anx auth whoami` shows the host, agent and resolution source. `anx host token --as <name>` prints only the short-lived bearer in text mode; JSON mode returns `{token, expires_at, agent: {id, handle}}` for the bridge. Protect its stdout as a secret. Use `--config-dir <absolute-path>` or `ANX_CONFIG_DIR` to locate enrolled hosts when `HOME` is absent.
+
+The bridge uses host-signed `anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds <n>` and `anx host bridge wake claim|complete|fail --host-id <id> --wakeup-id <id> --instance-id <id> [--error <text>]`. Its `[host].config_dir` must point to the same enrolled host directory used by `anx`.
 
 Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Revocation is a human auth-admin action in the Access page.
 
@@ -24,10 +26,13 @@ Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host 
 Label launched work with `--label anx.card.<card-slug>`. To subscribe the execution to ANX, use agentctl's `command` destination; it appends an owner-only callback file path to the argv:
 
 ```bash
-agentctl subscribe create --execution "$EXECUTION_ID" --destination command --target "$(command -v anx)" --arg runs --arg ingest --kind all
+ANX_CONFIG_DIR="${ANX_CONFIG_DIR:-$HOME/.config/anx}"
+agentctl subscribe create --execution "$EXECUTION_ID" --destination command --target "$(command -v anx)" \
+  --arg --config-dir --arg "$ANX_CONFIG_DIR" --arg --base-url --arg "$ANX_BASE_URL" \
+  --arg runs --arg ingest --kind all
 ```
 
-`anx runs ingest` also accepts one version 1 callback or execution JSON envelope on stdin. It derives the reporting agent from the envelope adapter because callback processes have no `AGENTCTL_*` environment. Replayed observations converge on the same run. Read with `anx runs list` and `anx runs get <run-id>`.
+agentctl's `command` destination supplies only `PATH=/usr/bin:/bin` and `LANG=C`; it gives no `HOME` or stdin, discards output, and appends the owner-only event file as the final argument. `anx runs ingest [--as <name>] [--config-dir <absolute-path>] [<event-file>]` reads that file, or one version 1 callback/execution JSON envelope on stdin if no path is given. It uses `--as` when supplied, otherwise the envelope adapter. Failures append an error code to the owner-only, bounded `<config-dir>/logs/runs-ingest.log`; successes and tokens are never logged. A failure exits nonzero for agentctl retry. Replayed observations converge on the same run. Read with `anx runs list` and `anx runs get <run-id>`.
 
 ## Integration Scenarios
 
@@ -43,7 +48,7 @@ go test -tags=integration ./integration/...
 These tests:
 
 - build the real `anx` and `anx-core` binaries
-- use an empty temp workspace (fresh `state.sqlite` per run) with an ephemeral `ANX_BOOTSTRAP_TOKEN` so registration matches core auth state
+- use an empty temp workspace (fresh `state.sqlite` per run), bootstrap a human, and enroll a host through a one-time token
 - run multi-step thread/event, docs/conflict, and provenance flows through the real CLI
 
 ## Pi Dogfood
@@ -120,7 +125,7 @@ agent-facing conversation verbs are `topics message/messages/reply`,
 `cards create/message/messages/reply/revise/move/assign/resolve/reopen`. For
 ordinary domain conversation updates, prefer `anx <domain> message <id>
 --body-file update.md`; the CLI fills the backing `thread_id`, domain/thread
-refs, and profile actor. Use raw `events create` only for contract-level writes
+refs, and resolved agent actor. Use raw `events create` only for contract-level writes
 or unusual integrations.
 
 Draft/commit flow:
@@ -308,7 +313,7 @@ source-owned and update through observations. These commands do not mutate the
 external source.
 
 All commands are noninteractive and support the existing single `--json` envelope.
-Malformed flags and resource selectors fail with exit 2 before profile resolution.
+Malformed flags and resource selectors fail with exit 2 before identity resolution.
 API denial/conflict/rate-limit errors retain the shared machine-readable error
 contract. `anx help work` and `anx help work observations submit` work offline.
 
@@ -368,8 +373,8 @@ transport authentication.
 
 The PM is an external agent. Do not call a model in-process. `make serve` seeds
 persona `pm` (`actor-gds-pm` / `dev.pm`) for the default game-dev-studio
-scenario, writes CLI profile homes from registration tokens (no refresh
-exchange), and prints the exact command. Wake routing and
+scenario. Enroll a host and select `--as pm` before starting the PM runner.
+Wake routing and
 `ANX_PM_BRIDGE_ENABLED` are not required.
 
 Export `ZAI_API_KEY` in the shell that launches `pm serve`. The runner does not
@@ -380,8 +385,7 @@ and that variable is unset, the turn fails with a sentence that names
 The harness child receives the **full parent environment**, then `HOME` is
 reset to the login account home from passwd (`user.Current().HomeDir`). That
 is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
-`ANX_AS=pm` applies to the `anx` process (CLI
-profiles), not to the child harness. After a successful claim the runner also
+`ANX_AS=pm` applies to the `anx` process identity, not to the child harness. After a successful claim the runner also
 sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
 `anx pm turns context` send it when `--lease-token` is omitted, so the harness
 does not have to copy the token into `--from-file`. The lease token is in the
@@ -533,7 +537,7 @@ ANX_AS=pm ./cli/anx --as pm pm serve \
 PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
 `--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are
 bound to the current workspace, principal and record kind; do not reuse one after
-switching profiles. Lists do not support server-side project filtering; use
+switching derived agents. Lists do not support server-side project filtering; use
 `work list --project-ref` for project-scoped work queries.
 
 For cross-lane validation only, the real-binary harness accepts

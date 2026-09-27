@@ -575,9 +575,8 @@ func TestHarnessChildEnvRestoresPasswdHomeAndAgent(t *testing.T) {
 
 func TestHarnessChildEnvDoesNotInjectZAIAPIKey(t *testing.T) {
 	got := harnessChildEnv(config.Resolved{
-		Agent:       "pm",
-		BaseURL:     "http://127.0.0.1:8000",
-		ProfilePath: "/tmp/pm.json",
+		Agent:   "pm",
+		BaseURL: "http://127.0.0.1:8000",
 	}, []string{"PATH=/bin"})
 	if envValue(got, "ZAI_API_KEY") != "" {
 		t.Fatal("harness injected ZAI_API_KEY from disk")
@@ -1444,7 +1443,7 @@ func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 		t.Fatalf("claims=%d", claims)
 	}
 	logs := stderr.String()
-	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this profile is maya"
+	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this agent is maya"
 	if !strings.Contains(logs, wantWhy) {
 		t.Fatalf("missing first forbidden explanation: %s", logs)
 	}

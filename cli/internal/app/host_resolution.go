@@ -99,11 +99,15 @@ func ompAncestor() bool {
 }
 
 func (a *App) resolvedHost(cfg config.Resolved) (hostidentity.Host, error) {
-	home, err := a.UserHomeDir()
+	configDir, err := a.configDir(cfg)
 	if err != nil {
 		return hostidentity.Host{}, err
 	}
-	host, ok, err := hostidentity.Load(home, cfg.BaseURL)
+	baseURL := cfg.BaseURL
+	if cfg.Sources["base_url"] == "default" {
+		baseURL = ""
+	}
+	host, ok, err := hostidentity.LoadAt(configDir, baseURL)
 	if err != nil {
 		return hostidentity.Host{}, err
 	}
@@ -111,6 +115,23 @@ func (a *App) resolvedHost(cfg config.Resolved) (hostidentity.Host, error) {
 		return hostidentity.Host{}, errnorm.Local("host_not_enrolled", "host is not enrolled; run anx host enroll")
 	}
 	return host, nil
+}
+
+func (a *App) configDir(cfg config.Resolved) (string, error) {
+	if cfg.ConfigDir != "" {
+		return cfg.ConfigDir, nil
+	}
+	if strings.TrimSpace(a.Getenv("HOME")) == "" {
+		return "", errnorm.Local("config_dir_required", "set --config-dir <absolute-path> or ANX_CONFIG_DIR when HOME is unset")
+	}
+	home, err := a.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	if home == "" {
+		return "", errnorm.Local("config_dir_required", "set --config-dir <absolute-path> or ANX_CONFIG_DIR")
+	}
+	return filepath.Join(home, ".config", "anx"), nil
 }
 
 func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
@@ -124,6 +145,9 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 	host, err := a.resolvedHost(cfg)
 	if err != nil {
 		return cfg, err
+	}
+	if cfg.Sources["base_url"] == "default" {
+		cfg.BaseURL = host.BaseURL
 	}
 	key, err := hostidentity.Key(host)
 	if err != nil {

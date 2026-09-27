@@ -291,9 +291,9 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 		topics := runtimeHelpDocTopics()
 		return &commandResult{Text: RuntimeHelpDocsIndexMarkdown(topics), Data: map[string]any{
 			"markdown": RuntimeHelpDocsIndexMarkdown(topics),
-			"topics": topics,
-			"source": "runtime-help-catalog",
-			"count":  len(topics),
+			"topics":   topics,
+			"source":   "runtime-help-catalog",
+			"count":    len(topics),
 		}}, nil
 	}
 	if strings.TrimSpace(searchFlag.value) != "" {
@@ -304,10 +304,10 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 		}
 		return &commandResult{Text: text, Data: map[string]any{
 			"markdown": text,
-			"query":   strings.TrimSpace(searchFlag.value),
-			"topics":  matches,
-			"source":  "runtime-help-catalog",
-			"matches": len(matches),
+			"query":    strings.TrimSpace(searchFlag.value),
+			"topics":   matches,
+			"source":   "runtime-help-catalog",
+			"matches":  len(matches),
 		}}, nil
 	}
 
@@ -502,7 +502,7 @@ func (a *App) runInstallSkill(args []string) (*commandResult, error) {
 		"Next: read the installed skill, then run `anx workspace summary` before starting durable workspace work.",
 	}, "\n")
 	return &commandResult{Text: text, Data: map[string]any{
-		"text": text,
+		"text":          text,
 		"path":          writtenPath,
 		"content":       content,
 		"written_files": []string{writtenPath},
@@ -530,7 +530,7 @@ Options:
 Examples:
   anx meta docs
   anx meta docs --list
-  anx meta docs --search profile
+  anx meta docs --search identity
   anx meta docs --write-dir ./docs/generated`)
 }
 
@@ -545,7 +545,7 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   anx meta doc agent-guide
-  anx meta doc profiles
+  anx meta doc "host identity"
   anx meta doc env
   anx meta doc "docs trash"`)
 }
