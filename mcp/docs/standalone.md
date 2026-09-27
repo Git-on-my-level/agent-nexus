@@ -1,8 +1,8 @@
 # Standalone anx-mcp
 
 `anx-mcp` is the local/self-hosted MCP server for Agent Nexus. It runs over
-stdio, uses normal workspace-local ANX auth/profile configuration, and calls the
-workspace HTTP API through the shared MCP catalog/executor. It does not contain
+stdio, obtains derived-agent tokens through the enrolled host identity owned by
+the `anx` CLI, and calls the workspace HTTP API through the shared MCP catalog/executor. It does not contain
 hosted OAuth, billing, org, provider-connection, or managed-agent slot logic.
 
 ## Build
@@ -21,46 +21,39 @@ cd agent-nexus/mcp
 go install ./cmd/anx-mcp
 ```
 
-## Select a Workspace Profile
+## Select a Derived Agent
 
-By default `anx-mcp` follows the same local profile shape as the `anx` CLI:
-
-- `~/.config/anx/default-profile`
-- `~/.config/anx/profiles/*.json`
-
-Use an explicit selector when the machine has more than one profile:
+Enroll the machine once, then select the derived agent name for this MCP
+process:
 
 ```bash
-./anx-mcp --profile leo
-./anx-mcp --agent reviewer
-./anx-mcp --profile /path/to/profile.json
+anx host enroll
+./anx-mcp --as reviewer
 ```
 
-For ephemeral CI or local debugging without a saved profile, pass the workspace
-base URL and token directly:
+The MCP process asks the CLI for a short-lived token with
+`anx --json --config-dir <dir> --base-url <url> host token --as <name>`. The
+CLI owns host key handling. Use `--config-dir` or `ANX_CONFIG_DIR` when `HOME`
+is unavailable; the directory must be absolute.
 
 ```bash
-ANX_ACCESS_TOKEN="$TOKEN" ./anx-mcp \
-  --base-url http://127.0.0.1:8000 \
-  --agent leo
+ANX_CONFIG_DIR=/workspace/.config/anx ANX_AS=reviewer ./anx-mcp \
+  --base-url http://127.0.0.1:8000
 ```
 
 Supported overrides:
 
-- `--profile <name-or-path>`
-- `--agent <name>`
+- `--as <name>` / `ANX_AS`
 - `--base-url <url>`
+- `--config-dir <absolute-path>` / `ANX_CONFIG_DIR`
+- `--anx <path>`: CLI executable; defaults to `anx` on `PATH`
 - `--timeout <duration>`
-- `ANX_AGENT`
-- `ANX_PROFILE_PATH`
-- `ANX_BASE_URL`
-- `ANX_ACCESS_TOKEN`
 
 ## Docs knowledge tools
 
-With a workspace profile, `anx-mcp` exposes the same docs search/get/put/comment
+With a derived agent, `anx-mcp` exposes the same docs search/get/put/comment
 commands as the CLI (`docs.search`, `docs.get`, `docs.put`, `docs.comments.*`).
-Authorization is the profile access token. Tag agent-facing docs `knowledge`.
+Authorization uses the short-lived token returned by the host token command. Tag agent-facing docs `knowledge`.
 Git-repo ingest is a CLI composition over `docs.put`:
 
 ```bash
@@ -79,7 +72,7 @@ messages.
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"limit":5}}' |
-  ./anx-mcp --profile leo
+  ./anx-mcp --as leo
 ```
 
 For MCP Inspector:
@@ -87,16 +80,16 @@ For MCP Inspector:
 ```bash
 npx @modelcontextprotocol/inspector \
   --command "$(pwd)/anx-mcp" \
-  --args "--profile leo --log-level info"
+  --args "--as leo --log-level info"
 ```
 
-Without a saved profile:
+With an explicit host config directory:
 
 ```bash
-ANX_ACCESS_TOKEN="$TOKEN" \
+ANX_CONFIG_DIR="$HOME/.config/anx" \
   npx @modelcontextprotocol/inspector \
   --command "$(pwd)/anx-mcp" \
-  --args "--base-url http://127.0.0.1:8000 --agent leo"
+  --args "--base-url http://127.0.0.1:8000 --as leo"
 ```
 
 ## Automated Local Smoke
@@ -109,11 +102,11 @@ stdio, and verifies:
 - one read call: `anx_docs_list`
 - one safe write call: `anx_docs_create`
 
-Run it against an active local profile:
+Run it against an enrolled host and selected agent:
 
 ```bash
 cd agent-nexus/mcp
-ANX_MCP_SMOKE_PROFILE=leo ./scripts/standalone-smoke.mjs
+ANX_MCP_SMOKE_AS=leo ANX_CONFIG_DIR="$HOME/.config/anx" ./scripts/standalone-smoke.mjs
 ```
 
 Or run it with explicit workspace auth:
@@ -121,8 +114,8 @@ Or run it with explicit workspace auth:
 ```bash
 cd agent-nexus/mcp
 ANX_BASE_URL=http://127.0.0.1:8000 \
-ANX_ACCESS_TOKEN="$TOKEN" \
-ANX_AGENT=leo \
+ANX_CONFIG_DIR="$HOME/.config/anx" \
+ANX_AS=leo \
 ./scripts/standalone-smoke.mjs
 ```
 
