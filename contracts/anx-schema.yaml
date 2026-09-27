@@ -34,6 +34,18 @@ enums:
     enum_policy: strict
     values: [unread, read, dismissed]
 
+  run_state:
+    enum_policy: strict
+    values: [starting, running, completed, failed, cancelled, unknown]
+
+  run_liveness:
+    enum_policy: strict
+    values: [alive, stale, unknown]
+
+  derived_agent_state:
+    enum_policy: strict
+    values: [waiting_on_human, working, idle, stale]
+
   board_column_key:
     enum_policy: strict
     values: [backlog, ready, in_progress, blocked, review, done]
@@ -127,6 +139,8 @@ ref_format:
     "card:<handle>": "References a card by public handle"
     "card_revision:<handle>": "References a card content revision by public handle"
     "inbox:<handle>": "References a derived inbox item by public handle"
+    "host:<handle>": "References an enrolled workspace host by slug"
+    "run:<handle>": "References a launcher run by public handle"
     "url:<url>": "References an external URL"
   rules:
     - "All refs MUST start with a typed prefix followed by a colon and value."
@@ -186,6 +200,60 @@ actor:
     created_at: { type: datetime, required: true }
 
 primitives:
+  host:
+    description: Workspace-local machine principal with exactly one active Ed25519 key. No auth-admin capability or bearer session; can sign for its own derived agents and update its own display name/exclusions. Host revocation cascades to all child credentials in one transaction and emits one audit entry.
+    fields:
+      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true }
+      handle: { type: string, required: true }
+      slug: { type: string, required: true, description: "Unique per workspace, lowercase [a-z0-9-], 1-63 chars, no leading/trailing hyphen." }
+      display_name: { type: string, required: true }
+      os_user: { type: string, required: true }
+      hostname: { type: string, required: true }
+      discovered_adapters: { type: "list<string>", required: true }
+      key_id: { type: string, required: true }
+      excluded_names: { type: "list<string>", required: true }
+      created_at: { type: datetime, required: true }
+      revoked_at: { type: datetime, required: false }
+  derived_agent:
+    description: Workspace-local principal for an immutable (host_id, name) pair. Handle is <name>.<host_slug>; actor ID remains stable across exclusion and later re-derivation. Adopted agents keep the existing actor ID and history while old standalone keys and sessions are revoked.
+    fields:
+      id: { type: string, required: true }
+      actor_id: { type: string, required: true }
+      host_id: { type: string, required: true }
+      name: { type: string, required: true, description: "Lowercase [a-z][a-z0-9-]*, 1-32 chars. Known adapter or explicit persona." }
+      handle: { type: string, required: true }
+      created_at: { type: datetime, required: true }
+      revoked_at: { type: datetime, required: false }
+  run:
+    description: Launcher-neutral execution observation; unique immutable key (launcher, host_id, external_id). A terminal run does not complete its card.
+    fields:
+      id: { type: string, required: true }
+      ref: { type: typed_ref, required: true }
+      handle: { type: string, required: true }
+      launcher: { type: string, required: true }
+      external_id: { type: string, required: true }
+      host_id: { type: string, required: true }
+      agent_id: { type: string, required: true }
+      adapter: { type: string, required: true }
+      model: { type: string, required: false }
+      state: { type: string, required: true, ref: enums.run_state }
+      liveness: { type: string, required: true, ref: enums.run_liveness }
+      result_collected: { type: boolean, required: true }
+      labels: { type: "list<string>", required: true }
+      card_ref: { type: typed_ref, required: false }
+      repository: { type: string, required: false }
+      branch: { type: string, required: false }
+      started_at: { type: datetime, required: false }
+      ended_at: { type: datetime, required: false }
+      last_observed_at: { type: datetime, required: true }
+  agent_presence:
+    description: Latest self-reported card and progress; working freshness is 30 minutes, independent from bridge connectivity.
+    fields:
+      agent_id: { type: string, required: true }
+      current_card_ref: { type: typed_ref, required: false }
+      note: { type: string, required: false }
+      observed_at: { type: datetime, required: true }
   event:
     description: >
       Append-only. Never edited or deleted. Corrections are new events.
@@ -872,3 +940,39 @@ conversational_pm:
     - Read-back evidence is required for independent verification.
     - Channel mappings are exact and do not inherit personal credentials or permission.
     - Missing PM provider or action executor returns unavailable, never fabricated success.
+
+command_center:
+  version: "1"
+  enrollment_ttl_seconds: 600
+  assertion_max_skew_seconds: 300
+  presence_fresh_seconds: 1800
+  stale_signal_seconds: 86400
+  adapter_names: [claude, codex, cursor, omp, generic]
+  run_attribution_header: X-ANX-Run-Id
+  run_attribution_format: "agentctl/<external_id>"
+  run_state_order: [unknown, starting, running, terminal]
+  terminal_run_states: [completed, failed, cancelled]
+  agent_state_precedence: [waiting_on_human, working, idle, stale]
+  errors:
+    host_slug_taken: { status: 409, meaning: Requested host slug is already enrolled or reserved. }
+    adoption_proof_invalid: { status: 401, meaning: An adoption key or signature is invalid, revoked, or does not bind this request. }
+    adoption_conflict: { status: 409, meaning: Adoption would duplicate a host/name or re-parent an already derived principal. }
+    enrollment_pending: { status: 409, meaning: Interactive completion preceded human approval. }
+    enrollment_denied: { status: 403, meaning: Human denied this enrollment. }
+    enrollment_expired: { status: 410, meaning: Enrollment expired after ten minutes. }
+    enrollment_consumed: { status: 409, meaning: Enrollment was already completed or otherwise finalized. }
+    host_revoked: { status: 403, meaning: Host or its key was revoked. }
+    agent_excluded: { status: 403, meaning: This host excludes the requested agent name. }
+    agent_handle_taken: { status: 409, meaning: A standalone principal already owns the derived handle; adopt or rename it first. }
+    run_identity_conflict: { status: 409, meaning: Composite run key was previously bound to a different agent or immutable identity. }
+    run_state_regression: { status: 409, meaning: An observation would replace a terminal state or regress a known state. }
+    run_attribution_invalid: { status: 400, meaning: Run header is malformed or does not resolve to the authenticated host and agent. }
+  invariants:
+    - Bootstrap creates only a human passkey principal; host enrollment always requires human approval or a human-created headless token.
+    - Host assertion and adoption proofs are single-use, timestamp or nonce bound, Ed25519 verified, and recorded transactionally against replay.
+    - Excluding a name blocks new token derivation and revokes outstanding derived-agent sessions without deleting its actor or history.
+    - A locally excluded legacy profile is omitted from adoption and remains usable only until revoked; no new standalone agent registration exists.
+    - Host bearer delegation cannot grant auth-admin, issue invites, or act for another host.
+    - Run state is monotonic. Unknown is provisional; terminal states are absorbing. A late running callback cannot replace completed.
+    - Run attribution is resolved from the authenticated agent and its host; an unknown external run creates a provisional unknown-state run before recording the write.
+    - Waiting on human takes precedence over working, and bridge online is separate from agent state.

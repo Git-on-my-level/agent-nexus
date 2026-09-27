@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `31`
+- Concepts: `33`
 
 ## `actors`
 
@@ -15,17 +15,23 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `9`
+- Commands: `15`
 - Command IDs:
   - `agent.notification-receipts.stream`
   - `agent.notifications.dismiss`
   - `agent.notifications.list`
   - `agent.notifications.read`
+  - `agents.get`
+  - `agents.list`
   - `agents.me.get`
-  - `agents.me.keys.rotate`
-  - `agents.me.patch`
-  - `agents.me.revoke`
-  - `auth.agents.register`
+  - `agents.me.presence`
+  - `hosts.bridge.check_in`
+  - `hosts.get`
+  - `hosts.list`
+  - `hosts.patch`
+  - `runs.get`
+  - `runs.list`
+  - `runs.upsert`
 
 ## `artifacts`
 
@@ -50,15 +56,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `21`
+- Commands: `28`
 - Command IDs:
   - `actors.create`
   - `actors.list`
   - `agents.me.get`
-  - `agents.me.keys.rotate`
-  - `agents.me.patch`
-  - `agents.me.revoke`
-  - `auth.agents.register`
   - `auth.audit.list`
   - `auth.bootstrap.status`
   - `auth.invites.create`
@@ -73,6 +75,17 @@ Generated from `contracts/anx-openapi.yaml`.
   - `auth.principals.list`
   - `auth.principals.revoke`
   - `auth.token`
+  - `hosts.enroll.approve`
+  - `hosts.enroll.complete`
+  - `hosts.enroll.deny`
+  - `hosts.enroll.headless`
+  - `hosts.enroll.pending`
+  - `hosts.enroll.poll`
+  - `hosts.enroll.start`
+  - `hosts.revoke`
+  - `hosts.tokens.create`
+  - `hosts.tokens.list`
+  - `hosts.tokens.revoke`
 
 ## `boards`
 
@@ -96,8 +109,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `49`
+- Commands: `53`
 - Command IDs:
+  - `agents.get`
+  - `agents.me.presence`
   - `boards.cards.batch_add`
   - `boards.cards.get`
   - `boards.cards.list`
@@ -138,6 +153,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.get`
   - `pm.turns.heartbeat`
   - `pm.turns.release`
+  - `runs.list`
+  - `runs.upsert`
   - `work.capabilities`
   - `work.create`
   - `work.get`
@@ -261,10 +278,32 @@ Generated from `contracts/anx-openapi.yaml`.
   - `home.read`
   - `home.unread`
 
+## `hosts`
+
+- Commands: `15`
+- Command IDs:
+  - `hosts.bridge.check_in`
+  - `hosts.enroll.approve`
+  - `hosts.enroll.complete`
+  - `hosts.enroll.deny`
+  - `hosts.enroll.headless`
+  - `hosts.enroll.pending`
+  - `hosts.enroll.poll`
+  - `hosts.enroll.start`
+  - `hosts.get`
+  - `hosts.list`
+  - `hosts.patch`
+  - `hosts.revoke`
+  - `hosts.tokens.create`
+  - `hosts.tokens.list`
+  - `hosts.tokens.revoke`
+
 ## `inbox`
 
-- Commands: `3`
+- Commands: `5`
 - Command IDs:
+  - `agents.get`
+  - `agents.list`
   - `inbox.get`
   - `inbox.respond`
   - `inbox.stream`
@@ -349,6 +388,17 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.revisions.create`
   - `docs.revisions.get`
   - `docs.revisions.list`
+
+## `runs`
+
+- Commands: `6`
+- Command IDs:
+  - `agents.get`
+  - `agents.list`
+  - `agents.me.presence`
+  - `runs.get`
+  - `runs.list`
+  - `runs.upsert`
 
 ## `secrets`
 

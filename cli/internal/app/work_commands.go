@@ -26,6 +26,7 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"work presence":            {path: "/agents/me/presence", method: "PATCH", body: true, summary: "Set the current derived agent's card and progress note."},
 	"work list":                {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
 	"work get":                 {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
 	"work create":              {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
@@ -205,6 +206,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
 		text, _ := workHelpText(topic)
 		return &commandResult{Text: text, Data: map[string]any{"help_text": text}}, topic, nil
+	}
+	if len(args) >= 2 && args[0] == "work" && args[1] == "presence" {
+		return nil, "work presence", errnorm.Internal("not_implemented", "work presence awaits the derived-agent CLI implementation")
 	}
 	parsed, err := parseWorkCommand(args)
 	if err != nil {

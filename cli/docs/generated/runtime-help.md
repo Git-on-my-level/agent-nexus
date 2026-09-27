@@ -145,6 +145,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work get` (command): Read one work card, source authority, executions and current evidence.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
+- `work presence` (command): Set the current derived agent's card and progress note.
 - `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
 - `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
 - `work refresh get` (command): Read refresh state without queueing work.
@@ -1472,6 +1473,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx work observations list   Read append-only evidence for a work card, preserving pagination and uncertainty.
   anx work observations submit Submit an authenticated remote observation; preserve its idempotency key on retry.
   anx work patch               Update work metadata with if_version; external status remains source-owned.
+  anx work presence            Set the current derived agent's card and progress note.
   anx work refresh get         Read refresh state without queueing work.
   anx work refresh request     Request a bounded refresh; queued is not a successful observation.
 
@@ -1976,7 +1978,7 @@ Generated Help: auth invites list
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -1997,12 +1999,18 @@ Generated Help: auth invites create
 - HTTP: `POST /auth/invites`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Issue a one-time invite for human or agent principals.
+- Why: Issue a one-time invite for a human principal; kind must be human.
 - Output: Returns `{ invite, token }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
+Inputs:
+  Required:
+  - body `kind` (string)
+  Optional:
+  - body `expires_at` (datetime)
+  Enum values: kind: human
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -2026,7 +2034,7 @@ Generated Help: auth invites revoke
 - Output: Returns `{ invite }`.
 - Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -2050,10 +2058,10 @@ Generated Help: auth bootstrap status
 - HTTP: `GET /auth/bootstrap/status`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Report whether first-principal bootstrap registration is still available.
+- Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -2078,7 +2086,7 @@ Generated Help: auth principals list
 - Output: Returns principal list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -2103,7 +2111,7 @@ Generated Help: auth principals revoke
 - Output: Returns result JSON.
 - Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
 
 Inputs:
   Required:
@@ -2131,7 +2139,7 @@ Generated Help: auth audit list
 - Output: Returns audit list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`, `audit`
-- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
@@ -4994,7 +5002,7 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -5024,7 +5032,7 @@ Generated Help: work create
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5083,7 +5091,7 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5117,7 +5125,7 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
@@ -5155,7 +5163,7 @@ Generated Help: work patch
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5187,6 +5195,43 @@ Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not re
 Use --json for one machine-readable envelope.
 ```
 
+## `work presence`
+
+Set the current derived agent's card and progress note.
+
+```text
+Generated Help: work presence
+
+- Command ID: `agents.me.presence`
+- CLI path: `work presence`
+- HTTP: `PATCH /agents/me/presence`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Report current card and progress.
+- Output: Returns `{ presence }`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
+- Concepts: `agents`, `cards`, `runs`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Optional:
+  - body `current_card_ref` (string)
+  - body `note` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+
+Set the current derived agent's card and progress note.
+
+Usage: anx work presence --from-file <path|->
+
+JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `work observations list`
 
 Read append-only evidence for a work card, preserving pagination and uncertainty.
@@ -5204,7 +5249,7 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5240,7 +5285,7 @@ Generated Help: work observations submit
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5302,7 +5347,7 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh request`
 
 Inputs:
   Required:
@@ -5336,7 +5381,7 @@ Generated Help: work refresh request
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`
 
 Inputs:
   Required:

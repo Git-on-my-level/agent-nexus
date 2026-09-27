@@ -45,6 +45,15 @@
         "done"
       ]
     },
+    "derived_agent_state": {
+      "enum_policy": "strict",
+      "values": [
+        "idle",
+        "stale",
+        "waiting_on_human",
+        "working"
+      ]
+    },
     "event_group": {
       "enum_policy": "strict",
       "values": [
@@ -109,6 +118,25 @@
     "provenance_source": {
       "enum_policy": "open",
       "values": null
+    },
+    "run_liveness": {
+      "enum_policy": "strict",
+      "values": [
+        "alive",
+        "stale",
+        "unknown"
+      ]
+    },
+    "run_state": {
+      "enum_policy": "strict",
+      "values": [
+        "cancelled",
+        "completed",
+        "failed",
+        "running",
+        "starting",
+        "unknown"
+      ]
     },
     "work_item_risk": {
       "enum_policy": "strict",

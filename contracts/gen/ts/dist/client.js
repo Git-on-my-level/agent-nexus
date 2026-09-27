@@ -187,6 +187,79 @@ export const commandRegistry = [
         "ts_method": "agentNotificationsRead"
     },
     {
+        "command_id": "agents.get",
+        "cli_path": "agents get",
+        "group": "agents",
+        "method": "GET",
+        "path": "/agents/{agent_id}",
+        "operation_id": "getAgent",
+        "summary": "Get agent state and recent work",
+        "description": "Any authenticated workspace principal. Agent ID or handle; includes current/recent cards, recent runs, open asks and progress notes.",
+        "why": "Inspect one agent's state and recent activity.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ agent, recent_cards, recent_runs, open_asks, recent_notes }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "agents",
+            "runs",
+            "cards",
+            "inbox"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "agent_id"
+        ],
+        "adjacent_commands": [
+            "agents.list",
+            "agents.me.get"
+        ],
+        "go_method": "AgentsGet",
+        "ts_method": "agentsGet"
+    },
+    {
+        "command_id": "agents.list",
+        "cli_path": "agents list",
+        "group": "agents",
+        "method": "GET",
+        "path": "/agents",
+        "operation_id": "listAgents",
+        "summary": "List agent roster",
+        "description": "Any authenticated workspace principal. Includes derived and adopted agents; a legacy excluded standalone principal is marked standalone until revoked. State precedence is waiting_on_human, working, idle, stale. Waiting means an open ask/review/escalation requested by this agent. Working means an alive nonterminal run or presence refreshed within 30 minutes. Stale means no run, presence, write, or bridge signal within 24 hours. Bridge online is separate from state.",
+        "why": "See who is working or waiting.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ agents }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "agents",
+            "runs",
+            "inbox"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "adjacent_commands": [
+            "agents.get",
+            "agents.me.get"
+        ],
+        "go_method": "AgentsList",
+        "ts_method": "agentsList"
+    },
+    {
         "command_id": "agents.me.get",
         "cli_path": "agents me",
         "group": "agents",
@@ -194,12 +267,12 @@ export const commandRegistry = [
         "path": "/agents/me",
         "operation_id": "getCurrentAgent",
         "summary": "Get current authenticated agent",
-        "why": "Resolve bearer principal to agent profile and keys.",
+        "why": "Resolve a derived-agent bearer to its host, name, handle, and actor ID; retained for agent self-identification.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ agent, keys }`.",
+        "output_envelope": "Returns `{ agent }`; derived agents have no independent signing keys.",
         "error_codes": [
             "auth_required",
             "invalid_token"
@@ -211,112 +284,68 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "agents.me.keys.rotate",
-            "agents.me.patch",
-            "agents.me.revoke"
+            "agents.get",
+            "agents.list"
         ],
         "go_method": "AgentsMeGet",
         "ts_method": "agentsMeGet"
     },
     {
-        "command_id": "agents.me.keys.rotate",
-        "cli_path": "agents me keys rotate",
-        "group": "agents",
-        "method": "POST",
-        "path": "/agents/me/keys/rotate",
-        "operation_id": "rotateAgentKeys",
-        "summary": "Rotate agent signing keys",
-        "why": "Add a new Ed25519 key for assertions.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ key }`.",
-        "error_codes": [
-            "auth_required",
-            "invalid_request",
-            "invalid_token"
-        ],
-        "concepts": [
-            "auth",
-            "agents"
-        ],
-        "stability": "beta",
-        "surface": "utility",
-        "adjacent_commands": [
-            "agents.me.get",
-            "agents.me.patch",
-            "agents.me.revoke"
-        ],
-        "go_method": "AgentsMeKeysRotate",
-        "ts_method": "agentsMeKeysRotate"
-    },
-    {
-        "command_id": "agents.me.patch",
-        "cli_path": "agents me patch",
-        "group": "agents",
+        "command_id": "agents.me.presence",
+        "cli_path": "work presence",
+        "group": "work",
         "method": "PATCH",
-        "path": "/agents/me",
-        "operation_id": "patchCurrentAgent",
-        "summary": "Update current agent profile",
-        "why": "Rename or adjust profile fields for the authenticated agent.",
+        "path": "/agents/me/presence",
+        "operation_id": "patchAgentPresence",
+        "summary": "Set current agent presence",
+        "description": "Derived-agent bearer only. Each write refreshes presence time. Explicit null current_card_ref clears the card; omitted field preserves it. Note is an optional short progress line; explicit null clears it. Presence expires from working after 30 minutes but remains last note for roster display.",
+        "why": "Report current card and progress.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ agent }`.",
+        "output_envelope": "Returns `{ presence }`.",
         "error_codes": [
             "auth_required",
-            "invalid_request",
-            "invalid_token"
-        ],
-        "concepts": [
-            "auth",
-            "agents"
-        ],
-        "stability": "beta",
-        "surface": "utility",
-        "adjacent_commands": [
-            "agents.me.get",
-            "agents.me.keys.rotate",
-            "agents.me.revoke"
-        ],
-        "go_method": "AgentsMePatch",
-        "ts_method": "agentsMePatch"
-    },
-    {
-        "command_id": "agents.me.revoke",
-        "cli_path": "agents me revoke",
-        "group": "agents",
-        "method": "POST",
-        "path": "/agents/me/revoke",
-        "operation_id": "revokeCurrentAgent",
-        "summary": "Revoke current agent credentials",
-        "why": "Self-revocation or admin-style revocation flow for the active principal.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ ok: true }`.",
-        "error_codes": [
-            "auth_required",
-            "invalid_request",
             "invalid_token",
-            "conflict"
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "run_attribution_invalid"
         ],
         "concepts": [
-            "auth",
-            "agents"
+            "agents",
+            "cards",
+            "runs"
         ],
         "stability": "beta",
-        "surface": "utility",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "current_card_ref",
+                    "type": "string"
+                },
+                {
+                    "name": "note",
+                    "type": "string"
+                }
+            ]
+        },
         "adjacent_commands": [
-            "agents.me.get",
-            "agents.me.keys.rotate",
-            "agents.me.patch"
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.patch",
+            "work.refresh.get",
+            "work.refresh.request"
         ],
-        "go_method": "AgentsMeRevoke",
-        "ts_method": "agentsMeRevoke"
+        "go_method": "AgentsMePresence",
+        "ts_method": "agentsMePresence"
     },
     {
         "command_id": "artifacts.archive",
@@ -809,50 +838,6 @@ export const commandRegistry = [
         "ts_method": "artifactsUnarchive"
     },
     {
-        "command_id": "auth.agents.register",
-        "cli_path": "auth agents register",
-        "group": "auth",
-        "method": "POST",
-        "path": "/auth/agents/register",
-        "operation_id": "registerAgent",
-        "summary": "Register workspace agent principal",
-        "why": "Bootstrap or invite-gated agent registration with key material.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `{ agent, tokens, ... }` per core auth handlers.",
-        "error_codes": [
-            "invalid_request",
-            "invalid_token",
-            "auth_required"
-        ],
-        "concepts": [
-            "auth",
-            "agents"
-        ],
-        "stability": "beta",
-        "surface": "utility",
-        "adjacent_commands": [
-            "auth.audit.list",
-            "auth.bootstrap.status",
-            "auth.invites.create",
-            "auth.invites.list",
-            "auth.invites.revoke",
-            "auth.passkey.dev.login",
-            "auth.passkey.dev.register",
-            "auth.passkey.login.options",
-            "auth.passkey.login.verify",
-            "auth.passkey.register.options",
-            "auth.passkey.register.verify",
-            "auth.principals.list",
-            "auth.principals.revoke",
-            "auth.token"
-        ],
-        "go_method": "AuthAgentsRegister",
-        "ts_method": "authAgentsRegister"
-    },
-    {
         "command_id": "auth.audit.list",
         "cli_path": "auth audit list",
         "group": "auth",
@@ -877,7 +862,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.bootstrap.status",
             "auth.invites.create",
             "auth.invites.list",
@@ -903,7 +887,7 @@ export const commandRegistry = [
         "path": "/auth/bootstrap/status",
         "operation_id": "getAuthBootstrapStatus",
         "summary": "Bootstrap registration availability",
-        "why": "Report whether first-principal bootstrap registration is still available.",
+        "why": "Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -915,7 +899,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.invites.create",
             "auth.invites.list",
@@ -941,7 +924,7 @@ export const commandRegistry = [
         "path": "/auth/invites",
         "operation_id": "createAuthInvite",
         "summary": "Create invite token",
-        "why": "Issue a one-time invite for human or agent principals.",
+        "why": "Issue a one-time invite for a human principal; kind must be human.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -950,15 +933,32 @@ export const commandRegistry = [
         "error_codes": [
             "auth_required",
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "forbidden"
         ],
         "concepts": [
             "auth"
         ],
         "stability": "beta",
         "surface": "utility",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "kind",
+                    "type": "string",
+                    "enum_values": [
+                        "human"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "expires_at",
+                    "type": "datetime"
+                }
+            ]
+        },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.list",
@@ -1000,7 +1000,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1047,7 +1046,6 @@ export const commandRegistry = [
             "invite_id"
         ],
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1091,7 +1089,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1135,7 +1132,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1177,7 +1173,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1220,7 +1215,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1246,7 +1240,7 @@ export const commandRegistry = [
         "path": "/auth/passkey/register/options",
         "operation_id": "passkeyRegisterOptions",
         "summary": "Begin passkey registration",
-        "why": "WebAuthn registration challenge for workspace agents.",
+        "why": "WebAuthn registration challenge for workspace humans.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -1262,7 +1256,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1293,7 +1286,7 @@ export const commandRegistry = [
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ agent, tokens }`.",
+        "output_envelope": "Returns `{ agent, tokens }` for a human passkey principal.",
         "error_codes": [
             "invalid_request",
             "invalid_token"
@@ -1305,7 +1298,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1347,7 +1339,6 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "utility",
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1395,7 +1386,6 @@ export const commandRegistry = [
             "principal_id"
         ],
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -1420,24 +1410,78 @@ export const commandRegistry = [
         "method": "POST",
         "path": "/auth/token",
         "operation_id": "issueAuthToken",
-        "summary": "Issue or refresh auth tokens",
+        "summary": "Exchange host assertion or refresh auth tokens",
+        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names fail before creation. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.",
         "why": "Assertion or refresh-token exchange for bearer access.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ tokens }` envelope.",
+        "output_envelope": "Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope.",
         "error_codes": [
             "invalid_request",
-            "invalid_token"
+            "invalid_token",
+            "key_mismatch",
+            "host_revoked",
+            "agent_excluded",
+            "agent_handle_taken",
+            "agent_revoked"
         ],
         "concepts": [
             "auth"
         ],
         "stability": "beta",
         "surface": "utility",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "grant_type",
+                    "type": "string",
+                    "enum_values": [
+                        "assertion",
+                        "host_assertion",
+                        "refresh_token",
+                        "workspace_human_grant",
+                        "workspace_managed_agent_grant"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "agent_id",
+                    "type": "string"
+                },
+                {
+                    "name": "agent_name",
+                    "type": "string"
+                },
+                {
+                    "name": "assertion",
+                    "type": "string"
+                },
+                {
+                    "name": "host_id",
+                    "type": "string"
+                },
+                {
+                    "name": "key_id",
+                    "type": "string"
+                },
+                {
+                    "name": "refresh_token",
+                    "type": "string"
+                },
+                {
+                    "name": "signature",
+                    "type": "string"
+                },
+                {
+                    "name": "signed_at",
+                    "type": "datetime"
+                }
+            ]
+        },
         "adjacent_commands": [
-            "auth.agents.register",
             "auth.audit.list",
             "auth.bootstrap.status",
             "auth.invites.create",
@@ -5106,6 +5150,872 @@ export const commandRegistry = [
         "ts_method": "homeUnread"
     },
     {
+        "command_id": "hosts.bridge.check_in",
+        "cli_path": "host bridge check-in",
+        "group": "host",
+        "method": "POST",
+        "path": "/hosts/{host_id}/bridge/check-in",
+        "operation_id": "checkInHostBridge",
+        "summary": "Check in host bridge",
+        "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance checks in for all enabled derived agents on the host; no per-agent bridge identity or key is accepted.",
+        "why": "Record a host bridge heartbeat for wake routing.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ bridge }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "key_mismatch",
+            "host_revoked",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Host proof is required; no agent bearer or per-agent bridge proof is accepted.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "bridge_instance_id",
+                    "type": "string"
+                },
+                {
+                    "name": "checked_in_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "expires_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "path_params": [
+            "host_id"
+        ],
+        "adjacent_commands": [
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsBridgeCheckIn",
+        "ts_method": "hostsBridgeCheckIn"
+    },
+    {
+        "command_id": "hosts.enroll.approve",
+        "cli_path": "host enroll approve",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollments/{enrollment_id}/approve",
+        "operation_id": "approveHostEnrollment",
+        "summary": "Approve host enrollment",
+        "description": "Human auth-admin only. Atomically reserves the host slug for this enrollment; approval does not deliver credentials or perform adoption.",
+        "why": "Approve a verified machine.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `HostEnrollmentStatusResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "not_found",
+            "enrollment_expired",
+            "enrollment_consumed",
+            "host_slug_taken"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "enrollment_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollApprove",
+        "ts_method": "hostsEnrollApprove"
+    },
+    {
+        "command_id": "hosts.enroll.complete",
+        "cli_path": "host enroll complete",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollments/{enrollment_id}/complete",
+        "operation_id": "completeHostEnrollment",
+        "summary": "Complete approved host enrollment",
+        "description": "Public ceremony. Requires the poll token and host-key proof; atomically creates the host and adopts the frozen, proved agent set. Single use; a denied or pending request cannot complete. No host bearer or refresh token is issued.",
+        "why": "Finish an approved host enrollment.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }` with adopted agents.",
+        "error_codes": [
+            "invalid_request",
+            "invalid_token",
+            "enrollment_pending",
+            "enrollment_denied",
+            "enrollment_expired",
+            "enrollment_consumed",
+            "adoption_conflict",
+            "host_slug_taken",
+            "not_found"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "poll_token",
+                    "type": "string"
+                },
+                {
+                    "name": "signature",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "enrollment_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollComplete",
+        "ts_method": "hostsEnrollComplete"
+    },
+    {
+        "command_id": "hosts.enroll.deny",
+        "cli_path": "host enroll deny",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollments/{enrollment_id}/deny",
+        "operation_id": "denyHostEnrollment",
+        "summary": "Deny host enrollment",
+        "description": "Human auth-admin only; terminal and audited.",
+        "why": "Reject an untrusted machine.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `HostEnrollmentStatusResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "not_found",
+            "enrollment_expired",
+            "enrollment_consumed"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "enrollment_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollDeny",
+        "ts_method": "hostsEnrollDeny"
+    },
+    {
+        "command_id": "hosts.enroll.headless",
+        "cli_path": "host enroll headless",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollments/headless",
+        "operation_id": "completeHeadlessHostEnrollment",
+        "summary": "Enroll host using headless token",
+        "description": "Public single-request ceremony. Atomically verifies and consumes the human-created token, verifies the host key and adoption proofs, and creates the host. A failed request does not consume the token.",
+        "why": "Enroll a CI or cloud host without polling.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`; never issues host bearer credentials.",
+        "error_codes": [
+            "invalid_request",
+            "invalid_token",
+            "host_slug_taken",
+            "adoption_proof_invalid",
+            "adoption_conflict"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "adoptions",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "discovered_adapters",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "enrollment_token",
+                    "type": "string"
+                },
+                {
+                    "name": "hostname",
+                    "type": "string"
+                },
+                {
+                    "name": "os_user",
+                    "type": "string"
+                },
+                {
+                    "name": "public_key",
+                    "type": "string"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "string"
+                },
+                {
+                    "name": "requested_slug",
+                    "type": "string"
+                },
+                {
+                    "name": "signature",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollHeadless",
+        "ts_method": "hostsEnrollHeadless"
+    },
+    {
+        "command_id": "hosts.enroll.pending",
+        "cli_path": "host enroll pending",
+        "group": "host",
+        "method": "GET",
+        "path": "/auth/hosts/enrollments/pending",
+        "operation_id": "listPendingHostEnrollments",
+        "summary": "List pending host approvals",
+        "description": "Human auth-admin only. Includes the requested slug, OS user, hostname, discovered adapters, adopted agent names, requesting IP and expiry; never returns poll tokens or proofs.",
+        "why": "Review host enrollment requests.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ enrollments }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollPending",
+        "ts_method": "hostsEnrollPending"
+    },
+    {
+        "command_id": "hosts.enroll.poll",
+        "cli_path": "host enroll poll",
+        "group": "host",
+        "method": "GET",
+        "path": "/auth/hosts/enrollments/{enrollment_id}",
+        "operation_id": "pollHostEnrollment",
+        "summary": "Poll enrollment status",
+        "description": "Public ceremony authenticated by the high-entropy X-ANX-Enrollment-Token header. Returns pending, approved, denied, expired, or completed; never exposes the approval session or host credentials.",
+        "why": "Wait for an auth-admin to decide the host request.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `HostEnrollmentStatusResponse`.",
+        "error_codes": [
+            "invalid_request",
+            "invalid_token",
+            "enrollment_expired",
+            "not_found"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "enrollment_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollPoll",
+        "ts_method": "hostsEnrollPoll"
+    },
+    {
+        "command_id": "hosts.enroll.start",
+        "cli_path": "host enroll start",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollments",
+        "operation_id": "startHostEnrollment",
+        "summary": "Start interactive host enrollment",
+        "description": "Public ceremony. Does not create a principal. The enrollment and user code expire after 10 minutes; core records requesting IP for the approval view. Adoption proofs are checked before approval and frozen with the request.",
+        "why": "Obtain a user code for human host approval.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `HostEnrollmentStartResponse`; poll_token is secret and shown only once.",
+        "error_codes": [
+            "invalid_request",
+            "host_slug_taken",
+            "adoption_proof_invalid",
+            "adoption_conflict"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "adoptions",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "discovered_adapters",
+                    "type": "list\u003cany\u003e"
+                },
+                {
+                    "name": "hostname",
+                    "type": "string"
+                },
+                {
+                    "name": "os_user",
+                    "type": "string"
+                },
+                {
+                    "name": "public_key",
+                    "type": "string"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "string"
+                },
+                {
+                    "name": "requested_slug",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsEnrollStart",
+        "ts_method": "hostsEnrollStart"
+    },
+    {
+        "command_id": "hosts.get",
+        "cli_path": "host get",
+        "group": "host",
+        "method": "GET",
+        "path": "/hosts/{host_id}",
+        "operation_id": "getHost",
+        "summary": "Get host and derived agents",
+        "description": "Any authenticated workspace principal. Returns excluded names and derived agents, including adopted principals, even when revoked.",
+        "why": "Inspect one machine and its agents.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "host_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsGet",
+        "ts_method": "hostsGet"
+    },
+    {
+        "command_id": "hosts.list",
+        "cli_path": "host list",
+        "group": "host",
+        "method": "GET",
+        "path": "/hosts",
+        "operation_id": "listHosts",
+        "summary": "List workspace hosts",
+        "description": "Any authenticated workspace principal. Includes revoked hosts for audit, never public keys or secrets beyond the host key ID.",
+        "why": "Inspect enrolled machines.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ hosts }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "hosts",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsList",
+        "ts_method": "hostsList"
+    },
+    {
+        "command_id": "hosts.patch",
+        "cli_path": "host patch",
+        "group": "host",
+        "method": "PATCH",
+        "path": "/hosts/{host_id}",
+        "operation_id": "patchHost",
+        "summary": "Update host display name or exclusions",
+        "description": "Human auth-admin bearer or this host via the three host proof headers; derived-agent bearer tokens cannot edit the host. Omitted fields remain unchanged. Replacing excluded_names invalidates outstanding sessions for newly excluded agents while preserving their actor/history.",
+        "why": "Name a host or block agent names on it.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "key_mismatch",
+            "host_revoked",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "optional": [
+                {
+                    "name": "display_name",
+                    "type": "string"
+                },
+                {
+                    "name": "excluded_names",
+                    "type": "list\u003cany\u003e"
+                }
+            ]
+        },
+        "path_params": [
+            "host_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsPatch",
+        "ts_method": "hostsPatch"
+    },
+    {
+        "command_id": "hosts.revoke",
+        "cli_path": "host revoke",
+        "group": "host",
+        "method": "DELETE",
+        "path": "/hosts/{host_id}",
+        "operation_id": "revokeHost",
+        "summary": "Revoke host and all derived agents",
+        "description": "Human auth-admin only. In one transaction revoke host, every child principal/key/session/token, and record one audit event. Idempotent; retained records remain visible to reads.",
+        "why": "Cut off a compromised machine.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "host_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsRevoke",
+        "ts_method": "hostsRevoke"
+    },
+    {
+        "command_id": "hosts.tokens.create",
+        "cli_path": "host tokens create",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollment-tokens",
+        "operation_id": "createHostEnrollmentToken",
+        "summary": "Create headless enrollment token",
+        "description": "Human auth-admin only. One-time secret shown only in this response; expires within 10 minutes to 24 hours.",
+        "why": "Authorize one headless host enrollment.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ enrollment_token, token }` once.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "expires_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "label",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsTokensCreate",
+        "ts_method": "hostsTokensCreate"
+    },
+    {
+        "command_id": "hosts.tokens.list",
+        "cli_path": "host tokens list",
+        "group": "host",
+        "method": "GET",
+        "path": "/auth/hosts/enrollment-tokens",
+        "operation_id": "listHostEnrollmentTokens",
+        "summary": "List headless enrollment tokens",
+        "description": "Human auth-admin only. Token secrets are never returned by list.",
+        "why": "Inspect headless host enrollment grants.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ enrollment_tokens }` without secrets.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsTokensList",
+        "ts_method": "hostsTokensList"
+    },
+    {
+        "command_id": "hosts.tokens.revoke",
+        "cli_path": "host tokens revoke",
+        "group": "host",
+        "method": "POST",
+        "path": "/auth/hosts/enrollment-tokens/{token_id}/revoke",
+        "operation_id": "revokeHostEnrollmentToken",
+        "summary": "Revoke headless enrollment token",
+        "description": "Human auth-admin only; consumed tokens remain consumed.",
+        "why": "Invalidate an unused headless grant.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ enrollment_token }` without secret.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "not_found"
+        ],
+        "concepts": [
+            "auth",
+            "hosts"
+        ],
+        "stability": "beta",
+        "surface": "utility",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "token_id"
+        ],
+        "adjacent_commands": [
+            "hosts.bridge.check_in",
+            "hosts.enroll.approve",
+            "hosts.enroll.complete",
+            "hosts.enroll.deny",
+            "hosts.enroll.headless",
+            "hosts.enroll.pending",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list"
+        ],
+        "go_method": "HostsTokensRevoke",
+        "ts_method": "hostsTokensRevoke"
+    },
+    {
         "command_id": "inbox.get",
         "cli_path": "inbox get",
         "group": "inbox",
@@ -7500,6 +8410,203 @@ export const commandRegistry = [
         "ts_method": "refEdgesList"
     },
     {
+        "command_id": "runs.get",
+        "cli_path": "runs get",
+        "group": "runs",
+        "method": "GET",
+        "path": "/runs/{run_id}",
+        "operation_id": "getRun",
+        "summary": "Get one run",
+        "description": "Any authenticated workspace principal.",
+        "why": "Inspect execution attribution and outcome.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ run }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "runs",
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "path_params": [
+            "run_id"
+        ],
+        "adjacent_commands": [
+            "runs.upsert",
+            "runs.list"
+        ],
+        "go_method": "RunsGet",
+        "ts_method": "runsGet"
+    },
+    {
+        "command_id": "runs.list",
+        "cli_path": "runs list",
+        "group": "runs",
+        "method": "GET",
+        "path": "/runs",
+        "operation_id": "listRuns",
+        "summary": "List launcher runs",
+        "description": "Any authenticated workspace principal. Newest started_at first, then ID; cursor is opaque. `active=true` means nonterminal state and alive liveness.",
+        "why": "See current and recent agent executions.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ runs, next_cursor? }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request"
+        ],
+        "concepts": [
+            "runs",
+            "agents",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "adjacent_commands": [
+            "runs.get",
+            "runs.upsert"
+        ],
+        "go_method": "RunsList",
+        "ts_method": "runsList"
+    },
+    {
+        "command_id": "runs.upsert",
+        "cli_path": "runs ingest",
+        "group": "runs",
+        "method": "POST",
+        "path": "/runs",
+        "operation_id": "upsertRun",
+        "summary": "Idempotently ingest a launcher run",
+        "description": "Derived-agent bearer only. Authenticated agent must equal agent_id and belong to host_id. Composite key `(launcher, host_id, external_id)` is immutable; a conflicting agent or immutable field returns run_identity_conflict. State and observation timestamps cannot regress. Terminal states are absorbing except an identical replay; unknown is provisional and may advance to any observed state. A terminal run never changes a card.",
+        "why": "Map one agentctl execution envelope to a durable run.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ run, created, replayed }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "host_revoked",
+            "run_identity_conflict",
+            "run_state_regression"
+        ],
+        "concepts": [
+            "runs",
+            "agents",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "adapter",
+                    "type": "string"
+                },
+                {
+                    "name": "agent_id",
+                    "type": "string"
+                },
+                {
+                    "name": "external_id",
+                    "type": "string"
+                },
+                {
+                    "name": "host_id",
+                    "type": "string"
+                },
+                {
+                    "name": "labels",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "last_observed_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "launcher",
+                    "type": "string",
+                    "enum_values": [
+                        "agentctl"
+                    ]
+                },
+                {
+                    "name": "liveness",
+                    "type": "string",
+                    "enum_values": [
+                        "alive",
+                        "stale",
+                        "unknown"
+                    ]
+                },
+                {
+                    "name": "result_collected",
+                    "type": "boolean"
+                },
+                {
+                    "name": "state",
+                    "type": "string",
+                    "enum_values": [
+                        "cancelled",
+                        "completed",
+                        "failed",
+                        "running",
+                        "starting",
+                        "unknown"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "branch",
+                    "type": "string"
+                },
+                {
+                    "name": "card_ref",
+                    "type": "string"
+                },
+                {
+                    "name": "ended_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "model",
+                    "type": "string"
+                },
+                {
+                    "name": "repository",
+                    "type": "string"
+                },
+                {
+                    "name": "started_at",
+                    "type": "datetime"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "runs.get",
+            "runs.list"
+        ],
+        "go_method": "RunsUpsert",
+        "ts_method": "runsUpsert"
+    },
+    {
         "command_id": "secrets.create",
         "cli_path": "secret create",
         "group": "secret",
@@ -8589,6 +9696,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -8727,6 +9835,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -8770,6 +9879,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -8811,6 +9921,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -8854,6 +9965,7 @@ export const commandRegistry = [
             "work.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -9000,6 +10112,7 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -9097,6 +10210,7 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
         ],
@@ -9141,6 +10255,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.request"
         ],
         "go_method": "WorkRefreshGet",
@@ -9192,6 +10307,7 @@ export const commandRegistry = [
             "work.observations.list",
             "work.observations.submit",
             "work.patch",
+            "agents.me.presence",
             "work.refresh.get"
         ],
         "go_method": "WorkRefreshRequest",
@@ -9278,17 +10394,17 @@ export class AnxClient {
     agentNotificationsRead(options = {}) {
         return this.invoke("agent.notifications.read", {}, options);
     }
+    agentsGet(pathParams, options = {}) {
+        return this.invoke("agents.get", pathParams, options);
+    }
+    agentsList(options = {}) {
+        return this.invoke("agents.list", {}, options);
+    }
     agentsMeGet(options = {}) {
         return this.invoke("agents.me.get", {}, options);
     }
-    agentsMeKeysRotate(options = {}) {
-        return this.invoke("agents.me.keys.rotate", {}, options);
-    }
-    agentsMePatch(options = {}) {
-        return this.invoke("agents.me.patch", {}, options);
-    }
-    agentsMeRevoke(options = {}) {
-        return this.invoke("agents.me.revoke", {}, options);
+    agentsMePresence(options = {}) {
+        return this.invoke("agents.me.presence", {}, options);
     }
     artifactsArchive(pathParams, options = {}) {
         return this.invoke("artifacts.archive", pathParams, options);
@@ -9319,9 +10435,6 @@ export class AnxClient {
     }
     artifactsUnarchive(pathParams, options = {}) {
         return this.invoke("artifacts.unarchive", pathParams, options);
-    }
-    authAgentsRegister(options = {}) {
-        return this.invoke("auth.agents.register", {}, options);
     }
     authAuditList(options = {}) {
         return this.invoke("auth.audit.list", {}, options);
@@ -9533,6 +10646,51 @@ export class AnxClient {
     homeUnread(options = {}) {
         return this.invoke("home.unread", {}, options);
     }
+    hostsBridgeCheckIn(pathParams, options = {}) {
+        return this.invoke("hosts.bridge.check_in", pathParams, options);
+    }
+    hostsEnrollApprove(pathParams, options = {}) {
+        return this.invoke("hosts.enroll.approve", pathParams, options);
+    }
+    hostsEnrollComplete(pathParams, options = {}) {
+        return this.invoke("hosts.enroll.complete", pathParams, options);
+    }
+    hostsEnrollDeny(pathParams, options = {}) {
+        return this.invoke("hosts.enroll.deny", pathParams, options);
+    }
+    hostsEnrollHeadless(options = {}) {
+        return this.invoke("hosts.enroll.headless", {}, options);
+    }
+    hostsEnrollPending(options = {}) {
+        return this.invoke("hosts.enroll.pending", {}, options);
+    }
+    hostsEnrollPoll(pathParams, options = {}) {
+        return this.invoke("hosts.enroll.poll", pathParams, options);
+    }
+    hostsEnrollStart(options = {}) {
+        return this.invoke("hosts.enroll.start", {}, options);
+    }
+    hostsGet(pathParams, options = {}) {
+        return this.invoke("hosts.get", pathParams, options);
+    }
+    hostsList(options = {}) {
+        return this.invoke("hosts.list", {}, options);
+    }
+    hostsPatch(pathParams, options = {}) {
+        return this.invoke("hosts.patch", pathParams, options);
+    }
+    hostsRevoke(pathParams, options = {}) {
+        return this.invoke("hosts.revoke", pathParams, options);
+    }
+    hostsTokensCreate(options = {}) {
+        return this.invoke("hosts.tokens.create", {}, options);
+    }
+    hostsTokensList(options = {}) {
+        return this.invoke("hosts.tokens.list", {}, options);
+    }
+    hostsTokensRevoke(pathParams, options = {}) {
+        return this.invoke("hosts.tokens.revoke", pathParams, options);
+    }
     inboxGet(pathParams, options = {}) {
         return this.invoke("inbox.get", pathParams, options);
     }
@@ -9655,6 +10813,15 @@ export class AnxClient {
     }
     refEdgesList(options = {}) {
         return this.invoke("ref_edges.list", {}, options);
+    }
+    runsGet(pathParams, options = {}) {
+        return this.invoke("runs.get", pathParams, options);
+    }
+    runsList(options = {}) {
+        return this.invoke("runs.list", {}, options);
+    }
+    runsUpsert(options = {}) {
+        return this.invoke("runs.upsert", {}, options);
     }
     secretsCreate(options = {}) {
         return this.invoke("secrets.create", {}, options);
