@@ -245,7 +245,7 @@ All workspace data routes require authenticated principals. Writes require an
 ### 7.3 Convenience operations
 - Submit receipt (validates evidence + packet + refs, creates artifact + emits `receipt_added` with required typed refs)
 - Submit review (validates packet + refs, creates artifact + emits `review_completed` with required typed refs)
-- Request human attention (emits `human_attention_requested`; prefer `anx human ask|review|escalate` over raw event authoring)
+- Request human attention (emits `human_attention_requested`; prefer `anx ask|review|escalate` over raw event authoring)
 - Respond to inbox item (emits `human_attention_responded` event with `inbox:<inbox_item_id>` in refs)
 
 ### 7.4 Derived views
