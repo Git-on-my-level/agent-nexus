@@ -126,7 +126,7 @@ func ExitCode(err error) int {
 		return 7
 	case "timeout", "timeout_exceeded":
 		return 8
-	case "declined":
+	case "rejected":
 		return 9
 	}
 	if typed.Kind == KindUsage {

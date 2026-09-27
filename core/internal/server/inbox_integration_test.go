@@ -63,9 +63,17 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	}
 
 	itemID := asString(item["id"])
+	for _, bad := range []string{
+		`{"actor_id":"actor-1","response_text":"Approved.","notify_mode":"none"}`,
+		`{"actor_id":"actor-1","response_text":"Approved.","outcome":"maybe","notify_mode":"none"}`,
+	} {
+		invalid := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", bad, http.StatusBadRequest)
+		assertErrorCode(t, invalid, "invalid_request")
+	}
 	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", `{
 		"actor_id":"actor-1",
 		"response_text":"Ship Friday with a rollback plan.",
+		"outcome":"answered",
 		"notify_mode":"none",
 		"related_refs":["artifact:decision_note"]
 	}`, http.StatusCreated)
@@ -84,6 +92,16 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	payload, _ := response.Event["payload"].(map[string]any)
 	if got := asString(payload["response_text"]); got != "Ship Friday with a rollback plan." {
 		t.Fatalf("expected response_text payload, got %#v", payload)
+	}
+	if got := asString(payload["outcome"]); got != "answered" {
+		t.Fatalf("expected answered outcome payload, got %#v", payload)
+	}
+	completed := getInboxPayload(t, h.baseURL+"/inbox?status=completed")
+	row, found := findInboxItem(completed.Items, func(candidate map[string]any) bool {
+		return asString(candidate["response_event_ref"]) == "event:"+asString(response.Event["id"])
+	})
+	if !found || asString(row["outcome"]) != "answered" {
+		t.Fatalf("completed inbox item lost outcome: %#v", completed.Items)
 	}
 	if got := asString(response.Notify["mode"]); got != "none" {
 		t.Fatalf("expected no notification target metadata, got %#v", response.Notify)
@@ -134,6 +152,7 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(escalation["id"]))+"/respond", `{
 		"actor_id":"actor-1",
 		"response_text":"Investigating now.",
+		"outcome":"answered",
 		"notify_mode":"none"
 	}`, http.StatusCreated).Body.Close()
 }
@@ -248,6 +267,7 @@ func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing
 	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", `{
 		"actor_id":"actor-1",
 		"response_text":"Answer text"
+		,"outcome":"answered"
 	}`, http.StatusConflict)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "notification_target_required")

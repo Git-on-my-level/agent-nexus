@@ -733,15 +733,15 @@
   function respondInbox(
     row,
     text,
-    { acknowledge = false, proposal = "" } = {},
+    { acknowledge = false, proposal = "", outcome = "answered" } = {},
   ) {
     const item = row?.item;
     const body = String(text ?? "").trim();
     if (!item?.id || !body || busy) return;
     const who = row.requester?.name || "";
     const request = acknowledge
-      ? { response_text: body, notify_mode: "none" }
-      : { response_text: body, notify_mode: defaultNotifyMode(item) };
+      ? { response_text: body, outcome: "acknowledged", notify_mode: "none" }
+      : { response_text: body, outcome, notify_mode: defaultNotifyMode(item) };
     const next = neighbourId(row.id);
     const draft = reply;
     queueInboxResponse({
@@ -1359,8 +1359,9 @@
                     bind:draft={reply}
                     {chosen}
                     {busy}
-                    onSend={(text) =>
+                    onSend={(text, outcome) =>
                       respondInbox(selected, text, {
+                        outcome,
                         proposal: selected.responseProposals.includes(text)
                           ? text
                           : "",

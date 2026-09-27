@@ -27,7 +27,7 @@ go run ./cmd/anx --agent local version
 
 All non-streaming commands emit envelope v2 in JSON mode. Success has `ok`, `schema_version: 2`, `command`, `result`, `warnings: []`, and `next_actions: []`. Errors have `ok: false`, `schema_version: 2`, `warnings: []`, and `error` with `code`, `message`, `retryable`, `exit_code`, `details`, and `next_actions`. Text mode projects the same document as `fact key=value`, `warning code=…`, and `next anx …` lines. Values containing whitespace or quotes are quoted. `next_actions` include `argv`, `mutates`, and `side_effect_class` (`read_only`, `local_operational_write`, `remote_coordination_write`, or `external_side_effect`).
 
-Exit codes: 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 declined, 1 other. A warning does not change the exit code. Run `anx help` for daily and setup commands, or `anx help --all` for the full catalog. Diagnostic groups are under `anx debug` (for example, `anx debug events list` and `anx debug meta commands`).
+Exit codes: 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 rejected, 1 other. A warning does not change the exit code. Run `anx help` for daily and setup commands, or `anx help --all` for the full catalog. Diagnostic groups are under `anx debug` (for example, `anx debug events list` and `anx debug meta commands`).
 
 **Refs and handles:** list-style JSON and default text rows lead with public typed refs such as `topic:<handle>`, `board:<handle>`, and `card:<handle>`. You can paste typed refs or bare handles back into commands; the CLI passes them through to core for resolution. Use `--json` when scripts need `ref` and `handle` fields directly.
 

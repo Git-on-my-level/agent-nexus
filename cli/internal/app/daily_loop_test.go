@@ -72,13 +72,18 @@ func TestOrientIncludesSecondaryAssigneeAndAnswers(t *testing.T) {
 	}
 }
 
-func TestAwaitAnsweredDeclinedTimeoutAndReconnect(t *testing.T) {
+func TestAwaitOutcomesTimeoutAndReconnect(t *testing.T) {
 	for _, tc := range []struct {
-		name, answer          string
+		name, answer, outcome string
 		wantExit, connections int
 		reconnect             bool
 	}{
-		{"answered", "Approved", 0, 1, false}, {"declined", "Declined", 9, 1, false}, {"timeout", "", 8, 1, false}, {"reconnect", "After reconnect", 0, 2, true},
+		{"answered", "Declined", "answered", 0, 1, false},
+		{"approved", "Looks good", "approved", 0, 1, false},
+		{"acknowledged", "Noted", "acknowledged", 0, 1, false},
+		{"rejected", "Approved.", "rejected", 9, 1, false},
+		{"timeout", "", "", 8, 1, false},
+		{"reconnect", "After reconnect", "answered", 0, 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var opened atomic.Int32
@@ -100,7 +105,7 @@ func TestAwaitAnsweredDeclinedTimeoutAndReconnect(t *testing.T) {
 						fmt.Fprint(w, "id: first\nevent: event\ndata: {\"event\":{\"type\":\"other\"}}\n\n")
 						return
 					}
-					payload := fmt.Sprintf(`{"event":{"id":"response-1","type":"human_attention_responded","payload":{"request_event_ref":"event:ask-1","response_text":%q,"responding_actor_id":"human-1","subject_ref":"card:task"}}}`, tc.answer)
+					payload := fmt.Sprintf(`{"event":{"id":"response-1","type":"human_attention_responded","payload":{"request_event_ref":"event:ask-1","response_text":%q,"outcome":%q,"responding_actor_id":"human-1","subject_ref":"card:task"}}}`, tc.answer, tc.outcome)
 					fmt.Fprintf(w, "id: response-1\nevent: event\ndata: %s\n\n", payload)
 				default:
 					http.NotFound(w, r)
@@ -115,6 +120,15 @@ func TestAwaitAnsweredDeclinedTimeoutAndReconnect(t *testing.T) {
 			doc := dailyJSON(t, out)
 			if tc.wantExit == 0 && anyString(asMap(doc["result"])["answer"]) != tc.answer {
 				t.Fatalf("answer missing: %s", out.String())
+			}
+			if tc.wantExit == 0 && anyString(asMap(doc["result"])["outcome"]) != tc.outcome {
+				t.Fatalf("outcome missing: %s", out.String())
+			}
+			if tc.wantExit == 9 {
+				details := asMap(asMap(doc["error"])["details"])
+				if anyString(details["outcome"]) != "rejected" || anyString(details["answer"]) != tc.answer || anyString(details["responder"]) != "human-1" {
+					t.Fatalf("rejected response details missing: %s", out.String())
+				}
 			}
 			if tc.wantExit != 0 && int(asMap(doc["error"])["exit_code"].(float64)) != tc.wantExit {
 				t.Fatalf("wrong error document: %s", out.String())

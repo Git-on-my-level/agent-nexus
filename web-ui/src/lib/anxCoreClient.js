@@ -1265,6 +1265,13 @@ export function createAnxCoreClient(options = {}) {
       if (!responseText) {
         throw new Error("respondInboxItem requires a non-empty response_text.");
       }
+      if (
+        !["answered", "approved", "rejected", "acknowledged"].includes(
+          payload?.outcome,
+        )
+      ) {
+        throw new Error("respondInboxItem requires a valid outcome.");
+      }
       return invokeCommand("inbox.respond", {
         pathParams: pathParams({ inbox_id: id }),
         options: {

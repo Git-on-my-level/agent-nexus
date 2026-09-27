@@ -100,6 +100,26 @@ func TestStateDerivedActionsAndActorReferences(t *testing.T) {
 	}
 }
 
+func TestAwaitActionsFollowStructuredOutcome(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		outcome, want string
+	}{
+		{"answered", "anx work note Ship card:task"},
+		{"approved", "anx work note Ship card:task"},
+		{"acknowledged", "anx work get card:task"},
+	} {
+		actions := deriveNextActions("await", nil, map[string]any{"outcome": tc.outcome, "answer": "Ship", "subject_ref": "card:task"})
+		if len(actions) != 1 || strings.Join(actions[0].Argv, " ") != tc.want {
+			t.Fatalf("outcome %s actions: %#v", tc.outcome, actions)
+		}
+	}
+	rejected := deriveErrorActions("await", errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", "rejected"), map[string]any{"subject_ref": "card:task"}))
+	if len(rejected) != 1 || strings.Join(rejected[0].Argv, " ") != "anx work get card:task" {
+		t.Fatalf("rejected actions: %#v", rejected)
+	}
+}
+
 func TestDebugRoutingAndMetadata(t *testing.T) {
 	t.Parallel()
 	var stdout, stderr bytes.Buffer

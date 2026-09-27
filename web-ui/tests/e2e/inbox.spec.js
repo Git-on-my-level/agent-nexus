@@ -115,9 +115,11 @@ async function mockPmSurfaces(page) {
 test("inbox triage lists actionable rows and responding removes an item", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const actorId = "actor-e2e";
   let inboxRequestCount = 0;
   let respondCount = 0;
+  const responseBodies = [];
   let inboxItems = [
     {
       id: "inbox-001",
@@ -186,6 +188,7 @@ test("inbox triage lists actionable rows and responding removes an item", async 
     );
     const id = decodeURIComponent(middle).trim();
     respondCount += 1;
+    responseBodies.push(route.request().postDataJSON());
     inboxItems = inboxItems.filter((item) => item.id !== id);
 
     await route.fulfill({
@@ -309,10 +312,39 @@ test("inbox triage lists actionable rows and responding removes an item", async 
   await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
   // The window closes and the response is committed once.
   await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(1);
-
+  expect(responseBodies[0]).toMatchObject({
+    response_text: "Approved.",
+    outcome: "answered",
+  });
   await page.goto("/o/local/w/local/inbox");
   await expect(page.getByTestId("inbox-row-inbox-002")).toBeVisible();
   await expect(page.getByTestId("inbox-row-inbox-001")).toHaveCount(0);
+
+  const reviewItem = inboxItems.find((item) => item.id === "inbox-003");
+  await page.goto("/o/local/w/local/inbox/inbox-003");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(2);
+  expect(responseBodies[1]).toMatchObject({
+    response_text: "Approved.",
+    outcome: "approved",
+  });
+
+  inboxItems.push(reviewItem);
+  await page.goto("/o/local/w/local/inbox/inbox-003");
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(3);
+  expect(responseBodies[2]).toMatchObject({
+    response_text: "Rejected.",
+    outcome: "rejected",
+  });
+
+  await page.goto("/o/local/w/local/inbox/inbox-002");
+  await page.getByRole("button", { name: "Acknowledge" }).click();
+  await expect.poll(() => respondCount, { timeout: 15_000 }).toBe(4);
+  expect(responseBodies[3]).toMatchObject({
+    outcome: "acknowledged",
+    notify_mode: "none",
+  });
 });
 
 test("inbox loads after hard refresh when workspace bootstrap is delayed", async ({

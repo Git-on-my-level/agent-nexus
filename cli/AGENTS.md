@@ -63,7 +63,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 - In `--json` mode, non-streaming commands emit exactly one JSON envelope to stdout.
 - Streaming commands emit one envelope v2 per event and preserve resume behavior.
 - JSON output uses envelope v2: success `{ok, schema_version:2, command, result, warnings:[], next_actions:[]}` and errors `{ok:false, schema_version:2, error:{code,message,retryable,exit_code,details,next_actions}, warnings:[], next_actions:[]}`.
-- Exit codes are 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 declined, and 1 other.
+- Exit codes are 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 rejected, and 1 other.
 - Default text is a projection of the same document: one fact per line with a lead token and `key=value` fields, plus `warning code=…` and runnable `next <argv>` lines.
 - Default text output is the preferred agent readback mode. Use JSON for code/script parsing, CI, or `jq`, not as the default way to inspect state.
 - Public refs/handles are the primary identity contract. Board-card text rows lead with the card ref/title and show assignees; backing `thread_ref` or `thread_id` is available in JSON.
