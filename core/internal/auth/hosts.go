@@ -28,7 +28,17 @@ var (
 	ErrEnrollmentDenied     = errors.New("enrollment_denied")
 	ErrEnrollmentExpired    = errors.New("enrollment_expired")
 	ErrEnrollmentConsumed   = errors.New("enrollment_consumed")
+	ErrEnrollmentCapacity   = errors.New("enrollment_capacity")
 )
+
+const (
+	maxEnrollmentAdapters             = 16
+	maxEnrollmentAdoptions            = 16
+	maxPendingEnrollmentsPerSource    = 4
+	maxPendingEnrollmentsPerWorkspace = 64
+	enrollmentRetention               = time.Hour
+)
+
 var hostSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 var agentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
@@ -173,7 +183,7 @@ func validateEnrollment(in HostEnrollmentInput) (ed25519.PublicKey, error) {
 	if err != nil {
 		return nil, ErrInvalidRequest
 	}
-	if !validSlug(in.RequestedSlug) || strings.TrimSpace(in.OSUser) == "" || strings.TrimSpace(in.Hostname) == "" || in.DiscoveredAdapters == nil || in.Adoptions == nil {
+	if !validSlug(in.RequestedSlug) || strings.TrimSpace(in.OSUser) == "" || len(in.OSUser) > 128 || strings.TrimSpace(in.Hostname) == "" || len(in.Hostname) > 255 || in.DiscoveredAdapters == nil || len(in.DiscoveredAdapters) > maxEnrollmentAdapters || in.Adoptions == nil || len(in.Adoptions) > maxEnrollmentAdoptions || len(in.RequestNonce) > 128 {
 		return nil, ErrInvalidRequest
 	}
 	nonce, err := base64.RawURLEncoding.DecodeString(in.RequestNonce)
@@ -189,7 +199,7 @@ func validateEnrollment(in HostEnrollmentInput) (ed25519.PublicKey, error) {
 	}
 	seen = map[string]bool{}
 	for _, a := range in.Adoptions {
-		if !validAgentName(a.AgentName) || seen[a.AgentName] || a.AgentID == "" || a.KeyID == "" || a.Signature == "" {
+		if !validAgentName(a.AgentName) || seen[a.AgentName] || a.AgentID == "" || len(a.AgentID) > 128 || a.KeyID == "" || len(a.KeyID) > 128 || a.Signature == "" || len(a.Signature) > 128 {
 			return nil, ErrInvalidRequest
 		}
 		seen[a.AgentName] = true
@@ -227,6 +237,10 @@ func (s *Store) verifyAdoptions(ctx context.Context, q interface {
 }
 func expireHostEnrollmentsTx(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `UPDATE host_enrollments SET status='expired' WHERE status IN ('pending','approved') AND expires_at<=?`, hostNow())
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM host_enrollments WHERE status IN ('expired','denied','completed') AND created_at<?`, time.Now().UTC().Add(-enrollmentRetention).Format(time.RFC3339Nano))
 	return err
 }
 func (s *Store) slugAvailable(ctx context.Context, q interface {
@@ -254,6 +268,13 @@ func (s *Store) StartHostEnrollment(ctx context.Context, in HostEnrollmentInput,
 	if err := expireHostEnrollmentsTx(ctx, tx); err != nil {
 		return EnrollmentStart{}, err
 	}
+	var workspacePending, sourcePending int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COUNT(*) FILTER (WHERE requesting_ip=?) FROM host_enrollments WHERE status='pending' AND expires_at>?`, ip, hostNow()).Scan(&workspacePending, &sourcePending); err != nil {
+		return EnrollmentStart{}, err
+	}
+	if workspacePending >= maxPendingEnrollmentsPerWorkspace || sourcePending >= maxPendingEnrollmentsPerSource {
+		return EnrollmentStart{}, ErrEnrollmentCapacity
+	}
 	if err := s.slugAvailable(ctx, tx, in.RequestedSlug, ""); err != nil {
 		return EnrollmentStart{}, err
 	}
@@ -274,9 +295,6 @@ func (s *Store) StartHostEnrollment(ctx context.Context, in HostEnrollmentInput,
 	adoptions, _ := json.Marshal(in.Adoptions)
 	_, err = tx.ExecContext(ctx, `INSERT INTO host_enrollments(id,user_code,poll_token_hash,public_key,requested_slug,os_user,hostname,discovered_adapters_json,request_nonce,adoptions_json,requesting_ip,status,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)`, id, code, tokenHash(poll), in.PublicKey, in.RequestedSlug, in.OSUser, in.Hostname, string(adapters), in.RequestNonce, string(adoptions), ip, hostNow(), expires)
 	if err != nil {
-		return EnrollmentStart{}, err
-	}
-	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_enroll_started", Metadata: map[string]any{"enrollment_id": id, "requested_slug": in.RequestedSlug, "requesting_ip": ip}}); err != nil {
 		return EnrollmentStart{}, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -21,15 +21,17 @@ const (
 	defaultAuthRequestBodyLimit    int64 = 256 << 10
 	defaultContentRequestBodyLimit int64 = 8 << 20
 
-	defaultAuthRequestsPerMinute            = 600
-	defaultAuthRequestsBurst                = 100
-	defaultWriteRequestsPerMinute           = 1200
-	defaultWriteRequestsBurst               = 200
-	requestTooLargeRetryAfterSecs           = 1
-	defaultRouteRateLimitMaxKeys            = 4096
-	defaultRouteRateLimitBucketTTL          = 15 * time.Minute
-	routeRateLimitPruneInterval             = time.Minute
-	defaultAttachmentRequestBodyLimit int64 = 50 << 20
+	defaultAuthRequestsPerMinute             = 600
+	defaultAuthRequestsBurst                 = 100
+	defaultEnrollmentRequestsPerMinute       = 12
+	defaultEnrollmentRequestsBurst           = 8
+	defaultWriteRequestsPerMinute            = 1200
+	defaultWriteRequestsBurst                = 200
+	requestTooLargeRetryAfterSecs            = 1
+	defaultRouteRateLimitMaxKeys             = 4096
+	defaultRouteRateLimitBucketTTL           = 15 * time.Minute
+	routeRateLimitPruneInterval              = time.Minute
+	defaultAttachmentRequestBodyLimit  int64 = 50 << 20
 )
 
 type RequestBodyLimits struct {
@@ -40,10 +42,12 @@ type RequestBodyLimits struct {
 }
 
 type RouteRateLimits struct {
-	AuthRequestsPerMinute  int
-	AuthBurst              int
-	WriteRequestsPerMinute int
-	WriteBurst             int
+	AuthRequestsPerMinute       int
+	AuthBurst                   int
+	EnrollmentRequestsPerMinute int
+	EnrollmentBurst             int
+	WriteRequestsPerMinute      int
+	WriteBurst                  int
 }
 
 func (l RequestBodyLimits) normalize() RequestBodyLimits {
@@ -68,6 +72,12 @@ func (l RouteRateLimits) normalize() RouteRateLimits {
 	}
 	if l.AuthBurst <= 0 {
 		l.AuthBurst = defaultAuthRequestsBurst
+	}
+	if l.EnrollmentRequestsPerMinute <= 0 {
+		l.EnrollmentRequestsPerMinute = defaultEnrollmentRequestsPerMinute
+	}
+	if l.EnrollmentBurst <= 0 {
+		l.EnrollmentBurst = defaultEnrollmentRequestsBurst
 	}
 	if l.WriteRequestsPerMinute <= 0 {
 		l.WriteRequestsPerMinute = defaultWriteRequestsPerMinute
@@ -167,6 +177,8 @@ func (l *routeRateLimiter) limitForBucket(bucket string) (int, int) {
 	switch bucket {
 	case "auth":
 		return l.limits.AuthRequestsPerMinute, l.limits.AuthBurst
+	case "enrollment":
+		return l.limits.EnrollmentRequestsPerMinute, l.limits.EnrollmentBurst
 	case "write":
 		return l.limits.WriteRequestsPerMinute, l.limits.WriteBurst
 	default:
@@ -282,6 +294,9 @@ func routeRateLimitBucketForPath(path string, requirement routeAccessRequirement
 		return ""
 	}
 	if strings.HasPrefix(path, "/auth/") {
+		if path == "/auth/hosts/enrollments" || path == "/auth/hosts/enrollments/headless" {
+			return "enrollment"
+		}
 		return "auth"
 	}
 	switch requirement.bucket {

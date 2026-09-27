@@ -346,6 +346,28 @@ func TestAuthRouteRateLimitingReturnsRateLimited(t *testing.T) {
 	}
 }
 
+func TestEnrollmentStartHasDedicatedLowRateLimit(t *testing.T) {
+	limiter := newRouteRateLimiter(RouteRateLimits{})
+	now := time.Now().UTC()
+	if bucket := routeRateLimitBucketForPath("/auth/hosts/enrollments", routeAccessRequirement{}); bucket != "enrollment" {
+		t.Fatalf("enrollment bucket = %q", bucket)
+	}
+	for i := 0; i < defaultEnrollmentRequestsBurst; i++ {
+		if ok, _ := limiter.allow("enrollment", "addr:192.0.2.1", now); !ok {
+			t.Fatalf("burst request %d refused", i)
+		}
+	}
+	if ok, retry := limiter.allow("enrollment", "addr:192.0.2.1", now); ok || retry < time.Second {
+		t.Fatalf("enrollment start not rate limited: ok=%v retry=%s", ok, retry)
+	}
+	if ok, _ := limiter.allow("enrollment", "addr:192.0.2.2", now); !ok {
+		t.Fatal("another source inherited rate limit")
+	}
+	if ok, _ := limiter.allow("auth", "addr:192.0.2.1", now); !ok {
+		t.Fatal("enrollment limit consumed generic auth allowance")
+	}
+}
+
 func TestAuthRouteRateLimitingScopesByForwardedClientAddrWhenProxyIsLoopback(t *testing.T) {
 	t.Parallel()
 

@@ -18,6 +18,7 @@ import {
   inboxResponseOverlay,
   inboxResponseToast,
   queueInboxResponse,
+  retryInboxResponse,
   resetInboxResponseQueue,
   undoInboxResponse,
 } from "../../src/lib/inboxResponseQueue.js";
@@ -133,7 +134,10 @@ describe("inbox response queue", () => {
     });
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(client.respondInboxItem).toHaveBeenCalledTimes(1);
-    expect(client.respondInboxItem).toHaveBeenCalledWith("inbox:a", request);
+    expect(client.respondInboxItem).toHaveBeenCalledWith("inbox:a", {
+      ...request,
+      idempotency_key: expect.any(String),
+    });
     expect(get(inboxResponseToast)).toMatchObject({ state: "sent" });
   });
 
@@ -159,7 +163,10 @@ describe("inbox response queue", () => {
     queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
     queueInboxResponse({ itemId: "inbox:b", request, message: "B" });
     await vi.advanceTimersByTimeAsync(0);
-    expect(client.respondInboxItem).toHaveBeenCalledWith("inbox:a", request);
+    expect(client.respondInboxItem).toHaveBeenCalledWith("inbox:a", {
+      ...request,
+      idempotency_key: expect.any(String),
+    });
     expect(undoInboxResponse()?.itemId).toBe("inbox:b");
   });
 
@@ -172,6 +179,17 @@ describe("inbox response queue", () => {
       error: expect.stringContaining("core unavailable"),
     });
     expect(get(inboxResponseOverlay)["inbox:a"]).toBeUndefined();
+  });
+
+  it("retries an ambiguous failure with the same idempotency key", async () => {
+    client.respondInboxItem.mockRejectedValueOnce(new Error("connection lost"));
+    queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+    await flushInboxResponse();
+    const first = client.respondInboxItem.mock.calls[0][1];
+    expect(first.idempotency_key).toMatch(/^[0-9a-f-]{36}$/i);
+    await retryInboxResponse();
+    const retry = client.respondInboxItem.mock.calls[1][1];
+    expect(retry).toEqual(first);
   });
 
   it("files answered items as completed until core catches up", () => {

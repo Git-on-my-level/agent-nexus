@@ -1246,7 +1246,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Obtain a user code for human host approval.
 - Concepts: `auth`, `hosts`
-- Error codes: `invalid_request`, `host_slug_taken`, `adoption_proof_invalid`, `adoption_conflict`
+- Error codes: `invalid_request`, `host_slug_taken`, `adoption_proof_invalid`, `adoption_conflict`, `enrollment_capacity`, `rate_limited`
 - Output: Returns `HostEnrollmentStartResponse`; poll_token is secret and shown only once.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
 
@@ -1370,9 +1370,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `projection`
 - Input mode: `json-body`
-- Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+- Why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
 - Concepts: `inbox`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
 - Output: Returns `{ event, notify }`.
 
 ## `inbox.stream`

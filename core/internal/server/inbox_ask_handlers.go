@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +18,17 @@ import (
 	"agent-nexus-core/internal/schema"
 )
 
+type humanAttentionResponseStore interface {
+	HumanAttentionResponseReplay(context.Context, string, string, string) (map[string]any, error)
+	HumanAttentionResponseClaimed(context.Context, string) (bool, error)
+	AppendHumanAttentionResponse(context.Context, string, string, string, string, string, map[string]any, map[string]any) (map[string]any, bool, error)
+	SaveHumanAttentionResponseResult(context.Context, string, map[string]any) error
+}
+
 func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, pathInboxItemID string) {
+	if _, ok := requireHumanPrincipal(w, r, opts); !ok {
+		return
+	}
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")
 		return
@@ -23,8 +37,14 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		writeError(w, http.StatusServiceUnavailable, "schema_unavailable", "schema contract is not configured")
 		return
 	}
+	responseStore, ok := opts.primitiveStore.(humanAttentionResponseStore)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "human attention response store is not configured")
+		return
+	}
 
 	var req struct {
+		IdempotencyKey      string   `json:"idempotency_key"`
 		ActorID             string   `json:"actor_id"`
 		InboxItemID         string   `json:"inbox_item_id"`
 		ResponseText        string   `json:"response_text"`
@@ -72,10 +92,81 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 	responseText = strings.TrimSpace(responseText)
+	req.ResponseText = responseText
+	if len(req.IdempotencyKey) > 128 || strings.TrimSpace(req.IdempotencyKey) != req.IdempotencyKey {
+		writeError(w, http.StatusBadRequest, "invalid_request", "idempotency_key must be at most 128 characters without surrounding whitespace")
+		return
+	}
+	hashInput, err := json.Marshal(struct {
+		ActorID     string `json:"actor_id"`
+		InboxItemID string `json:"inbox_item_id"`
+		Request     any    `json:"request"`
+	}{actorID, effectiveItemID, req})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to hash human attention response")
+		return
+	}
+	digest := sha256.Sum256(hashInput)
+	requestHash := hex.EncodeToString(digest[:])
+	if req.IdempotencyKey != "" {
+		replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
+		if replayErr == nil {
+			writeJSON(w, http.StatusCreated, replay)
+			return
+		}
+		if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
+			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
+			return
+		}
+		if !errors.Is(replayErr, primitives.ErrNotFound) {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load response replay")
+			return
+		}
+	}
+	for _, variant := range inboxItemIDVariants(effectiveItemID) {
+		claimed, claimErr := responseStore.HumanAttentionResponseClaimed(r.Context(), variant)
+		if claimErr != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check response state")
+			return
+		}
+		if claimed {
+			if req.IdempotencyKey != "" {
+				replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
+				if replayErr == nil {
+					writeJSON(w, http.StatusCreated, replay)
+					return
+				}
+				if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
+					writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
+					return
+				}
+			}
+			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+			return
+		}
+	}
 
 	item, err := resolveInboxItemByVariants(r.Context(), opts.primitiveStore, effectiveItemID)
 	if err != nil {
 		if errors.Is(err, primitives.ErrNotFound) {
+			if req.IdempotencyKey != "" {
+				replay, replayErr := responseStore.HumanAttentionResponseReplay(r.Context(), actorID, req.IdempotencyKey, requestHash)
+				if replayErr == nil {
+					writeJSON(w, http.StatusCreated, replay)
+					return
+				}
+				if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
+					writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
+					return
+				}
+			}
+			for _, variant := range inboxItemIDVariants(effectiveItemID) {
+				claimed, claimErr := responseStore.HumanAttentionResponseClaimed(r.Context(), variant)
+				if claimErr == nil && claimed {
+					writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+					return
+				}
+			}
 			writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
 			return
 		}
@@ -119,6 +210,10 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 	requestEventRef := strings.TrimSpace(anyString(itemPayload["request_event_ref"]))
 	if requestEventRef == "" && sourceEventID != "" {
 		requestEventRef = "event:" + sourceEventID
+	}
+	if sourceEventID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "inbox item is missing source event id")
+		return
 	}
 
 	target, ok := resolveHumanAttentionResponseTarget(w, r, opts, humanAttentionTargetRequest{
@@ -174,11 +269,25 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
-	responseStored, err := opts.primitiveStore.AppendEvent(r.Context(), actorID, responseEvent)
+	initialNotify := map[string]any{"requested": target.Mode != "none", "queued": false, "message": "Response recorded; notification pending.", "target_actor_id": target.ActorID, "target_agent_id": target.AgentID, "target_handle": target.Handle, "mode": target.Mode}
+	storedResponse, replayed, err := responseStore.AppendHumanAttentionResponse(r.Context(), actorID, sourceEventID, inboxItemID, req.IdempotencyKey, requestHash, responseEvent, initialNotify)
 	if err != nil {
+		if errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded) {
+			writeError(w, http.StatusConflict, "conflict", "human attention request already has a response")
+			return
+		}
+		if errors.Is(err, primitives.ErrHumanAttentionIdempotencyConflict) {
+			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to store human attention response")
 		return
 	}
+	if replayed {
+		writeJSON(w, http.StatusCreated, storedResponse)
+		return
+	}
+	responseStored := storedResponse["event"].(map[string]any)
 	_ = refreshDerivedTopicProjection(r.Context(), opts, threadID, time.Now().UTC(), actorID)
 
 	notifyRequested := target.Mode != "none"
@@ -214,7 +323,11 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 		},
 	}
 
-	writeJSON(w, http.StatusCreated, hygiene.attach(response))
+	response = hygiene.attach(response)
+	if err := responseStore.SaveHumanAttentionResponseResult(r.Context(), sourceEventID, response); err != nil {
+		log.Printf("save human attention response replay: %v", err)
+	}
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inboxItemID string) (primitives.DerivedInboxItem, error) {

@@ -200,7 +200,7 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 		if i, ok := index[r.AgentID]; ok {
 			v := &out[i]
 			v.LastSignalAt = stringPtr(later(value(v.LastSignalAt), r.LastObservedAt))
-			if active(r) && v.ActiveRun == nil {
+			if activeAt(r, now) && v.ActiveRun == nil {
 				start := r.LastObservedAt
 				if r.StartedAt != nil {
 					start = *r.StartedAt
