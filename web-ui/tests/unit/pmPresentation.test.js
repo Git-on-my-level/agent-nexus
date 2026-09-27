@@ -360,3 +360,82 @@ describe("target revision follows core's decision_revision rule", () => {
     ).toBe("6");
   });
 });
+
+describe("task table noise pass", () => {
+  it("orders by attention and keeps the incoming order within a phase", async () => {
+    const { sortWorkByAttention } = await import("$lib/pm/presentation.js");
+    const rows = [
+      { ref: "card:done", phase: "done" },
+      { ref: "card:backlog", phase: "backlog" },
+      { ref: "card:progress-a", phase: "in_progress" },
+      { ref: "card:odd", phase: "vendor_waiting" },
+      { ref: "card:blocked", phase: "blocked" },
+      { ref: "card:cancelled", phase: "cancelled" },
+      { ref: "card:progress-b", phase: "in_progress" },
+      { ref: "card:review", phase: "review" },
+      { ref: "card:ready", phase: "ready" },
+    ];
+    expect(sortWorkByAttention(rows).map((row) => row.ref)).toEqual([
+      "card:blocked",
+      "card:progress-a",
+      "card:progress-b",
+      "card:review",
+      "card:ready",
+      "card:backlog",
+      "card:odd",
+      "card:done",
+      "card:cancelled",
+    ]);
+  });
+
+  it("folds tasks that mirror one source item into the one whose reader works", async () => {
+    const { dedupeWorkBySource } = await import("$lib/pm/presentation.js");
+    const failing = {
+      ref: "card:208-jit",
+      source: {
+        authority: "github",
+        connection_id: "github-jit",
+        native_id: "org/repo#208",
+      },
+      freshness: { last_observed_at: "2026-09-01T12:00:00Z" },
+      refresh: { last_error: { code: "policy_denied" } },
+    };
+    const working = {
+      ref: "card:208",
+      source: {
+        authority: "github",
+        connection_id: "github-main",
+        native_id: "org/repo#208",
+      },
+      freshness: { last_observed_at: "2026-09-01T11:00:00Z" },
+    };
+    const native = { ref: "card:native", source: { authority: "nexus" } };
+    const other = {
+      ref: "card:209",
+      source: { authority: "github", native_id: "org/repo#209" },
+    };
+    const { records, folded } = dedupeWorkBySource([
+      failing,
+      native,
+      working,
+      other,
+    ]);
+    expect(records.map((row) => row.ref)).toEqual([
+      "card:native",
+      "card:208",
+      "card:209",
+    ]);
+    expect(folded["card:208"].map((row) => row.ref)).toEqual(["card:208-jit"]);
+  });
+
+  it("names a connection for a person and keeps the id out of the label", async () => {
+    const { connectionName } = await import("$lib/pm/presentation.js");
+    expect(
+      connectionName({ authority: "github", connection_id: "github-main" }),
+    ).toBe("GitHub · main");
+    expect(
+      connectionName({ authority: "multica", connection_id: "studio_team" }),
+    ).toBe("Multica · studio team");
+    expect(connectionName({ authority: "github" })).toBe("GitHub");
+  });
+});

@@ -1,6 +1,10 @@
 <script>
   import SignalBadge from "./SignalBadge.svelte";
-  import { sourceLabel, workFreshness } from "$lib/pm/presentation.js";
+  import {
+    isNexusOwned,
+    sourceLabel,
+    workFreshness,
+  } from "$lib/pm/presentation.js";
   import { formatTimestamp } from "$lib/formatDate";
   import {
     actorDisplayLabel,
@@ -24,17 +28,17 @@
   let ownerLabel = $derived(
     actorDisplayLabel(work?.owner, $actorRegistry, $principalRegistry),
   );
-  let boardLabel = $derived(
-    boardTitle || String(work?.board_ref ?? "").replace(/^board:/, ""),
+  // The board name only when the parent says it tells boards apart; a
+  // source-owned card says where it lives instead.
+  let placeLabel = $derived(
+    boardTitle || (isNexusOwned(work) ? "" : sourceLabel(work?.source)),
   );
   let age = $derived(
     formatTimestamp(work?.freshness?.last_observed_at || work?.updated_at) ||
       "",
   );
   let meta = $derived(
-    [ownerLabel, boardLabel || sourceLabel(work?.source), age]
-      .filter(Boolean)
-      .join(" · "),
+    [ownerLabel, placeLabel, age].filter(Boolean).join(" · "),
   );
   let blocked = $derived(work?.phase === "blocked");
   // A read that is failing is worth a badge: the reader cannot tell from

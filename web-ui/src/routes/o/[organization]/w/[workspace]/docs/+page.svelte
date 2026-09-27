@@ -21,10 +21,13 @@
   import WorkspaceListBulkToolbar from "$lib/components/WorkspaceListBulkToolbar.svelte";
   import LeadingSelectionGlyph from "$lib/components/LeadingSelectionGlyph.svelte";
   import LifecycleBadge from "$lib/components/LifecycleBadge.svelte";
-  import InlineWorkspaceMetricStrip from "$lib/components/InlineWorkspaceMetricStrip.svelte";
   import { createWorkspaceResourceLifecycleController } from "$lib/workspaceResourceLifecycle.svelte.js";
   import { createWorkspaceListSelection } from "$lib/workspaceListSelection.svelte.js";
-  import { documentListMetricItems } from "$lib/workspaceRowMetrics.js";
+  import {
+    DOC_LIST_EVENT_TYPES,
+    liveWorkspaceEvents,
+  } from "$lib/liveWorkspaceEvents.js";
+  import { onMount } from "svelte";
 
   /**
    * Agent-written comments are frequently "Update on <document title>". A row
@@ -216,12 +219,12 @@
     return /^https?:\/\//i.test(String(value ?? "").trim());
   }
 
-  async function loadDocuments(isRetry = false) {
+  async function loadDocuments(isRetry = false, { live = false } = {}) {
     const loadToken = ++activeDocumentListLoadToken;
     const loadWorkspaceSlug = workspaceSlug;
     const loadScopedThreadId = scopedThreadId;
     loading = true;
-    error = "";
+    if (!live) error = "";
     retrying = isRetry;
     try {
       const q = searchQueryTrimmed;
@@ -261,6 +264,7 @@
         return;
       }
       documents = filterTopLevelDocuments(data.documents);
+      error = "";
     } catch (e) {
       if (
         loadToken !== activeDocumentListLoadToken ||
@@ -391,6 +395,27 @@
     const t = doc?.trashed_at;
     return typeof t === "string" ? t.trim() !== "" : Boolean(t);
   }
+
+  // The list follows the event stream: a new doc, a revision or a comment
+  // re-reads it. Comments on other threads (tasks, inbox) are ignored.
+  onMount(() =>
+    liveWorkspaceEvents({
+      client: coreClient,
+      types: DOC_LIST_EVENT_TYPES,
+      filter: (event) =>
+        event.type !== "message_posted" ||
+        (Array.isArray(event.refs) &&
+          event.refs.some((ref) => String(ref).startsWith("document:"))) ||
+        documents.some(
+          (doc) => doc?.thread_id && doc.thread_id === event.thread_id,
+        ),
+      onChange: () => {
+        // Selecting rows for a bulk action pins the list until it is done.
+        if (docSel.selectMode || createOpen) return;
+        void loadDocuments(false, { live: true });
+      },
+    }),
+  );
 
   let confirmModalTitle = $derived(lifecycle.confirmTitle());
   let confirmModalMessage = $derived(lifecycle.confirmMessage());
@@ -802,7 +827,6 @@
               Updated {formatTimestamp(doc.updated_at) || "—"}
             </p>
             {@render docEnrichment(doc, false)}
-            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
             {@render docLastComment(doc)}
           </div>
         </div>
@@ -870,7 +894,6 @@
               Updated {formatTimestamp(doc.updated_at) || "—"}
             </p>
             {@render docEnrichment(doc, true)}
-            <InlineWorkspaceMetricStrip items={documentListMetricItems(doc)} />
             {@render docLastComment(doc)}
           </div>
         {/snippet}
