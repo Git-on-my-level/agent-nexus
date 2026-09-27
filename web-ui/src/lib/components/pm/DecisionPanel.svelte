@@ -141,7 +141,11 @@
     <header>
       <h2 class="text-subtitle font-semibold text-fg">
         {#if workHref && !selected?.work_missing}
-          <a class="hover:text-accent-text" href={workHref}>{summary.title}</a>
+          <a
+            class="hover:text-accent-text"
+            href={workHref}
+            data-inbox-shortcut="open">{summary.title}</a
+          >
         {:else}
           {summary.title}
         {/if}
@@ -398,6 +402,7 @@
             class="ui-btn-secondary"
             type="button"
             onclick={onAcknowledge}
+            data-inbox-shortcut="done"
             disabled={busy}
             >{busy && busyWith === "acknowledge"
               ? "Closing…"

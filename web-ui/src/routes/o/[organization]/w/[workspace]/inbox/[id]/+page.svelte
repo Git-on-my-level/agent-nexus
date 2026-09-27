@@ -11,10 +11,37 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import AttachmentChip from "$lib/components/AttachmentChip.svelte";
   import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
+  import InboxActorName from "$lib/components/inbox/InboxActorName.svelte";
+  import InboxContextStrip from "$lib/components/inbox/InboxContextStrip.svelte";
+  import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
+  import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
+  import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
+  import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
   import { coreClient } from "$lib/coreClient";
   import { threadTimelineEventHref } from "$lib/deepLinkTargets";
   import { formatAbsoluteDateTime } from "$lib/formatDate";
-  import { decodeInboxItemId } from "$lib/inboxUtils";
+  import { loadInboxContext } from "$lib/inboxContext.js";
+  import { inboxItemSubject } from "$lib/inboxMailbox.js";
+  import {
+    defaultNotifyMode,
+    flushInboxResponse,
+    hasPendingInboxResponse,
+    queueInboxResponse,
+    takeInboxRestore,
+    undoInboxResponse,
+  } from "$lib/inboxResponseQueue.js";
+  import {
+    inboxShortcutAction,
+    inboxShortcutList,
+    otherDialogOpen,
+  } from "$lib/inboxShortcuts.js";
+  import { decodeInboxItemId, inboxItemMailboxId } from "$lib/inboxUtils";
+  import { formatShortcut } from "$lib/keyboardHints.js";
+  import { label as phaseLabel, sentenceCase } from "$lib/pm/presentation.js";
   import { buildPrimitiveRefRoutes, resolveRefLink } from "$lib/refLinkModel";
   import { searchActors } from "$lib/searchHelpers";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
@@ -30,7 +57,7 @@
   let notifyMode = $state("original");
   let notifyTargetActorID = $state("");
   let notifyTargetAgentID = $state("");
-  let submitting = $state(false);
+
   let submitError = $state("");
   let attachingResponseFile = $state(false);
   let pendingResponseAttachmentUpload = $state(null);
@@ -48,6 +75,11 @@
   let notifyTargetMenuOpen = $state(false);
   let inboxLoadSeq = 0;
   let loadedInboxRouteKey = $state("");
+  let chosen = $state("");
+  let helpOpen = $state(false);
+  let subject = $state(null);
+  let context = $state(null);
+  let contextLoading = $state(false);
 
   const KIND_LABELS = {
     ask: "Ask",
@@ -140,17 +172,27 @@
     return value?.notification_target_status ?? {};
   }
 
-  function requesterLabel(value = item) {
+  function actorName(id) {
+    const raw = String(id ?? "").trim();
+    if (!raw) return "";
+    const label = actorDisplayLabel(raw, $actorRegistry, $principalRegistry);
+    return label && label !== raw && label !== raw.replace(/^actor:/, "")
+      ? label
+      : "";
+  }
+
+  function requesterId(value = item) {
     return (
-      String(value?.requester_label ?? "").trim() ||
-      String(value?.requester_agent_id ?? "").trim() ||
       String(value?.requester_actor_id ?? "").trim() ||
-      "unknown requester"
+      String(value?.requester_agent_id ?? "").trim()
     );
   }
 
-  function applyPreset(text) {
-    responseDraft = text;
+  function requesterName(value = item) {
+    return (
+      String(value?.requester_label ?? "").trim() ||
+      actorName(requesterId(value))
+    );
   }
 
   function notifyTargetLabel() {
@@ -204,6 +246,10 @@
     responseAttachmentError = "";
     responseAttachmentRefs = [];
     responseComposerArtifactsByRef = {};
+    chosen = "";
+    subject = null;
+    context = null;
+    contextLoading = false;
   }
 
   function handleNotifyTargetInput(event) {
@@ -235,7 +281,7 @@
       const label = notifyTargetLabel();
       return label ? `Notify ${label}` : "Notify someone else";
     }
-    return `Notify ${requesterLabel()}`;
+    return `Notify ${requesterName() || "the requester"}`;
   }
 
   async function loadItem(
@@ -259,12 +305,13 @@
       }
       item = loaded;
       loadedInboxRouteKey = routeKey;
-      notifyMode =
-        notificationStatus(loaded).resolvable === false ? "none" : "original";
+      notifyMode = defaultNotifyMode(loaded);
       if (browser) {
         const cached = localStorage.getItem(draftStorageKey(workspace, id));
         if (cached != null) responseDraft = cached;
       }
+      applyRestore(takeInboxRestore(loaded.id));
+      void loadContext(loaded, routeKey);
     } catch (error) {
       if (seq !== inboxLoadSeq || routeKey !== inboxRouteKey()) return;
       if (error?.status === 404) {
@@ -283,8 +330,88 @@
     }
   }
 
-  async function submitResponseWithText(responseText) {
-    if (!item || submitting) return;
+  /** Composer state an Undo hands back, so nothing typed or chosen is lost. */
+  function applyRestore(state) {
+    if (!state) return;
+    responseDraft = String(state.draft ?? "");
+    chosen = String(state.chosen ?? "");
+    notifyMode = state.notifyMode || notifyMode;
+    notifyTargetSelected = state.notifyTargetSelected ?? null;
+    notifyTargetActorID = String(state.notifyTargetActorID ?? "");
+    notifyTargetAgentID = String(state.notifyTargetAgentID ?? "");
+    responseAttachmentRefs = Array.isArray(state.attachmentRefs)
+      ? [...state.attachmentRefs]
+      : [];
+    responseComposerArtifactsByRef = { ...(state.artifactsByRef ?? {}) };
+  }
+
+  async function loadContext(loaded, routeKey) {
+    let next = inboxItemSubject(loaded);
+    subject = next;
+    contextLoading = true;
+    try {
+      if (next?.kind === "card") {
+        try {
+          const response = await coreClient.getWork(next.ref);
+          const task = response?.work ?? null;
+          if (task) {
+            next = inboxItemSubject(loaded, { work: [task] });
+            if (routeKey === inboxRouteKey()) subject = next;
+          }
+        } catch {
+          // The title from the item stands.
+        }
+      }
+      const value = await loadInboxContext(loaded, next);
+      if (routeKey === inboxRouteKey()) context = value;
+    } finally {
+      if (routeKey === inboxRouteKey()) contextLoading = false;
+    }
+  }
+
+  function subjectHref(value) {
+    const ref = String(value?.ref ?? "");
+    if (value?.kind === "card")
+      return workspaceHref(`/tasks/${encodeURIComponent(ref)}`);
+    if (value?.kind === "document")
+      return workspaceHref(
+        `/docs/${encodeURIComponent(ref.slice("document:".length))}`,
+      );
+    return "";
+  }
+
+  const OPERATOR_SUBJECTS = new Set(["card", "document", "topic"]);
+  let contextSubject = $derived.by(() => {
+    // Threads and boards are not operator nouns; they get no subject line.
+    if (!subject || !OPERATOR_SUBJECTS.has(subject.kind)) return null;
+    if (subject.kind === "document") {
+      const document = context?.document;
+      return {
+        title: String(document?.title || subject.title),
+        status: document?.head_revision_number
+          ? `v${document.head_revision_number}`
+          : "",
+      };
+    }
+    return {
+      title: subject.title,
+      status: subject.phase ? phaseLabel(subject.phase) : "",
+    };
+  });
+  let contextRelation = $derived(
+    itemKind(item) === "review"
+      ? "Review of"
+      : subject?.kind === "card" && !isCompleted
+        ? "Blocks"
+        : "On",
+  );
+
+  /**
+   * Queues the response behind the undo toast and returns to the Inbox. The
+   * committed request is this page's `inbox.respond` call, unchanged.
+   */
+  function submitResponseWithText(responseText, { acknowledge = false } = {}) {
+    if (!item) return;
     const text = String(responseText ?? "").trim();
     if (!text) {
       submitError = "Response text is required.";
@@ -292,56 +419,135 @@
     }
     const targetActorID = String(notifyTargetActorID ?? "").trim();
     const targetAgentID = String(notifyTargetAgentID ?? "").trim();
-    if (notifyMode === "target" && !targetActorID && !targetAgentID) {
+    if (
+      !acknowledge &&
+      notifyMode === "target" &&
+      !targetActorID &&
+      !targetAgentID
+    ) {
       submitError = "Replacement target requires an actor ID or agent ID.";
       return;
     }
 
     submitError = "";
-    submitting = true;
-    try {
-      const resp = await coreClient.respondInboxItem(inboxItemID, {
-        response_text: text,
-        related_refs: responseAttachmentRefs,
-        notify_mode: notifyMode,
-        notify_target_actor_id:
-          notifyMode === "target" && targetActorID ? targetActorID : undefined,
-        notify_target_agent_id:
-          notifyMode === "target" && targetAgentID ? targetAgentID : undefined,
-      });
-      if (browser) localStorage.removeItem(draftStorageKey());
-      responseDraft = "";
-      responseAttachmentRefs = [];
-      responseComposerArtifactsByRef = {};
-      responseAttachmentError = "";
-      const eventId = String(resp?.event?.id ?? "").trim();
-      const notify = resp?.notify ?? {};
-      const requested = Boolean(notify.requested);
-      const queued = Boolean(notify.queued);
-      const qs = new URLSearchParams();
-      qs.set("status", "open");
-      if (eventId) qs.set("responded", eventId);
-      const tid = String(item?.thread_id ?? "").trim();
-      if (tid) qs.set("responded_thread", tid);
-      if (requested && queued) qs.set("notify_queued", "1");
-      else qs.set("notify_recorded", "1");
-      await goto(`${workspaceHref("/inbox")}?${qs}`, {
-        replaceState: false,
-        noScroll: false,
-        keepFocus: false,
-      });
-    } catch (error) {
-      submitError =
-        error instanceof Error
-          ? `Failed to submit response: ${error.message}`
-          : String(error);
-    } finally {
-      submitting = false;
-    }
+    const request = acknowledge
+      ? { response_text: text, notify_mode: "none" }
+      : {
+          response_text: text,
+          related_refs: responseAttachmentRefs,
+          notify_mode: notifyMode,
+          notify_target_actor_id:
+            notifyMode === "target" && targetActorID
+              ? targetActorID
+              : undefined,
+          notify_target_agent_id:
+            notifyMode === "target" && targetAgentID
+              ? targetAgentID
+              : undefined,
+        };
+    const proposal = proposalStrings.includes(text) ? text : "";
+    const who =
+      notifyMode === "target"
+        ? notifyTargetLabel()
+        : notifyMode === "none"
+          ? ""
+          : requesterName();
+    queueInboxResponse({
+      itemId: item.id,
+      request,
+      message: acknowledge
+        ? "Acknowledged"
+        : who
+          ? `Sent to ${who}`
+          : "Response recorded",
+      restore: {
+        origin: "item",
+        href: $page.url.pathname,
+        draft: acknowledge || proposal ? responseDraft : text,
+        chosen: proposal,
+        notifyMode,
+        notifyTargetSelected,
+        notifyTargetActorID,
+        notifyTargetAgentID,
+        attachmentRefs: responseAttachmentRefs,
+        artifactsByRef: responseComposerArtifactsByRef,
+      },
+    });
+    if (browser) localStorage.removeItem(draftStorageKey());
+    responseDraft = "";
+    chosen = "";
+    responseAttachmentRefs = [];
+    responseComposerArtifactsByRef = {};
+    responseAttachmentError = "";
+    void goto(workspaceHref("/inbox"));
   }
 
-  async function submitResponse() {
-    await submitResponseWithText(responseDraft);
+  function undoLastResponse() {
+    const entry = undoInboxResponse();
+    if (!entry) return;
+    const restore = entry.restore || {};
+    if (restore.origin === "item" && entry.itemId === item?.id) {
+      applyRestore(restore);
+      return;
+    }
+    if (restore.origin === "item" && restore.href) {
+      void goto(restore.href);
+      return;
+    }
+    void goto(
+      `${workspaceHref("/inbox")}?item=${encodeURIComponent(restore.rowId || "")}`,
+    );
+  }
+
+  function handleKeydown(event) {
+    const shortcut = inboxShortcutAction(event, {
+      helpOpen,
+      modalOpen: !helpOpen && otherDialogOpen(),
+    });
+    if (!shortcut) return;
+    const root = document.querySelector("[data-inbox-item-page]");
+    const find = (selector) => root?.querySelector(selector) || null;
+    switch (shortcut.type) {
+      case "help":
+        helpOpen = true;
+        break;
+      case "close-help":
+        helpOpen = false;
+        break;
+      case "undo":
+        if (!hasPendingInboxResponse()) return;
+        undoLastResponse();
+        break;
+      case "proposal": {
+        const button = find(
+          `[data-inbox-proposal="${shortcut.index}"]:not([disabled])`,
+        );
+        if (!button) return;
+        button.click();
+        break;
+      }
+      case "reply": {
+        const field = find('[data-inbox-shortcut="reply"]');
+        if (!field) return;
+        field.focus();
+        break;
+      }
+      case "done": {
+        const control = find('[data-inbox-shortcut="done"]:not([disabled])');
+        if (!control) return;
+        control.click();
+        break;
+      }
+      case "open": {
+        const link = find('a[data-inbox-shortcut="open"]');
+        if (!link) return;
+        link.click();
+        break;
+      }
+      default:
+        return;
+    }
+    event.preventDefault();
   }
 
   async function handleAttachResponseFile(event) {
@@ -418,11 +624,31 @@
   });
 </script>
 
-<div class="mx-auto max-w-3xl space-y-3 px-4 py-4 max-md:px-3 max-md:py-3">
+<svelte:window
+  onkeydown={handleKeydown}
+  onbeforeunload={(event) => {
+    if (hasPendingInboxResponse()) {
+      void flushInboxResponse();
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  }}
+/>
+
+<div
+  class="mx-auto max-w-3xl space-y-3 px-4 py-4 max-md:px-3 max-md:py-3"
+  data-inbox-item-page
+>
   <div class="flex items-center justify-between">
     <a
       class="text-meta text-fg-muted hover:text-fg max-md:text-micro"
-      href={workspaceHref(isCompleted ? "/inbox?status=completed" : "/inbox")}
+      href={item
+        ? `${workspaceHref("/inbox")}?${new URLSearchParams(
+            isCompleted
+              ? { mailbox: "handled", item: inboxItemMailboxId(item) }
+              : { item: inboxItemMailboxId(item) },
+          )}`
+        : workspaceHref("/inbox")}
     >
       ← Back to inbox
     </a>
@@ -441,23 +667,20 @@
   {:else if item}
     <section class="space-y-4 max-md:space-y-3">
       <header class="space-y-2 max-md:space-y-1.5">
-        <div class="flex flex-wrap items-center gap-2 text-micro">
-          <span
-            class="rounded border border-line bg-panel px-2 py-0.5 font-semibold uppercase tracking-wide text-fg-muted"
-          >
-            {kindLabel(item)}
-          </span>
+        <div
+          class="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
+        >
+          <span class="ui-label mb-0">{kindLabel(item).toUpperCase()}</span>
           {#if item.severity}
             <span
-              class="rounded border border-danger bg-danger-soft px-2 py-0.5 font-semibold uppercase tracking-wide text-danger-text"
+              class="ui-badge {String(item.severity).toLowerCase() ===
+              'critical'
+                ? 'ui-badge--danger'
+                : 'ui-badge--warn'}">{sentenceCase(item.severity)}</span
             >
-              {item.severity}
-            </span>
           {/if}
-          <span class="min-w-0 text-fg-muted [overflow-wrap:anywhere]">
-            from <span class="font-mono text-mono text-fg"
-              >{requesterLabel(item)}</span
-            >
+          <span class="min-w-0 [overflow-wrap:anywhere]">
+            from <InboxActorName name={requesterName()} id={requesterId()} />
           </span>
         </div>
         <!--
@@ -472,6 +695,17 @@
         >
           {item.title}
         </h1>
+        <InboxContextStrip
+          relation={contextRelation}
+          subject={contextSubject}
+          subjectHref={subjectHref(subject)}
+          note={context?.note || null}
+          noteAuthor={context?.note
+            ? actorName(context.note.actorId) ||
+              (context.note.byRequester ? requesterName() : "")
+            : ""}
+          loading={contextLoading && !context}
+        />
         {#if item.body}
           <div
             class="rounded-md border border-line bg-panel px-3 py-2 text-meta leading-relaxed text-fg"
@@ -508,17 +742,14 @@
               Original request details are unavailable for this entry.
             </p>
           {/if}
-          {#if item.responded_at}
-            <p class="text-micro text-fg-muted">
-              Responded {formatAbsoluteDateTime(item.responded_at)}
-            </p>
-          {/if}
-          {#if item.responding_actor_id}
-            <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
-              Responder{" "}
-              <span class="font-mono text-fg">{item.responding_actor_id}</span>
-            </p>
-          {/if}
+          <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
+            {#if item.responding_actor_id}Answered by <InboxActorName
+                name={actorName(item.responding_actor_id)}
+                id={item.responding_actor_id}
+              />{:else}Answered{/if}{#if item.responded_at}{" "}{formatAbsoluteDateTime(
+                item.responded_at,
+              )}{/if}
+          </p>
           <div>
             <div
               class="text-micro font-medium uppercase tracking-wide text-fg-muted"
@@ -544,327 +775,266 @@
             <Button
               variant="secondary"
               size="compact"
-              href={workspaceHref("/inbox?status=completed")}
+              href={`${workspaceHref("/inbox")}?mailbox=handled`}
             >
-              View Completed inbox
+              View Handled
             </Button>
           </div>
         </div>
       {:else}
-        <form
-          class="space-y-4"
-          onsubmit={(event) => {
-            event.preventDefault();
-            void submitResponse();
-          }}
+        <InboxRespondPanel
+          kind={itemKind(item)}
+          proposals={proposalStrings}
+          bind:draft={responseDraft}
+          {chosen}
+          replyId="human-response-input"
+          replyLabel="Your response"
+          placeholder="Write the response the agent should rely on."
+          tall
+          sendLabel="Send response"
+          onSend={(text) => submitResponseWithText(text)}
+          onAcknowledge={() =>
+            submitResponseWithText("Acknowledged from inbox", {
+              acknowledge: true,
+            })}
         >
-          {#if itemKind(item) === "review"}
-            <div class="flex flex-wrap gap-2">
-              <button
-                class="rounded border border-line bg-panel px-3 py-1.5 text-meta font-semibold text-fg hover:bg-bg-soft disabled:opacity-50"
-                type="button"
-                disabled={submitting}
-                onclick={() => void submitResponseWithText("Approved.")}
-              >
-                Approve
-              </button>
-              <button
-                class="rounded border border-line bg-panel px-3 py-1.5 text-meta font-semibold text-fg hover:bg-bg-soft disabled:opacity-50"
-                type="button"
-                disabled={submitting}
-                onclick={() => void submitResponseWithText("Rejected.")}
-              >
-                Reject
-              </button>
-            </div>
-          {/if}
-
-          {#if proposalStrings.length > 0}
-            <div class="space-y-2">
-              <div
-                class="text-micro font-medium uppercase tracking-wide text-fg-muted"
-              >
-                Suggested responses
-              </div>
-              <div class="space-y-1.5">
-                {#each proposalStrings as proposal, index (proposal)}
-                  {@const isRecommended = index === 0}
-                  {@const isSelected = responseDraft.trim() === proposal.trim()}
-                  <button
-                    class="group block w-full rounded border bg-panel px-3 py-2 text-left text-meta text-fg transition hover:bg-bg-soft max-md:px-2.5 max-md:py-1.5 max-md:text-micro max-md:leading-snug {isSelected
-                      ? 'border-accent ring-1 ring-accent bg-accent-soft'
-                      : 'border-line'}"
-                    type="button"
-                    onclick={() => applyPreset(proposal)}
-                  >
-                    <span
-                      class="flex w-full flex-col items-start gap-1.5 text-left"
-                    >
-                      {#if isRecommended}
-                        <span
-                          class="shrink-0 rounded border border-accent bg-accent-soft px-2 py-0.5 text-micro font-semibold uppercase tracking-wide text-accent max-md:px-1.5 max-md:text-[11px]"
-                        >
-                          Recommended
-                        </span>
-                      {/if}
-                      <!-- Canned replies quote ids and addresses verbatim. -->
-                      <span
-                        class="w-full whitespace-pre-wrap [overflow-wrap:anywhere]"
-                        >{proposal}</span
-                      >
-                    </span>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          <div>
-            <label
-              class="block text-micro font-medium uppercase tracking-wide text-fg-muted"
-              for="human-response-input">Your response</label
+          {#snippet after()}
+            <span class="ml-auto hidden text-micro text-fg-subtle sm:inline"
+              >{formatShortcut("Enter")} to send · ? for shortcuts</span
             >
-            <textarea
-              id="human-response-input"
-              class="mt-2 min-h-[200px] w-full rounded border border-line bg-panel px-3 py-2 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent max-md:min-h-[140px]"
-              bind:value={responseDraft}
-              placeholder="Write the response the agent should rely on."
-            ></textarea>
-          </div>
-
-          <div class="space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <label
-                class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
-              >
-                {attachingResponseFile ? "Uploading…" : "Attach file"}
-                <input
-                  class="sr-only"
-                  accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
-                  disabled={attachingResponseFile || submitting}
-                  onchange={handleAttachResponseFile}
-                  type="file"
-                />
-              </label>
-              {#if pendingResponseAttachmentUpload}
-                {@const pendingResolved = resolveRefLink(
-                  "artifact:upload-pending",
-                  {
+          {/snippet}
+          {#snippet extras()}
+            <div class="space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <label
+                  class="inline-flex cursor-pointer items-center rounded border border-line bg-panel px-3 py-1.5 text-micro font-medium text-fg hover:bg-bg-soft"
+                >
+                  {attachingResponseFile ? "Uploading…" : "Attach file"}
+                  <input
+                    class="sr-only"
+                    accept="image/*,text/plain,text/markdown,text/csv,.md,.txt,.csv,.json,.pdf"
+                    disabled={attachingResponseFile}
+                    onchange={handleAttachResponseFile}
+                    type="file"
+                  />
+                </label>
+                {#if pendingResponseAttachmentUpload}
+                  {@const pendingResolved = resolveRefLink(
+                    "artifact:upload-pending",
+                    {
+                      threadId: String(item?.thread_id ?? "").trim(),
+                      boardId: "",
+                      humanize: true,
+                      artifactRoutesById: {},
+                      eventRoutesById: {},
+                      workspaceSlug,
+                      organizationSlug,
+                    },
+                  )}
+                  <AttachmentChip
+                    resolved={pendingResolved}
+                    artifactOverlay={pendingResponseAttachmentUpload}
+                    pending
+                    size="compact"
+                  />
+                {/if}
+                {#each responseAttachmentRefs as ref (ref)}
+                  {@const composerResolved = resolveRefLink(ref, {
                     threadId: String(item?.thread_id ?? "").trim(),
                     boardId: "",
                     humanize: true,
-                    artifactRoutesById: {},
+                    artifactRoutesById: inboxComposerArtifactRoutes,
                     eventRoutesById: {},
                     workspaceSlug,
                     organizationSlug,
-                  },
-                )}
-                <AttachmentChip
-                  resolved={pendingResolved}
-                  artifactOverlay={pendingResponseAttachmentUpload}
-                  pending
-                  size="compact"
-                />
-              {/if}
-              {#each responseAttachmentRefs as ref (ref)}
-                {@const composerResolved = resolveRefLink(ref, {
-                  threadId: String(item?.thread_id ?? "").trim(),
-                  boardId: "",
-                  humanize: true,
-                  artifactRoutesById: inboxComposerArtifactRoutes,
-                  eventRoutesById: {},
-                  workspaceSlug,
-                  organizationSlug,
-                })}
-                <span class="inline-flex max-w-full items-center gap-1">
-                  <AttachmentChip resolved={composerResolved} size="compact" />
-                  <button
-                    class="shrink-0 text-fg-muted hover:text-fg"
-                    type="button"
-                    aria-label={`Remove ${ref}`}
-                    onclick={() => {
-                      responseAttachmentRefs = responseAttachmentRefs.filter(
-                        (candidate) => candidate !== ref,
-                      );
-                      const next = { ...responseComposerArtifactsByRef };
-                      delete next[ref];
-                      responseComposerArtifactsByRef = next;
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              {/each}
-            </div>
-            {#if responseAttachmentError}
-              <p class="text-micro text-danger-text">
-                {responseAttachmentError}
-              </p>
-            {/if}
-          </div>
-
-          <div
-            class="rounded border border-line bg-bg-soft px-3 py-2 text-meta max-md:space-y-2"
-          >
-            <div
-              class="flex flex-wrap items-center gap-x-3 gap-y-2 max-md:block"
-            >
-              <span
-                class="min-w-0 text-fg-muted [overflow-wrap:anywhere] max-md:block max-md:text-micro"
-                >{notifyDescription()}</span
-              >
-              <div
-                class="ml-auto flex flex-wrap items-center gap-1 max-md:mt-2 max-md:grid max-md:grid-cols-3 max-md:rounded-md max-md:border max-md:border-line max-md:bg-panel max-md:p-1"
-              >
-                <button
-                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
-                  'original'
-                    ? 'bg-accent-soft text-accent'
-                    : 'text-fg-muted hover:text-fg'}"
-                  type="button"
-                  disabled={notificationStatus().resolvable === false}
-                  onclick={() => {
-                    notifyMode = "original";
-                    clearNotifyTarget();
-                  }}
-                >
-                  Original requester
-                </button>
-                <button
-                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
-                  'target'
-                    ? 'bg-accent-soft text-accent'
-                    : 'text-fg-muted hover:text-fg'}"
-                  type="button"
-                  onclick={() => {
-                    notifyMode = "target";
-                    notifyTargetMenuOpen = true;
-                  }}
-                >
-                  Someone else
-                </button>
-                <button
-                  class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
-                  'none'
-                    ? 'bg-accent-soft text-accent'
-                    : 'text-fg-muted hover:text-fg'}"
-                  type="button"
-                  onclick={() => {
-                    notifyMode = "none";
-                    clearNotifyTarget();
-                  }}
-                >
-                  No one
-                </button>
-              </div>
-            </div>
-            {#if notifyMode === "target"}
-              <div class="relative mt-2">
-                {#if notifyTargetSelected}
-                  <div
-                    class="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1.5"
-                  >
-                    <span
-                      class="inline-flex min-w-0 items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-micro text-accent [overflow-wrap:anywhere]"
-                    >
-                      @{notifyTargetSelected.display_name ||
-                        notifyTargetSelected.id}
-                    </span>
+                  })}
+                  <span class="inline-flex max-w-full items-center gap-1">
+                    <AttachmentChip
+                      resolved={composerResolved}
+                      size="compact"
+                    />
                     <button
-                      class="ml-auto text-micro text-fg-muted hover:text-fg"
+                      class="shrink-0 text-fg-muted hover:text-fg"
                       type="button"
-                      onclick={clearNotifyTarget}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                {:else}
-                  <input
-                    class="w-full rounded border border-line bg-panel px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent"
-                    type="text"
-                    placeholder="Search people or agents…"
-                    role="combobox"
-                    aria-label="Notify someone else"
-                    aria-controls={notifyTargetPopupOpen
-                      ? "notify-target-results"
-                      : undefined}
-                    aria-expanded={notifyTargetPopupOpen}
-                    aria-autocomplete="list"
-                    value={notifyTargetQuery}
-                    oninput={handleNotifyTargetInput}
-                    onfocus={() => (notifyTargetMenuOpen = true)}
-                  />
-                  {#if notifyTargetPopupOpen}
-                    <!-- A results list that floats over the composer: mark it
-                         as a listbox so it reads (and is dismissed) as a
-                         popup rather than as chrome covering Send response. -->
-                    <div
-                      id="notify-target-results"
-                      role="listbox"
-                      aria-label="Notification targets"
-                      class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-line bg-panel shadow-lg"
-                      use:dismissOnEscape={{
-                        enabled: true,
-                        onDismiss: () => (notifyTargetMenuOpen = false),
+                      aria-label={`Remove ${ref}`}
+                      onclick={() => {
+                        responseAttachmentRefs = responseAttachmentRefs.filter(
+                          (candidate) => candidate !== ref,
+                        );
+                        const next = { ...responseComposerArtifactsByRef };
+                        delete next[ref];
+                        responseComposerArtifactsByRef = next;
                       }}
                     >
-                      {#each notifyTargetResults as actor (actor.id)}
-                        <button
-                          class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-bg-soft"
-                          type="button"
-                          role="option"
-                          aria-selected={false}
-                          onclick={() => chooseNotifyTarget(actor)}
-                        >
-                          <span
-                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent"
-                          >
-                            {(actor.display_name || actor.id || "?")
-                              .slice(0, 1)
-                              .toUpperCase()}
-                          </span>
-                          <span class="min-w-0 flex-1">
-                            <span class="block truncate text-fg"
-                              >{actor.display_name || actor.id}</span
-                            >
-                            <span
-                              class="block truncate font-mono text-micro text-fg-muted"
-                              >{actor.id}</span
-                            >
-                          </span>
-                        </button>
-                      {/each}
+                      ×
+                    </button>
+                  </span>
+                {/each}
+              </div>
+              {#if responseAttachmentError}
+                <p class="text-micro text-danger-text">
+                  {responseAttachmentError}
+                </p>
+              {/if}
+            </div>
+
+            <div
+              class="rounded border border-line bg-bg-soft px-3 py-2 text-meta max-md:space-y-2"
+            >
+              <div
+                class="flex flex-wrap items-center gap-x-3 gap-y-2 max-md:block"
+              >
+                <span
+                  class="min-w-0 text-fg-muted [overflow-wrap:anywhere] max-md:block max-md:text-micro"
+                  >{notifyDescription()}</span
+                >
+                <div
+                  class="ml-auto flex flex-wrap items-center gap-1 max-md:mt-2 max-md:grid max-md:grid-cols-3 max-md:rounded-md max-md:border max-md:border-line max-md:bg-panel max-md:p-1"
+                >
+                  <button
+                    class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
+                    'original'
+                      ? 'bg-accent-soft text-accent'
+                      : 'text-fg-muted hover:text-fg'}"
+                    type="button"
+                    disabled={notificationStatus().resolvable === false}
+                    onclick={() => {
+                      notifyMode = "original";
+                      clearNotifyTarget();
+                    }}
+                  >
+                    Original requester
+                  </button>
+                  <button
+                    class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
+                    'target'
+                      ? 'bg-accent-soft text-accent'
+                      : 'text-fg-muted hover:text-fg'}"
+                    type="button"
+                    onclick={() => {
+                      notifyMode = "target";
+                      notifyTargetMenuOpen = true;
+                    }}
+                  >
+                    Someone else
+                  </button>
+                  <button
+                    class="rounded px-2 py-1 text-micro font-medium max-md:py-1.5 {notifyMode ===
+                    'none'
+                      ? 'bg-accent-soft text-accent'
+                      : 'text-fg-muted hover:text-fg'}"
+                    type="button"
+                    onclick={() => {
+                      notifyMode = "none";
+                      clearNotifyTarget();
+                    }}
+                  >
+                    No one
+                  </button>
+                </div>
+              </div>
+              {#if notifyMode === "target"}
+                <div class="relative mt-2">
+                  {#if notifyTargetSelected}
+                    <div
+                      class="flex items-center gap-2 rounded border border-line bg-panel px-2 py-1.5"
+                    >
+                      <span
+                        class="inline-flex min-w-0 items-center gap-1.5 rounded bg-accent-soft px-2 py-0.5 text-micro text-accent [overflow-wrap:anywhere]"
+                      >
+                        @{notifyTargetSelected.display_name ||
+                          notifyTargetSelected.id}
+                      </span>
+                      <button
+                        class="ml-auto text-micro text-fg-muted hover:text-fg"
+                        type="button"
+                        onclick={clearNotifyTarget}
+                      >
+                        Clear
+                      </button>
                     </div>
+                  {:else}
+                    <input
+                      class="w-full rounded border border-line bg-panel px-2 py-1.5 text-meta text-fg outline-none placeholder:text-fg-muted focus:ring-2 focus:ring-accent"
+                      type="text"
+                      placeholder="Search people or agents…"
+                      role="combobox"
+                      aria-label="Notify someone else"
+                      aria-controls={notifyTargetPopupOpen
+                        ? "notify-target-results"
+                        : undefined}
+                      aria-expanded={notifyTargetPopupOpen}
+                      aria-autocomplete="list"
+                      value={notifyTargetQuery}
+                      oninput={handleNotifyTargetInput}
+                      onfocus={() => (notifyTargetMenuOpen = true)}
+                    />
+                    {#if notifyTargetPopupOpen}
+                      <!-- A results list that floats over the composer: mark it
+                         as a listbox so it reads (and is dismissed) as a
+                         popup rather than as chrome covering Send response. -->
+                      <div
+                        id="notify-target-results"
+                        role="listbox"
+                        aria-label="Notification targets"
+                        class="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-line bg-panel shadow-lg"
+                        use:dismissOnEscape={{
+                          enabled: true,
+                          onDismiss: () => (notifyTargetMenuOpen = false),
+                        }}
+                      >
+                        {#each notifyTargetResults as actor (actor.id)}
+                          <button
+                            class="flex w-full items-center gap-2 px-3 py-2 text-left text-meta hover:bg-bg-soft"
+                            type="button"
+                            role="option"
+                            aria-selected={false}
+                            onclick={() => chooseNotifyTarget(actor)}
+                          >
+                            <span
+                              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent"
+                            >
+                              {(actor.display_name || actor.id || "?")
+                                .slice(0, 1)
+                                .toUpperCase()}
+                            </span>
+                            <span class="min-w-0 flex-1">
+                              <span class="block truncate text-fg"
+                                >{actor.display_name || actor.id}</span
+                              >
+                              <span
+                                class="block truncate font-mono text-micro text-fg-muted"
+                                >{actor.id}</span
+                              >
+                            </span>
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
                   {/if}
-                {/if}
+                </div>
+              {/if}
+            </div>
+
+            {#if submitError}
+              <div
+                class="rounded border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
+                role="alert"
+              >
+                {submitError}
               </div>
             {/if}
-          </div>
-
-          {#if submitError}
-            <div
-              class="rounded border border-danger bg-danger-soft px-3 py-2 text-meta text-danger-text"
-              role="alert"
-            >
-              {submitError}
-            </div>
-          {/if}
-
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-meta text-fg-muted max-md:hidden">
-              ⌘+Enter to submit
-            </p>
-            <Button
-              class="max-md:w-full max-md:justify-center"
-              type="submit"
-              variant="primary"
-              disabled={submitting}
-            >
-              {submitting ? "Sending..." : "Send response"}
-            </Button>
-          </div>
-        </form>
+          {/snippet}
+        </InboxRespondPanel>
       {/if}
     </section>
   {/if}
+  <KeyboardShortcutsDialog
+    bind:open={helpOpen}
+    shortcuts={inboxShortcutList().filter(
+      ([action]) => !/^(Next|Previous) item$/.test(action),
+    )}
+    title="Inbox shortcuts"
+  />
+  <InboxUndoToast onUndo={undoLastResponse} />
 </div>

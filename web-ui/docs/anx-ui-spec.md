@@ -74,7 +74,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 **Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
 
 1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
-2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`getInboxSubjectLabel`) — because their job is to name the *ref type*. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
+2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`inboxSubjectNoun`) — because their job is to name the *ref type*. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
 Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
@@ -179,20 +179,49 @@ Events stays under More on mobile rather than a primary bottom-nav slot.
 
 ### 3.1 Inbox
 
-A dedicated surface showing items that need operator attention.
+A dedicated surface showing items that need operator attention. It is the only attention surface; other views (Tasks, a future Agents roster) link into it rather than handling items themselves.
 
-**Display:**
+**Mailboxes and order:**
 
 - Inbox items are grouped into three **mailboxes** — **Needs you**, **Watching**, **Handled** (`lib/inboxMailbox.js`). Item `kind` (`ask`, `review`, `escalate`) drives affordances within an item, not the grouping; unknown kinds MUST still appear rather than being dropped.
-- Within each group, sorted by inferred **urgency** (from kind, optional severity, and trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
-- Each item shows: title, kind, requester context, and a link to the relevant task, document, thread, or artifact.
+- **Needs you** is ordered by how long the requester has been blocked (the age of the open request, compared at minute resolution), then by severity (critical, high, …), then by kind. Blocked tasks use their last update as the start of the wait, because core does not record when a task entered Blocked. **Watching** and **Handled** are newest first.
+- A `?work_ref=<card ref>` link ("Inbox for this task") narrows every mailbox to rows about that task and shows a removable "Only <task>" chip. Counts on the mailbox tabs follow the filter; the sidebar count does not.
+
+**Rows:**
+
+- An ask, review or escalation row reads: title and loud severity badge; then the requester by name and the subject ("Omar Reed · Task: Lock hub quest path"); on the right, in Needs you, how long they have waited ("3h 12m", amber from one hour). The subject prefers the task an item names over the project it was filed on (`inboxItemSubject`).
+- Names, not identifiers: requesters and responders resolve through the actor registry. When only an id exists the UI shows a short stand-in (`agent 6400c2d2`) with the full id behind a copy button; a raw UUID is never the label.
+- Watching **update** rows (`home.unread` groups) are digests in operator language built from the group's events — "Leo moved 2 tasks to review · Nina commented", "You updated 2 tasks" — never core nouns ("Board updates") or a bare count badge (`lib/inboxDigest.js`).
+- Handled rows drop core's "Human response recorded:" title prefix; the mailbox already says the item was answered.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
 
-**Actions:**
+**Detail pane and standalone item page:**
 
-- Navigate to the relevant inbox item, task, document, thread inspection route, or artifact.
+- The first row of the current mailbox is selected automatically; the pane is never an empty placeholder while rows exist. The automatic selection stays on its row while the list refreshes, so a live update never swaps the item being answered. Below `lg` the list and the detail are separate screens and only an explicit choice (`?item=`) opens the detail.
+- The pane header says who is blocked and for how long ("Omar Reed has been blocked for 3h 12m").
+- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). The strip has a slot for an agent presence note once core serves one. Threads and boards are not operator subjects and get no subject line.
+- The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event, numbered 1–5. The first is marked **Recommended**. Choosing a proposal selects it and sends it; **`review`** items also offer **Approve** / **Reject**, which send fixed text. A freeform reply and **Acknowledge** complete the surface. The Inbox pane and the standalone item route (`/inbox/{id}`) share this component (`InboxRespondPanel`) and behave the same; the standalone page adds the notify-target and attachment controls.
+- Both surfaces notify the original requester by default when core can reach them (`notification_target_status.resolvable`), and nobody otherwise. Acknowledge never notifies.
+- Links from the standalone page back into the Inbox use the Inbox's own parameters (`?mailbox=handled&item=…`); `?status=` is not an Inbox parameter.
+
+**Undo:**
+
+- Sending a proposal, a reply, Approve/Reject or Acknowledge does not call core immediately. The response waits about five seconds behind an undo toast ("Sent to Omar Reed · Undo"); Undo or ⌘Z takes it back and restores the selection and draft. When the window closes the UI commits exactly the `inbox.respond` request built at send time. Queuing a second response commits the first at once; closing the tab commits a waiting response (with the browser's leave prompt to give it time). A refused commit returns the item to Needs you with a "Not sent" toast and Retry (`lib/inboxResponseQueue.js`).
+- While a response waits or has just committed, the item is filed under Handled locally so the list and the sidebar count move at once; core's projection takes over within a minute.
+- The standalone page returns to the Inbox after sending; undoing a response sent there goes back to that page with the draft, notify target and attachments restored.
+
+**Keyboard:**
+
+- `J` / `K` next and previous row, `1`–`5` send that suggested response, `R` focus the reply, `⌘Enter` send the reply, `E` acknowledge (or mark an update read, or acknowledge a failed delivery), `O` open the subject task or doc, `⌘Z` undo the waiting response, `?` the shortcut list, `Esc` close it. Single keys never fire while typing in a field, with a modifier held, or under another dialog. The pane footer shows the keys that apply to the selected row (`lib/inboxShortcuts.js`).
+
+**Live updates:**
+
+- The Inbox follows the workspace event stream (`GET /stream/events`, resumed from the newest event so history is not replayed) and reloads quietly, coalescing bursts. There is no Reload button. A quiet reload never blanks the list and clears a load error once the load succeeds again (`lib/inboxLiveUpdates.js`).
+- The sidebar Inbox item shows the Needs you count (nothing at zero). While the Inbox page is open it publishes its own count; elsewhere the shell loads the Needs you sources itself and refreshes on the same stream (`lib/inboxCount.js`).
+
+**Writes:**
+
 - Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
-- The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event: the first entry is the **recommended** response (highlighted); additional entries are optional fill-ins for the freeform response text. **`review`** items also expose local **Approve** / **Reject** actions that submit fixed response text without using those chips.
 - Record a response (creates a `human_attention_responded` event for inbox items, or a `message_posted` event for general notes) with notes and typed refs. The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). Topic refs are optional context when present, never the anchor.
 
 ### 3.2 Thread inspection list
@@ -332,7 +361,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 ## 6. Concurrency
 
 - Agent Nexus web UI MUST assume multiple writers (operators and agents) may update anx-core concurrently.
-- The UI SHOULD subscribe for changes and refresh when canonical state changes. List pages use `liveWorkspaceEvents` (`lib/liveWorkspaceEvents.js`) over `GET /stream/events`: it starts after the newest matching event (no history replay), filters by type and an optional predicate, coalesces bursts into one re-read, resumes with `last_event_id` after a drop, backs off while core is unreachable, and stops on 401/403. Tasks, Docs and the task page use it; thread detail keeps its own thread-scoped stream. A live re-read keeps the rows on screen and, on failure, says they may be stale.
+- The UI SHOULD subscribe for changes and refresh when canonical state changes. List pages use `liveWorkspaceEvents` (`lib/liveWorkspaceEvents.js`) over `GET /stream/events`: it starts after the newest matching event (no history replay), filters by type and an optional predicate, coalesces bursts into one re-read, resumes with `last_event_id` after a drop, backs off while core is unreachable, and stops on 401/403. Tasks, Docs, the task page and the Inbox (§3.1) use it; thread detail keeps its own thread-scoped stream. A live re-read keeps the rows on screen and, on failure, says they may be stale.
 - For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the operator and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
 
 ---

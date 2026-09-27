@@ -78,6 +78,10 @@ import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+pag
 import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
 import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
+import {
+  flushInboxResponse,
+  resetInboxResponseQueue,
+} from "../../src/lib/inboxResponseQueue.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -112,7 +116,10 @@ beforeEach(() => {
       new Promise((resolve) => signal?.addEventListener("abort", resolve)),
   );
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  resetInboxResponseQueue();
+});
 
 describe("PM operator interactions", () => {
   it("keeps board and table records identical including an unfamiliar phase", async () => {
@@ -448,7 +455,7 @@ describe("PM operator interactions", () => {
     ).toBeGreaterThan(0);
     expect(client.getPmAction).toHaveBeenCalledWith("older-action");
   });
-  it("places awaiting decisions in Needs you", async () => {
+  it("places awaiting decisions in Needs you and selects the first row", async () => {
     state.route("/inbox");
     client.listPmDecisions.mockResolvedValue({
       items: [
@@ -460,15 +467,60 @@ describe("PM operator interactions", () => {
         },
       ],
     });
-    render(InboxPage);
-    await screen.findByRole("link", { name: /Later sample instruction/ });
+    const { container } = render(InboxPage);
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-inbox-row="decision:later"]'),
+      ).toBeTruthy(),
+    );
+    // The first row of the mailbox is selected without a click; the pane is
+    // never an empty "choose an item" placeholder while rows exist.
     expect(
-      screen.queryByRole("heading", { name: "Later sample instruction" }),
-    ).toBeNull();
-    expect(screen.getByText("Choose an item.")).toBeTruthy();
+      await screen.findByRole("heading", { name: "Later sample instruction" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Choose an item.")).toBeNull();
     expect(
       screen.getAllByRole("link", { name: /Needs you/ }).length,
     ).toBeGreaterThan(0);
+  });
+  it("sends a suggested response behind an undo toast, never at once", async () => {
+    state.route("/inbox");
+    const askedAt = new Date(
+      Date.now() - (3 * 60 + 12) * 60_000 - 20_000,
+    ).toISOString();
+    client.listInboxItems.mockImplementation(async ({ status }) => ({
+      items:
+        status === "open"
+          ? [
+              {
+                id: "inbox:ask-one",
+                kind: "ask",
+                title: "Pick the default path",
+                requester_label: "Omar Reed",
+                source_event_time: askedAt,
+                response_proposals: ["Combat first", "Hub first"],
+              },
+            ]
+          : [],
+    }));
+    client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
+    const { container } = render(InboxPage);
+    // Auto-selected, with the wait spelled out and the recommendation marked.
+    await screen.findByRole("heading", { name: "Pick the default path" });
+    expect(screen.getByText(/has been blocked for/)).toBeTruthy();
+    expect(
+      container.querySelector("[data-inbox-blocked-for]")?.textContent,
+    ).toBe("3h 12m");
+    expect(screen.getByText("Recommended")).toBeTruthy();
+
+    await fireEvent.keyDown(window, { key: "2" });
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(await screen.findByText("Sent to Omar Reed")).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await flushInboxResponse();
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
   });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");

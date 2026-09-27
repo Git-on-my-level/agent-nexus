@@ -233,6 +233,12 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   });
 
   await page.route(/\/events$/, async (route) => {
+    // Only the message post is under test; the Inbox's live stream
+    // (`/stream/events`) also ends in /events.
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
     const payload = JSON.parse(route.request().postData() ?? "{}");
     postedCount += 1;
 
@@ -255,8 +261,14 @@ test("mocked core smoke flow: inbox -> threads -> thread detail -> post message 
   await expect(
     page.getByRole("heading", { name: "Inbox", exact: true }),
   ).toBeVisible();
+  // The only row is listed and, selected by default, open in the pane.
+  await expect(page.getByTestId("inbox-row-inbox-100")).toContainText(
+    "Approve onboarding exception handling",
+  );
   await expect(
-    page.getByText("Approve onboarding exception handling", { exact: true }),
+    page.getByRole("heading", {
+      name: "Approve onboarding exception handling",
+    }),
   ).toBeVisible();
 
   // Threads are inspection, not primary navigation: open the list directly.

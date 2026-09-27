@@ -336,3 +336,39 @@ routes remain.
   not offered as a palette move (it needs an evidence ref). Assign is offered only for
   Nexus-owned tasks and writes `cards.patch` `assignee_refs` with the chosen person first.
   Action outcomes show in a notice rendered by the palette component.
+- **2026-09-27 · Inbox (O1) · One notify default for both respond surfaces.** The pane used
+  to send with `notify_mode: "none"` while the standalone page notified the requester. Both
+  now notify the original requester when `notification_target_status.resolvable` allows it
+  and nobody otherwise; Acknowledge never notifies. A waiting agent should hear its answer
+  wherever it was given. Files: `web-ui/src/lib/inboxResponseQueue.js` (`defaultNotifyMode`),
+  `inbox/+page.svelte`, `inbox/[id]/+page.svelte`.
+- **2026-09-27 · Inbox (O1) · Undo is a client-side queue with one pending response.** A
+  response waits 5 s, then the exact `inbox.respond` body built at send time is committed.
+  Queuing another commits the first immediately; closing the tab commits it (with the leave
+  prompt); a failed commit returns the item with Retry. Answered items are filed under
+  Handled locally for up to 60 s while core's inbox projection catches up. The queue lives
+  in a module so a send from `/inbox/{id}` stays undoable after returning to the Inbox.
+  Files: `web-ui/src/lib/inboxResponseQueue.js`, `web-ui/src/lib/components/inbox/`.
+- **2026-09-27 · Inbox (O1) · Needs you wait and context come from existing reads.** Wait is
+  the open request's age (`source_event_time`), compared at clock-minute resolution so the
+  order is stable and same-minute asks fall back to severity; a blocked task uses its last
+  update because core does not record when it entered Blocked. The context strip reads
+  `docs.get` and `events.list` (`message_posted` on `thread:<task handle>` and the item's
+  threads) and prefers the requester's own latest message; it has a `presence` slot for the
+  agent presence note the Agents workstream adds. No core changes. Files:
+  `web-ui/src/lib/inboxMailbox.js`, `web-ui/src/lib/inboxContext.js`,
+  `web-ui/src/lib/components/inbox/InboxContextStrip.svelte`.
+- **2026-09-27 · Inbox (O1) · Live updates and the sidebar count share one stream.**
+  `inboxLiveUpdates.js` holds one `/stream/events` connection per workspace (resumed from the
+  newest event via `events.list?limit=1`, since the stream otherwise replays history) for the
+  Inbox page and the sidebar count. While the Inbox is open it publishes its own Needs you
+  count; elsewhere `inboxCount.js` loads the Needs you sources and refreshes on the stream.
+  The noise workstream's `liveWorkspaceEvents` helper can absorb `inboxLiveUpdates.js` at
+  integration; the contract is "subscribe(workspace, listener) → unsubscribe". Files:
+  `web-ui/src/lib/inboxLiveUpdates.js`, `web-ui/src/lib/inboxCount.js`,
+  `web-ui/src/lib/anxCoreClient.js` (`streamWorkspaceEvents`).
+- **2026-09-27 · Inbox (O1) · Inbox URL parameters.** The Inbox reads `mailbox`, `item` and
+  `work_ref` (the task page's "Inbox for this task" link now narrows the list). `status` is
+  not an Inbox parameter; the standalone page links with `?mailbox=handled&item=…`. Thread and
+  board subjects get no context-strip subject line (not operator nouns), and core's "Human
+  response recorded:" prefix is dropped from Handled titles.
