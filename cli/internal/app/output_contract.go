@@ -120,7 +120,8 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 }
 
 func resultWarnings(command string, argv []string, value any) ([]output.Warning, []output.NextAction) {
-	if command != "work list" {
+	parts := strings.Fields(command)
+	if len(parts) == 0 || parts[len(parts)-1] != "list" && parts[len(parts)-1] != "search" {
 		return []output.Warning{}, []output.NextAction{}
 	}
 	root, _ := value.(map[string]any)
@@ -128,30 +129,46 @@ func resultWarnings(command string, argv []string, value any) ([]output.Warning,
 		return []output.Warning{}, []output.NextAction{}
 	}
 	owner := ""
+	actorFlags := map[string]bool{"--owner": true, "--owner-ref": true, "--actor-id": true, "--assignee-ref": true}
 	for i, tok := range argv {
-		if tok == "--owner" && i+1 < len(argv) {
+		if actorFlags[tok] && i+1 < len(argv) {
 			owner = argv[i+1]
 		}
-		if strings.HasPrefix(tok, "--owner=") {
-			owner = strings.TrimPrefix(tok, "--owner=")
+		for flag := range actorFlags {
+			if strings.HasPrefix(tok, flag+"=") {
+				owner = strings.TrimPrefix(tok, flag+"=")
+			}
 		}
 	}
-	if owner == "" || len(asSlice(root["work"])) > 0 || len(asSlice(root["items"])) > 0 || len(asSlice(root["cards"])) > 0 {
+	if owner == "" {
+		return []output.Warning{}, []output.NextAction{}
+	}
+	foundList := false
+	for _, key := range []string{"work", "items", "cards", "events", "topics", "documents", "actors"} {
+		if items, ok := root[key]; ok {
+			foundList = true
+			if len(asSlice(items)) > 0 {
+				return []output.Warning{}, []output.NextAction{}
+			}
+		}
+	}
+	if !foundList {
 		return []output.Warning{}, []output.NextAction{}
 	}
 	unfiltered := []string{"anx"}
 	for i := 0; i < len(argv); i++ {
-		if argv[i] == "--owner" && i+1 < len(argv) {
+		if actorFlags[argv[i]] && i+1 < len(argv) {
 			i++
 			continue
 		}
-		if strings.HasPrefix(argv[i], "--owner=") {
+		name, _, _, isFlag := parseLongOptionToken(argv[i])
+		if isFlag && actorFlags["--"+name] {
 			continue
 		}
 		unfiltered = append(unfiltered, argv[i])
 	}
-	return []output.Warning{{Code: "empty_actor_filter", Message: "No work matched this owner; verify the actor reference."}}, []output.NextAction{
-		action("List without owner filter", unfiltered...),
+	return []output.Warning{{Code: "empty_actor_filter", Message: "No records matched this actor filter; verify the actor reference."}}, []output.NextAction{
+		action("List without actor filter", unfiltered...),
 		action("Find actor", "anx", "debug", "actors", "list", "--q", strings.TrimPrefix(owner, "actor:")),
 	}
 }

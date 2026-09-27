@@ -86,6 +86,10 @@ func TestStateDerivedActionsAndActorReferences(t *testing.T) {
 	if len(warnings) != 1 || warnings[0].Code != "empty_actor_filter" || len(repairs) != 2 || strings.Join(repairs[0].Argv, " ") != "anx work list" {
 		t.Fatalf("actor filter warning: %#v %#v", warnings, repairs)
 	}
+	warnings, repairs = resultWarnings("debug events list", []string{"debug", "events", "list", "--actor-id=missing"}, map[string]any{"events": []any{}})
+	if len(warnings) != 1 || len(repairs) != 2 || strings.Join(repairs[0].Argv, " ") != "anx debug events list" {
+		t.Fatalf("diagnostic actor filter warning: %#v %#v", warnings, repairs)
+	}
 	notFound := deriveErrorActions("cards get", errnorm.Local("card_not_found", "missing"))
 	if len(notFound) != 1 || strings.Join(notFound[0].Argv, " ") != "anx cards list" {
 		t.Fatalf("not found repair: %#v", notFound)
