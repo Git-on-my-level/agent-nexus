@@ -1,7 +1,8 @@
 import { get, writable } from "svelte/store";
 import { selectedActorId } from "$lib/actorSession";
 import { buildInboxRows, filterMailbox } from "$lib/inboxMailbox.js";
-import { subscribeInboxLiveUpdates } from "$lib/inboxLiveUpdates.js";
+import { coreClient } from "$lib/coreClient";
+import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
 import {
   applyResponseOverlay,
   inboxResponseOverlay,
@@ -136,7 +137,10 @@ export function startInboxCount(workspace) {
       clearTimeout(timer);
       timer = setTimeout(() => void run(), REFRESH_DELAY_MS);
     };
-    const unsubscribeLive = subscribeInboxLiveUpdates(key, schedule);
+    const unsubscribeLive = liveWorkspaceEvents({
+      client: coreClient,
+      onChange: schedule,
+    });
     // A response answered from the standalone page lowers the count at once.
     const unsubscribeOverlay = inboxResponseOverlay.subscribe(publish);
     controller = {

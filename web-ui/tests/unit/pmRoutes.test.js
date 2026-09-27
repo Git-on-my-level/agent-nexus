@@ -181,11 +181,8 @@ describe("PM operator interactions", () => {
     // No Reload button: the list follows the event stream.
     expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
     await waitFor(() => expect(emit).toBeTypeOf("function"));
-    expect(client.streamEvents).toHaveBeenCalledWith(
-      expect.objectContaining({
-        types: expect.arrayContaining(["card_moved", "card_updated"]),
-      }),
-    );
+    // The workspace stream is shared; the page filters card events itself.
+    expect(client.streamEvents).toHaveBeenCalledTimes(1);
     emit({
       id: "evt-1",
       event: "event",

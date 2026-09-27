@@ -13,6 +13,7 @@ describe("navigation model", () => {
   it("includes expected primary nav labels", () => {
     expect(navigationItems.map((item) => item.label)).toEqual([
       "Inbox",
+      "Agents",
       "Tasks",
       "Docs",
     ]);

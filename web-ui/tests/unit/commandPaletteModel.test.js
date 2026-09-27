@@ -66,6 +66,7 @@ describe("command palette model", () => {
       commands.map((c) => [c.label, (c.shortcut || []).join(" ")]),
     ).toEqual([
       ["Inbox", "G I"],
+      ["Agents", "G A"],
       ["Tasks", "G T"],
       ["Docs", "G D"],
       ["Ask PM", "Ctrl J"],

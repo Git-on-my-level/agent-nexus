@@ -6,6 +6,8 @@
   import {
     actorDisplayLabel,
     actorRegistry,
+    agentRegistry,
+    findAgentSummary,
     principalRegistry,
     selectedActorId,
   } from "$lib/actorSession";
@@ -45,7 +47,7 @@
     invalidateInboxContext,
     loadInboxContext,
   } from "$lib/inboxContext.js";
-  import { subscribeInboxLiveUpdates } from "$lib/inboxLiveUpdates.js";
+  import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
   import { claimInboxCount, publishInboxCount } from "$lib/inboxCount.js";
   import {
     applyResponseOverlay,
@@ -145,6 +147,7 @@
       now,
       currentActorId: $selectedActorId || "",
       actorName,
+      agentName: (id) => findAgentSummary(id, $agentRegistry)?.display_name,
     }),
   );
   let scoped = $derived(
@@ -933,10 +936,10 @@
   onMount(() => {
     void load();
     const releaseCount = claimInboxCount();
-    const stopLive = subscribeInboxLiveUpdates(
-      $page.params.workspace,
-      scheduleLiveRefresh,
-    );
+    const stopLive = liveWorkspaceEvents({
+      client: coreClient,
+      onChange: () => scheduleLiveRefresh(),
+    });
     const stopCommitted = onInboxResponseCommitted(() => scheduleLiveRefresh());
     const timer = setInterval(() => {
       now = Date.now();
@@ -1344,6 +1347,7 @@
                         : "")
                     : ""}
                   loading={contextLoading && !context}
+                  presenceActorId={selected.requester?.id || ""}
                 />
                 {#if selected.body}
                   <p

@@ -19,6 +19,8 @@
   import {
     actorDisplayLabel,
     actorRegistry,
+    agentRegistry,
+    findAgentSummary,
     principalRegistry,
   } from "$lib/actorSession";
   import { coreClient } from "$lib/coreClient";
@@ -190,6 +192,10 @@
 
   function requesterName(value = item) {
     return (
+      String(
+        findAgentSummary(requesterId(value), $agentRegistry)?.display_name ??
+          "",
+      ).trim() ||
       String(value?.requester_label ?? "").trim() ||
       actorName(requesterId(value))
     );
@@ -705,6 +711,7 @@
               (context.note.byRequester ? requesterName() : "")
             : ""}
           loading={contextLoading && !context}
+          presenceActorId={requesterId()}
         />
         {#if item.body}
           <div

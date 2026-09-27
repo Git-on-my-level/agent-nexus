@@ -1,13 +1,15 @@
 <script>
+  import { agentRegistry, findAgentSummary } from "$lib/actorSession";
+  import AgentPresenceLine from "$lib/components/agents/AgentPresenceLine.svelte";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
 
   /**
    * What the item is blocking and the latest progress note around it, so the
    * reader can answer without opening the task first.
    *
-   * `presence` is a slot for the agent's own presence note (set with
-   * `anx work note`) once core serves one; it renders between the subject and
-   * the last message.
+   * `presenceActorId` names the requester; when it is an agent with a
+   * presence note (`anx work note`), that note renders between the subject
+   * and the last message.
    */
   let {
     relation = "On",
@@ -16,8 +18,17 @@
     note = null,
     noteAuthor = "",
     loading = false,
-    presence = null,
+    presenceActorId = "",
   } = $props();
+
+  let presence = $derived(
+    Boolean(
+      String(
+        findAgentSummary(presenceActorId, $agentRegistry)?.last_progress_note ??
+          "",
+      ).trim(),
+    ),
+  );
 </script>
 
 {#if subject || note || loading || presence}
@@ -42,7 +53,7 @@
       </p>
     {/if}
     {#if presence}
-      {@render presence()}
+      <AgentPresenceLine actorId={presenceActorId} />
     {/if}
     {#if note}
       <p class="line-clamp-2 [overflow-wrap:anywhere]" data-inbox-last-note>

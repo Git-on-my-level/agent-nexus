@@ -592,7 +592,7 @@
     ["Move focused task to the previous or next phase (board)", ["←", "→"]],
     ["Board view", ["B"]],
     ["Table view", ["T"]],
-    ["Go to Inbox, Tasks or Docs", ["G", "I T D"]],
+    ["Go to Inbox, Agents, Tasks or Docs", ["G", "I A T D"]],
     ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
