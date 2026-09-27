@@ -40,7 +40,7 @@ function resolveWorkspacePublicUrl(resolved, requestPath = "") {
  * fall back to public/browser workspace URLs (degraded: operators should set
  * `coreBaseUrl` on `ANX_WORKSPACES` entries so copied commands hit the API).
  */
-function resolveRegistrationBaseUrl(event, resolved) {
+function resolveCliBaseUrl(event, resolved) {
   const core = normalizeBaseUrl(resolved.workspace?.coreBaseUrl ?? "");
   if (core) {
     return core;
@@ -88,7 +88,7 @@ export async function load(event) {
     coreBaseUrl: resolved.workspace?.coreBaseUrl ?? "",
     workspaceId:
       resolved.workspace?.workspaceId ?? resolved.workspace?.id ?? "",
-    registrationBaseUrl: resolveRegistrationBaseUrl(event, resolved),
+    cliBaseUrl: resolveCliBaseUrl(event, resolved),
     outOfWorkspaceMode: provider.mode,
   };
 }

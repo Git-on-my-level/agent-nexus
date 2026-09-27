@@ -33,8 +33,8 @@
 
   let ctaAccessHref = $derived(
     organizationSlug && workspaceSlug
-      ? `${workspacePath(organizationSlug, workspaceSlug, "/access")}?invite=agent&from=tour`
-      : "/access?invite=agent&from=tour",
+      ? `${workspacePath(organizationSlug, workspaceSlug, "/access")}?from=tour#hosts`
+      : "/access?from=tour#hosts",
   );
 
   let firstName = $derived(deriveFirstName(userLabel));
@@ -67,40 +67,46 @@
             placement: "center",
             eyebrow: "60-second tour",
             title: welcomeTitle,
-            body: "Inbox, Tasks, and Docs are the three places you work. PM is the conversation surface for decisions that need follow-through.",
+            body: "Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work. PM is the conversation surface for decisions that need follow-through.",
             primaryLabel: "Take the tour →",
             skipLabel: "Maybe later",
           },
           {
             selector: '[data-tour="inbox"]',
-            eyebrow: "1 of 5 · Inbox",
+            eyebrow: "1 of 6 · Inbox",
             title: "Inbox is the only attention surface",
             body: "Decisions that need an answer, blocked tasks, and items that require a response land here.",
           },
           {
+            selector: '[data-tour="agents"]',
+            eyebrow: "2 of 6 · Agents",
+            title: "Agents shows who is doing what",
+            body: "Every agent on your machines, grouped by working, waiting on you, idle and stale, with its task, last note and run time. Asks still get answered in the Inbox.",
+          },
+          {
             selector: '[data-tour="tasks"]',
-            eyebrow: "2 of 5 · Tasks",
+            eyebrow: "3 of 6 · Tasks",
             title: "Tasks is the work board",
             body: "Table and board over the same records. Drag a task created here to change phase. A task that lives in another tracker opens a decision instead of mutating the source.",
           },
           {
             selector: '[data-tour="docs"]',
-            eyebrow: "3 of 5 · Docs",
+            eyebrow: "4 of 6 · Docs",
             title: "Docs is shared knowledge",
             body: "Versioned documents with first-class comments. Use them for meta knowledge and what other hosts cannot see.",
           },
           {
             selector: '[data-tour="pm"]',
-            eyebrow: "4 of 5 · PM",
+            eyebrow: "5 of 6 · PM",
             title: "PM is the conversation",
             body: "Ask what needs a decision, then follow the receipt. The PM runs through the existing agent harnesses.",
           },
           {
             selector: '[data-tour="access"]',
-            eyebrow: "5 of 5 · Access",
-            title: "Connect the first agent",
-            body: "Invite an agent or teammate. Settings also holds Secrets, Integrations, and Audit.",
-            ctaLabel: "Connect your first agent →",
+            eyebrow: "6 of 6 · Access",
+            title: "Enroll the machine your agents run on",
+            body: "Run anx host enroll on it once and approve it here; every agent on that machine can then work in this workspace. Access also holds people and invites.",
+            ctaLabel: "Enroll a machine →",
             ctaHref: ctaAccessHref,
           },
         ],
