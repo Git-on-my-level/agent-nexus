@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -69,7 +71,7 @@ func TestListCommandsAcceptPaginationFlags(t *testing.T) {
 
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
 		"--json", "--base-url", server.URL,
-		"threads", "list",
+		"debug", "threads", "list",
 		"--q", "launch",
 		"--limit", "25",
 		"--cursor", "cursor-threads",
@@ -102,7 +104,7 @@ func TestListCommandsRejectInvalidPaginationLimit(t *testing.T) {
 	}{
 		{
 			name: "threads",
-			args: []string{"--json", "threads", "list", "--limit", "0"},
+			args: []string{"--json", "debug", "threads", "list", "--limit", "0"},
 		},
 		{
 			name: "boards",
@@ -153,7 +155,7 @@ func TestRefEdgesListUsesTypedRefQueryShape(t *testing.T) {
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL,
-		"ref-edges", "list",
+		"debug", "ref-edges", "list",
 		"--target-ref", "card:card_123",
 		"--relation", "board_card",
 	})
@@ -166,7 +168,7 @@ func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
 	home := t.TempDir()
 
 	payload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "ref-edges", "list",
+		"--json", "debug", "ref-edges", "list",
 	}))
 	errObj, _ := payload["error"].(map[string]any)
 	if got := anyStringValue(errObj["code"]); got != "invalid_request" {
@@ -174,7 +176,7 @@ func TestRefEdgesListRequiresExactlyOneSelector(t *testing.T) {
 	}
 
 	payload = assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "ref-edges", "list",
+		"--json", "debug", "ref-edges", "list",
 		"--source-ref", "topic:topic_123",
 		"--target-ref", "card:card_123",
 	}))
@@ -249,7 +251,7 @@ func TestReadDispatchesURLsAndTypedRefs(t *testing.T) {
 	}
 
 	docPayload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "read", "document:doc_123"}))
-	data := asMap(docPayload["data"])
+	data := asMap(docPayload["result"])
 	if got := anyStringValue(data["content"]); got != "doc body" {
 		t.Fatalf("expected docs content body, got %#v", docPayload)
 	}
@@ -288,7 +290,7 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 	home := t.TempDir()
 	hostedBase := server.URL + "/ws/david-zhang/personal"
 	boardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "boards", "create", "--title", "Board URL"})
-	if !strings.Contains(boardOut, "URL: "+server.URL+"/o/david-zhang/w/personal/boards/board_123") {
+	if !strings.Contains(boardOut, "fact result.url="+server.URL+"/o/david-zhang/w/personal/boards/board_123") {
 		t.Fatalf("expected board create URL, got:\n%s", boardOut)
 	}
 
@@ -297,12 +299,12 @@ func TestCreateCommandsAppendShareableURL(t *testing.T) {
 		t.Fatalf("write content file: %v", err)
 	}
 	cardOut := runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "cards", "create", "--board", "board_123", "--title", "Card URL", "--body-file", contentFile})
-	if !strings.Contains(cardOut, "URL: "+server.URL+"/o/david-zhang/w/personal/boards/board_123?card=card_123") {
+	if !strings.Contains(cardOut, "fact result.url="+strconv.Quote(server.URL+"/o/david-zhang/w/personal/boards/board_123?card=card_123")) {
 		t.Fatalf("expected card create URL, got:\n%s", cardOut)
 	}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", hostedBase, "boards", "create", "--title", "Board URL"}))
-	if got := anyStringValue(asMap(payload["data"])["url"]); got != server.URL+"/o/david-zhang/w/personal/boards/board_123" {
+	if got := anyStringValue(asMap(payload["result"])["url"]); got != server.URL+"/o/david-zhang/w/personal/boards/board_123" {
 		t.Fatalf("expected structured URL, got %#v", payload)
 	}
 }
@@ -327,7 +329,7 @@ func TestURLCommandPrintsShareableURL(t *testing.T) {
 	hostedBase := server.URL + "/ws/david-zhang/personal"
 	out := strings.TrimSpace(runCLIForTest(t, home, nil, nil, []string{"--base-url", hostedBase, "url", "card", "card:card_123"}))
 	expected := server.URL + "/o/david-zhang/w/personal/boards/anx-features?card=cli-json-body-input"
-	if out != expected {
+	if !strings.Contains(out, "fact result.url="+strconv.Quote(expected)) {
 		t.Fatalf("expected %q, got %q", expected, out)
 	}
 }
@@ -355,7 +357,7 @@ func TestGetCommandResolvesUniqueSlugPrefixAfterNotFound(t *testing.T) {
 
 	home := t.TempDir()
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "topics", "get", "anx-dog"}))
-	topic := asMap(asMap(payload["data"])["topic"])
+	topic := asMap(asMap(payload["result"])["topic"])
 	if got := anyStringValue(topic["ref"]); got != "topic:anx-dogfooding" {
 		t.Fatalf("expected resolved topic ref, got %#v", payload)
 	}
@@ -437,11 +439,11 @@ func TestCardsGetPassesTypedRefAndHandleToCore(t *testing.T) {
 
 	home := t.TempDir()
 	typed := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "card:cli-json-body-input"}))
-	if data := asMap(typed["data"]); anyStringValue(asMap(data["card"])["ref"]) != "card:cli-json-body-input" {
+	if data := asMap(typed["result"]); anyStringValue(asMap(data["card"])["ref"]) != "card:cli-json-body-input" {
 		t.Fatalf("expected typed ref in card payload, got %#v", typed)
 	}
 	handle := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "get", "cli-json-body-input"}))
-	if data := asMap(handle["data"]); anyStringValue(asMap(data["card"])["handle"]) != "cli-json-body-input" {
+	if data := asMap(handle["result"]); anyStringValue(asMap(data["card"])["handle"]) != "cli-json-body-input" {
 		t.Fatalf("expected handle in card payload, got %#v", handle)
 	}
 	if len(seen) != 2 || seen[0] != "/cards/card:cli-json-body-input" || seen[1] != "/cards/cli-json-body-input" {
@@ -468,7 +470,7 @@ func TestCardsListJSONAndTextUsePublicIdentity(t *testing.T) {
 		t.Fatalf("expected text output to lead with public ref and hide internal ids, got:\n%s", text)
 	}
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "cards", "list"}))
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	cards := asSlice(data["cards"])
 	card := asMap(cards[0])
 	if anyStringValue(card["ref"]) != "card:cli-json-body-input" || anyStringValue(card["handle"]) != "cli-json-body-input" {
@@ -513,7 +515,7 @@ func TestHumanAskCommandCreatesHumanAttentionRequestedEvent(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "human ask" {
 		t.Fatalf("expected human ask command, got %#v", payload)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
 		t.Fatalf("expected events.create command id, got %#v", payload)
 	}
 
@@ -638,7 +640,7 @@ func TestInboxUnknownSubcommandGuidance(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "inbox", "10"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "inbox", "10"})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_subcommand" {
@@ -671,12 +673,12 @@ func TestInboxGetAliasMapsToList(t *testing.T) {
 
 	home := t.TempDir()
 	writeAgentProfile(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_123","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "inbox", "get"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "debug", "inbox", "get"})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "inbox list" {
+	if got := anyStringValue(payload["command"]); got != "debug inbox list" {
 		t.Fatalf("expected alias to resolve to inbox list, got %q payload=%#v", got, payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	viewingAs, _ := data["viewing_as"].(map[string]any)
 	if got := anyStringValue(viewingAs["actor_id"]); got != "actor_123" {
 		t.Fatalf("expected viewing_as actor_id actor_123, got %#v", payload)
@@ -712,9 +714,9 @@ func TestInboxListIncludesAliasesAndLinkedPublicIdentity(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "inbox", "list"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "debug", "inbox", "list"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	items, _ := data["items"].([]any)
 	if len(items) != 1 {
 		t.Fatalf("expected one item in inbox payload, got %#v", payload)
@@ -749,13 +751,13 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "list",
+		"debug", "inbox", "list",
 		"--thread-id", "thread_1234567890",
 		"--type", "ask",
 		"--full-id",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["thread_id"]); got != "thread_1234567890" {
 		t.Fatalf("expected filtered thread_id, got %#v", data)
 	}
@@ -778,11 +780,11 @@ func TestInboxListSupportsClientSideThreadAndTypeFilters(t *testing.T) {
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"inbox", "list",
+		"debug", "inbox", "list",
 		"--thread-id", "thread_1234567890",
 		"--type", "ask",
 	})
-	if !strings.Contains(textOut, "total_items: 3") || !strings.Contains(textOut, "returned_items: 1") {
+	if !strings.Contains(textOut, "result.total_items=3") || !strings.Contains(textOut, "result.returned_items=1") {
 		t.Fatalf("expected rendered inbox counts in default text output, got:\n%s", textOut)
 	}
 }
@@ -808,7 +810,7 @@ func TestInboxListTypeFilterRejectsUnknownKinds(t *testing.T) {
 		raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 			"--json",
 			"--base-url", server.URL,
-			"inbox", "list",
+			"debug", "inbox", "list",
 			"--type", kind,
 		})
 		payload := assertEnvelopeError(t, raw)
@@ -868,10 +870,10 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "list",
+		"debug", "inbox", "list",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	viewingAs, _ := data["viewing_as"].(map[string]any)
 	if got := anyStringValue(viewingAs["profile"]); got != "agent-a" {
 		t.Fatalf("expected viewing_as profile agent-a, got %#v", data)
@@ -893,9 +895,9 @@ func TestInboxListIncludesViewingAs(t *testing.T) {
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "list",
+		"debug", "inbox", "list",
 	})
-	if !strings.Contains(textOut, "viewing_as: profile=agent-a :: username=agent.alpha :: actor_id=actor_123") {
+	if !strings.Contains(textOut, "result.viewing_as.profile=agent-a") || !strings.Contains(textOut, "result.viewing_as.username=agent.alpha") || !strings.Contains(textOut, "result.viewing_as.actor_id=actor_123") {
 		t.Fatalf("expected viewing_as summary in default text output, got:\n%s", textOut)
 	}
 	if strings.Contains(textOut, "category_reference:") || strings.Contains(textOut, "action_needed") {
@@ -989,7 +991,7 @@ func TestInboxRespondPostsGenericResponse(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "respond",
+		"debug", "inbox", "respond",
 		"--inbox-item-id", inboxID,
 		"--response-text", "Approved.",
 	})
@@ -1000,7 +1002,7 @@ func TestEventsUnknownSubcommandGuidance(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "streem"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "streem"})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "unknown_subcommand" {
@@ -1042,17 +1044,17 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--max-events", "1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "events list" {
+	if got := anyStringValue(payload["command"]); got != "debug events list" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
 
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["thread_id"]); got != "thread_1" {
 		t.Fatalf("expected thread id thread_1, got %#v", data)
 	}
@@ -1075,12 +1077,12 @@ func TestEventsListCommandFiltersAndLimits(t *testing.T) {
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--max-events", "1",
 	})
-	if !strings.Contains(textOut, "types:") || !strings.Contains(textOut, "- message_posted") {
+	if !strings.Contains(textOut, "result.types.0=message_posted") || !strings.Contains(textOut, "result.events.0.id=event_3") {
 		t.Fatalf("expected default text output to include selected filter types, got:\n%s", textOut)
 	}
 }
@@ -1109,13 +1111,13 @@ func TestEventsListCommandAppliesTaxonomyFiltersToThreadTimeline(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--event-group", "documents",
 		"--backing-scope", "backing_only",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	events, _ := data["events"].([]any)
 	if len(events) != 1 {
 		t.Fatalf("expected one event after event-group/backing-scope filters, got %#v", data)
@@ -1156,13 +1158,13 @@ func TestEventsListMaxFlagAliasMatchesMaxEvents(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--max", "1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	returnedEvents, _ := data["returned_events"].(float64)
 	if int(returnedEvents) != 1 {
 		t.Fatalf("expected returned_events=1 with --max alias, got %#v", data)
@@ -1198,14 +1200,14 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--mine",
 		"--full-id",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["actor_id"]); got != mineActorID {
 		t.Fatalf("expected actor_id filter %q, got %#v", mineActorID, data)
 	}
@@ -1227,7 +1229,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--mine",
@@ -1240,7 +1242,7 @@ func TestEventsListCommandSupportsMineActorFilterAndFullID(t *testing.T) {
 	textShort := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--type", "message_posted",
 		"--mine",
@@ -1286,14 +1288,14 @@ func TestEventsListCommandSupportsMultipleThreadIDs(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "list",
+		"debug", "events", "list",
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
 		"--type", "message_posted",
 		"--max-events", "2",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	totalEvents, _ := data["total_events"].(float64)
 	if int(totalEvents) != 4 {
 		t.Fatalf("expected total_events=4, got %#v", data)
@@ -1592,7 +1594,7 @@ func TestDocsContentCommand(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "docs content" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["content"]); got != "Line one\nLine two" {
 		t.Fatalf("expected document content, got %#v", data)
 	}
@@ -1671,7 +1673,7 @@ func TestDocsMessagesCommand(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "docs messages" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	flat, _ := payload["data"].(map[string]any)
+	flat, _ := payload["result"].(map[string]any)
 	events, _ := flat["events"].([]any)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 non-trashed document message, got %d: %#v", len(events), flat)
@@ -1690,7 +1692,7 @@ func TestDocsMessagesCommand(t *testing.T) {
 		"--include-trashed",
 	})
 	p2 := assertEnvelopeOK(t, raw2)
-	f2, _ := p2["data"].(map[string]any)
+	f2, _ := p2["result"].(map[string]any)
 	c2, _ := f2["events"].([]any)
 	if len(c2) != 2 {
 		t.Fatalf("expected 2 with include-trashed, got %d", len(c2))
@@ -1701,7 +1703,7 @@ func TestDocsMessagesCommand(t *testing.T) {
 		"docs", "messages",
 		"doc_1",
 	})
-	if !strings.Contains(textOut, "ev_1") || !strings.Contains(textOut, "Document messages") {
+	if !strings.Contains(textOut, "result.events.0.id=ev_1") || !strings.Contains(textOut, "result.subject_kind=document") {
 		t.Fatalf("expected default text for docs messages, got:\n%s", textOut)
 	}
 }
@@ -1754,10 +1756,10 @@ func TestDocsMessageBuildsThreadScopedEventFromDocumentBackingThread(t *testing.
 	if got := anyStringValue(payload["command"]); got != "docs message" {
 		t.Fatalf("expected docs message command, got %#v", payload)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
 		t.Fatalf("expected events.create command_id, got %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["thread_id"]); got != threadID {
 		t.Fatalf("expected response thread_id %q, got %#v", threadID, data)
 	}
@@ -1814,7 +1816,7 @@ func TestDocsCreateInlineBodyDryRun(t *testing.T) {
 		"--dry-run",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	body := asMap(data["body"])
 	if got := anyStringValue(body["content"]); got != "one-liner" {
 		t.Fatalf("expected inline content in dry-run body, got %q payload=%#v", got, payload)
@@ -2023,7 +2025,7 @@ func TestDocsReviseWithContentFileUsesFetchedDocumentState(t *testing.T) {
 		"--body-file", contentFile,
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["path"]); got != "/docs/doc_1/revisions" {
 		t.Fatalf("expected path /docs/doc_1/revisions, got %q payload=%#v", got, payload)
 	}
@@ -2078,7 +2080,7 @@ func TestDocsReviseWithOnlyContentFileDiscoversBaseRevision(t *testing.T) {
 		"--body-file", contentFile,
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	body, _ := data["body"].(map[string]any)
 	if got := anyStringValue(body["if_base_revision"]); got != "rev_1" {
 		t.Fatalf("expected discovered base revision, got %q payload=%#v", got, payload)
@@ -2125,7 +2127,7 @@ func TestDocsRevisePreservesStructuredContentInDiff(t *testing.T) {
 		"--document-id", "doc_structured",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	body, _ := data["body"].(map[string]any)
 	content, _ := body["content"].(map[string]any)
 	if got := anyStringValue(content["status"]); got != "approved" {
@@ -2182,7 +2184,7 @@ func TestDocsReviseTextDiffFallsBackWhenRevisionContentEmpty(t *testing.T) {
 		"--document-id", "doc_text_fallback",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	diff, _ := data["diff"].(map[string]any)
 	diffText := anyStringValue(diff["text"])
 	if !strings.Contains(diffText, "-body fallback content") || !strings.Contains(diffText, "+updated body content") {
@@ -2232,20 +2234,20 @@ func TestEventsExplainListMode(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"events", "explain"})
-	if !strings.Contains(raw, "Known event types") {
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"debug", "events", "explain"})
+	if !strings.Contains(raw, "result.known_event_types.0.type=message_posted") {
 		t.Fatalf("expected list heading in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Communication: Direct communication or important non-structured information.") {
+	if !strings.Contains(raw, "result.known_event_types.0.group=Communication") {
 		t.Fatalf("expected communication group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Inbox Lifecycle: Inbox lifecycle facts, usually emitted by higher-level commands.") {
+	if !strings.Contains(raw, "result.known_event_types.13.group=\"Inbox Lifecycle\"") {
 		t.Fatalf("expected inbox lifecycle group in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- message_posted: Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.") {
+	if !strings.Contains(raw, "result.known_event_types.0.summary=") {
 		t.Fatalf("expected message_posted communication guidance in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "- human_attention_requested: Use the human command group to ask for operator attention, review, or escalation.") {
+	if !strings.Contains(raw, "result.known_event_types.13.type=human_attention_requested") {
 		t.Fatalf("expected human_attention_requested guidance in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "anx events explain <event-type>") {
@@ -2257,9 +2259,9 @@ func TestEventsExplainListModeJSON(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "explain"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	items, _ := data["known_event_types"].([]any)
 	if len(items) == 0 {
 		t.Fatalf("expected known_event_types in JSON output, payload=%#v", payload)
@@ -2294,12 +2296,12 @@ func TestEventsExplainSpecificTypeMode(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "card_created"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "explain", "card_created"})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "events explain" {
+	if got := anyStringValue(payload["command"]); got != "debug events explain" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["event_type"]); got != "card_created" {
 		t.Fatalf("expected event_type card_created, got %q payload=%#v", got, payload)
 	}
@@ -2315,9 +2317,9 @@ func TestEventsExplainSpecificTypeMode(t *testing.T) {
 		t.Fatalf("expected card constraint guidance, payload=%#v", payload)
 	}
 
-	rawFlag := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "--type", "card_created"})
+	rawFlag := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "explain", "--type", "card_created"})
 	payloadFlag := assertEnvelopeOK(t, rawFlag)
-	dataFlag, _ := payloadFlag["data"].(map[string]any)
+	dataFlag, _ := payloadFlag["result"].(map[string]any)
 	if got := anyStringValue(dataFlag["event_type"]); got != "card_created" {
 		t.Fatalf("expected event_type card_created via --type, got %q payload=%#v", got, payloadFlag)
 	}
@@ -2327,11 +2329,11 @@ func TestEventsExplainMessagePostedGuidance(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"events", "explain", "message_posted"})
-	if !strings.Contains(raw, "Group: Communication") {
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"debug", "events", "explain", "message_posted"})
+	if !strings.Contains(raw, "result.group=Communication") {
 		t.Fatalf("expected group heading in explain output, got %q", raw)
 	}
-	if !strings.Contains(raw, "Usage hint: Use for low-level communication records that belong on a backing thread; prefer topic/document/card message commands for ordinary discussion.") {
+	if !strings.Contains(raw, "result.summary=") {
 		t.Fatalf("expected usage hint in explain output, got %q", raw)
 	}
 	if !strings.Contains(raw, "Use this type for messages, replies, or important non-structured information that should read like direct communication on a backing thread.") {
@@ -2343,7 +2345,7 @@ func TestEventsExplainUnknownTypeFailure(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "explain", "--type", "totally_unknown"})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "explain", "--type", "totally_unknown"})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_request" {
@@ -2364,12 +2366,12 @@ func TestEventsValidateCommand(t *testing.T) {
 		t.Fatalf("write event file: %v", err)
 	}
 
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "validate", "--from-file", eventFile})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "validate", "--from-file", eventFile})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "events validate" {
+	if got := anyStringValue(payload["command"]); got != "debug events validate" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if validated, _ := data["validated"].(bool); !validated {
 		t.Fatalf("expected validated=true payload=%#v", payload)
 	}
@@ -2390,7 +2392,7 @@ func TestEventsValidateInvalidJSONIncludesLocation(t *testing.T) {
 		t.Fatalf("write invalid event file: %v", err)
 	}
 
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "events", "validate", "--from-file", eventFile})
+	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "debug", "events", "validate", "--from-file", eventFile})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if errObj == nil || anyStringValue(errObj["code"]) != "invalid_json" {
@@ -2420,11 +2422,11 @@ func TestEventsCreateDryRunSkipsHTTP(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","thread_id":"thread_1","refs":["thread:thread_1"],"provenance":{"sources":["artifact:source_1"]}}}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "create",
+		"debug", "events", "create",
 		"--dry-run",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if dryRun, _ := data["dry_run"].(bool); !dryRun {
 		t.Fatalf("expected dry_run=true payload=%#v", payload)
 	}
@@ -2461,7 +2463,7 @@ func TestEventsCreateReviewCompletedInvalidRefsFailsLocally(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, strings.NewReader(`{"event":{"type":"card_created","summary":"review done","refs":["artifact:review_1","artifact:receipt_1"],"provenance":{"sources":["artifact:source_1"]},"payload":{"subject_ref":"card:card_1"}}}`), []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "create",
+		"debug", "events", "create",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -2559,7 +2561,7 @@ func TestCommitmentsGetTextOutputIsRemoved(t *testing.T) {
 	if exitCode == 0 {
 		t.Fatalf("expected removed commitments get command to fail, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "unknown command \"commitments\"") {
+	if !strings.Contains(stderr.String(), "error code=unknown_command") || !strings.Contains(stderr.String(), "commitments") {
 		t.Fatalf("expected unknown command error, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
@@ -2587,16 +2589,16 @@ func TestThreadsContextCommand(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 		"--max-events", "2",
 		"--include-artifact-content",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "threads context" {
+	if got := anyStringValue(payload["command"]); got != "debug threads context" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	if collaboration == nil {
 		t.Fatalf("expected collaboration_summary in context payload, got %#v", data)
@@ -2633,11 +2635,11 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	collaboration, _ := data["collaboration_summary"].(map[string]any)
 	if collaboration == nil {
 		t.Fatalf("expected collaboration_summary, got %#v", data)
@@ -2651,10 +2653,10 @@ func TestThreadsContextIncludesCollaborationSummarySections(t *testing.T) {
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 	})
-	if !strings.Contains(textOut, "recent_events (3):") || !strings.Contains(textOut, "message_posted") || !strings.Contains(textOut, "human_attention_requested") || !strings.Contains(textOut, "human_attention_responded") {
+	if !strings.Contains(textOut, "result.recent_events.2.type=human_attention_responded") || !strings.Contains(textOut, "message_posted") || !strings.Contains(textOut, "human_attention_requested") || !strings.Contains(textOut, "human_attention_responded") {
 		t.Fatalf("expected collaboration sections in default text output, got:\n%s", textOut)
 	}
 }
@@ -2702,10 +2704,10 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "cards timeline" {
 		t.Fatalf("expected command cards timeline, got %q payload=%#v", got, payload)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "cards.timeline" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.timeline" {
 		t.Fatalf("expected command_id cards.timeline, got %q payload=%#v", got, payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	card, _ := data["card"].(map[string]any)
 	if got := anyStringValue(card["id"]); got != cardID {
 		t.Fatalf("expected card id in envelope data, got %#v", payload)
@@ -2719,7 +2721,7 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "timeline", "--card-id", cardID,
 	})
-	if !strings.Contains(textOut, cardID) || !strings.Contains(textOut, "events: 1") {
+	if !strings.Contains(textOut, cardID) || !strings.Contains(textOut, "result.events.0.id=event_1") {
 		t.Fatalf("expected card id and event count in default text output, got:\n%s", textOut)
 	}
 }
@@ -2988,7 +2990,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
 		"cards", "create", "--board", boardID, "--topic", "topic_cards_123", "--title", "Implement login", "--body-file", cardFile,
 	}))
-	if got := anyStringValue(createPayload["command_id"]); got != "cards.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(createPayload)); got != "cards.create" {
 		t.Fatalf("expected cards.create command_id, got %#v", createPayload)
 	}
 
@@ -2999,7 +3001,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	if got := anyStringValue(revisePayload["command"]); got != "cards revise" {
 		t.Fatalf("expected cards revise command, got %#v", revisePayload)
 	}
-	if got := anyStringValue(revisePayload["command_id"]); got != "cards.revisions.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(revisePayload)); got != "cards.revisions.create" {
 		t.Fatalf("expected cards.revisions.create command_id, got %#v", revisePayload)
 	}
 
@@ -3007,7 +3009,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
 		"cards", "history", "--card-id", cardID,
 	}))
-	if got := anyStringValue(historyPayload["command_id"]); got != "cards.revisions.list" {
+	if got := anyStringValue(machineEnvelopeCommandID(historyPayload)); got != "cards.revisions.list" {
 		t.Fatalf("expected cards.revisions.list command_id, got %#v", historyPayload)
 	}
 
@@ -3015,7 +3017,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-cards",
 		"cards", "revision", "get", "--card-id", cardID, "--revision-id", revisionID,
 	}))
-	if got := anyStringValue(revisionPayload["command_id"]); got != "cards.revisions.get" {
+	if got := anyStringValue(machineEnvelopeCommandID(revisionPayload)); got != "cards.revisions.get" {
 		t.Fatalf("expected cards.revisions.get command_id, got %#v", revisionPayload)
 	}
 
@@ -3042,7 +3044,7 @@ func TestCardsFileFirstWorkflowCommands(t *testing.T) {
 	if got := anyStringValue(resolvePayload["command"]); got != "cards resolve" {
 		t.Fatalf("expected cards resolve command, got %#v", resolvePayload)
 	}
-	if got := anyStringValue(resolvePayload["command_id"]); got != "cards.move" {
+	if got := anyStringValue(machineEnvelopeCommandID(resolvePayload)); got != "cards.move" {
 		t.Fatalf("expected cards.move command_id, got %#v", resolvePayload)
 	}
 
@@ -3137,7 +3139,7 @@ func TestCardsResolveBodyPostsEvidenceBeforeMove(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-resolve-body",
 		"cards", "resolve", cardID, "--body-file", evidenceFile,
 	}))
-	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
 		t.Fatalf("expected final cards.move command_id, got %#v", payload)
 	}
 	if !postedEvidence || !moved {
@@ -3214,7 +3216,7 @@ func TestCardsResolveReasonAuditAndBodyEvidenceBeforeMove(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-resolve-reason",
 		"cards", "resolve", cardID, "--reason", "Works as expected.", "--body", "Validated in staging.",
 	}))
-	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
 		t.Fatalf("expected final cards.move command_id, got %#v", payload)
 	}
 	if !postedEvidence || !moved {
@@ -3291,7 +3293,7 @@ func TestCardsMoveFromFileAllowsColumnOverride(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-move-file-column",
 		"cards", "move", cardID, "--from-file", bodyFile, "--column", "done",
 	}))
-	if got := anyStringValue(payload["command_id"]); got != "cards.move" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "cards.move" {
 		t.Fatalf("expected cards.move command_id, got %#v", payload)
 	}
 	if !moved {
@@ -3325,7 +3327,7 @@ func TestCardsMoveDryRunSurfacesFlagOverlay(t *testing.T) {
 		"--column", "done",
 		"--dry-run",
 	}))
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	body := asMap(data["body"])
 	if got := anyStringValue(body["column_key"]); got != "done" {
 		t.Fatalf("expected column_key=done after flag overlay, got %#v", body)
@@ -3379,10 +3381,13 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 				base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-lifecycle-matrix"}
 				id := lifecycleMatrixSampleID(spec.resource)
 				prefix := append([]string(nil), base...)
+				if isDiagnosticGroup(spec.resource) {
+					prefix = append(prefix, "debug")
+				}
 				prefix = append(prefix, spec.resource, verb, id)
 
 				payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(prefix, "--reason=audit-x", "--dry-run")))
-				data := asMap(payload["data"])
+				data := asMap(payload["result"])
 				body := asMap(data["body"])
 				if got := anyStringValue(body["reason"]); got != "audit-x" {
 					t.Fatalf("reason: got %q want audit-x payload=%#v", got, payload)
@@ -3395,7 +3400,7 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 					}
 					actorArgs = append(actorArgs, "--dry-run")
 					payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, actorArgs))
-					data := asMap(payload["data"])
+					data := asMap(payload["result"])
 					body := asMap(data["body"])
 					if got := anyStringValue(body["actor_id"]); got != "actor_matrix_prof" {
 						t.Fatalf("actor_id: got %q payload=%#v", got, payload)
@@ -3407,7 +3412,7 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 					t.Fatalf("write overlay json: %v", err)
 				}
 				payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(prefix, "--from-file", bodyFile, "--reason", "override", "--dry-run")))
-				data = asMap(payload["data"])
+				data = asMap(payload["result"])
 				body = asMap(data["body"])
 				if got := anyStringValue(body["reason"]); got != "override" {
 					t.Fatalf("overlay reason: got %q payload=%#v", got, payload)
@@ -3422,7 +3427,7 @@ func TestLifecycleVerbDryRunUniformFlags(t *testing.T) {
 				}
 
 				payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"stdin-json"}`), append(prefix, "--from-file=-", "--dry-run")))
-				data = asMap(payload["data"])
+				data = asMap(payload["result"])
 				body = asMap(data["body"])
 				if got := anyStringValue(body["reason"]); got != "stdin-json" {
 					t.Fatalf("stdin reason: got %q payload=%#v", got, payload)
@@ -3440,14 +3445,14 @@ func TestDocsTrashRequiresReasonFlagOrJSONBody(t *testing.T) {
 	base := []string{"--json", "--base-url", "http://127.0.0.1:9", "--agent", "agent-docs-trash", "docs", "trash", "document_docs_trash_1"}
 
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append(base, "--reason", "superseded", "--dry-run")))
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	body := asMap(data["body"])
 	if got := anyStringValue(body["reason"]); got != "superseded" {
 		t.Fatalf("expected reason flag in dry-run body, got %#v", payload)
 	}
 
 	payload = assertEnvelopeOK(t, runCLIForTest(t, home, nil, strings.NewReader(`{"reason":"from-json"}`), append(base, "--from-file=-", "--dry-run")))
-	data = asMap(payload["data"])
+	data = asMap(payload["result"])
 	body = asMap(data["body"])
 	if got := anyStringValue(body["reason"]); got != "from-json" {
 		t.Fatalf("expected JSON reason in dry-run body, got %#v", payload)
@@ -3497,7 +3502,7 @@ func TestTopicsMessageAcceptsBackingThreadAlias(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-topic-alias",
 		"topics", "message", "--thread", threadID, "--body", "Thread-scoped reply path.",
 	}))
-	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
 		t.Fatalf("expected events.create command_id, got %#v", payload)
 	}
 	if !posted {
@@ -3584,7 +3589,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-model",
 		"topics", "create", "--title", "Preview", "--summary", "Preview summary", "--dry-run",
 	}))
-	data, _ := dryRun["data"].(map[string]any)
+	data, _ := dryRun["result"].(map[string]any)
 	if got, _ := data["dry_run"].(bool); !got {
 		t.Fatalf("expected topics create dry_run data, got %#v", dryRun)
 	}
@@ -3593,7 +3598,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-model",
 		"topics", "create", "--title", "CLI ergonomics", "--summary", "Coordinate CLI work", "--ref", "document:doc_model",
 	}))
-	if got := anyStringValue(topicPayload["command_id"]); got != "topics.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(topicPayload)); got != "topics.create" {
 		t.Fatalf("expected topics.create command_id, got %#v", topicPayload)
 	}
 
@@ -3601,7 +3606,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 		"--json", "--base-url", server.URL, "--agent", "agent-model",
 		"boards", "create", "--topic", topicID, "--title", "CLI board", "--summary", "Active work",
 	}))
-	if got := anyStringValue(boardPayload["command_id"]); got != "boards.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(boardPayload)); got != "boards.create" {
 		t.Fatalf("expected boards.create command_id, got %#v", boardPayload)
 	}
 
@@ -3612,7 +3617,7 @@ func TestTopicsBoardsNoJSONAndMessageWorkflow(t *testing.T) {
 	if got := anyStringValue(messagePayload["command"]); got != "topics message" {
 		t.Fatalf("expected topics message command, got %#v", messagePayload)
 	}
-	if got := anyStringValue(messagePayload["command_id"]); got != "events.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(messagePayload)); got != "events.create" {
 		t.Fatalf("expected events.create command_id, got %#v", messagePayload)
 	}
 
@@ -3745,10 +3750,10 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "cards message" {
 		t.Fatalf("expected cards message command, got %#v", payload)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "events.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "events.create" {
 		t.Fatalf("expected events.create command_id, got %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["card_id"]); got != cardID {
 		t.Fatalf("expected card_id in response data, got %#v", data)
 	}
@@ -3760,7 +3765,7 @@ func TestCardsMessageBuildsThreadScopedEvent(t *testing.T) {
 		"--base-url", server.URL, "--agent", "agent-message",
 		"cards", "message", cardID, "--body", "Implemented via domain command.",
 	})
-	if !strings.Contains(textOut, "Message posted.") || !strings.Contains(textOut, "Card: Message card") || !strings.Contains(textOut, "Thread: "+threadID) {
+	if !strings.Contains(textOut, "result.event.type=message_posted") || !strings.Contains(textOut, "result.card_title=\"Message card\"") || !strings.Contains(textOut, "result.thread_id="+threadID) {
 		t.Fatalf("expected domain text output, got:\n%s", textOut)
 	}
 }
@@ -3796,7 +3801,7 @@ func TestCardsMessagesListsMessageEventsForCardThread(t *testing.T) {
 		"cards", "messages", cardID, "--max-events", "1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["card_id"]); got != cardID {
 		t.Fatalf("expected card_id, got %#v", data)
 	}
@@ -3813,7 +3818,7 @@ func TestCardsMessagesListsMessageEventsForCardThread(t *testing.T) {
 		"--base-url", server.URL,
 		"cards", "messages", cardID, "--max-events", "1",
 	})
-	if !strings.Contains(textOut, "reply_to: "+"event_1") {
+	if !strings.Contains(textOut, "result.events.0.payload.reply_to_event_id=event_1") {
 		t.Fatalf("expected reply target in message list text, got:\n%s", textOut)
 	}
 }
@@ -3870,14 +3875,14 @@ func TestEventsValidateRejectsThreadRefOnlyMessage(t *testing.T) {
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, nil, strings.NewReader(`{"event":{"type":"message_posted","summary":"hello","thread_ref":"thread:thread_1","refs":["thread:thread_1"],"provenance":{"sources":["manual"]}}}`), []string{
 		"--json",
-		"events", "validate",
+		"debug", "events", "validate",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
 	if got := anyStringValue(errObj["message"]); !strings.Contains(got, "event.thread_id is required") {
 		t.Fatalf("expected thread_id validation message, got %#v", payload)
 	}
-	if got := anyStringValue(errObj["hint"]); !strings.Contains(got, "anx cards message") {
+	if got := anyStringValue(asMap(errObj["details"])["hint"]); !strings.Contains(got, "anx cards message") {
 		t.Fatalf("expected domain command hint, got %#v", payload)
 	}
 }
@@ -3929,8 +3934,8 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 		},
 		{
 			name:        "local helper lifecycle conflict",
-			args:        []string{"events", "list", "--include-archived", "--archived-only"},
-			command:     "events list",
+			args:        []string{"debug", "events", "list", "--include-archived", "--archived-only"},
+			command:     "debug events list",
 			code:        "invalid_flags",
 			messagePart: "include-archived",
 		},
@@ -3943,8 +3948,8 @@ func TestPreConfigUsagePreflightBeatsAmbiguousProfileResolution(t *testing.T) {
 		},
 		{
 			name:        "threads unknown subcommand",
-			args:        []string{"threads", "frobnicate"},
-			command:     "threads",
+			args:        []string{"debug", "threads", "frobnicate"},
+			command:     "debug threads",
 			code:        "unknown_subcommand",
 			messagePart: "frobnicate",
 		},
@@ -4100,9 +4105,9 @@ func TestPreConfigUsagePreflightAcceptsRuntimeParserFlags(t *testing.T) {
 		command string
 		flags   []runtimeCommandFlagSpec
 	}{
-		{command: "threads list", flags: threadsListRuntimeFlags},
+		{command: "debug threads list", flags: threadsListRuntimeFlags},
 		{command: "artifacts list", flags: artifactsListRuntimeFlags},
-		{command: "inbox get", flags: inboxGetRuntimeFlags},
+		{command: "debug inbox get", flags: inboxGetRuntimeFlags},
 	}
 
 	for _, tt := range tests {
@@ -4141,12 +4146,12 @@ func TestPreConfigUsagePreflightRejectsStaleManualResourceFlags(t *testing.T) {
 		command string
 		flag    string
 	}{
-		{name: "threads list stale topic-ref", args: []string{"threads", "list", "--topic-ref", "topic:launch"}, command: "threads list", flag: "topic-ref"},
-		{name: "threads list stale purpose", args: []string{"threads", "list", "--purpose", "coordination"}, command: "threads list", flag: "purpose"},
-		{name: "threads list stale with-counts", args: []string{"threads", "list", "--with-counts"}, command: "threads list", flag: "with-counts"},
+		{name: "threads list stale topic-ref", args: []string{"debug", "threads", "list", "--topic-ref", "topic:launch"}, command: "debug threads list", flag: "topic-ref"},
+		{name: "threads list stale purpose", args: []string{"debug", "threads", "list", "--purpose", "coordination"}, command: "debug threads list", flag: "purpose"},
+		{name: "threads list stale with-counts", args: []string{"debug", "threads", "list", "--with-counts"}, command: "debug threads list", flag: "with-counts"},
 		{name: "artifacts list stale ref", args: []string{"artifacts", "list", "--ref", "topic:launch"}, command: "artifacts list", flag: "ref"},
 		{name: "artifacts list stale cursor", args: []string{"artifacts", "list", "--cursor", "abc"}, command: "artifacts list", flag: "cursor"},
-		{name: "inbox get stale full-id", args: []string{"inbox", "get", "--full-id"}, command: "inbox get", flag: "full-id"},
+		{name: "inbox get stale full-id", args: []string{"debug", "inbox", "get", "--full-id"}, command: "debug inbox get", flag: "full-id"},
 	}
 
 	for _, tt := range tests {
@@ -4199,10 +4204,10 @@ func TestConfigResolutionErrorsUsePreflightCommandIdentity(t *testing.T) {
 
 	raw := runCLIForTest(t, home, nil, nil, []string{
 		"--json",
-		"events", "list", "--max-events", "1",
+		"debug", "events", "list", "--max-events", "1",
 	})
 	payload := assertEnvelopeError(t, raw)
-	if got := anyStringValue(payload["command"]); got != "events list" {
+	if got := anyStringValue(payload["command"]); got != "debug events list" {
 		t.Fatalf("expected events list config error command, got %#v", payload)
 	}
 	errObj, _ := payload["error"].(map[string]any)
@@ -4230,8 +4235,8 @@ func TestBoardCommands(t *testing.T) {
 			if got := r.URL.Query().Get("state"); got != "active" {
 				t.Fatalf("expected state query active, got %q", got)
 			}
-			if got := r.URL.Query()["owner"]; len(got) != 1 || got[0] != "actor_1" {
-				t.Fatalf("expected owner query [actor_1], got %#v", got)
+			if got := r.URL.Query()["owner"]; len(got) != 1 || got[0] != "actor:actor_1" {
+				t.Fatalf("expected owner query [actor:actor_1], got %#v", got)
 			}
 			_, _ = w.Write([]byte(`{"boards":[{"board":{"id":"` + boardID + `","title":"Launch","state":"active"},"summary":{"card_count":1,"cards_by_column":{"backlog":1,"ready":0,"in_progress":0,"blocked":0,"review":0,"done":0},"unresolved_card_count":1,"document_count":1,"latest_activity_at":"` + updatedAt + `","has_document_refs":true}}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/boards":
@@ -4337,22 +4342,22 @@ func TestBoardCommands(t *testing.T) {
 	assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"board":{"title":"Launch","thread_id":"thread_primary_1","state":"active"}}`), []string{"--json", "--base-url", server.URL, "boards", "create"}))
 
 	getPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "get", "--board-id", boardID}))
-	if got := anyStringValue(getPayload["command_id"]); got != "boards.get" {
+	if got := anyStringValue(machineEnvelopeCommandID(getPayload)); got != "boards.get" {
 		t.Fatalf("expected boards.get command_id, got %#v", getPayload)
 	}
 
 	updatePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, strings.NewReader(`{"if_updated_at":"`+updatedAt+`","patch":{"title":"Launch Updated"}}`), []string{"--json", "--base-url", server.URL, "boards", "patch", "--board-id", boardID}))
-	if got := anyStringValue(updatePayload["command_id"]); got != "boards.patch" {
+	if got := anyStringValue(machineEnvelopeCommandID(updatePayload)); got != "boards.patch" {
 		t.Fatalf("expected boards.patch command_id, got %#v", updatePayload)
 	}
 
 	workspacePayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "workspace", "--board-id", boardID}))
-	if got := anyStringValue(workspacePayload["command_id"]); got != "boards.workspace" {
+	if got := anyStringValue(machineEnvelopeCommandID(workspacePayload)); got != "boards.workspace" {
 		t.Fatalf("expected boards.workspace command_id, got %#v", workspacePayload)
 	}
 
 	cardsListPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "list", "--board-id", boardID}))
-	if got := anyStringValue(cardsListPayload["command_id"]); got != "boards.cards.list" {
+	if got := anyStringValue(machineEnvelopeCommandID(cardsListPayload)); got != "boards.cards.list" {
 		t.Fatalf("expected boards.cards.list command_id, got %#v", cardsListPayload)
 	}
 
@@ -4360,17 +4365,17 @@ func TestBoardCommands(t *testing.T) {
 	if got := anyStringValue(canonicalCardsListPayload["command"]); got != "cards list" {
 		t.Fatalf("expected canonical cards list command, got %#v", canonicalCardsListPayload)
 	}
-	if got := anyStringValue(canonicalCardsListPayload["command_id"]); got != "cards.list" {
+	if got := anyStringValue(machineEnvelopeCommandID(canonicalCardsListPayload)); got != "cards.list" {
 		t.Fatalf("expected canonical cards list command id, got %#v", canonicalCardsListPayload)
 	}
 
 	createPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "cards", "create", "--board", boardID, "--title", "Launch task", "--body", "Launch task body", "--column", "backlog", "--request-key", "req-1", "--document-ref", "document:doc_1"}))
-	if got := anyStringValue(createPayload["command_id"]); got != "cards.create" {
+	if got := anyStringValue(machineEnvelopeCommandID(createPayload)); got != "cards.create" {
 		t.Fatalf("expected cards.create command_id, got %#v", createPayload)
 	}
 
 	getCardPayload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "boards", "cards", "get", "--board-id", boardID, "--card-id", cardID}))
-	if got := anyStringValue(getCardPayload["command_id"]); got != "boards.cards.get" {
+	if got := anyStringValue(machineEnvelopeCommandID(getCardPayload)); got != "boards.cards.get" {
 		t.Fatalf("expected boards.cards.get command_id, got %#v", getCardPayload)
 	}
 }
@@ -4403,14 +4408,14 @@ func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 		"--base-url", server.URL,
 		"workspace", "summary",
 	})
-	if !strings.Contains(text, "Workspace summary") || !strings.Contains(text, "counts: boards=1 cards=2 documents=1 inbox_items=1") || !strings.Contains(text, "Launch") {
+	if !strings.Contains(text, "result.counts.boards=1") || !strings.Contains(text, "result.counts.cards=2") || !strings.Contains(text, "result.boards.0.board.title=Launch") {
 		t.Fatalf("unexpected workspace summary text:\n%s", text)
 	}
 	bareText := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"workspace",
 	})
-	if !strings.Contains(bareText, "Workspace summary") || !strings.Contains(bareText, "counts: boards=1 cards=2 documents=1 inbox_items=1") {
+	if !strings.Contains(bareText, "result.counts.boards=1") || !strings.Contains(bareText, "result.counts.inbox_items=1") {
 		t.Fatalf("expected bare workspace to default to summary, got:\n%s", bareText)
 	}
 
@@ -4419,10 +4424,10 @@ func TestWorkspaceSummaryTextAndJSON(t *testing.T) {
 		"--base-url", server.URL,
 		"workspace", "summary",
 	}))
-	if got := anyStringValue(payload["command_id"]); got != "workspace.summary" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "workspace.summary" {
 		t.Fatalf("expected workspace.summary command_id, got %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	counts, _ := data["counts"].(map[string]any)
 	if got := intValue(counts["cards"]); got != 2 {
 		t.Fatalf("expected cards count 2, got %#v", payload)
@@ -4456,7 +4461,7 @@ func TestWorkspaceSummaryEmptyStateIncludesNextStepHint(t *testing.T) {
 		"--base-url", server.URL,
 		"workspace",
 	})
-	if !strings.Contains(text, "Next: create coordination with `anx topics create --title <title>`") {
+	if !strings.Contains(text, "result.counts.boards=0") {
 		t.Fatalf("expected empty workspace next-step hint, got:\n%s", text)
 	}
 }
@@ -4487,7 +4492,7 @@ func TestWorkspaceSummaryAllowsPartialOptionalReadFailure(t *testing.T) {
 		"--base-url", server.URL,
 		"workspace", "summary",
 	}))
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	warnings, _ := data["warnings"].([]any)
 	if len(warnings) != 1 {
 		t.Fatalf("expected one warning for cards failure, got %#v", payload)
@@ -4550,7 +4555,7 @@ func TestThreadsContextRejectsMixedSelectionModesWithActionableGuidance(t *testi
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 		"--state", "active",
 	})
@@ -4601,12 +4606,12 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	contexts, _ := data["contexts"].([]any)
 	if len(contexts) != 2 {
 		t.Fatalf("expected 2 contexts, got %#v", data)
@@ -4624,11 +4629,11 @@ func TestThreadsContextAggregatesAcrossMultipleThreads(t *testing.T) {
 
 	textOut := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 		"--thread-id", "thread_2",
 	})
-	if !strings.Contains(textOut, "Thread contexts (2):") || !strings.Contains(textOut, "recent_events (4):") || !strings.Contains(textOut, "human_attention_requested") {
+	if !strings.Contains(textOut, "result.contexts.1.thread_id=thread_2") || !strings.Contains(textOut, "result.recent_events.3.type=human_attention_responded") || !strings.Contains(textOut, "human_attention_requested") {
 		t.Fatalf("expected aggregate context sections in default text output, got:\n%s", textOut)
 	}
 }
@@ -4678,11 +4683,11 @@ func TestThreadsContextDiscoversByState(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--state", "active",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	threadIDs := stringList(data["thread_ids"])
 	if len(threadIDs) != 3 || threadIDs[0] != "thread_init_1" || threadIDs[1] != "thread_case_1" || threadIDs[2] != "thread_init_2" {
 		t.Fatalf("expected active thread_ids [thread_init_1 thread_case_1 thread_init_2], got %#v", data)
@@ -4730,17 +4735,17 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "inspect",
+		"debug", "threads", "inspect",
 		"--thread-id", "thread_1",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	if got := anyStringValue(payload["command"]); got != "threads inspect" {
+	if got := anyStringValue(payload["command"]); got != "debug threads inspect" {
 		t.Fatalf("expected threads inspect command, got %#v", payload)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "threads.inspect" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "threads.inspect" {
 		t.Fatalf("expected threads.inspect command_id, got %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	thread, _ := data["thread"].(map[string]any)
 	if got := anyStringValue(thread["id"]); got != "thread_1" {
 		t.Fatalf("expected thread_1, got %#v", data)
@@ -4766,14 +4771,14 @@ func TestThreadsInspectBuildsCoordinationView(t *testing.T) {
 
 	textFull := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"threads", "inspect",
+		"debug", "threads", "inspect",
 		"--thread-id", "thread_1",
 		"--full-id",
 	})
 	if !strings.Contains(textFull, eventID) {
 		t.Fatalf("expected full event id in inspect output, got:\n%s", textFull)
 	}
-	if !strings.Contains(textFull, "inbox_items (1):") {
+	if !strings.Contains(textFull, "result.inbox.items.0.id="+inboxID) {
 		t.Fatalf("expected inbox section in inspect output, got:\n%s", textFull)
 	}
 }
@@ -4799,7 +4804,7 @@ func TestThreadsInspectDiscoveryRequiresSingleThread(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "inspect",
+		"debug", "threads", "inspect",
 		"--state", "active",
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -4819,7 +4824,7 @@ func TestThreadsInspectRejectsMixedSelectionModes(t *testing.T) {
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
-		"threads", "inspect",
+		"debug", "threads", "inspect",
 		"--thread-id", "thread_1",
 		"--state", "active",
 	})
@@ -4862,11 +4867,11 @@ func TestThreadsContextTextOutputIsPayloadFirst(t *testing.T) {
 	home := t.TempDir()
 	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 	})
 
-	if !strings.Contains(out, "Thread thread_1") || !strings.Contains(out, "recent_events (2):") {
+	if !strings.Contains(out, "result.thread.id=thread_1") || !strings.Contains(out, "result.recent_events.1.type=human_attention_responded") {
 		t.Fatalf("expected thread context summary, got:\n%s", out)
 	}
 	if !strings.Contains(out, "human_attention_requested") || !strings.Contains(out, "attachment") || !strings.Contains(out, "Publish rescue brief") {
@@ -4894,11 +4899,11 @@ func TestThreadsContextVerboseShowsFullBodyWithoutHeaders(t *testing.T) {
 	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--verbose",
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 	})
 
-	if !strings.Contains(out, `"thread": {`) || !strings.Contains(out, `"recent_events": []`) {
+	if !strings.Contains(out, "result.thread.id=thread_1") || !strings.Contains(out, "result.collaboration_summary.artifact_count=0") {
 		t.Fatalf("expected verbose JSON body, got:\n%s", out)
 	}
 	if strings.Contains(out, "status: 200") || strings.Contains(out, "header Content-Type:") {
@@ -4923,14 +4928,14 @@ func TestThreadsContextHeadersShowTransportMetadataOnOptIn(t *testing.T) {
 	out := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--base-url", server.URL,
 		"--headers",
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", "thread_1",
 	})
 
-	if !strings.Contains(out, "status: 200") || !strings.Contains(out, "header Content-Type: application/json") {
+	if !strings.Contains(out, "result.status_code=200") || !strings.Contains(out, "result.headers.Content-Type.0=application/json") {
 		t.Fatalf("expected transport metadata with --headers, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Thread thread_1") {
+	if !strings.Contains(out, "result.thread.id=thread_1") {
 		t.Fatalf("expected payload summary to remain visible, got:\n%s", out)
 	}
 }
@@ -4953,8 +4958,8 @@ func TestThreadsContextPassesTypedRefAndHandleToCore(t *testing.T) {
 	defer server.Close()
 
 	home := t.TempDir()
-	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "threads", "context", "--thread-id", "thread:launch-plan"}))
-	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "threads", "context", "--thread-id", "launch-plan"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "debug", "threads", "context", "--thread-id", "thread:launch-plan"}))
+	assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{"--json", "--base-url", server.URL, "debug", "threads", "context", "--thread-id", "launch-plan"}))
 	if len(seen) != 2 || seen[0] != "/threads/thread:launch-plan/context" || seen[1] != "/threads/launch-plan/context" {
 		t.Fatalf("expected threads context to pass refs/handles through to core, got %#v", seen)
 	}
@@ -4983,7 +4988,7 @@ func TestThreadsContextCommandEndpointNotFoundDoesNotAttemptIDResolution(t *test
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"threads", "context",
+		"debug", "threads", "context",
 		"--thread-id", rawID,
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -5061,7 +5066,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "respond",
+		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "Approved.",
 		"--actor-id", "me",
@@ -5133,7 +5138,7 @@ func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 		"--json",
 		"--base-url", server.URL,
 		"--agent", "agent-a",
-		"inbox", "respond",
+		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
 	})
@@ -5152,7 +5157,7 @@ func TestInboxRespondRequiresResponseText(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "respond",
+		"debug", "inbox", "respond",
 		"inbox:ask:thread_42:none:event_1",
 	})
 	payload := assertEnvelopeError(t, raw)
@@ -5174,7 +5179,7 @@ func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json",
 		"--agent", "agent-a",
-		"inbox", "respond",
+		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
 		"--actor-id", "me",
@@ -5293,8 +5298,8 @@ func TestArtifactContentRaw(t *testing.T) {
 	home := t.TempDir()
 	env := map[string]string{}
 	out := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "artifacts", "content", "--artifact-id", "artifact-raw"})
-	if !bytes.Equal([]byte(out), expected) {
-		t.Fatalf("unexpected artifact bytes: got=%v want=%v", []byte(out), expected)
+	if !strings.Contains(out, base64.StdEncoding.EncodeToString(expected)) {
+		t.Fatalf("unexpected artifact content projection: %q", out)
 	}
 }
 
@@ -5318,7 +5323,7 @@ func TestArtifactContentOutputFile(t *testing.T) {
 		"--base-url", server.URL,
 		"artifacts", "content", "--artifact-id", "artifact-file", "-o", outPath,
 	})
-	if !strings.Contains(out, "wrote 18 bytes") {
+	if !strings.Contains(out, "fact result.bytes_written=18") {
 		t.Fatalf("expected write summary, got %q", out)
 	}
 	got, err := os.ReadFile(outPath)
@@ -5351,7 +5356,7 @@ func TestArtifactContentJSONOutputFile(t *testing.T) {
 		"artifacts", "content", "--artifact-id", "artifact-json-file", "--output", outPath,
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["output_path"]); got != outPath {
 		t.Fatalf("expected output_path %q, got %#v", outPath, data)
 	}
@@ -5383,8 +5388,8 @@ func TestArtifactDownloadAlias(t *testing.T) {
 
 	home := t.TempDir()
 	out := runCLIForTest(t, home, map[string]string{}, nil, []string{"--base-url", server.URL, "artifacts", "download", "--artifact-id", "artifact-download"})
-	if !bytes.Equal([]byte(out), expected) {
-		t.Fatalf("unexpected artifact bytes: got=%q want=%q", out, expected)
+	if !strings.Contains(out, base64.StdEncoding.EncodeToString(expected)) {
+		t.Fatalf("unexpected artifact content projection: %q", out)
 	}
 }
 
@@ -5561,7 +5566,7 @@ func TestArtifactsContentOutputDotUsesContentDispositionFilename(t *testing.T) {
 		"--base-url", server.URL,
 		"artifacts", "content", "artifact-named", "--output", ".",
 	})
-	if !strings.Contains(out, "wrote 13 bytes to report.txt") {
+	if !strings.Contains(out, "fact result.bytes_written=13") || !strings.Contains(out, "fact result.output_path=report.txt") {
 		t.Fatalf("expected write summary, got %q", out)
 	}
 	got, err := os.ReadFile(filepath.Join(cwd, "report.txt"))
@@ -5603,7 +5608,7 @@ func TestArtifactsContentOutputDotFallsBackToMetadataFilename(t *testing.T) {
 		"artifacts", "content", "artifact-meta", "--output", ".",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["output_path"]); got != "fallback.bin" {
 		t.Fatalf("expected metadata fallback output path, got %#v", data)
 	}
@@ -5644,7 +5649,7 @@ func TestArtifactsInspectCommand(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "artifacts inspect" {
 		t.Fatalf("unexpected command label: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	artifact, _ := data["artifact"].(map[string]any)
 	content, _ := data["content"].(map[string]any)
 	if got := anyStringValue(artifact["id"]); got != "artifact_1" {
@@ -5664,7 +5669,7 @@ func TestArtifactsInspectCommand(t *testing.T) {
 	if got := anyStringValue(getPayload["command"]); got != "artifacts inspect" {
 		t.Fatalf("expected artifacts get to route to inspect, got %#v", getPayload)
 	}
-	getData := asMap(getPayload["data"])
+	getData := asMap(getPayload["result"])
 	getContent := asMap(getData["content"])
 	if got := anyStringValue(getContent["body_text"]); got != "artifact body" {
 		t.Fatalf("expected artifact get alias to include content, got %#v", getData)
@@ -5720,7 +5725,7 @@ func TestEventsTailReconnect(t *testing.T) {
 	raw := runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "tail",
+		"debug", "events", "tail",
 		"--types", "message_posted,document_created",
 		"--max-events", "2",
 	})
@@ -5753,8 +5758,8 @@ func TestEventsTailReconnect(t *testing.T) {
 			t.Fatalf("expected repeated type query values, got %q", rawQuery)
 		}
 	}
-	firstData, _ := events[0]["data"].(map[string]any)
-	secondData, _ := events[1]["data"].(map[string]any)
+	firstData, _ := events[0]["result"].(map[string]any)
+	secondData, _ := events[1]["result"].(map[string]any)
 	if firstData["id"] != "e-1" || secondData["id"] != "e-2" {
 		t.Fatalf("unexpected stream ids: first=%v second=%v", firstData["id"], secondData["id"])
 	}
@@ -5767,6 +5772,12 @@ var (
 func assertGolden(t *testing.T, goldenFile string, actual string) {
 	t.Helper()
 	path := filepath.Join("testdata", goldenFile)
+	if os.Getenv("ANX_UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(path, []byte(actual), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 	expected, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden %s: %v", path, err)
@@ -5785,6 +5796,12 @@ func stableMachineInboxJSON(s string) string {
 func assertGoldenStabilizedInboxAliases(t *testing.T, goldenFile string, actual string) {
 	t.Helper()
 	path := filepath.Join("testdata", goldenFile)
+	if os.Getenv("ANX_UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(path, []byte(stableMachineInboxJSON(actual)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 	expected, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden %s: %v", path, err)
@@ -5796,7 +5813,7 @@ func assertGoldenStabilizedInboxAliases(t *testing.T, goldenFile string, actual 
 
 func proposalIDFromEnvelope(t *testing.T, payload map[string]any) string {
 	t.Helper()
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	proposalID := anyStringValue(data["proposal_id"])
 	if strings.TrimSpace(proposalID) == "" {
 		t.Fatalf("expected proposal_id in payload=%#v", payload)
@@ -5810,7 +5827,7 @@ func normalizeProposalEnvelopeForGolden(t *testing.T, raw string) string {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatalf("decode proposal envelope json: %v raw=%s", err, raw)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		return raw
 	}
@@ -5825,7 +5842,7 @@ func normalizeProposalEnvelopeForGolden(t *testing.T, raw string) string {
 	if applyCommand := strings.TrimSpace(anyStringValue(data["apply_command"])); applyCommand != "" {
 		data["apply_command"] = strings.ReplaceAll(applyCommand, proposalID, "draft-PLACEHOLDER")
 	}
-	payload["data"] = data
+	payload["result"] = data
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		t.Fatalf("encode normalized proposal envelope: %v payload=%#v", err, payload)
@@ -5857,7 +5874,7 @@ func TestInboxTailReconnect(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "inbox", "tail", "--max-events", "2"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "debug", "inbox", "tail", "--max-events", "2"})
 	if !strings.Contains(raw, `"id": "inbox:1@a1"`) || !strings.Contains(raw, `"id": "inbox:2@b2"`) {
 		t.Fatalf("unexpected inbox stream output: %s", raw)
 	}
@@ -5880,12 +5897,29 @@ func TestEventsStreamDefaultNoFollow(t *testing.T) {
 
 	home := t.TempDir()
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "events", "stream"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "debug", "events", "stream"})
 	if calls != 1 {
 		t.Fatalf("expected single stream request without --follow, got %d", calls)
 	}
 	if !strings.Contains(raw, `"id": "e-1"`) {
 		t.Fatalf("unexpected stream output: %s", raw)
+	}
+}
+
+func TestEventsStreamEmptyStillEmitsEnvelope(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/stream/events" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+	}))
+	defer server.Close()
+	output := runCLIForTest(t, t.TempDir(), map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "debug", "events", "stream"})
+	doc := assertEnvelopeOK(t, output)
+	if got := intValue(asMap(doc["result"])["received_events"]); got != 0 {
+		t.Fatalf("expected empty stream receipt, got %#v", doc)
 	}
 }
 
@@ -5912,16 +5946,16 @@ func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
 	eventsTail := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "tail",
+		"debug", "events", "tail",
 		"--max-events", "1",
 	}))
-	if got := anyStringValue(eventsTail["command"]); got != "events stream" {
+	if got := anyStringValue(eventsTail["command"]); got != "debug events stream" {
 		t.Fatalf("expected canonical command events stream, got %q payload=%#v", got, eventsTail)
 	}
-	if got := anyStringValue(eventsTail["command_id"]); got != "events.stream" {
+	if got := anyStringValue(machineEnvelopeCommandID(eventsTail)); got != "events.stream" {
 		t.Fatalf("expected command_id events.stream, got %q payload=%#v", got, eventsTail)
 	}
-	eventsTailData, _ := eventsTail["data"].(map[string]any)
+	eventsTailData, _ := eventsTail["result"].(map[string]any)
 	if got := anyStringValue(eventsTailData["payload_key"]); got != "event" {
 		t.Fatalf("expected payload_key=event, got %#v", eventsTailData)
 	}
@@ -5932,16 +5966,16 @@ func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
 	inboxTail := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "tail",
+		"debug", "inbox", "tail",
 		"--max-events", "1",
 	}))
-	if got := anyStringValue(inboxTail["command"]); got != "inbox stream" {
+	if got := anyStringValue(inboxTail["command"]); got != "debug inbox stream" {
 		t.Fatalf("expected canonical command inbox stream, got %q payload=%#v", got, inboxTail)
 	}
-	if got := anyStringValue(inboxTail["command_id"]); got != "inbox.stream" {
+	if got := anyStringValue(machineEnvelopeCommandID(inboxTail)); got != "inbox.stream" {
 		t.Fatalf("expected command_id inbox.stream, got %q payload=%#v", got, inboxTail)
 	}
-	inboxTailData, _ := inboxTail["data"].(map[string]any)
+	inboxTailData, _ := inboxTail["result"].(map[string]any)
 	if got := anyStringValue(inboxTailData["payload_key"]); got != "item" {
 		t.Fatalf("expected payload_key=item, got %#v", inboxTailData)
 	}
@@ -5952,26 +5986,26 @@ func TestStreamAliasCommandsUseCanonicalMachineIdentity(t *testing.T) {
 	eventsErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "tail",
+		"debug", "events", "tail",
 		"--max-events", "-1",
 	}))
-	if got := anyStringValue(eventsErr["command"]); got != "events stream" {
+	if got := anyStringValue(eventsErr["command"]); got != "debug events stream" {
 		t.Fatalf("expected canonical error command events stream, got %q payload=%#v", got, eventsErr)
 	}
-	if got := anyStringValue(eventsErr["command_id"]); got != "events.stream" {
+	if got := anyStringValue(machineEnvelopeCommandID(eventsErr)); got != "events.stream" {
 		t.Fatalf("expected error command_id events.stream, got %q payload=%#v", got, eventsErr)
 	}
 
 	inboxErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"inbox", "tail",
+		"debug", "inbox", "tail",
 		"--max-events", "-1",
 	}))
-	if got := anyStringValue(inboxErr["command"]); got != "inbox stream" {
+	if got := anyStringValue(inboxErr["command"]); got != "debug inbox stream" {
 		t.Fatalf("expected canonical error command inbox stream, got %q payload=%#v", got, inboxErr)
 	}
-	if got := anyStringValue(inboxErr["command_id"]); got != "inbox.stream" {
+	if got := anyStringValue(machineEnvelopeCommandID(inboxErr)); got != "inbox.stream" {
 		t.Fatalf("expected error command_id inbox.stream, got %q payload=%#v", got, inboxErr)
 	}
 }
@@ -5984,25 +6018,25 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 
 	eventsListErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"events", "list",
+		"debug", "events", "list",
 		"--max-events", "-1",
 	}))
-	if got := anyStringValue(eventsListErr["command"]); got != "events list" {
+	if got := anyStringValue(eventsListErr["command"]); got != "debug events list" {
 		t.Fatalf("expected events list error command, got %q payload=%#v", got, eventsListErr)
 	}
-	if got := anyStringValue(eventsListErr["command_id"]); got != "events.list" {
+	if got := anyStringValue(machineEnvelopeCommandID(eventsListErr)); got != "events.list" {
 		t.Fatalf("expected events.list command_id, got %q payload=%#v", got, eventsListErr)
 	}
 
 	eventsListLifecycleErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"events", "list",
+		"debug", "events", "list",
 		"--include-trashed",
 	}))
-	if got := anyStringValue(eventsListLifecycleErr["command"]); got != "events list" {
+	if got := anyStringValue(eventsListLifecycleErr["command"]); got != "debug events list" {
 		t.Fatalf("expected events list lifecycle error command, got %q payload=%#v", got, eventsListLifecycleErr)
 	}
-	if got := anyStringValue(eventsListLifecycleErr["command_id"]); got != "events.list" {
+	if got := anyStringValue(machineEnvelopeCommandID(eventsListLifecycleErr)); got != "events.list" {
 		t.Fatalf("expected events.list lifecycle command_id, got %q payload=%#v", got, eventsListLifecycleErr)
 	}
 	errObj, _ := eventsListLifecycleErr["error"].(map[string]any)
@@ -6012,34 +6046,34 @@ func TestMachineFacingNonStreamErrorsIncludeCommandIdentity(t *testing.T) {
 
 	eventsGetErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"events", "get",
+		"debug", "events", "get",
 	}))
-	if got := anyStringValue(eventsGetErr["command"]); got != "events get" {
+	if got := anyStringValue(eventsGetErr["command"]); got != "debug events get" {
 		t.Fatalf("expected events get error command, got %q payload=%#v", got, eventsGetErr)
 	}
-	if got := anyStringValue(eventsGetErr["command_id"]); got != "events.get" {
+	if got := anyStringValue(machineEnvelopeCommandID(eventsGetErr)); got != "events.get" {
 		t.Fatalf("expected events.get command_id, got %q payload=%#v", got, eventsGetErr)
 	}
 
 	threadsContextErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"threads", "context",
+		"debug", "threads", "context",
 	}))
-	if got := anyStringValue(threadsContextErr["command"]); got != "threads context" {
+	if got := anyStringValue(threadsContextErr["command"]); got != "debug threads context" {
 		t.Fatalf("expected threads context error command, got %q payload=%#v", got, threadsContextErr)
 	}
-	if got := anyStringValue(threadsContextErr["command_id"]); got != "threads.context" {
+	if got := anyStringValue(machineEnvelopeCommandID(threadsContextErr)); got != "threads.context" {
 		t.Fatalf("expected threads.context command_id, got %q payload=%#v", got, threadsContextErr)
 	}
 
 	threadsRecommendationsErr := assertEnvelopeError(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"threads", "workspace",
+		"debug", "threads", "workspace",
 	}))
-	if got := anyStringValue(threadsRecommendationsErr["command"]); got != "threads workspace" {
+	if got := anyStringValue(threadsRecommendationsErr["command"]); got != "debug threads workspace" {
 		t.Fatalf("expected threads workspace error command, got %q payload=%#v", got, threadsRecommendationsErr)
 	}
-	if got := anyStringValue(threadsRecommendationsErr["command_id"]); got != "threads.workspace" {
+	if got := anyStringValue(machineEnvelopeCommandID(threadsRecommendationsErr)); got != "threads.workspace" {
 		t.Fatalf("expected threads.workspace command_id, got %q payload=%#v", got, threadsRecommendationsErr)
 	}
 }
@@ -6062,10 +6096,10 @@ func TestEventsStreamFallbackPayloadForNonWrapperJSON(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, env, nil, []string{
 		"--json",
 		"--base-url", server.URL,
-		"events", "stream",
+		"debug", "events", "stream",
 		"--max-events", "1",
 	}))
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["payload_key"]); got != "data" {
 		t.Fatalf("expected fallback payload_key=data, got %#v", data)
 	}
@@ -6093,7 +6127,7 @@ func TestTypedCommandUsageFailures(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--json", "threads", "patch", "--thread-id", "thread_1"})
+	exitCode := cli.Run([]string{"--json", "debug", "threads", "patch", "--thread-id", "thread_1"})
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2, got %d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
 	}
@@ -6139,7 +6173,7 @@ func TestCLISurfaceBodyFileAndStdinAliases(t *testing.T) {
 		"--body-file=-",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	body := asMap(data["body"])
 	card := asMap(body["card"])
 	if got, _ := card["summary"].(string); got != "Card body from stdin\n" {
@@ -6155,7 +6189,7 @@ func TestCLISurfaceBodyFileAndStdinAliases(t *testing.T) {
 		"--body", "Inline body",
 	})
 	payload = assertEnvelopeOK(t, raw)
-	data = asMap(payload["data"])
+	data = asMap(payload["result"])
 	body = asMap(data["body"])
 	card = asMap(body["card"])
 	if got := anyStringValue(card["summary"]); got != "Inline body" {
@@ -6177,7 +6211,7 @@ func TestDocsCreateAndReviseBodyFileStdinNotConsumedAsJSON(t *testing.T) {
 			"--body-file=-",
 		})
 		payload := assertEnvelopeOK(t, raw)
-		data := asMap(payload["data"])
+		data := asMap(payload["result"])
 		body := asMap(data["body"])
 		if got := anyStringValue(body["content"]); got != "# Title\n\nProse from stdin" {
 			t.Fatalf("expected markdown from stdin as content, got %q", got)
@@ -6646,7 +6680,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("events_list", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"events", "list",
+			"debug", "events", "list",
 			"--thread-id", "thread_123",
 			"--type", "message_posted",
 		})
@@ -6656,7 +6690,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("events_get", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"events", "get",
+			"debug", "events", "get",
 			"--event-id", "event_456",
 		})
 		assertGolden(t, "events_get_machine.golden.json", raw)
@@ -6665,7 +6699,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("events_stream", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"events", "stream",
+			"debug", "events", "stream",
 			"--max-events", "1",
 		})
 		assertGolden(t, "events_stream_machine.golden.json", raw)
@@ -6674,7 +6708,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("threads_context", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"threads", "context",
+			"debug", "threads", "context",
 			"--thread-id", "thread_123",
 		})
 		assertGolden(t, "threads_context_machine.golden.json", raw)
@@ -6683,7 +6717,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("threads_inspect", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"threads", "inspect",
+			"debug", "threads", "inspect",
 			"--thread-id", "thread_123",
 		})
 		assertGoldenStabilizedInboxAliases(t, "threads_inspect_machine.golden.json", raw)
@@ -6692,7 +6726,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("threads_workspace", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"threads", "workspace",
+			"debug", "threads", "workspace",
 			"--thread-id", "thread_123",
 		})
 		assertGoldenStabilizedInboxAliases(t, "threads_workspace_machine.golden.json", raw)
@@ -6718,7 +6752,7 @@ func TestMachineFacingTargetedCommandGoldens(t *testing.T) {
 	t.Run("inbox_stream", func(t *testing.T) {
 		raw := runCLIForTest(t, home, env, nil, []string{
 			"--json", "--base-url", server.URL,
-			"inbox", "stream",
+			"debug", "inbox", "stream",
 			"--max-events", "1",
 		})
 		assertGolden(t, "inbox_stream_machine.golden.json", raw)

@@ -456,7 +456,7 @@ func TestBridgeWorkspaceIDReadsRegistrationBindings(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "bridge", "workspace-id", "--handle", "hermes"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("expected data payload: %#v", payload)
 	}
@@ -501,7 +501,7 @@ func TestBridgeWorkspaceIDPaginatesUntilHandleMatches(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "bridge", "workspace-id", "--handle", "hermes"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("expected data payload: %#v", payload)
 	}

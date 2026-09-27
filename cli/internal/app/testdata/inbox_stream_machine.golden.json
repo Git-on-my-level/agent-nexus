@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "command": "inbox stream",
-  "command_id": "inbox.stream",
-  "data": {
+  "schema_version": 2,
+  "command": "debug inbox stream",
+  "result": {
     "id": "ibx_1",
     "item": {
       "handle": "inbox-1",
@@ -18,5 +18,7 @@
     },
     "payload_key": "item",
     "type": "inbox_item"
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

@@ -1,13 +1,17 @@
 {
   "ok": false,
+  "schema_version": 2,
   "command": "api call",
+  "warnings": [],
+  "next_actions": [],
   "error": {
     "code": "invalid_request",
     "message": "path is required",
-    "recoverable": true,
-    "hint": "Run `anx help` for supported flags and usage.",
+    "retryable": true,
+    "exit_code": 2,
     "details": {
       "flag": "--path"
-    }
+    },
+    "next_actions": []
   }
 }

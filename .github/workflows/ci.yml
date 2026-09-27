@@ -23,6 +23,7 @@ jobs:
       contracts: ${{ steps.filter.outputs.contracts }}
       core: ${{ steps.filter.outputs.core }}
       cli: ${{ steps.filter.outputs.cli }}
+      mcp: ${{ steps.filter.outputs.mcp }}
       web_ui: ${{ steps.filter.outputs.web_ui }}
       auth_e2e_smoke: ${{ steps.filter.outputs.auth_e2e_smoke }}
       platform_constraints: ${{ steps.filter.outputs.platform_constraints }}
@@ -58,6 +59,8 @@ jobs:
               - 'scripts/read-version.sh'
               - 'scripts/set-version.sh'
               - 'scripts/sync-version.sh'
+            mcp:
+              - 'mcp/**'
             web_ui:
               - 'web-ui/**'
             auth_e2e_smoke:
@@ -122,6 +125,28 @@ jobs:
 
       - name: Run core check
         run: make -C core check-ci
+
+  mcp-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: mcp/go.mod
+          cache-dependency-path: mcp/go.sum
+
+      - name: Check MCP tool policy covers the command registry
+        run: node mcp/scripts/check-tool-policy.mjs
+
+      - name: Run MCP tests
+        working-directory: mcp
+        run: go test ./...
 
   cli-checks:
     runs-on: ubuntu-latest

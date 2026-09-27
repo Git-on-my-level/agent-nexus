@@ -149,8 +149,9 @@ func agentGuideSections() []guideSection {
 			Title: "Programmatic output (`--json`)",
 			Lines: []string{
 				"- Use `--json` or `ANX_JSON=true` when you are parsing output in code, scripts, CI, or `jq` (not for default agent readbacks).",
-				"- Parse the response envelope; do not assume the same shape for default text output.",
-				"- Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.",
+				"- Parse envelope v2: success uses `result`, `warnings`, and `next_actions`; errors use `error.code`, `error.retryable`, `error.exit_code`, `error.details`, and `error.next_actions`.",
+				"- Default text projects the same facts and actions as `key=value`, `warning code=…`, and `next anx …` lines.",
+				"- Exit codes are 2 usage, 3 not found, 4 conflict, 5 auth, 6 network, 7 outdated, 8 timeout, 9 declined, and 1 other.",
 				"- Keep scripts idempotent where possible: read state, compare, then write only when needed.",
 			},
 		},

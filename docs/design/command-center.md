@@ -277,6 +277,13 @@ routes remain.
 
 ## Workstream decisions
 
+(Append dated entries here: decision, reason, files.)
+
+- 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
+  each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and
+  `adapter`. Event reads expose the same object. Presence and progress notes
+  use separate infrastructure tables and do not create activity events.
+
 - 2026-09-27: Adoption proofs bind a client-generated 128-bit request nonce and host
   public key because the enrollment ID does not exist when start is submitted; core
   freezes proved adoptions before human approval. Local `--exclude` omits profiles
@@ -305,3 +312,11 @@ routes remain.
   online state; it does not require the former per-agent wake registration.
   Legacy standalone agents retain their existing wake registration during
   adoption rollout.
+- 2026-09-27 (core identity and runs): A run created from `X-ANX-Run-Id` uses
+  the host-derived adapter name when it is a known adapter, or `generic` for a
+  persona. The first launcher observation may replace that inferred adapter
+  while the run is still provisional (`unknown`); subsequent observations keep
+  it immutable. Roster names and display names always come from the canonical
+  host-agent relation, independent of launcher adapter.
+- 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
+- 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.

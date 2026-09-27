@@ -78,8 +78,8 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 		},
 	}, "topics", "create")
 
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicID := mustStringPath(t, topic.Payload, "data.body.topic.id")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicID := mustStringPath(t, topic.Payload, "result.topic.id")
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
@@ -100,13 +100,13 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
+	}, "debug", "events", "create")
 
 	workerTopic := h.runCLIExpectOK(t, "worker", nil, "topics", "get", "--topic-id", topicID)
 	if !strings.Contains(workerTopic.Stdout, "Harness Incident") || !strings.Contains(workerTopic.Stdout, runID) {
 		t.Fatalf("expected worker topic read to include run title, got: %s", workerTopic.Stdout)
 	}
-	workerThread := h.runCLIExpectOK(t, "worker", nil, "threads", "get", "--thread-id", threadID)
+	workerThread := h.runCLIExpectOK(t, "worker", nil, "debug", "threads", "get", "--thread-id", threadID)
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -122,15 +122,15 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
+	}, "debug", "events", "create")
 
-	workerEventID := mustStringPath(t, ack.Payload, "data.body.event.id")
-	coordEvent := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", workerEventID)
+	workerEventID := mustStringPath(t, ack.Payload, "result.event.id")
+	coordEvent := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", workerEventID)
 	if !strings.Contains(coordEvent.Stdout, "Worker acknowledged harness thread") {
 		t.Fatalf("expected coordinator event read to include worker acknowledgement, got: %s", coordEvent.Stdout)
 	}
 
-	if got := mustStringPath(t, workerThread.Payload, "data.body.thread.thread_id"); got != threadID {
+	if got := mustStringPath(t, workerThread.Payload, "result.thread.thread_id"); got != threadID {
 		t.Fatalf("thread id mismatch: got %q want %q", got, threadID)
 	}
 }
@@ -159,8 +159,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, "topics", "create")
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicID := mustStringPath(t, topic.Payload, "data.body.topic.id")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicID := mustStringPath(t, topic.Payload, "result.topic.id")
 
 	doc := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"document": map[string]any{
@@ -173,8 +173,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"sources": []string{"inferred"},
 		},
 	}, "docs", "create")
-	documentID := mustStringPath(t, doc.Payload, "data.body.document.id")
-	initialRevisionID := mustStringPath(t, doc.Payload, "data.body.revision.revision_id")
+	documentID := mustStringPath(t, doc.Payload, "result.document.id")
+	initialRevisionID := mustStringPath(t, doc.Payload, "result.revision.revision_id")
 
 	decision := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
@@ -196,8 +196,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	decisionEventID := mustStringPath(t, decision.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	decisionEventID := mustStringPath(t, decision.Payload, "result.event.id")
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"patch": map[string]any{
@@ -205,8 +205,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		},
 	}, "topics", "patch", "--topic-id", topicID)
 
-	h.runCLIExpectOK(t, "worker", nil, "threads", "context", "--thread-id", threadID)
-	h.runCLIExpectOK(t, "worker", nil, "events", "get", "--event-id", decisionEventID)
+	h.runCLIExpectOK(t, "worker", nil, "debug", "threads", "context", "--thread-id", threadID)
+	h.runCLIExpectOK(t, "worker", nil, "debug", "events", "get", "--event-id", decisionEventID)
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -222,8 +222,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	ackEventID := mustStringPath(t, ack.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	ackEventID := mustStringPath(t, ack.Payload, "result.event.id")
 
 	workerUpdate := h.runCLIExpectOK(t, "worker", map[string]any{
 		"if_base_revision": initialRevisionID,
@@ -231,7 +231,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		"content_type":     "text",
 		"refs":             []string{"thread:" + threadID, "event:" + decisionEventID},
 	}, "docs", "revise", "--apply", "--document-id", documentID)
-	workerRevisionID := mustStringPath(t, workerUpdate.Payload, "data.body.revision.revision_id")
+	workerRevisionID := mustStringPath(t, workerUpdate.Payload, "result.revision.revision_id")
 
 	completion := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -248,12 +248,12 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	completionEventID := mustStringPath(t, completion.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	completionEventID := mustStringPath(t, completion.Payload, "result.event.id")
 
-	h.runCLIExpectOK(t, "reviewer", nil, "threads", "context", "--thread-id", threadID)
+	h.runCLIExpectOK(t, "reviewer", nil, "debug", "threads", "context", "--thread-id", threadID)
 	preConflict := h.runCLIExpectOK(t, "reviewer", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, preConflict.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, preConflict.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("expected worker revision to be head before stale update, got %q want %q", got, workerRevisionID)
 	}
 
@@ -277,7 +277,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	}
 
 	postConflict := h.runCLIExpectOK(t, "reviewer", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, postConflict.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, postConflict.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("stale overwrite advanced revision head: got %q want %q", got, workerRevisionID)
 	}
 
@@ -296,8 +296,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	reviewEventID := mustStringPath(t, review.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	reviewEventID := mustStringPath(t, review.Payload, "result.event.id")
 
 	h.runCLIExpectOK(t, "reviewer", map[string]any{
 		"patch": map[string]any{
@@ -310,13 +310,13 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		t.Fatalf("expected topic read to include run title, got: %s", coordTopic.Stdout)
 	}
 
-	coordCompletion := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", completionEventID)
+	coordCompletion := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", completionEventID)
 	if !strings.Contains(coordCompletion.Stdout, "message_posted") || !strings.Contains(coordCompletion.Stdout, runID) {
 		t.Fatalf("expected completion event output to include message_posted and run id, got: %s", coordCompletion.Stdout)
 	}
 
 	coordDoc := h.runCLIExpectOK(t, "coordinator", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, coordDoc.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, coordDoc.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("coordinator saw unexpected doc head: got %q want %q", got, workerRevisionID)
 	}
 
@@ -325,7 +325,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		t.Fatalf("expected document history to contain baseline and worker revisions, got: %s", history.Stdout)
 	}
 
-	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", reviewEventID)
+	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", reviewEventID)
 	if !strings.Contains(coordReview.Stdout, "message_posted") || !strings.Contains(coordReview.Stdout, "conflict-safe") || !strings.Contains(coordReview.Stdout, runID) {
 		t.Fatalf("expected review event output to include review details, got: %s", coordReview.Stdout)
 	}
@@ -351,7 +351,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 		},
 		"content_type": "structured",
 	}, "artifacts", "create")
-	artifactRef := mustStringPath(t, artifact.Payload, "data.body.artifact.ref")
+	artifactRef := mustStringPath(t, artifact.Payload, "result.artifact.ref")
 
 	topic := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"topic": map[string]any{
@@ -365,8 +365,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 			"provenance":    map[string]any{"sources": []any{artifactRef}},
 		},
 	}, "topics", "create")
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicHandle := mustStringPath(t, topic.Payload, "data.body.topic.handle")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicHandle := mustStringPath(t, topic.Payload, "result.topic.handle")
 	threadRef := "thread:" + topicHandle
 
 	event := h.runCLIExpectOK(t, "investigator", map[string]any{
@@ -387,8 +387,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	eventID := mustStringPath(t, event.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	eventID := mustStringPath(t, event.Payload, "result.event.id")
 
 	walk := h.runCLIExpectOK(t, "investigator", nil,
 		"provenance", "walk",
@@ -398,11 +398,11 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	if got := mustStringPath(t, walk.Payload, "command"); got != "provenance walk" {
 		t.Fatalf("unexpected command name: got %q want provenance walk", got)
 	}
-	if got := mustStringPath(t, walk.Payload, "data.from"); got != "event:"+eventID {
+	if got := mustStringPath(t, walk.Payload, "result.from"); got != "event:"+eventID {
 		t.Fatalf("unexpected walk root: got %q want %q", got, "event:"+eventID)
 	}
 
-	data, _ := walk.Payload["data"].(map[string]any)
+	data, _ := walk.Payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("missing data payload: %#v", walk.Payload)
 	}
@@ -544,20 +544,20 @@ func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) st
 func (h *liveCoreHarness) createInviteTokenKind(t *testing.T, issuerAgent, kind string) string {
 	t.Helper()
 	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", kind)
-	return mustStringPath(t, res.Payload, "data.token")
+	return mustStringPath(t, res.Payload, "result.token")
 }
 
 func (h *liveCoreHarness) actorID(t *testing.T, agent string) string {
 	t.Helper()
 	res := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	return mustStringPath(t, res.Payload, "data.profile.actor_id")
+	return mustStringPath(t, res.Payload, "result.profile.actor_id")
 }
 
 func (h *liveCoreHarness) selectPMAgent(t *testing.T, agent string) {
 	t.Helper()
 	who := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	actor := mustStringPath(t, who.Payload, "data.profile.actor_id")
-	handle := mustStringPath(t, who.Payload, "data.profile.username")
+	actor := mustStringPath(t, who.Payload, "result.profile.actor_id")
+	handle := mustStringPath(t, who.Payload, "result.profile.username")
 	restartCoreForWorkTest(t, h, "ANX_PM_AGENT_ACTOR_ID="+actor, "ANX_PM_AGENT_HANDLE="+handle)
 }
 
@@ -837,8 +837,8 @@ func getPathValue(payload map[string]any, path string) (any, bool) {
 		return v, true
 	}
 	// CLI --json envelopes flatten API `body` into `data` (see flattenEnvelopeData).
-	if strings.HasPrefix(path, "data.body.") {
-		alt := "data." + strings.TrimPrefix(path, "data.body.")
+	if strings.HasPrefix(path, "result.") {
+		alt := "result." + strings.TrimPrefix(path, "result.")
 		if v, ok := descendJSONPath(payload, alt); ok {
 			return v, true
 		}

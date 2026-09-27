@@ -151,12 +151,12 @@ func TestWorkspaceExecutorRepresentativeCommandGroups(t *testing.T) {
 			wantPath:   "/agents/me",
 		},
 		{
-			name:          "agents me update",
-			commandID:     "agents.me.patch",
-			arguments:     map[string]any{"body": map[string]any{"display_name": "Researcher"}},
+			name:          "agents me presence",
+			commandID:     "agents.me.presence",
+			arguments:     map[string]any{"body": map[string]any{"current_card_ref": "card:tune-combat", "note": "testing parry window"}},
 			wantMethod:    http.MethodPatch,
-			wantPath:      "/agents/me",
-			wantBodyField: map[string]any{"display_name": "Researcher"},
+			wantPath:      "/agents/me/presence",
+			wantBodyField: map[string]any{"current_card_ref": "card:tune-combat"},
 		},
 		{
 			name:       "artifacts read",

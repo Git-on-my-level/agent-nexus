@@ -16,6 +16,7 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
@@ -170,6 +171,7 @@ type handlerOptions struct {
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	authStore                      *auth.Store
+	runStore                       *commandcenter.Store
 	workspaceHumanGrantVerifier    auth.WorkspaceHumanGrantIdentityVerifier
 	workspaceManagedGrantVerifier  auth.WorkspaceManagedAgentGrantIdentityVerifier
 	passkeySessionStore            *auth.PasskeySessionStore
@@ -242,6 +244,10 @@ func WithAuthStore(authStore *auth.Store) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.authStore = authStore
 	}
+}
+
+func WithRunStore(store *commandcenter.Store) HandlerOption {
+	return func(opts *handlerOptions) { opts.runStore = store }
 }
 
 func WithWorkspaceHumanGrantVerifier(verifier auth.WorkspaceHumanGrantIdentityVerifier) HandlerOption {
@@ -655,6 +661,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
+			}
+			if !attachRunAttribution(w, r, opts) {
+				return
 			}
 			handler(w, r)
 		})
@@ -1130,12 +1139,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 		}
 	})
-	registerRoute("/agents", commandCenterStubRouteAccess, handleCommandCenterStub)
-	registerRoute("/agents/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/agents", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
+	registerRoute("/agents/", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
 	registerRoute("/hosts", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
 	registerRoute("/hosts/", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
-	registerRoute("/runs", commandCenterStubRouteAccess, handleCommandCenterStub)
-	registerRoute("/runs/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/runs", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleRuns(w, r, opts) })
+	registerRoute("/runs/", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleRuns(w, r, opts) })
 
 	registerRoute("/topics", func(r *http.Request) routeAccessRequirement {
 		switch r.Method {

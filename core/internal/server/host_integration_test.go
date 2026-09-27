@@ -349,3 +349,78 @@ func TestHostAdoptionProofPreservesActor(t *testing.T) {
 	status, p = hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{"grant_type": "assertion", "agent_id": "agent-old", "key_id": "key-old", "signed_at": signed, "signature": hostSign(oldPriv, "anx-auth-token|agent-old|key-old|"+signed)})
 	hostStatus(t, status, 401, p)
 }
+
+func TestHostPersonaRunRosterAndBridge(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
+	url := env.server.URL
+	status, p := hostHTTP(t, "POST", url+"/auth/passkey/dev/register", "", map[string]any{"display_name": "Admin", "bootstrap_token": testBootstrapToken})
+	hostStatus(t, status, 201, p)
+	admin := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens", admin, map[string]any{"label": "run test", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
+	hostStatus(t, status, 201, p)
+	secret := p["token"].(string)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := base64.StdEncoding.EncodeToString(pub)
+	nonce := base64.RawURLEncoding.EncodeToString(pub[:16])
+	slug := "m5-mbp"
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/headless", "", map[string]any{
+		"public_key": public, "requested_slug": slug, "os_user": "operator", "hostname": slug,
+		"discovered_adapters": []string{"codex"}, "request_nonce": nonce, "adoptions": []any{},
+		"enrollment_token": secret, "signature": hostSign(priv, "anx-host-headless-enroll|"+nonce+"|"+slug+"|"+public),
+	})
+	hostStatus(t, status, 201, p)
+	host := p["host"].(map[string]any)
+	hostID, keyID := host["id"].(string), host["key_id"].(string)
+	signed := time.Now().UTC().Format(time.RFC3339Nano)
+	name := "reviewer"
+	status, p = hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{
+		"grant_type": "host_assertion", "host_id": hostID, "key_id": keyID, "agent_name": name,
+		"signed_at": signed, "signature": hostSign(priv, "anx-host-agent-token|"+hostID+"|"+keyID+"|"+name+"|"+signed),
+	})
+	hostStatus(t, status, 200, p)
+	agent := p["agent"].(map[string]any)
+	access := p["tokens"].(map[string]any)["access_token"].(string)
+	observed := time.Now().UTC().Format(time.RFC3339Nano)
+	runBody := map[string]any{"launcher": "agentctl", "external_id": "exec-persona", "host_id": hostID,
+		"agent_id": agent["id"], "adapter": "codex", "state": "running", "liveness": "alive",
+		"result_collected": false, "labels": []string{}, "last_observed_at": observed}
+	resp := postJSONExpectStatusWithHeaders(t, url+"/runs", runBody,
+		map[string]string{"Authorization": "Bearer " + access, "X-ANX-Run-Id": "agentctl/exec-persona"}, http.StatusOK)
+	var runResponse map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&runResponse); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if runResponse["run"].(map[string]any)["adapter"] != "codex" {
+		t.Fatal(runResponse)
+	}
+	checkRoster := func(wantOnline bool) {
+		t.Helper()
+		status, p := hostHTTP(t, "GET", url+"/agents", admin, nil)
+		hostStatus(t, status, 200, p)
+		for _, item := range p["agents"].([]any) {
+			row := item.(map[string]any)
+			if row["id"] != agent["id"] {
+				continue
+			}
+			if row["handle"] != "reviewer.m5-mbp" || row["display_name"] != "reviewer on m5-mbp" ||
+				row["name"] != "reviewer" || row["identity_kind"] != "derived" || row["state"] != "working" ||
+				row["bridge_online"] != wantOnline || row["active_run"].(map[string]any)["adapter"] != "codex" {
+				t.Fatalf("persona roster: %#v", row)
+			}
+			return
+		}
+		t.Fatal("derived persona missing from roster")
+	}
+	checkRoster(false)
+	status, p = hostSignedHTTP(t, "POST", url+"/hosts/"+hostID+"/bridge/check-in", hostID, keyID, "bridge-check-in", priv,
+		map[string]any{"bridge_instance_id": "bridge-1", "checked_in_at": time.Now().UTC().Format(time.RFC3339), "expires_at": time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339)})
+	hostStatus(t, status, 200, p)
+	checkRoster(true)
+	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+hostID, admin, map[string]any{"excluded_names": []string{name}})
+	hostStatus(t, status, 200, p)
+	checkRoster(false)
+}

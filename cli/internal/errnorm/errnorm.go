@@ -107,8 +107,33 @@ func ExitCode(err error) int {
 		return 0
 	}
 	var typed *Error
-	if errors.As(err, &typed) && typed.Kind == KindUsage {
+	if !errors.As(err, &typed) {
+		return 1
+	}
+	if strings.HasSuffix(typed.Code, "_not_found") {
+		return 3
+	}
+	switch typed.Code {
+	case "not_found", "draft_not_found", "profile_not_found":
+		return 3
+	case "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
+		return 4
+	case "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
+		return 5
+	case "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
+		return 6
+	case "cli_outdated":
+		return 7
+	case "timeout", "timeout_exceeded":
+		return 8
+	case "declined":
+		return 9
+	}
+	if typed.Kind == KindUsage {
 		return 2
+	}
+	if typed.Kind == KindNetwork {
+		return 6
 	}
 	return 1
 }
@@ -194,7 +219,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx auth register` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth whoami` to refresh credentials, then retry."},
 	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},
-	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
+	"cli_outdated":                  {Recoverable: true, Hint: "Run `anx update`, then retry."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, select a profile with --agent or ANX_AGENT (or `anx auth default <name>` when multiple profiles exist), then run `anx doctor` if connectivity is uncertain."},
 	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},

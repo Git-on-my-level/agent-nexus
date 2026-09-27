@@ -25,7 +25,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate dev-profile-homes pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,7 @@ check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
 	$(MAKE) cli-check
+	$(MAKE) mcp-check
 	$(MAKE) http-record-test
 	$(MAKE) -C $(WEB_UI_DIR) check
 
@@ -92,6 +93,10 @@ version-check: ## Verify version-derived source files are current
 
 docs-ref-audit: ## Audit agent-facing docs for broken local path references
 	./scripts/docs-ref-audit
+
+mcp-check: ## Run MCP tool policy coverage and MCP tests
+	node mcp/scripts/check-tool-policy.mjs
+	cd mcp && go test ./...
 
 cli-check: ## Run CLI checks
 	$(MAKE) version-check

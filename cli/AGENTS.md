@@ -61,12 +61,13 @@ If an old command path conflicts with this model, prefer a clean replacement and
 
 - Non-interactive by default.
 - In `--json` mode, non-streaming commands emit exactly one JSON envelope to stdout.
-- Streaming commands preserve their documented stream framing and resume behavior.
-- Exit code `2` remains reserved for local usage and validation failures.
-- Default text output (non-JSON) should stay line-oriented and concise rather than depending on rich terminal interaction.
+- Streaming commands emit one envelope v2 per event and preserve resume behavior.
+- JSON output uses envelope v2: success `{ok, schema_version:2, command, result, warnings:[], next_actions:[]}` and errors `{ok:false, schema_version:2, error:{code,message,retryable,exit_code,details,next_actions}, warnings:[], next_actions:[]}`.
+- Exit codes are 0 success, 2 usage, 3 not found, 4 conflict, 5 auth, 6 network/unavailable, 7 outdated, 8 timeout, 9 declined, and 1 other.
+- Default text is a projection of the same document: one fact per line with a lead token and `key=value` fields, plus `warning code=…` and runnable `next <argv>` lines.
 - Default text output is the preferred agent readback mode. Use JSON for code/script parsing, CI, or `jq`, not as the default way to inspect state.
-- Public refs/handles are the primary identity contract. Default text should lead with typed refs such as `card:<handle>`, and JSON envelopes should expose `ref` and `handle` before internal ids. Board-card lists must expose the card ref/title first; backing `thread_ref` or `thread_id` is secondary context.
-- Remote API failures: stderr prints `Error (<code>): <message>` plus a `Hint:` line when the CLI has recovery guidance. In `--json` mode, the same hint is in `error.hint`, and `error.details.hint` is kept in sync with that value when enrichment runs. `error.details` may include `anx_cli_recovery` (e.g. `kind` values such as `stale_concurrency_token`, `invalid_enum`, `auth_refresh`, `key_mismatch`, `agent_revoked`, `resource_exists`, plus `field`, `schema_enum`, `refresh_cli`, `valid_enum_values`, `reason`, `list_cli`, `register_cli`) as a machine-readable supplement—do not rely on it without checking `kind`. Deeper fields under `error.details.parsed` still mirror the raw API payload.
+- Public refs/handles are the primary identity contract. Board-card text rows lead with the card ref/title and show assignees; backing `thread_ref` or `thread_id` is available in JSON.
+- Remote API failures use the same renderer as success. `error.details.hint` carries supplementary human guidance; runnable repairs belong in `error.next_actions`. `error.details` may include `anx_cli_recovery` with a typed `kind` and fields for the specific repair. Deeper fields under `error.details.parsed` mirror the raw API payload.
 - Usage and command-shape errors must beat profile/config resolution whenever they can be detected without side effects. When adding a command or flag, update `internal/app/command_usage_preflight.go` alongside the real parser/help so agents with multiple local profiles see `invalid_flags` or `unknown_subcommand` instead of a misleading `config_resolution_failed`.
 
 ## What CLI Does Not Own
@@ -104,3 +105,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 - Keep this file centered on agent ergonomics, runtime boundaries, and stable output rules.
 - Put exhaustive command examples and refactor notes in runbooks or generated docs, not here.
 - Update this guide when CLI behavior changes in ways that affect automation assumptions.
+
+## Adding result actions
+
+Add command side effect classification in `internal/app/output_contract.go` and generated command classification in `internal/registry/registry.go`. Add bounded, concrete result-state rules to `deriveNextActions`: inspect the flattened result, require a real ref or cursor, and construct exact argv accepted by the parser. Include `mutates` and `side_effect_class` through the shared `action` constructor. Add error repairs to `deriveErrorActions`, warnings to `resultWarnings`, and verify both JSON and text projection. Never infer a target from a title or a partial ref.
