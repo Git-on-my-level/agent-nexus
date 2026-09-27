@@ -88,14 +88,11 @@ func loadHumanAttentionFromMarkdownFile(path string, expectedKind string) (human
 	if fm.Title == "" {
 		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter title is required")
 	}
-	if fm.SubjectRef == "" {
-		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter subject_ref is required")
-	}
 	if fm.RecommendedResponse == "" {
 		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter recommended_response is required")
 	}
 	if fm.Kind != "" && !strings.EqualFold(fm.Kind, expectedKind) {
-		return empty, "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("frontmatter kind %q does not match anx human %s", fm.Kind, expectedKind))
+		return empty, "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("frontmatter kind %q does not match anx %s", fm.Kind, expectedKind))
 	}
 
 	responseProposals, err := buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)

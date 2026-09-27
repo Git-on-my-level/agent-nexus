@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -472,6 +473,13 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	coreBindMu.Lock()
 	defer coreBindMu.Unlock()
 	port := allocatePort(t)
+	if assigned := strings.TrimSpace(os.Getenv("ANX_INTEGRATION_PORT")); assigned != "" {
+		parsed, parseErr := strconv.Atoi(assigned)
+		if parseErr != nil || parsed < 1 || parsed > 65535 {
+			t.Fatalf("invalid ANX_INTEGRATION_PORT %q", assigned)
+		}
+		port = parsed
+	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
 		"--listen-addr", fmt.Sprintf("127.0.0.1:%d", port),

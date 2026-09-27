@@ -60,9 +60,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "inbox",
 		UseWhen:     "A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).",
-		NotFor:      "Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
+		NotFor:      "Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
 		Examples:    []string{"asks", "reviews", "escalations"},
-		RelatedRead: []string{"anx human ask", "anx human review", "anx human escalate"},
+		RelatedRead: []string{"anx ask", "anx review", "anx escalate"},
 	},
 	{
 		Name:        "draft",
@@ -109,7 +109,7 @@ func conceptsSelectionRules() []string {
 		"Use cards for the canonical store over card rows (create, workflow writes, revisions, lifecycle).",
 		"Use work (`anx work list` / `anx work get`) for the operator Tasks projection over those same rows (freshness, observations, annotations). Layered, not a duplicate of cards.",
 		"Use events for immutable facts.",
-		"Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx human ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.",
+		"Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.",
 		"Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.",
 		"Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.",
 	}

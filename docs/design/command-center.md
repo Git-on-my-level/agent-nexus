@@ -372,3 +372,6 @@ routes remain.
   not an Inbox parameter; the standalone page links with `?mailbox=handled&item=…`. Thread and
   board subjects get no context-strip subject line (not operator nouns), and core's "Human
   response recorded:" prefix is dropped from Handled titles.
+
+- 2026-09-27, S6: `orient` composes five existing reads: agent detail, one 200-row work page, two 100-event pages for requests and responses, and unread notifications. It filters all assignees locally because the work owner's server filter sees only the first assignee. It reports page limits and matched/returned counts. The profile-based agent lookup is isolated in `dailyAgent` for S5 to replace. (`cli/internal/app/daily_loop.go`.)
+- 2026-09-27, S6: A top-level ask returns its immutable `event:<id>` as `ask_id`; `await` accepts that or the bare event id and waits on the request's backing thread. Responses are matched by the source event id in the inbox item id because `request_event_ref` can be a nonunique public event handle. The current inbox response contract contains freeform `response_text` but no structured decline field, so exit 9 means the trimmed response text is exactly `declined` (case-insensitive). Other responses exit 0 with the exact text. (`cli/internal/app/human_command.go`, `cli/internal/app/daily_loop.go`.)

@@ -237,7 +237,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:             "human_attention_requested",
 		Group:            "Inbox Lifecycle",
-		PreferredCommand: "anx human ask|review|escalate",
+		PreferredCommand: "anx ask|review|escalate",
 		Summary:          "Use the human command group to ask for operator attention, review, or escalation.",
 		Constraints: []string{
 			`event.refs must include "thread:<thread-handle>" and a typed subject ref such as "topic:<topic-handle>", "card:<card-handle>", or "document:<document-handle>".`,
@@ -344,7 +344,7 @@ var knownEventTypeGuidance = []eventTypeGuidance{
 	{
 		Type:             "human_attention_requested",
 		Group:            "Human Coordination",
-		PreferredCommand: "anx human ask|review|escalate",
+		PreferredCommand: "anx ask|review|escalate",
 		Constraints: []string{
 			`event.refs must include "thread:<thread-handle>".`,
 			`event.payload must include "kind", "title", "subject_ref", "requester_actor_id", and ordered "response_proposals" (1–6 strings, first is recommended).`,

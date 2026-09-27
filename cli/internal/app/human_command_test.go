@@ -15,7 +15,7 @@ func TestHumanCommandRequiresRecommendedResponse(t *testing.T) {
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "ask", "Q?",
+		"--json", "ask", "Q?",
 		"--subject-ref", "topic:t1",
 		"--thread-id", "thr1",
 	})
@@ -25,8 +25,8 @@ func TestHumanCommandRequiresRecommendedResponse(t *testing.T) {
 		t.Fatalf("%#v", payload)
 	}
 	msg := strings.ToLower(anyStringValue(errObj["message"]))
-	if !strings.Contains(msg, "recommended") {
-		t.Fatalf("expected recommended-response validation, got %q", anyStringValue(errObj["message"]))
+	if !strings.Contains(msg, "--recommend") {
+		t.Fatalf("expected --recommend validation, got %q", anyStringValue(errObj["message"]))
 	}
 }
 
@@ -35,13 +35,13 @@ func TestHumanCommandRejectsTooManyProposals(t *testing.T) {
 
 	home := t.TempDir()
 	args := []string{
-		"--json", "human", "ask", "Q",
+		"--json", "ask", "Q",
 		"--subject-ref", "topic:t1",
 		"--thread-id", "thr1",
-		"--recommended-response", "A",
+		"--recommend", "A",
 	}
 	for i := 0; i < 6; i++ {
-		args = append(args, "--proposal", string(rune('B'+i)))
+		args = append(args, "--alt", string(rune('B'+i)))
 	}
 	raw := runCLIForTest(t, home, map[string]string{}, nil, args)
 	payload := assertEnvelopeError(t, raw)
@@ -62,7 +62,7 @@ func TestHumanCommandFromFileRejectsMixedFlags(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "ask", "--from-file", path, "--subject-ref", "topic:y",
+		"--json", "ask", "--from-file", path, "--subject-ref", "topic:y",
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -82,7 +82,7 @@ func TestHumanCommandFromFileRejectsPositionalTitle(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "ask", "Extra title", "--from-file", path,
+		"--json", "ask", "Extra title", "--from-file", path,
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -102,7 +102,7 @@ func TestHumanCommandFromFileKindMismatch(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "ask", "--from-file", path,
+		"--json", "ask", "--from-file", path,
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -139,7 +139,7 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 		"--json", "--base-url", server.URL, "--agent", "agent-a",
-		"human", "ask", "--from-file", path,
+		"ask", "--from-file", path,
 	})
 	assertEnvelopeOK(t, raw)
 
@@ -165,7 +165,7 @@ func TestHumanCommandFromFileRequiresFrontmatterFields(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
-		"--json", "human", "review", "--from-file", path,
+		"--json", "review", "--from-file", path,
 	})
 	payload := assertEnvelopeError(t, raw)
 	errObj, _ := payload["error"].(map[string]any)
@@ -176,7 +176,7 @@ func TestHumanCommandFromFileRequiresFrontmatterFields(t *testing.T) {
 
 // A human-attention request must be expressible with the noun the operator
 // actually sees. Before this, only `topic:` subjects resolved their backing
-// thread, so `anx human review --subject-ref document:...` — the command's own
+// thread, so `anx review --subject-ref document:...` — the command's own
 // documented example — failed with "thread id is required", forcing the agent
 // to go and find a thread id the operator has never heard of.
 func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
@@ -237,9 +237,9 @@ func TestHumanCommandResolvesThreadFromThreadBackedSubjects(t *testing.T) {
 
 			raw := runCLIForTest(t, home, map[string]string{}, nil, []string{
 				"--json", "--base-url", server.URL, "--agent", "agent-a",
-				"human", "ask", "Which launch date?",
+				"ask", "Which launch date?",
 				"--subject-ref", tc.subjectRef,
-				"--recommended-response", "Use May 15.",
+				"--recommend", "Use May 15.",
 			})
 
 			// No --thread-id was passed: the CLI must have grounded it itself.

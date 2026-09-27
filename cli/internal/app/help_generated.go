@@ -957,25 +957,17 @@ func (a *App) rootUsageText() string {
 
 Usage: anx [global flags] <command>
 
-Daily commands:
-  work          List, inspect, and create commitments (see command help for side_effect_class)
-  cards         Create, assign, move, and resolve cards (see command help for side_effect_class)
-  docs          Read and revise durable context (see command help for side_effect_class)
-  topics        Discuss project context (see command help for side_effect_class)
-  notifications Read agent notifications (see command help for side_effect_class)
-  workspace     Summarize the workspace (read_only)
+Daily loop:
+  orient                  See me, my work, asks, notifications, stale items, and next steps (read_only)
+  work start [card]       Assign me, mark in progress, and set current card (remote_coordination_write)
+  work note <text> [card] Post progress and refresh presence (remote_coordination_write)
+  work block <why> [card] Mark blocked; add --ask --recommend <text> to ask (remote_coordination_write)
+  work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
+  ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
+  await <ask-id|card-ref>   Wait on event stream for answer or state (read_only)
 
-Setup commands:
-  doctor        Check local and core readiness (read_only)
-  update        Update the CLI (local_operational_write)
-  auth          Manage authentication (see command help for side_effect_class)
-  config        Inspect and select local configuration (see command help for side_effect_class)
-  help [topic]  Show command help (read_only)
-  debug <group> Inspect diagnostic resources (see command help for side_effect_class)
-
-Onboarding: anx help onboarding; anx debug meta doc agent-guide
-Agent skill: anx install skill --path ./SKILL.md
-Use anx help --all for the full command catalog.
+Setup: anx host enroll; anx doctor; anx install skill --path ./SKILL.md
+Help: anx help onboarding; anx help <command>; anx help --all
 Global flags: --json, --base-url, --agent, --timeout`) + "\n"
 }
 
@@ -1003,7 +995,9 @@ Core Commands:
   import        Bootstrap a precision-first workspace import and run local import helpers
   install       Install local ANX helper artifacts, including the opinionated agent skill
   draft         Stage write requests locally and commit them later
-  human         Surface ask, review, or escalation items to the human Inbox
+  ask|review|escalate  Request operator attention
+  orient        Read the personal daily snapshot
+  await         Wait for an answer or card state
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   work          Query commitments, context, freshness, refresh and capabilities
@@ -1079,6 +1073,12 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if strings.HasPrefix(topic, "debug ") {
 		topic = strings.TrimPrefix(topic, "debug ")
 	}
+	if topic == "work" {
+		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true
+	}
+	if strings.HasPrefix(topic, "work ") && isDailyWorkVerb(strings.TrimPrefix(topic, "work ")) {
+		return "anx " + topic + " [card]: use anx help work for the daily loop.\n", true
+	}
 	if text, ok := workHelpText(topic); ok {
 		return text, true
 	}
@@ -1090,7 +1090,13 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "draft" {
 		return draftUsageText(), true
 	}
-	if topic == "human" {
+	if topic == "orient" {
+		return "anx orient [--stale-hours N]: bounded personal snapshot (read_only)\n", true
+	}
+	if topic == "await" {
+		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on events (read_only)\n", true
+	}
+	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
 	}
 	if topic == "import" {
@@ -1858,7 +1864,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`exception_raised`" + `
 
 Usually emitted by higher-level commands:
-  - ` + "`human_attention_requested`" + `: prefer ` + "`anx human ask|review|escalate`" + `
+  - ` + "`human_attention_requested`" + `: prefer ` + "`anx ask|review|escalate`" + `
 
 Local CLI notes:
   - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
@@ -2032,48 +2038,18 @@ var runtimeRegistrySecretHelpPaths = []string{
 }
 
 func onboardingHelpText() string {
-	return strings.TrimSpace(`Onboarding: first steps (agents / automation)
+	return strings.TrimSpace(`Onboarding: daily loop
 
-This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read ` + "`anx meta doc agent-guide`" + `.
+1. Enroll this machine once per workspace with anx host enroll; a human approves it.
+2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
+3. Run anx orient. Confirm your handle, host, assigned work and next actions.
+4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
+5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
+6. Run anx work done --evidence <url|ref> when the card is complete.
+7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
-1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`ANX_BASE_URL`" + `.
-2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`ANX_AGENT`" + `) for registration and first checks below.
-3. Run ` + "`anx doctor`" + `, then ` + "`anx auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
-4. Register the agent profile:
-   - If bootstrap is available: ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (` + "`anx auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`anx auth register --username <username> --invite-token <token>`" + `.
-5. On a machine where ` + "`~/.config`" + ` persists, set the active profile once: ` + "`anx config use <agent>`" + ` (same as ` + "`anx auth default <agent>`" + `). Later commands can omit ` + "`--base-url`" + ` / ` + "`--agent`" + `; use ` + "`anx config show`" + ` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with ` + "`anx auth whoami`" + `, run ` + "`anx workspace summary`" + `, then attach work to the right Topic/Card/Doc before mutating.
-7. Install the opinionated ANX agent skill into the local agent instruction path when available: ` + "`anx install skill --path <path>`" + `.
-8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with ` + "`@handle`" + ` mentions?" If yes, read ` + "`anx meta doc agent-bridge`" + ` and ` + "`anx meta doc wake-routing`" + `. If this runtime cannot be externally woken, skip bridge setup and say why.
-
-Default behavior after onboarding
-
-- Start non-trivial work with ` + "`anx workspace summary`" + ` and inspect likely related Topics, Cards, Docs, and notifications (` + "`anx notifications`" + `). Inbox is the operator attention queue.
-- Use Topics for current work conversation and coordination.
-- Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
-- Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
-- Use Topic/Doc/Card messages and replies for collaboration; use raw ` + "`events create`" + ` only for unusual contract-level records.
-- Use ` + "`anx human ask|review|escalate`" + ` when blocked, high consequence, or low confidence.
-
-First commands to run
-
-  anx --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
-  anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
-  anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
-  anx --agent <agent> auth whoami
-  anx --agent <agent> workspace summary
-  anx --agent <agent> topics list
-  anx --agent <agent> notifications list --status unread
-  anx install skill --path ./SKILL.md
-
-Next step
-
-  anx meta doc agent-guide
-  anx install skill --path ./SKILL.md
-  anx meta doc wake-routing`)
+Install the bundled skill: anx install skill --path ./SKILL.md
+Read the guide: anx debug meta doc agent-guide`) + "\n"
 }
 
 func mapRuntimePathToRegistryPath(path string) string {

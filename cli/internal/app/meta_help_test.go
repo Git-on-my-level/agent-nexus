@@ -318,7 +318,7 @@ func TestConceptsGuideLayersCardsStoreAndWorkProjection(t *testing.T) {
 	if !strings.Contains(output, "Layered, not a duplicate of cards") {
 		t.Fatalf("expected choosing rule output=%s", output)
 	}
-	if !strings.Contains(output, "`anx human ask|review|escalate` is the way to put something in Inbox") {
+	if !strings.Contains(output, "`anx ask|review|escalate` is the way to put something in Inbox") {
 		t.Fatalf("expected Inbox vs PM decision guidance output=%s", output)
 	}
 	if !strings.Contains(output, "A PM decision is part of a PM conversation and is not an operator request") {
@@ -791,8 +791,8 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if !strings.Contains(stdout.String(), "anx help onboarding") {
 		t.Fatalf("expected onboarding hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "anx debug meta doc agent-guide") {
-		t.Fatalf("expected agent-guide hint output=%s", stdout.String())
+	if !strings.Contains(stdout.String(), "Daily loop") || !strings.Contains(stdout.String(), "orient ") {
+		t.Fatalf("expected orient command output=%s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "anx install skill --path ./SKILL.md") {
 		t.Fatalf("expected skill export hint output=%s", stdout.String())
@@ -819,29 +819,17 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "Onboarding: first steps") {
+	if !strings.Contains(output, "Onboarding: daily loop") {
 		t.Fatalf("expected onboarding header output=%s", output)
 	}
-	if !strings.Contains(output, "`anx debug meta doc agent-guide`") {
+	if !strings.Contains(output, "anx debug meta doc agent-guide") {
 		t.Fatalf("expected agent-guide pointer output=%s", output)
-	}
-	if !strings.Contains(output, "`anx debug meta doc wake-routing`") {
-		t.Fatalf("expected wake-routing pointer output=%s", output)
-	}
-	if !strings.Contains(output, "First commands to run") {
-		t.Fatalf("expected first-commands section output=%s", output)
 	}
 	if !strings.Contains(output, "anx install skill --path") {
 		t.Fatalf("expected skill export hint output=%s", output)
 	}
-	if !strings.Contains(output, "1. Point the CLI at the core API") {
-		t.Fatalf("expected base-url step output=%s", output)
-	}
-	if !strings.Contains(output, "`anx config use <agent>`") {
-		t.Fatalf("expected active profile step output=%s", output)
-	}
-	if !strings.Contains(output, "Next step") || !strings.Contains(output, "anx debug meta doc agent-guide") || !strings.Contains(output, "anx debug meta doc wake-routing") {
-		t.Fatalf("expected follow-up guidance output=%s", output)
+	if !strings.Contains(output, "anx host enroll") || !strings.Contains(output, "anx work done") {
+		t.Fatalf("expected host enrollment and daily loop output=%s", output)
 	}
 }
 
@@ -867,11 +855,11 @@ func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
 	if !strings.Contains(output, "# Opinionated ANX onboarding for agents") {
 		t.Fatalf("expected skill title output=%s", output)
 	}
-	if !strings.Contains(output, "## Default tracking loop") {
-		t.Fatalf("expected default tracking section output=%s", output)
+	if !strings.Contains(output, "## Daily loop") {
+		t.Fatalf("expected daily loop section output=%s", output)
 	}
-	if !strings.Contains(output, "`boards`") || !strings.Contains(output, "`docs`") || !strings.Contains(output, "`anx human ask`") {
-		t.Fatalf("expected higher-level abstractions in skill output=%s", output)
+	if !strings.Contains(output, "anx work start") || !strings.Contains(output, "anx await") || !strings.Contains(output, "anx.card.<card-slug>") {
+		t.Fatalf("expected daily loop and run label in skill output=%s", output)
 	}
 }
 
@@ -890,14 +878,11 @@ func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 	if !strings.Contains(string(content), "# Opinionated ANX onboarding for agents") {
 		t.Fatalf("expected written skill title content=%s", string(content))
 	}
-	if !strings.Contains(string(content), "## Asks and collaboration") {
-		t.Fatalf("expected written asks section content=%s", string(content))
+	if !strings.Contains(string(content), "## Daily loop") {
+		t.Fatalf("expected written daily loop section content=%s", string(content))
 	}
-	if !strings.Contains(output, "auth bootstrap status") {
-		t.Fatalf("expected bootstrap status onboarding guidance output=%s", output)
-	}
-	if !strings.Contains(output, "auth register --username <username> --bootstrap-token <token>") {
-		t.Fatalf("expected token-gated onboarding guidance output=%s", output)
+	if !strings.Contains(output, "anx host enroll") {
+		t.Fatalf("expected host enrollment guidance output=%s", output)
 	}
 }
 
@@ -916,8 +901,8 @@ func TestRunInstallSkillWritesSkillFile(t *testing.T) {
 	if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
 		t.Fatalf("expected written skill frontmatter content=%s", string(content))
 	}
-	if !strings.Contains(string(content), "## Default tracking loop") {
-		t.Fatalf("expected default tracking section content=%s", string(content))
+	if !strings.Contains(string(content), "## Daily loop") {
+		t.Fatalf("expected daily loop section content=%s", string(content))
 	}
 }
 
