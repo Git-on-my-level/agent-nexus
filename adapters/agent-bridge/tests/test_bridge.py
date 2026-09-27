@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -93,3 +94,53 @@ def test_config_rejects_agent_home(tmp_path):
     path.write_text('agent_home = "./old"\n[host]\nbase_url="http://x"\nid="h"\nslug="host"\n[agents.codex]\ncommand=["true"]\n')
     with pytest.raises(ValueError, match="obsolete"):
         load_config(path)
+
+
+def test_mismatched_handle_does_not_stall_later_wakes(tmp_path, monkeypatch):
+    bridge, output, calls = setup_bridge(tmp_path, monkeypatch)
+    bridge.client.notifications = lambda name: [
+        {"wakeup_id": "artifact-bad", "target_handle": "other.test-host", "delivery_status": "requested",
+         "trigger_text": "nope", "thread_id": "t0"},
+        {"wakeup_id": "artifact-1", "target_handle": "codex.test-host", "delivery_status": "requested",
+         "trigger_text": "hello", "thread_id": "thread-1"},
+    ]
+    assert bridge.run_once() == 1
+    assert output.exists()
+    actions = [json.loads(x) for x in calls.read_text().splitlines()]
+    wakes = [a for a in actions if a[:3] == ["host", "bridge", "wake"]]
+    assert ["host", "bridge", "wake", "fail"] in [w[:4] for w in wakes]
+    assert wakes[-1][:4] == ["host", "bridge", "wake", "complete"]
+    fail = next(w for w in wakes if w[3] == "fail")
+    assert "--wakeup-id" in fail and fail[fail.index("--wakeup-id") + 1] == "artifact-bad"
+
+
+def test_checkin_ttl_covers_configured_interval(tmp_path, monkeypatch):
+    bridge, _, calls = setup_bridge(tmp_path, monkeypatch)
+    config = replace(bridge.config, checkin_seconds=240)
+    bridge.config = config
+    bridge.cli.config = config
+    bridge.checkin()
+    actions = [json.loads(x) for x in calls.read_text().splitlines()]
+    checkins = [a for a in actions if a[:3] == ["host", "bridge", "check-in"]]
+    assert checkins
+    ttl = int(checkins[-1][checkins[-1].index("--ttl-seconds") + 1])
+    assert ttl >= 240
+    assert ttl <= 3600
+
+
+def test_complete_error_does_not_fail_successful_wake(tmp_path, monkeypatch):
+    bridge, output, calls = setup_bridge(tmp_path, monkeypatch)
+    original = bridge.cli.wake
+
+    def wake(action, wakeup_id, instance_id, error=""):
+        if action == "complete":
+            raise RuntimeError("complete failed")
+        return original(action, wakeup_id, instance_id, error)
+
+    bridge.cli.wake = wake
+    assert bridge.run_once() == 0
+    assert output.exists()
+    actions = [json.loads(x) for x in calls.read_text().splitlines()]
+    wake_actions = [a[3] for a in actions if a[:3] == ["host", "bridge", "wake"]]
+    assert "claim" in wake_actions
+    assert "fail" not in wake_actions

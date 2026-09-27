@@ -53,8 +53,6 @@ class Bridge:
             for item in self.client.notifications(name):
                 if item.get("delivery_status") != "requested":
                     continue
-                if item.get("target_handle") != f"{name}.{self.config.host_slug}":
-                    raise ValueError("notification target does not match derived handle")
                 try:
                     self.handle(name, item)
                     count += 1
@@ -83,12 +81,14 @@ class Bridge:
         wakeup_id = str(item["wakeup_id"])
         self.cli.wake("claim", wakeup_id, self.instance_id)
         try:
+            if item.get("target_handle") != f"{name}.{self.config.host_slug}":
+                raise ValueError("notification target does not match derived handle")
             packet = self.client.wake_packet(name, wakeup_id)
             self.launch(self.config.runtimes[name], packet, item)
-            self.cli.wake("complete", wakeup_id, self.instance_id)
         except Exception as exc:
             self.cli.wake("fail", wakeup_id, self.instance_id, str(exc))
             raise
+        self.cli.wake("complete", wakeup_id, self.instance_id)
 
     def launch(self, runtime: Runtime, packet: dict[str, Any], item: dict[str, Any]) -> None:
         prompt = self._prompt(packet, item)

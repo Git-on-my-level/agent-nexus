@@ -41,8 +41,9 @@ class HostCLI:
         return token
 
     def checkin(self, instance_id: str) -> Any:
+        ttl = min(3600, max(1, round(self.config.checkin_seconds * 3)))
         return self._call("host", "bridge", "check-in", "--host-id", self.config.host_id,
-                          "--instance-id", instance_id, "--ttl-seconds", "180")
+                          "--instance-id", instance_id, "--ttl-seconds", str(ttl))
 
     def wake(self, action: str, wakeup_id: str, instance_id: str, error: str = "") -> Any:
         if action not in ("claim", "complete", "fail"):
