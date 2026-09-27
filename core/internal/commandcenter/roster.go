@@ -9,12 +9,24 @@ import (
 	"time"
 )
 
-// SQLIdentities is the interim adapter to the existing principal metadata. The
-// host-identity workstream can replace it without changing run or roster storage.
+// SQLIdentities reads the canonical host-agent relation. Standalone principals
+// remain visible while they await adoption, but cannot report runs or presence.
 type SQLIdentities struct{ DB *sql.DB }
 
 func (s SQLIdentities) ListAgents(ctx context.Context) ([]Identity, error) {
-	rows, e := s.DB.QueryContext(ctx, `SELECT a.id,a.username,a.actor_id,a.metadata_json,COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,'') FROM agents a LEFT JOIN actors x ON x.id=a.actor_id WHERE COALESCE(json_extract(a.metadata_json,'$.principal_kind'),'agent')='agent' ORDER BY a.username`)
+	rows, e := s.DB.QueryContext(ctx, `SELECT a.id,a.username,a.actor_id,a.metadata_json,
+		COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,''),
+		COALESCE(ha.name,''),COALESCE(ha.identity_kind,''),
+		COALESCE(h.id,''),COALESCE(h.slug,''),
+		COALESCE(h.bridge_checked_in_at,''),COALESCE(h.bridge_expires_at,''),
+		COALESCE(h.revoked_at,''),CASE WHEN hx.name IS NULL THEN 0 ELSE 1 END
+		FROM agents a
+		LEFT JOIN actors x ON x.id=a.actor_id
+		LEFT JOIN host_agents ha ON ha.agent_id=a.id
+		LEFT JOIN hosts h ON h.id=ha.host_id
+		LEFT JOIN host_exclusions hx ON hx.host_id=ha.host_id AND hx.name=ha.name
+		WHERE COALESCE(json_extract(a.metadata_json,'$.principal_kind'),'agent')='agent'
+		ORDER BY a.username`)
 	if e != nil {
 		return nil, e
 	}
@@ -22,24 +34,27 @@ func (s SQLIdentities) ListAgents(ctx context.Context) ([]Identity, error) {
 	out := []Identity{}
 	for rows.Next() {
 		var v Identity
-		var meta string
-		if e = rows.Scan(&v.AgentID, &v.Handle, &v.ActorID, &meta, &v.DisplayName, &v.RevokedAt); e != nil {
+		var meta, hostRevoked string
+		var excluded int
+		if e = rows.Scan(&v.AgentID, &v.Handle, &v.ActorID, &meta, &v.DisplayName, &v.RevokedAt,
+			&v.Name, &v.Kind, &v.HostID, &v.HostSlug, &v.BridgeCheckedInAt, &v.BridgeExpiresAt,
+			&hostRevoked, &excluded); e != nil {
 			return nil, e
 		}
-		var m map[string]any
-		_ = json.Unmarshal([]byte(meta), &m)
-		v.HostID = str(m["host_id"])
-		v.HostSlug = str(m["host_slug"])
-		v.Name = str(m["name"])
-		v.Kind = str(m["identity_kind"])
-		if registration, ok := m["wake_registration"].(map[string]any); ok {
-			v.BridgeCheckedInAt = str(registration["bridge_checked_in_at"])
-			v.BridgeExpiresAt = str(registration["bridge_expires_at"])
-		}
-		if v.Kind == "" {
+		if v.HostID != "" {
+			v.DisplayName = v.Name + " on " + v.HostSlug
+			v.Adapter = defaultAdapter(v.Name)
+			if hostRevoked != "" || v.RevokedAt != "" || excluded != 0 {
+				v.BridgeCheckedInAt, v.BridgeExpiresAt = "", ""
+			}
+		} else {
+			var m map[string]any
+			_ = json.Unmarshal([]byte(meta), &m)
+			if registration, ok := m["wake_registration"].(map[string]any); ok {
+				v.BridgeCheckedInAt = str(registration["bridge_checked_in_at"])
+				v.BridgeExpiresAt = str(registration["bridge_expires_at"])
+			}
 			v.Kind = "standalone"
-		}
-		if v.Name == "" {
 			v.Name = v.Handle
 		}
 		out = append(out, v)
@@ -60,6 +75,15 @@ func (s SQLIdentities) ResolveAgent(ctx context.Context, id string) (Identity, e
 	return Identity{}, ErrNotFound
 }
 func str(v any) string { s, _ := v.(string); return s }
+
+func defaultAdapter(name string) string {
+	switch name {
+	case "claude", "codex", "cursor", "omp", "generic":
+		return name
+	default:
+		return "generic"
+	}
+}
 
 type ActiveRun struct {
 	RunID           string  `json:"run_id"`

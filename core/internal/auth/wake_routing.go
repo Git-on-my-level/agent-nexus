@@ -63,6 +63,23 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 		return base
 	}
 
+	if principal.HostID != "" {
+		if principal.HostExcluded {
+			base.State = WakeRoutingStateDisabled
+			base.Summary = "Agent name is excluded on its host."
+			return base
+		}
+		base.Taggable = true
+		base.Online = principal.HostBridgeOnline
+		if base.Online {
+			base.State = WakeRoutingStateOnline
+			base.Summary = "Online as @" + handle + "."
+		} else {
+			base.State = WakeRoutingStateOffline
+			base.Summary = "Host bridge is offline."
+		}
+		return base
+	}
 	registration := principal.Registration
 	if registration == nil {
 		base.State = WakeRoutingStateUnregistered

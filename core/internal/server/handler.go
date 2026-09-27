@@ -885,16 +885,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
-	registerRoute("/auth/agents/register", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationPrincipalGrowth, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleRegisterAgent(w, r, opts)
-	})
-	registerRoute("/auth/hosts/", commandCenterStubRouteAccess, handleCommandCenterStub)
-	registerRoute("/auth/hosts/enrollments", commandCenterStubRouteAccess, handleCommandCenterStub)
-	registerRoute("/auth/hosts/enrollment-tokens", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/auth/hosts/", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostAuthRoutes(w, r, opts) })
+	registerRoute("/auth/hosts/enrollments", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostAuthRoutes(w, r, opts) })
+	registerRoute("/auth/hosts/enrollment-tokens", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostAuthRoutes(w, r, opts) })
 
 	registerRoute("/auth/bootstrap/status", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthCeremony, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -1135,8 +1128,6 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		switch r.Method {
 		case http.MethodGet:
 			return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, mutation: routeMutationNone, supported: true}
-		case http.MethodPatch:
-			return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, mutation: routeMutationAuthCeremony, supported: true}
 		default:
 			return routeAccessRequirement{}
 		}
@@ -1144,42 +1135,16 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		switch r.Method {
 		case http.MethodGet:
 			handleGetCurrentAgent(w, r, opts)
-		case http.MethodPatch:
-			handlePatchCurrentAgent(w, r, opts)
 		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET and PATCH are supported")
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 		}
 	})
 	registerRoute("/agents", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
 	registerRoute("/agents/", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
-	registerRoute("/hosts", commandCenterStubRouteAccess, handleCommandCenterStub)
-	registerRoute("/hosts/", commandCenterStubRouteAccess, handleCommandCenterStub)
+	registerRoute("/hosts", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
+	registerRoute("/hosts/", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
 	registerRoute("/runs", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleRuns(w, r, opts) })
 	registerRoute("/runs/", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleRuns(w, r, opts) })
-
-	registerRoute("/agents/me/keys/rotate", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleRotateCurrentAgentKey(w, r, opts)
-	})
-
-	registerRoute("/agents/me/revoke", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationAuthCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleRevokeCurrentAgent(w, r, opts)
-	})
-
-	registerRoute("/agent-bridge/check-in", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
-			return
-		}
-		handleBridgeCheckIn(w, r, opts)
-	})
 
 	registerRoute("/topics", func(r *http.Request) routeAccessRequirement {
 		switch r.Method {
@@ -2562,7 +2527,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleDismissAgentNotification(w, r, opts)
 	})
 
-	registerRoute("/agent-wakeups/claim", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agent-wakeups/claim", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -2570,7 +2535,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleClaimAgentWakeup(w, r, opts)
 	})
 
-	registerRoute("/agent-wakeups/complete", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agent-wakeups/complete", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -2578,7 +2543,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleCompleteAgentWakeup(w, r, opts)
 	})
 
-	registerRoute("/agent-wakeups/fail", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+	registerRoute("/agent-wakeups/fail", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationInternalMaintenance, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 			return
@@ -2795,7 +2760,7 @@ func shouldEnforceCLIVersion(path string) bool {
 		return false
 	}
 	switch path {
-	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/v1/usage/summary", "/ops/blob-usage/rebuild", "/version", "/meta/handshake", "/auth/token", "/auth/agents/register", "/auth/bootstrap/status":
+	case "/health", "/livez", "/readyz", "/ops/health", "/ops/usage-summary", "/v1/usage/summary", "/ops/blob-usage/rebuild", "/version", "/meta/handshake", "/auth/token", "/auth/bootstrap/status":
 		return false
 	}
 	if strings.HasPrefix(path, "/auth/passkey/") {

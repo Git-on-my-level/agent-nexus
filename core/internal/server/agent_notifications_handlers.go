@@ -180,26 +180,45 @@ type agentWakeupMutationRequest struct {
 }
 
 func decodeAgentWakeupMutation(w http.ResponseWriter, r *http.Request, opts handlerOptions) (*auth.Principal, agentWakeupMutationRequest, bool) {
-	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	raw, ok := hostRawBody(w, r)
 	if !ok {
 		return nil, agentWakeupMutationRequest{}, false
 	}
-	if !isAgentPrincipal(principal) {
-		writeError(w, http.StatusForbidden, "invalid_request", "agent wakeups are only available to authenticated agents")
+	hostID := strings.TrimSpace(r.Header.Get("X-ANX-Host-Id"))
+	if hostID == "" {
+		writeError(w, http.StatusUnauthorized, "auth_required", "host id and key proof required")
+		return nil, agentWakeupMutationRequest{}, false
+	}
+	kind := "wakeup-" + strings.TrimPrefix(r.URL.Path, "/agent-wakeups/")
+	if !hostProof(w, r, opts, hostID, kind, raw) {
 		return nil, agentWakeupMutationRequest{}, false
 	}
 	var req agentWakeupMutationRequest
 	if !decodeJSONBody(w, r, &req) {
-		return nil, agentWakeupMutationRequest{}, false
+		return nil, req, false
 	}
 	req.WakeupID = strings.TrimSpace(req.WakeupID)
 	req.BridgeInstanceID = strings.TrimSpace(req.BridgeInstanceID)
 	req.Error = strings.TrimSpace(req.Error)
-	if req.WakeupID == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "wakeup_id is required")
-		return nil, agentWakeupMutationRequest{}, false
+	if req.WakeupID == "" || req.BridgeInstanceID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "wakeup_id and bridge_instance_id are required")
+		return nil, req, false
 	}
-	return principal, req, true
+	wakeup, err := opts.primitiveStore.GetAgentWakeup(r.Context(), req.WakeupID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "wakeup not found")
+		return nil, req, false
+	}
+	owns, err := opts.authStore.HostOwnsActor(r.Context(), hostID, wakeup.TargetActorID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to verify wakeup target")
+		return nil, req, false
+	}
+	if !owns {
+		writeError(w, http.StatusForbidden, "forbidden", "wakeup belongs to another host")
+		return nil, req, false
+	}
+	return &auth.Principal{ActorID: wakeup.TargetActorID}, req, true
 }
 
 func handleMutateAgentNotification(

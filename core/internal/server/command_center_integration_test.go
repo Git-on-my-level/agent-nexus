@@ -13,7 +13,11 @@ func TestCommandCenterRoutesAndAttribution(t *testing.T) {
 	ctx := context.Background()
 	db := env.workspace.DB()
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "cc-agent", "cc-actor", "codex.host", "cc-token")
-	_, e := db.ExecContext(ctx, `UPDATE agents SET metadata_json='{"principal_kind":"agent","identity_kind":"derived","host_id":"host-1","host_slug":"host","name":"codex"}' WHERE id=?`, agent.AgentID)
+	_, e := db.ExecContext(ctx, `INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host-1','host','Host','test','host','["codex"]',?)`, time.Now().UTC().Format(time.RFC3339Nano))
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = db.ExecContext(ctx, `INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host-1','codex',?,'derived')`, agent.AgentID)
 	if e != nil {
 		t.Fatal(e)
 	}

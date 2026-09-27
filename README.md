@@ -51,7 +51,7 @@ make contract-gen
 - embedded wake-routing sidecar: starts inside `anx-core` by default
 - web-ui: `http://127.0.0.1:5173`
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
-- after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `anx` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
+- after fixture **identities** seed (default), the seed enrolls `dev-host` and derives the agent personas under it. The seeded human consumes bootstrap.
 
 Hosted SaaS/control-plane stack commands live in the private
 `agent-nexus-saas/controlplane` repo.

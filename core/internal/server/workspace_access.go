@@ -45,7 +45,7 @@ func enrichRouteMutationPolicy(r *http.Request, req routeAccessRequirement) rout
 			}
 		}
 		switch path {
-		case "/ops/blob-usage/rebuild", "/derived/rebuild", "/agent-bridge/check-in":
+		case "/ops/blob-usage/rebuild", "/derived/rebuild":
 			req.mutation = routeMutationInternalMaintenance
 			return req
 		}

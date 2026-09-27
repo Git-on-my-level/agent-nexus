@@ -300,6 +300,24 @@ routes remain.
   infrastructure routes but must authenticate the host bridge when implemented.
   (`contracts/anx-openapi.yaml`, `contracts/anx-schema.yaml`,
   `contracts/non-openapi-endpoints.yaml`.)
+- 2026-09-27 (core identity): Wake queue infrastructure writes use the active
+  host key with `X-ANX-Host-Id` and the three host proof headers. The signed
+  message is `anx-host-wakeup-<claim|complete|fail>|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>`;
+  core verifies that the wake target actor belongs to that host. The local dev
+  seed may pass `existing_actor_id` on a host assertion only with
+  `ANX_DEV_REGISTER_LINKED_ACTORS=1`, preserving fixture actor IDs and history.
+  Production ignores this dev capability by default.
+- 2026-09-27 (core identity): Derived agent handles are taggable while their host
+  is active and the name is not excluded. Host bridge check-in controls their
+  online state; it does not require the former per-agent wake registration.
+  Legacy standalone agents retain their existing wake registration during
+  adoption rollout.
+- 2026-09-27 (core identity and runs): A run created from `X-ANX-Run-Id` uses
+  the host-derived adapter name when it is a known adapter, or `generic` for a
+  persona. The first launcher observation may replace that inferred adapter
+  while the run is still provisional (`unknown`); subsequent observations keep
+  it immutable. Roster names and display names always come from the canonical
+  host-agent relation, independent of launcher adapter.
 - 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
 - 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.
 ### 2026-09-27 · O2 web noise pass and ⌘K palette (`cc/web-noise`)

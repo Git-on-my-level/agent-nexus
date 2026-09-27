@@ -64,7 +64,7 @@ type PresencePatch struct {
 	Note    *string
 	SetNote bool
 }
-type Identity struct{ AgentID, ActorID, HostID, HostSlug, Name, Handle, DisplayName, Kind, RevokedAt, BridgeCheckedInAt, BridgeExpiresAt string }
+type Identity struct{ AgentID, ActorID, HostID, HostSlug, Name, Handle, DisplayName, Kind, Adapter, RevokedAt, BridgeCheckedInAt, BridgeExpiresAt string }
 type IdentitySource interface {
 	ResolveAgent(context.Context, string) (Identity, error)
 	ListAgents(context.Context) ([]Identity, error)
@@ -215,7 +215,7 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 	if e != nil {
 		return Run{}, false, false, e
 	}
-	if old.AgentID != in.AgentID || old.Adapter != in.Adapter {
+	if old.AgentID != in.AgentID || (old.Adapter != in.Adapter && !(old.State == "unknown" && in.State != "unknown")) {
 		return Run{}, false, false, ErrIdentityConflict
 	}
 	oldAt, _ := parseTime(old.LastObservedAt)
@@ -233,6 +233,9 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 		return old, false, true, nil
 	}
 	merged := old
+	if old.State == "unknown" && in.State != "unknown" {
+		merged.Adapter = in.Adapter
+	}
 	if !terminal(old.State) && in.State != "unknown" {
 		if !(old.State == "running" && in.State == "starting") {
 			merged.State = in.State
@@ -278,7 +281,7 @@ func (s *Store) UpsertRun(ctx context.Context, in Run) (Run, bool, bool, error) 
 	replayed := string(before) == string(after)
 	if !replayed {
 		labels, _ := json.Marshal(merged.Labels)
-		_, e = tx.ExecContext(ctx, `UPDATE runs SET model=?,state=?,liveness=?,result_collected=?,labels_json=?,card_ref=?,repository=?,branch=?,started_at=?,ended_at=?,last_observed_at=? WHERE id=?`, merged.Model, merged.State, merged.Liveness, merged.ResultCollected, string(labels), merged.CardRef, merged.Repository, merged.Branch, merged.StartedAt, merged.EndedAt, merged.LastObservedAt, merged.ID)
+		_, e = tx.ExecContext(ctx, `UPDATE runs SET adapter=?,model=?,state=?,liveness=?,result_collected=?,labels_json=?,card_ref=?,repository=?,branch=?,started_at=?,ended_at=?,last_observed_at=? WHERE id=?`, merged.Adapter, merged.Model, merged.State, merged.Liveness, merged.ResultCollected, string(labels), merged.CardRef, merged.Repository, merged.Branch, merged.StartedAt, merged.EndedAt, merged.LastObservedAt, merged.ID)
 		if e != nil {
 			return Run{}, false, false, e
 		}
@@ -300,7 +303,7 @@ func (s *Store) Provisional(ctx context.Context, identity Identity, external str
 		return Run{}, e
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	r, _, _, e := s.UpsertRun(ctx, Run{Launcher: "agentctl", ExternalID: external, HostID: identity.HostID, AgentID: identity.AgentID, Adapter: identity.Name, State: "unknown", Liveness: "unknown", Labels: []string{}, LastObservedAt: now})
+	r, _, _, e := s.UpsertRun(ctx, Run{Launcher: "agentctl", ExternalID: external, HostID: identity.HostID, AgentID: identity.AgentID, Adapter: identity.Adapter, State: "unknown", Liveness: "unknown", Labels: []string{}, LastObservedAt: now})
 	return r, e
 }
 func (s *Store) ListRuns(ctx context.Context, f Filter) ([]Run, string, error) {

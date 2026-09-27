@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrUsernameTaken = errors.New("username_taken")
 var ErrInvalidRequest = errors.New("invalid_request")
 var ErrInvalidToken = errors.New("invalid_token")
 var ErrAuthRequired = errors.New("auth_required")
@@ -29,12 +28,9 @@ var ErrAccountDisabled = errors.New("account_disabled")
 var ErrAccountStatusUnreachable = errors.New("account_status_unreachable")
 
 const (
-	defaultAccessTokenTTL   = 15 * time.Minute
-	defaultRefreshTokenTTL  = 30 * 24 * time.Hour
-	defaultAssertionSkew    = 5 * time.Minute
-	registerAgentMaxRetries = 8
-	registerAgentRetryBase  = 15 * time.Millisecond
-	registerAgentRetryMax   = 250 * time.Millisecond
+	defaultAccessTokenTTL  = 15 * time.Minute
+	defaultRefreshTokenTTL = 30 * 24 * time.Hour
+	defaultAssertionSkew   = 5 * time.Minute
 )
 
 type Option func(*Store)
@@ -51,18 +47,9 @@ type Agent struct {
 	Registration  *AgentRegistration `json:"registration,omitempty"`
 }
 
-type AgentKey struct {
-	KeyID     string  `json:"key_id"`
-	AgentID   string  `json:"agent_id"`
-	Algorithm string  `json:"algorithm"`
-	PublicKey string  `json:"public_key"`
-	CreatedAt string  `json:"created_at"`
-	RevokedAt *string `json:"revoked_at,omitempty"`
-}
-
 type TokenBundle struct {
 	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int64  `json:"expires_in"`
 }
@@ -97,12 +84,6 @@ type RevokeAgentResult struct {
 		AlreadyRevoked    bool   `json:"already_revoked"`
 		AllowHumanLockout bool   `json:"allow_human_lockout"`
 	} `json:"revocation"`
-}
-
-type RegisterAgentInput struct {
-	Username        string
-	PublicKey       string
-	ExistingActorID string
 }
 
 type AssertionInput struct {
@@ -170,8 +151,8 @@ func WithBootstrapToken(token string) Option {
 	}
 }
 
-// WithAllowDevRegisterLinkedActor allows POST /auth/agents/register to accept
-// existing_actor_id linking a new agent row to a pre-seeded actors row (local/dev only).
+// WithAllowDevRegisterLinkedActor permits linking pre-seeded actor rows in local dev
+// passkey registration and host-derived agent grants.
 func WithAllowDevRegisterLinkedActor(allow bool) Option {
 	return func(store *Store) {
 		store.allowDevRegisterLinkedActor = allow
@@ -188,46 +169,6 @@ func WithAccountStatusChecker(checker AccountStatusChecker) Option {
 
 func BuildAssertionMessage(agentID string, keyID string, signedAt string) string {
 	return "anx-auth-token|" + strings.TrimSpace(agentID) + "|" + strings.TrimSpace(keyID) + "|" + strings.TrimSpace(signedAt)
-}
-
-func (s *Store) RegisterAgent(ctx context.Context, input RegisterAgentInput, claim OnboardingClaim) (Agent, AgentKey, TokenBundle, error) {
-	if s == nil || s.db == nil {
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("auth store database is not initialized")
-	}
-
-	username, err := normalizeUsername(input.Username)
-	if err != nil {
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
-	}
-
-	if _, err := decodeEd25519PublicKey(input.PublicKey); err != nil {
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: public_key must be a base64-encoded ed25519 public key: %v", ErrInvalidRequest, err)
-	}
-
-	existingActorID := strings.TrimSpace(input.ExistingActorID)
-	if existingActorID != "" && !s.allowDevRegisterLinkedActor {
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("%w: existing_actor_id is not enabled for this core instance", ErrInvalidRequest)
-	}
-
-	publicKey := strings.TrimSpace(input.PublicKey)
-	var lastErr error
-	for attempt := 0; attempt < registerAgentMaxRetries; attempt++ {
-		agent, key, tokens, err := s.registerAgentOnce(ctx, username, publicKey, claim, existingActorID)
-		if err == nil {
-			return agent, key, tokens, nil
-		}
-		if errors.Is(err, ErrUsernameTaken) || !isSQLiteBusyError(err) {
-			return Agent{}, AgentKey{}, TokenBundle{}, err
-		}
-		lastErr = err
-		if attempt == registerAgentMaxRetries-1 {
-			break
-		}
-		if err := waitForRegisterRetry(ctx, attempt); err != nil {
-			return Agent{}, AgentKey{}, TokenBundle{}, err
-		}
-	}
-	return Agent{}, AgentKey{}, TokenBundle{}, lastErr
 }
 
 func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx *sql.Tx, actorID string) error {
@@ -263,173 +204,6 @@ func (s *Store) ensureExistingActorReadyForAgentLinkTx(ctx context.Context, tx *
 		return fmt.Errorf("%w: actor already linked to an agent", ErrInvalidRequest)
 	}
 	return nil
-}
-
-func (s *Store) registerAgentOnce(ctx context.Context, username string, publicKey string, claim OnboardingClaim, existingActorID string) (Agent, AgentKey, TokenBundle, error) {
-	now := time.Now().UTC()
-	nowText := now.Format(time.RFC3339Nano)
-	agentID := "agent_" + uuid.NewString()
-	actorID := agentID
-	if strings.TrimSpace(existingActorID) != "" {
-		actorID = strings.TrimSpace(existingActorID)
-	}
-	keyID := "key_" + uuid.NewString()
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("begin register agent transaction: %w", err)
-	}
-
-	if err := s.consumeOnboardingClaimTx(ctx, tx, claim, agentID, actorID, now); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, err
-	}
-
-	if strings.TrimSpace(existingActorID) != "" {
-		if err := s.ensureExistingActorReadyForAgentLinkTx(ctx, tx, actorID); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("tx rollback failed: %v", rbErr)
-			}
-			return Agent{}, AgentKey{}, TokenBundle{}, err
-		}
-	}
-
-	agentMetadata := map[string]any{}
-	if claim.Mode == OnboardingModeBootstrap {
-		agentMetadata["auth_admin"] = true
-	}
-	agentMetadataJSON, err := principalMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, agentMetadata)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent metadata: %w", err)
-	}
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, NULL, ?)`,
-		agentID,
-		username,
-		actorID,
-		nowText,
-		nowText,
-		agentMetadataJSON,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: agents.username") {
-			return Agent{}, AgentKey{}, TokenBundle{}, ErrUsernameTaken
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert agent: %w", err)
-	}
-
-	if strings.TrimSpace(existingActorID) == "" {
-		actorMetadataValue, err := actorMetadataJSON(PrincipalKindAgent, AuthMethodPublicKey, agentMetadata)
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("tx rollback failed: %v", rbErr)
-			}
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("encode agent actor metadata: %w", err)
-		}
-		_, err = tx.ExecContext(
-			ctx,
-			`INSERT INTO actors(id, display_name, tags_json, created_at, metadata_json)
-			 VALUES (?, ?, ?, ?, ?)`,
-			actorID,
-			username,
-			`["agent"]`,
-			nowText,
-			actorMetadataValue,
-		)
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("tx rollback failed: %v", rbErr)
-			}
-			return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert mapped actor: %w", err)
-		}
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO agent_keys(id, agent_id, public_key, algorithm, created_at, revoked_at)
-		 VALUES (?, ?, ?, 'ed25519', ?, NULL)`,
-		keyID,
-		agentID,
-		publicKey,
-		nowText,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("insert agent key: %w", err)
-	}
-
-	if err := s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{
-		EventType:      AuthAuditEventPrincipalRegistered,
-		OccurredAt:     now.Add(time.Nanosecond),
-		ActorAgentID:   agentID,
-		ActorActorID:   actorID,
-		SubjectAgentID: agentID,
-		SubjectActorID: actorID,
-		InviteID:       claim.InviteID,
-		Metadata: map[string]any{
-			"username":        username,
-			"principal_kind":  "agent",
-			"auth_method":     AuthMethodPublicKey,
-			"onboarding_mode": string(claim.Mode),
-			"auth_admin":      claim.Mode == OnboardingModeBootstrap,
-		},
-	}); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, err
-	}
-
-	tokens, _, err := s.issueTokenBundleTx(ctx, tx, agentID, now)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, AgentKey{}, TokenBundle{}, fmt.Errorf("commit register agent transaction: %w", err)
-	}
-
-	// Built as locals rather than composite literals inside the return:
-	// gofmt indents a multi-line literal in a multi-value return differently
-	// across Go versions, so that form reformats itself on any machine whose
-	// toolchain is newer than the one in core/go.mod and dirties the tree
-	// mid-release. Locals format identically everywhere.
-	agent := Agent{
-		AgentID:       agentID,
-		Username:      username,
-		ActorID:       actorID,
-		Revoked:       false,
-		CreatedAt:     nowText,
-		UpdatedAt:     nowText,
-		PrincipalKind: ptrString("agent"),
-		AuthMethod:    ptrString(AuthMethodPublicKey),
-	}
-	agentKey := AgentKey{
-		KeyID:     keyID,
-		AgentID:   agentID,
-		Algorithm: "ed25519",
-		PublicKey: publicKey,
-		CreatedAt: nowText,
-	}
-	return agent, agentKey, tokens, nil
 }
 
 func (s *Store) IssueTokenFromAssertion(ctx context.Context, input AssertionInput) (TokenBundle, error) {
@@ -835,352 +609,6 @@ func (s *Store) GetPrincipalSummary(ctx context.Context, agentID string) (AuthPr
 	return s.getPrincipalSummaryQueryRow(ctx, s.db.QueryRowContext, agentID)
 }
 
-func (s *Store) ListKeys(ctx context.Context, agentID string) ([]AgentKey, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("auth store database is not initialized")
-	}
-
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return nil, ErrAgentNotFound
-	}
-
-	rows, err := s.db.QueryContext(
-		ctx,
-		`SELECT id, agent_id, algorithm, public_key, created_at, revoked_at
-		 FROM agent_keys
-		 WHERE agent_id = ?
-		 ORDER BY created_at DESC, id DESC`,
-		agentID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query agent keys: %w", err)
-	}
-	defer rows.Close()
-
-	keys := make([]AgentKey, 0)
-	for rows.Next() {
-		var key AgentKey
-		var revokedRaw sql.NullString
-		if err := rows.Scan(&key.KeyID, &key.AgentID, &key.Algorithm, &key.PublicKey, &key.CreatedAt, &revokedRaw); err != nil {
-			return nil, fmt.Errorf("scan agent key row: %w", err)
-		}
-		if revokedRaw.Valid {
-			revoked := revokedRaw.String
-			key.RevokedAt = &revoked
-		}
-		keys = append(keys, key)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate agent keys: %w", err)
-	}
-
-	return keys, nil
-}
-
-func (s *Store) UpdateUsername(ctx context.Context, agentID string, username string) (Agent, error) {
-	if s == nil || s.db == nil {
-		return Agent{}, fmt.Errorf("auth store database is not initialized")
-	}
-
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return Agent{}, ErrAgentNotFound
-	}
-
-	normalized, err := normalizeUsername(username)
-	if err != nil {
-		return Agent{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
-	}
-
-	nowText := time.Now().UTC().Format(time.RFC3339Nano)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Agent{}, fmt.Errorf("begin update username transaction: %w", err)
-	}
-
-	result, err := tx.ExecContext(
-		ctx,
-		`UPDATE agents
-		 SET username = ?, updated_at = ?
-		 WHERE id = ?`,
-		normalized,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: agents.username") {
-			return Agent{}, ErrUsernameTaken
-		}
-		return Agent{}, fmt.Errorf("update agent username: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("read update username rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, ErrAgentNotFound
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE actors
-		 SET display_name = ?
-		 WHERE id = (SELECT actor_id FROM agents WHERE id = ?)`,
-		normalized,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("update mapped actor display name: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return Agent{}, fmt.Errorf("commit update username transaction: %w", err)
-	}
-
-	return s.GetAgent(ctx, agentID)
-}
-
-func (s *Store) UpdateRegistration(ctx context.Context, agentID string, registration AgentRegistration) (Agent, error) {
-	if s == nil || s.db == nil {
-		return Agent{}, fmt.Errorf("auth store database is not initialized")
-	}
-
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return Agent{}, ErrAgentNotFound
-	}
-
-	nowText := time.Now().UTC().Format(time.RFC3339Nano)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Agent{}, fmt.Errorf("begin update registration transaction: %w", err)
-	}
-
-	var (
-		username     string
-		actorID      string
-		metadataJSON string
-	)
-	if err := tx.QueryRowContext(
-		ctx,
-		`SELECT a.username, a.actor_id, a.metadata_json
-		 FROM agents a
-		 WHERE a.id = ?`,
-		agentID,
-	).Scan(&username, &actorID, &metadataJSON); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			return Agent{}, ErrAgentNotFound
-		}
-		return Agent{}, fmt.Errorf("query agent registration target: %w", err)
-	}
-
-	normalized := normalizeAgentRegistration(registration)
-	if normalized.Handle == "" {
-		normalized.Handle = strings.TrimSpace(username)
-	}
-	if normalized.Handle != strings.TrimSpace(username) {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("%w: registration.handle must match the authenticated agent username", ErrInvalidRequest)
-	}
-	if normalized.ActorID == "" {
-		normalized.ActorID = strings.TrimSpace(actorID)
-	}
-	if normalized.ActorID != strings.TrimSpace(actorID) {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("%w: registration.actor_id must match the authenticated agent actor_id", ErrInvalidRequest)
-	}
-	normalized.UpdatedAt = nowText
-
-	nextMetadataJSON, err := mergeRegistrationMetadataJSON(metadataJSON, normalized)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("merge registration metadata: %w", err)
-	}
-	result, err := tx.ExecContext(
-		ctx,
-		`UPDATE agents
-		 SET metadata_json = ?, updated_at = ?
-		 WHERE id = ?`,
-		nextMetadataJSON,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("update agent registration: %w", err)
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, fmt.Errorf("read update registration rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return Agent{}, ErrAgentNotFound
-	}
-	if err := tx.Commit(); err != nil {
-		return Agent{}, fmt.Errorf("commit update registration transaction: %w", err)
-	}
-	return s.GetAgent(ctx, agentID)
-}
-
-func (s *Store) RotateKey(ctx context.Context, agentID string, publicKey string) (AgentKey, error) {
-	if s == nil || s.db == nil {
-		return AgentKey{}, fmt.Errorf("auth store database is not initialized")
-	}
-
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" {
-		return AgentKey{}, ErrAgentNotFound
-	}
-
-	if _, err := decodeEd25519PublicKey(publicKey); err != nil {
-		return AgentKey{}, fmt.Errorf("%w: public_key must be a base64-encoded ed25519 public key: %v", ErrInvalidRequest, err)
-	}
-
-	now := time.Now().UTC()
-	nowText := now.Format(time.RFC3339Nano)
-	keyID := "key_" + uuid.NewString()
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return AgentKey{}, fmt.Errorf("begin rotate key transaction: %w", err)
-	}
-
-	var revokedAt sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT revoked_at FROM agents WHERE id = ?`, agentID).Scan(&revokedAt)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			return AgentKey{}, ErrAgentNotFound
-		}
-		return AgentKey{}, fmt.Errorf("query agent before key rotation: %w", err)
-	}
-	if revokedAt.Valid {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, ErrAgentRevoked
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE agent_keys
-		 SET revoked_at = ?
-		 WHERE agent_id = ? AND revoked_at IS NULL`,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("revoke existing keys: %w", err)
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO agent_keys(id, agent_id, public_key, algorithm, created_at, revoked_at)
-		 VALUES (?, ?, ?, 'ed25519', ?, NULL)`,
-		keyID,
-		agentID,
-		strings.TrimSpace(publicKey),
-		nowText,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("insert rotated key: %w", err)
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE auth_refresh_sessions
-		 SET revoked_at = COALESCE(revoked_at, ?)
-		 WHERE agent_id = ? AND revoked_at IS NULL`,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("revoke sessions during key rotation: %w", err)
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE auth_access_tokens
-		 SET revoked_at = COALESCE(revoked_at, ?)
-		 WHERE agent_id = ? AND revoked_at IS NULL`,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("revoke access tokens during key rotation: %w", err)
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`UPDATE agents SET updated_at = ? WHERE id = ?`,
-		nowText,
-		agentID,
-	)
-	if err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return AgentKey{}, fmt.Errorf("update agent timestamp during key rotation: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return AgentKey{}, fmt.Errorf("commit rotate key transaction: %w", err)
-	}
-
-	return AgentKey{
-		KeyID:     keyID,
-		AgentID:   agentID,
-		Algorithm: "ed25519",
-		PublicKey: strings.TrimSpace(publicKey),
-		CreatedAt: nowText,
-	}, nil
-}
-
 func (s *Store) RevokeAgent(ctx context.Context, agentID string, input RevokeAgentInput) (RevokeAgentResult, error) {
 	if s == nil || s.db == nil {
 		return RevokeAgentResult{}, fmt.Errorf("auth store database is not initialized")
@@ -1575,30 +1003,4 @@ func hashToken(raw string) string {
 func hashAssertionReplay(message string, signature string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(message) + "|" + strings.TrimSpace(signature)))
 	return hex.EncodeToString(sum[:])
-}
-
-func isSQLiteBusyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	lowered := strings.ToLower(err.Error())
-	return strings.Contains(lowered, "database is locked") ||
-		strings.Contains(lowered, "database table is locked") ||
-		strings.Contains(lowered, "sqlite_busy") ||
-		strings.Contains(lowered, "cannot start a transaction within a transaction")
-}
-
-func waitForRegisterRetry(ctx context.Context, attempt int) error {
-	delay := registerAgentRetryBase << attempt
-	if delay > registerAgentRetryMax {
-		delay = registerAgentRetryMax
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("register agent canceled while waiting to retry: %w", ctx.Err())
-	case <-timer.C:
-		return nil
-	}
 }

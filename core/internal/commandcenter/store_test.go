@@ -2,7 +2,6 @@ package commandcenter_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -103,13 +102,19 @@ func TestPresenceAndDerivedStates(t *testing.T) {
 	now := time.Now().UTC()
 	db := s.DB
 	agents := []struct{ id, actor string }{{"working", "actor-working"}, {"waiting", "actor-waiting"}, {"idle", "actor-idle"}, {"stale", "actor-stale"}}
+	if _, e := db.ExecContext(ctx, `INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host-1','host','Host','test','host','["generic"]',?)`, now.Format(time.RFC3339Nano)); e != nil {
+		t.Fatal(e)
+	}
 	for _, a := range agents {
-		meta, _ := json.Marshal(map[string]any{"principal_kind": "agent", "identity_kind": "derived", "host_id": "host-1", "host_slug": "host", "name": "codex"})
 		_, e := db.ExecContext(ctx, "INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES(?,?,'[]',?,'{}')", a.actor, a.id, now.Format(time.RFC3339Nano))
 		if e != nil {
 			t.Fatal(e)
 		}
-		_, e = db.ExecContext(ctx, "INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,?)", a.id, a.id+".host", a.actor, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), string(meta))
+		_, e = db.ExecContext(ctx, "INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,?,?,'{\"principal_kind\":\"agent\"}')", a.id, a.id+".host", a.actor, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, e = db.ExecContext(ctx, `INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host-1',?,?,'derived')`, a.id, a.id)
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -182,5 +187,67 @@ func TestPresenceAndDerivedStates(t *testing.T) {
 		if a.ID == "working" && a.State != "stale" {
 			t.Fatalf("expired signal state=%s", a.State)
 		}
+	}
+}
+
+func TestHostIdentitySourceAndBridgePresence(t *testing.T) {
+	s := fixture(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	at := now.Format(time.RFC3339Nano)
+	expires := now.Add(2 * time.Minute).Format(time.RFC3339Nano)
+	for _, query := range []string{
+		`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at,bridge_checked_in_at,bridge_expires_at) VALUES('host-1','m5-mbp','Mac','david','m5','["codex"]','` + at + `','` + at + `','` + expires + `')`,
+		`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('actor-1','Misleading','["agent"]','` + at + `','{}')`,
+		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent-1','reviewer.m5-mbp','actor-1','` + at + `','` + at + `','{"principal_kind":"agent","identity_kind":"derived","host_id":"wrong-host","name":"wrong"}')`,
+		`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host-1','reviewer','agent-1','adopted')`,
+	} {
+		if _, e := s.DB.ExecContext(ctx, query); e != nil {
+			t.Fatal(e)
+		}
+	}
+	identity, e := s.Identity(ctx, "agent-1")
+	if e != nil || identity.HostID != "host-1" || identity.HostSlug != "m5-mbp" || identity.Name != "reviewer" || identity.Kind != "adopted" || identity.DisplayName != "reviewer on m5-mbp" || identity.Adapter != "generic" {
+		t.Fatalf("canonical host identity: %+v %v", identity, e)
+	}
+	roster, e := s.Roster(ctx, now)
+	if e != nil || len(roster) != 1 || !roster[0].BridgeOnline {
+		t.Fatalf("host bridge check-in should make child online: %+v %v", roster, e)
+	}
+	if _, e = s.DB.ExecContext(ctx, `INSERT INTO host_exclusions(host_id,name) VALUES('host-1','reviewer')`); e != nil {
+		t.Fatal(e)
+	}
+	roster, e = s.Roster(ctx, now)
+	if e != nil || roster[0].BridgeOnline {
+		t.Fatalf("excluded child should be offline: %+v %v", roster, e)
+	}
+	if _, e = s.DB.ExecContext(ctx, `DELETE FROM host_exclusions WHERE host_id='host-1'`); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.DB.ExecContext(ctx, `UPDATE hosts SET revoked_at=? WHERE id='host-1'`, at); e != nil {
+		t.Fatal(e)
+	}
+	roster, e = s.Roster(ctx, now)
+	if e != nil || roster[0].BridgeOnline {
+		t.Fatalf("revoked host should be offline: %+v %v", roster, e)
+	}
+}
+
+func TestProvisionalPersonaAdapterResolvedByLauncher(t *testing.T) {
+	s := fixture(t)
+	ctx := context.Background()
+	provisional, e := s.Provisional(ctx, cc.Identity{AgentID: "agent-1", HostID: "host-1", Adapter: "generic"}, "exec-persona")
+	if e != nil || provisional.Adapter != "generic" || provisional.State != "unknown" {
+		t.Fatalf("provisional persona adapter: %+v %v", provisional, e)
+	}
+	observed := observation("agent-1", "exec-persona", time.Now().UTC().Add(time.Second))
+	observed.Adapter = "codex"
+	resolved, _, _, e := s.UpsertRun(ctx, observed)
+	if e != nil || resolved.Adapter != "codex" || resolved.ID != provisional.ID {
+		t.Fatalf("launcher adapter observation: %+v %v", resolved, e)
+	}
+	stored, e := s.GetRun(ctx, resolved.ID)
+	if e != nil || stored.Adapter != "codex" {
+		t.Fatalf("stored launcher adapter: %+v %v", stored, e)
 	}
 }

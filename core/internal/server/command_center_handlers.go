@@ -91,7 +91,7 @@ func attachRunAttribution(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		return false
 	}
-	ctx := commandcenter.WithAttribution(r.Context(), commandcenter.Attribution{RunID: run.ID, HostID: identity.HostID, AgentID: identity.AgentID, Adapter: identity.Name})
+	ctx := commandcenter.WithAttribution(r.Context(), commandcenter.Attribution{RunID: run.ID, HostID: identity.HostID, AgentID: identity.AgentID, Adapter: run.Adapter})
 	*r = *r.WithContext(ctx)
 	return true
 }
