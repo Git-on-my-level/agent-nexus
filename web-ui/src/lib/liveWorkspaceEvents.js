@@ -1,14 +1,19 @@
 /**
- * Live list updates from the workspace event stream (`GET /stream/events`).
+ * Live updates from the workspace event stream (`GET /stream/events`).
  *
- * A list page (Tasks, Docs, …) subscribes with the event types that can
- * change it and a callback that re-reads the list. The helper owns the
- * connection: it starts from the newest matching event so history is not
- * replayed, resumes with `last_event_id` after a drop, coalesces bursts into
- * one callback, and stops for good on an auth failure (the page's own reads
- * surface that). There is no Reload button to fall back on, so a dropped
- * connection reconnects on its own, backing off while core is unreachable;
- * the resume cursor makes core replay whatever landed during the gap.
+ * Every live surface (Tasks, Docs, a task page, the Inbox, the sidebar Inbox
+ * count, the Agents roster) subscribes here with the event types that can
+ * change it and a callback that re-reads what it shows. Subscriptions for the
+ * same client and the same scope (the whole workspace, or one backing thread)
+ * share one connection, so the shell never holds two streams for the same
+ * workspace.
+ *
+ * The connection starts after the newest event core already has, because the
+ * stream replays every matching event when `last_event_id` is empty or
+ * unknown. It resumes with `last_event_id` after a drop (core replays what
+ * landed during the gap), backs off while core is unreachable, and stops for
+ * good on an auth failure (the page's own reads surface that). Each
+ * subscriber coalesces bursts into one callback.
  *
  * Usage (Svelte 5):
  *
@@ -48,15 +53,10 @@ export function liveWorkspaceEvents({
   ) {
     return () => {};
   }
+  const wanted = new Set(Array.isArray(types) ? types : []);
   let stopped = false;
-  let controller = null;
-  let reconnectTimer = null;
   let flushTimer = null;
   let pending = [];
-  let lastEventId = "";
-  let connectedOnce = false;
-  let failures = 0;
-  const startedAt = Date.now();
 
   function flush() {
     flushTimer = null;
@@ -70,18 +70,87 @@ export function liveWorkspaceEvents({
       });
   }
 
-  function schedule(event) {
+  const subscriber = (event) => {
+    if (stopped) return;
+    if (wanted.size && !wanted.has(event?.type)) return;
+    try {
+      if (!filter(event)) return;
+    } catch {
+      return;
+    }
     pending.push(event);
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, debounceMs);
-  }
+  };
 
-  /** Start after the newest matching event so connecting replays nothing. */
+  const release = joinHub(client, String(threadId ?? "").trim(), subscriber, {
+    reconnectMs,
+  });
+
+  return () => {
+    stopped = true;
+    clearTimeout(flushTimer);
+    pending = [];
+    release();
+  };
+}
+
+/** @type {WeakMap<object, Map<string, ReturnType<typeof createHub>>>} */
+const hubsByClient = new WeakMap();
+
+function joinHub(client, threadId, subscriber, options) {
+  let hubs = hubsByClient.get(client);
+  if (!hubs) {
+    hubs = new Map();
+    hubsByClient.set(client, hubs);
+  }
+  let hub = hubs.get(threadId);
+  if (!hub || hub.closed) {
+    hub = createHub(client, threadId, options);
+    hubs.set(threadId, hub);
+  }
+  hub.subscribers.add(subscriber);
+  hub.start();
+  const joined = hub;
+  return () => {
+    joined.subscribers.delete(subscriber);
+    if (joined.subscribers.size) return;
+    joined.close();
+    if (hubs.get(threadId) === joined) hubs.delete(threadId);
+  };
+}
+
+/** One stream connection shared by every subscriber of a scope. */
+function createHub(client, threadId, { reconnectMs = 3000 } = {}) {
+  const subscribers = new Set();
+  let started = false;
+  let controller = null;
+  let reconnectTimer = null;
+  let lastEventId = "";
+  let connectedOnce = false;
+  let failures = 0;
+  const startedAt = Date.now();
+
+  const hub = {
+    subscribers,
+    closed: false,
+    start() {
+      if (started || hub.closed) return;
+      started = true;
+      void connect();
+    },
+    close() {
+      hub.closed = true;
+      controller?.abort();
+      clearTimeout(reconnectTimer);
+    },
+  };
+
+  /** Start after the newest event so connecting replays nothing. */
   async function seedCursor() {
     if (typeof client.listEvents !== "function") return;
     try {
       const result = await client.listEvents({
-        ...(types.length ? { type: types } : {}),
         ...(threadId ? { thread_id: threadId } : {}),
         limit: 1,
       });
@@ -100,16 +169,15 @@ export function liveWorkspaceEvents({
   }
 
   async function connect() {
-    if (stopped) return;
+    if (hub.closed) return;
     if (!connectedOnce && !lastEventId) await seedCursor();
-    if (stopped) return;
+    if (hub.closed) return;
     controller = new AbortController();
     let delivered = false;
     const openedAt = Date.now();
     try {
       await client.streamEvents({
         threadId: threadId || undefined,
-        types,
         lastEventId: lastEventId || undefined,
         signal: controller.signal,
         onEvent: (message) => {
@@ -119,14 +187,16 @@ export function liveWorkspaceEvents({
           const event = message?.data?.event;
           if (!event || typeof event !== "object") return;
           if (isHistory(event)) return;
-          if (!filter(event)) return;
-          schedule(event);
+          for (const subscriber of [...subscribers]) {
+            subscriber(event);
+          }
         },
       });
     } catch (error) {
-      if (stopped || error?.name === "AbortError") return;
+      if (hub.closed || error?.name === "AbortError") return;
       if (error?.status === 401 || error?.status === 403) {
-        stopped = true;
+        // A refused session stays refused; a later subscriber starts over.
+        hub.close();
         return;
       }
     }
@@ -136,18 +206,10 @@ export function liveWorkspaceEvents({
     const healthy = delivered || Date.now() - openedAt > 10_000;
     failures = healthy ? 0 : failures + 1;
     const delay = Math.min(reconnectMs * 2 ** Math.min(failures, 4), 60_000);
-    if (!stopped) reconnectTimer = setTimeout(connect, delay);
+    if (!hub.closed) reconnectTimer = setTimeout(connect, delay);
   }
 
-  void connect();
-
-  return () => {
-    stopped = true;
-    controller?.abort();
-    clearTimeout(reconnectTimer);
-    clearTimeout(flushTimer);
-    pending = [];
-  };
+  return hub;
 }
 
 /** Event types that change the Tasks list. */

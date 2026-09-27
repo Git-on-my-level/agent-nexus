@@ -46,16 +46,11 @@ describe("liveWorkspaceEvents", () => {
     });
     await flush();
     await flush();
-    expect(fake.client.listEvents).toHaveBeenCalledWith({
-      type: ["card_moved"],
-      limit: 1,
-    });
-    expect(fake.calls[0]).toMatchObject({
-      types: ["card_moved"],
-      lastEventId: "evt-9",
-    });
+    expect(fake.client.listEvents).toHaveBeenCalledWith({ limit: 1 });
+    expect(fake.calls[0]).toMatchObject({ lastEventId: "evt-9" });
     const ts = new Date().toISOString();
     fake.emit({ id: "evt-10", type: "card_moved", ts });
+    fake.emit({ id: "evt-10b", type: "document_created", ts });
     fake.emit({ id: "evt-11", type: "card_moved", ts });
     expect(onChange).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(500);
@@ -107,6 +102,66 @@ describe("liveWorkspaceEvents", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(fake.calls).toHaveLength(2);
     stop();
+  });
+
+  it("shares one connection per scope and closes it with the last subscriber", async () => {
+    const fake = fakeClient();
+    const tasks = vi.fn();
+    const inbox = vi.fn();
+    const stopTasks = liveWorkspaceEvents({
+      client: fake.client,
+      types: ["card_moved"],
+      onChange: tasks,
+    });
+    const stopInbox = liveWorkspaceEvents({
+      client: fake.client,
+      onChange: inbox,
+    });
+    await flush();
+    await flush();
+    expect(fake.client.streamEvents).toHaveBeenCalledTimes(1);
+    fake.emit({
+      id: "evt-20",
+      type: "message_posted",
+      ts: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(tasks).not.toHaveBeenCalled();
+    expect(inbox).toHaveBeenCalledTimes(1);
+    stopTasks();
+    const [{ signal }] = fake.client.streamEvents.mock.calls[0];
+    expect(signal.aborted).toBe(false);
+    stopInbox();
+    expect(signal.aborted).toBe(true);
+    const again = liveWorkspaceEvents({
+      client: fake.client,
+      onChange: vi.fn(),
+    });
+    await flush();
+    await flush();
+    expect(fake.client.streamEvents).toHaveBeenCalledTimes(2);
+    again();
+  });
+
+  it("keeps a thread subscription on its own connection", async () => {
+    const fake = fakeClient();
+    const stopWorkspace = liveWorkspaceEvents({
+      client: fake.client,
+      onChange: vi.fn(),
+    });
+    const stopThread = liveWorkspaceEvents({
+      client: fake.client,
+      threadId: "thread-1",
+      onChange: vi.fn(),
+    });
+    await flush();
+    await flush();
+    expect(fake.calls.map((call) => call.threadId)).toEqual([
+      undefined,
+      "thread-1",
+    ]);
+    stopWorkspace();
+    stopThread();
   });
 
   it("is a no-op for a client without a stream", () => {

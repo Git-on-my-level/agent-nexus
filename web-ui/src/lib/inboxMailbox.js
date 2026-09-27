@@ -367,6 +367,9 @@ export function compareNeedsYou(a, b) {
 
 /**
  * @param {object} input
+ * @param {(id: string) => string} [input.agentName] host-derived agent
+ *   name ("codex on m5-mbp") for an actor id, or "" for anyone else. It
+ *   outranks the requester label core stored with the ask.
  * @param {(id: string) => string} [input.actorName] display name for an
  *   actor id, or "" when the id resolves to no one.
  */
@@ -380,6 +383,7 @@ export function buildInboxRows({
   now = Date.now(),
   currentActorId = "",
   actorName = () => "",
+  agentName = () => "",
 } = {}) {
   const rows = [];
   const titles = new Map();
@@ -469,7 +473,9 @@ export function buildInboxRows({
       String(item.requester_actor_id ?? "").trim() ||
       String(item.requester_agent_id ?? "").trim();
     const requesterName =
-      String(item.requester_label ?? "").trim() || nameFor(requesterId);
+      String(agentName(requesterId) ?? "").trim() ||
+      String(item.requester_label ?? "").trim() ||
+      nameFor(requesterId);
     const responderId = String(item.responding_actor_id ?? "").trim();
     rows.push({
       id: inboxItemMailboxId(item),

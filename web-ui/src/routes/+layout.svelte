@@ -49,6 +49,7 @@
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
   import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
+  import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
   import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
@@ -585,6 +586,8 @@
     switch (String(href)) {
       case "/inbox":
         return "inbox";
+      case "/agents":
+        return "agents";
       case "/tasks":
         return "tasks";
       case "/docs":
@@ -998,6 +1001,12 @@
                     enabled={identityReady}
                   />
                 {/if}
+                {#if item.count === "agents-working"}
+                  <AgentsNavCount
+                    workspace={activeWorkspaceSlug}
+                    enabled={identityReady}
+                  />
+                {/if}
               </a>
             {/each}
           </nav>
@@ -1259,6 +1268,13 @@
           <span>{item.label}</span>
           {#if item.count === "inbox-needs-you"}
             <InboxNavCount
+              workspace={activeWorkspaceSlug}
+              enabled={identityReady}
+              variant="bottom"
+            />
+          {/if}
+          {#if item.count === "agents-working"}
+            <AgentsNavCount
               workspace={activeWorkspaceSlug}
               enabled={identityReady}
               variant="bottom"

@@ -926,13 +926,20 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(tour).toBeVisible(FIRST_PAINT);
       await expectCleanLayout(page, "tour step 1 welcome");
 
-      for (const step of ["1 of 5", "2 of 5", "3 of 5", "4 of 5", "5 of 5"]) {
+      for (const step of [
+        "1 of 6",
+        "2 of 6",
+        "3 of 6",
+        "4 of 6",
+        "5 of 6",
+        "6 of 6",
+      ]) {
         await page
           .getByRole("button", { name: /Take the tour|^Next$/ })
           .first()
           .click();
         await expect(tour.getByText(step, { exact: false })).toBeVisible();
-        if (step === "2 of 5") {
+        if (step === "3 of 6") {
           await expect(
             tour.getByText("Drag a task created here to change phase"),
           ).toBeVisible();

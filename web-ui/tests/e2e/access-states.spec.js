@@ -3,37 +3,25 @@ import { expect, test } from "@playwright/test";
 import { AUDIT_VIEWPORTS, expectCleanLayout } from "../helpers/layoutAudit.js";
 
 /**
- * Walks the Access page through every UI state it can reach (loading, errors,
- * each step of the invite / revoke flows, popovers, banners) at several
- * viewport sizes and runs the geometry audit after each transition.
+ * Walks the Access page through the states it can reach (loading, errors,
+ * host approval, exclusions, host revoke, headless tokens, people, invites,
+ * break-glass) at several viewport sizes and runs the geometry audit after
+ * each transition.
  */
 
 const ACCESS_PATH = "/o/local/w/local/access";
 const LONG_HASH =
   "1fb951be68b4aa395611181d1d7af40857ea6c038e26393eab6433516f2ee888";
 const SELF_AGENT_ID = `agent_ext_${LONG_HASH}`;
-
-function wakeRouting(state, handle) {
-  const summaries = {
-    online: `Online as @${handle}.`,
-    offline: `Offline. @${handle} is still taggable; wake notifications queue until the bridge checks in again.`,
-    unregistered: `@${handle} has not registered for wake routing in this workspace yet.`,
-  };
-  return {
-    applicable: true,
-    handle,
-    taggable: state !== "unregistered",
-    online: state === "online",
-    state,
-    summary: summaries[state],
-  };
-}
+const HOST_ID = "host_7b0c2f3e-1111-4c7d-8116-3a212e1fe301";
+const NOW = Date.now();
+const iso = (offsetMs) => new Date(NOW + offsetMs).toISOString();
 
 function principal(overrides) {
   return {
     actor_id: `actor-${overrides.agent_id}`,
-    principal_kind: "agent",
-    auth_method: "public_key",
+    principal_kind: "human",
+    auth_method: "passkey",
     created_at: "2026-03-01T10:00:00Z",
     last_seen_at: "2026-03-20T11:15:00Z",
     updated_at: "2026-03-28T10:00:00Z",
@@ -42,102 +30,131 @@ function principal(overrides) {
   };
 }
 
-const SELF_PRINCIPAL = principal({
-  agent_id: SELF_AGENT_ID,
-  // Hosted humans arrive with a synthesized, very long username.
-  username: `external.${LONG_HASH.slice(0, 54)}`,
-  principal_kind: "human",
-  auth_method: "external_grant",
-});
+function agentSummary(name, state, overrides = {}) {
+  return {
+    id: `agent-${name}`,
+    ref: `actor:actor-${name}`,
+    actor_id: `actor-${name}`,
+    host_id: HOST_ID,
+    host_slug: "m5-mbp",
+    name,
+    handle: `${name}.m5-mbp`,
+    display_name: `${name} on m5-mbp`,
+    identity_kind: "derived",
+    state,
+    bridge_online: state === "working",
+    current_card_ref: null,
+    current_card_title: null,
+    last_progress_note: null,
+    last_progress_at: null,
+    active_run: null,
+    open_asks_count: 0,
+    last_signal_at: iso(-60_000),
+    revoked_at: null,
+    ...overrides,
+  };
+}
 
-const POPULATED_PRINCIPALS = [
-  SELF_PRINCIPAL,
-  principal({
-    agent_id: "agent-hermes",
-    username: "m4-hermes",
-    wake_routing: wakeRouting("online", "m4-hermes"),
-  }),
-  principal({
-    agent_id: "agent-offline-with-a-really-long-identifier-0123456789abcdef",
-    username: "offline-agent-with-a-very-long-username-that-keeps-going",
-    wake_routing: wakeRouting(
-      "offline",
-      "offline-agent-with-a-very-long-username-that-keeps-going",
-    ),
-  }),
-  principal({
-    agent_id: "agent-second-human",
-    username: "riley@example.com",
-    principal_kind: "human",
-    auth_method: "passkey",
-  }),
-  principal({
-    agent_id: "agent-revoked",
-    username: "retired-bot",
-    revoked: true,
-  }),
-  // No username: the row falls back to the raw agent id.
-  principal({ agent_id: `agent_${LONG_HASH}` }),
-  principal({
-    agent_id: "agent-unregistered",
-    username: "fresh-agent",
-    wake_routing: wakeRouting("unregistered", "fresh-agent"),
+const AGENTS = [
+  agentSummary("codex", "working"),
+  agentSummary("claude", "waiting_on_human", { open_asks_count: 1 }),
+  agentSummary("release-bot-with-a-rather-long-persona-name", "stale", {
+    last_signal_at: null,
   }),
 ];
 
-const POPULATED_INVITES = [
+function host(overrides = {}) {
+  return {
+    id: HOST_ID,
+    ref: `host:${HOST_ID}`,
+    handle: "m5-mbp",
+    slug: "m5-mbp",
+    display_name: "m5-mbp",
+    os_user: "david",
+    hostname: "m5-mbp.local",
+    discovered_adapters: ["claude", "codex", "cursor"],
+    key_id: "hkey_6ecc6649-91e8-46cf-9e5b-57f1cbf8ffd4",
+    excluded_names: [],
+    // Core's host read embeds summaries without derived state; the roster
+    // supplies the state.
+    agents: AGENTS.map((agent) => ({ ...agent, state: "stale" })),
+    created_at: "2026-03-01T10:00:00Z",
+    revoked_at: null,
+    ...overrides,
+  };
+}
+
+const PENDING = [
   {
-    id: "invite_61ab15c4-e615-4c7d-8116-3a212e1fe301",
-    kind: "agent",
-    created_at: "2026-03-28T10:00:00Z",
+    id: "henr_1",
+    user_code: "J6FA-N4XI",
+    requested_slug: "ci-runner-with-a-long-machine-name-3",
+    os_user: "runner",
+    hostname: "ip-10-0-3-17.eu-west-1.compute.internal",
+    discovered_adapters: ["generic"],
+    adoption_names: [],
+    requesting_ip: "203.0.113.17",
+    status: "pending",
+    expires_at: iso(8 * 60_000),
+    created_at: iso(-2 * 60_000),
   },
-  {
-    id: "invite_consumed-0000-4c7d-8116-3a212e1fe302",
-    kind: "human",
-    created_at: "2026-03-20T10:00:00Z",
-    consumed_at: "2026-03-21T10:00:00Z",
-  },
-  {
-    id: "invite_revoked-0000-4c7d-8116-3a212e1fe303",
-    kind: "any",
-    created_at: "2026-03-19T10:00:00Z",
-    revoked_at: "2026-03-19T12:00:00Z",
-  },
+];
+
+const HUMANS = [
+  principal({
+    agent_id: SELF_AGENT_ID,
+    // Hosted humans arrive with a synthesized, very long username.
+    username: `external.${LONG_HASH.slice(0, 54)}`,
+    auth_method: "external_grant",
+  }),
+  principal({ agent_id: "agent-second-human", username: "riley@example.com" }),
+];
+
+const PRINCIPALS = [
+  ...HUMANS,
+  // Derived agents are principals too; the page lists them under hosts.
+  ...AGENTS.map((agent) =>
+    principal({
+      agent_id: agent.id,
+      actor_id: agent.actor_id,
+      username: agent.handle,
+      principal_kind: "agent",
+      auth_method: "host_assertion",
+    }),
+  ),
+  principal({
+    agent_id: "agent-legacy",
+    username: "legacy-hermes",
+    principal_kind: "agent",
+    auth_method: "public_key",
+  }),
 ];
 
 const AUDIT_EVENT_TYPES = [
+  "host_enroll_started",
+  "host_enroll_approved",
+  "host_enroll_completed",
+  "derived_agent_created",
+  "host_exclusions_changed",
+  "host_revoked",
   "invite_created",
-  "invite_consumed",
-  "invite_revoked",
-  "principal_registered",
   "principal_revoked",
-  "principal_self_revoked",
-  "principal_human_lockout_revoked",
-  "bootstrap_consumed",
   "some_future_event_type",
 ];
 
-const POPULATED_AUDIT = AUDIT_EVENT_TYPES.flatMap((event_type, i) => [
-  // Long raw ids on both sides (no usernames).
-  {
-    event_id: `authevt_91e4b6b0-b80f-4a1b-a9fa-8d67634bf6a${i}`,
-    event_type,
-    occurred_at: "2026-03-28T10:00:00Z",
-    actor_agent_id: SELF_AGENT_ID,
-    subject_agent_id: `agent_${LONG_HASH}`,
-    invite_id: "invite_61ab15c4-e615-4c7d-8116-3a212e1fe301",
+const AUDIT = AUDIT_EVENT_TYPES.map((event_type, i) => ({
+  event_id: `authevt_91e4b6b0-b80f-4a1b-a9fa-8d67634bf6a${i}`,
+  event_type,
+  occurred_at: "2026-03-28T10:00:00Z",
+  actor_agent_id: SELF_AGENT_ID,
+  subject_agent_id: `agent_${LONG_HASH}`,
+  metadata: {
+    host_id: HOST_ID,
+    name: "codex",
+    requesting_ip: "203.0.113.17",
+    excluded_names: ["cursor"],
   },
-  // Usernames present, no invite id.
-  {
-    event_id: `authevt_named_${i}`,
-    event_type,
-    occurred_at: "2026-03-27T10:00:00Z",
-    actor_username: "riley@example.com",
-    actor_agent_id: "agent-second-human",
-    subject_username: "m4-hermes",
-    subject_agent_id: "agent-hermes",
-  },
-]);
+}));
 
 function deferred() {
   let resolve;
@@ -157,13 +174,32 @@ async function installAccessApi(page, overrides = {}) {
   const api = {
     self: { agent_id: SELF_AGENT_ID, actor_id: "actor-self", username: "" },
     authenticated: true,
-    principals: POPULATED_PRINCIPALS,
-    principalsNextCursor: "",
+    principals: PRINCIPALS,
     activeHumans: 2,
-    invites: POPULATED_INVITES,
-    audit: POPULATED_AUDIT,
+    invites: [
+      {
+        id: "invite_61ab15c4-e615-4c7d-8116-3a212e1fe301",
+        kind: "human",
+        created_at: "2026-03-28T10:00:00Z",
+      },
+    ],
+    audit: AUDIT,
     auditNextCursor: "",
+    hosts: [host()],
+    pending: PENDING,
+    tokens: [
+      {
+        id: "htok_used",
+        label: "seed runner",
+        created_at: "2026-03-20T10:00:00Z",
+        expires_at: "2026-03-20T11:00:00Z",
+        consumed_at: "2026-03-20T10:05:00Z",
+        revoked_at: null,
+      },
+    ],
+    agents: AGENTS,
     createdToken: "oinv_yeJecICpb-7U8xbmFtTzivIiQg2TI32f",
+    hostToken: `htok_secret_${"Q2TI32fyeJecICpb".repeat(3)}`,
     hold: {},
     fail: {},
     calls: [],
@@ -219,30 +255,22 @@ async function installAccessApi(page, overrides = {}) {
     ),
   );
 
-  await page.route(/\/auth\/principals(\?.*)?$/, (route) => {
-    const cursor = new URL(route.request().url()).searchParams.get("cursor");
-    return respond(route, cursor ? "principalsMore" : "principals", () => ({
-      principals: cursor
-        ? api.principals.slice(0, 3).map((p, i) => ({
-            ...p,
-            agent_id: `${p.agent_id}-page2-${i}`,
-            username: p.username ? `${p.username}-2` : "",
-          }))
-        : api.principals,
+  await page.route(/\/auth\/principals(\?.*)?$/, (route) =>
+    respond(route, "principals", () => ({
+      principals: api.principals,
       active_human_principal_count: api.activeHumans,
-      next_cursor: cursor ? "" : api.principalsNextCursor,
-    }));
-  });
+    })),
+  );
 
   await page.route(/\/auth\/invites$/, (route) => {
     if (route.request().method() === "POST") {
       return respond(route, "createInvite", () => {
-        const kind = route.request().postDataJSON()?.kind ?? "agent";
+        const kind = route.request().postDataJSON()?.kind;
         api.invites = [
           {
             id: `invite_created-${api.invites.length}-4c7d-8116-3a212e1fe3ff`,
             kind,
-            created_at: "2026-03-29T10:00:00Z",
+            created_at: new Date().toISOString(),
           },
           ...api.invites,
         ];
@@ -259,7 +287,7 @@ async function installAccessApi(page, overrides = {}) {
       );
       api.invites = api.invites.map((invite) =>
         invite.id === id
-          ? { ...invite, revoked_at: "2026-03-29T11:00:00Z" }
+          ? { ...invite, revoked_at: new Date().toISOString() }
           : invite,
       );
       return { ok: true };
@@ -291,6 +319,101 @@ async function installAccessApi(page, overrides = {}) {
     }));
   });
 
+  await page.route(/\/auth\/hosts\/enrollments\/pending$/, (route) =>
+    respond(route, "pending", () => ({ enrollments: api.pending })),
+  );
+  await page.route(
+    /\/auth\/hosts\/enrollments\/[^/]+\/(approve|deny)$/,
+    (route) => {
+      const [, id, action] = route
+        .request()
+        .url()
+        .match(/enrollments\/([^/]+)\/(approve|deny)$/);
+      return respond(route, action, () => {
+        const enrollment = api.pending.find((entry) => entry.id === id);
+        api.pending = api.pending.filter((entry) => entry.id !== id);
+        return {
+          enrollment: {
+            ...enrollment,
+            status: action === "approve" ? "approved" : "denied",
+          },
+          poll_interval_seconds: 3,
+        };
+      });
+    },
+  );
+  await page.route(/\/auth\/hosts\/enrollment-tokens$/, (route) => {
+    if (route.request().method() === "POST") {
+      return respond(route, "createToken", () => {
+        const body = route.request().postDataJSON();
+        const token = {
+          id: `htok_${api.tokens.length}`,
+          label: body.label,
+          created_at: new Date().toISOString(),
+          expires_at: body.expires_at,
+          consumed_at: null,
+          revoked_at: null,
+        };
+        api.tokens = [token, ...api.tokens];
+        return { enrollment_token: token, token: api.hostToken };
+      });
+    }
+    return respond(route, "tokens", () => ({
+      enrollment_tokens: api.tokens,
+    }));
+  });
+  await page.route(
+    /\/auth\/hosts\/enrollment-tokens\/[^/]+\/revoke$/,
+    (route) =>
+      respond(route, "revokeToken", () => {
+        const id = route
+          .request()
+          .url()
+          .split("/enrollment-tokens/")[1]
+          .split("/")[0];
+        api.tokens = api.tokens.map((token) =>
+          token.id === id
+            ? { ...token, revoked_at: new Date().toISOString() }
+            : token,
+        );
+        return { enrollment_token: api.tokens.find((t) => t.id === id) };
+      }),
+  );
+
+  await page.route(/(?<!\/auth)\/hosts(\?.*)?$/, (route) =>
+    respond(route, "hosts", () => ({ hosts: api.hosts })),
+  );
+  await page.route(/(?<!\/auth)\/hosts\/[^/?]+$/, (route) => {
+    const method = route.request().method();
+    const id = decodeURIComponent(route.request().url().split("/hosts/")[1]);
+    if (method === "PATCH") {
+      return respond(route, "patchHost", () => {
+        const body = route.request().postDataJSON();
+        api.hosts = api.hosts.map((entry) =>
+          entry.id === id ? { ...entry, ...body } : entry,
+        );
+        return { host: api.hosts.find((entry) => entry.id === id) };
+      });
+    }
+    if (method === "DELETE") {
+      return respond(route, "revokeHost", () => {
+        api.hosts = api.hosts.map((entry) =>
+          entry.id === id
+            ? { ...entry, revoked_at: new Date().toISOString() }
+            : entry,
+        );
+        return { host: api.hosts.find((entry) => entry.id === id) };
+      });
+    }
+    return respond(route, "getHost", () => ({
+      host: api.hosts.find((entry) => entry.id === id),
+    }));
+  });
+
+  await page.route(/\/agents(\?.*)?$/, (route) =>
+    respond(route, "agents", () => ({ agents: api.agents })),
+  );
+
   return api;
 }
 
@@ -319,7 +442,9 @@ async function gotoAccessAsHosted(page) {
     .first()
     .click();
   await expect(page).toHaveURL(/\/access$/);
-  await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Access", exact: true }),
+  ).toBeVisible();
 }
 
 const bothEnds = { scrollPositions: ["top", "bottom"] };
@@ -340,260 +465,246 @@ for (const viewport of AUDIT_VIEWPORTS) {
 
     test("loading, populated, empty and failed sections", async ({ page }) => {
       const api = await installAccessApi(page);
+      api.hold.hosts = deferred();
       api.hold.principals = deferred();
-      api.hold.invites = deferred();
-      api.hold.audit = deferred();
       await page.goto(ACCESS_PATH);
-      await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Access", exact: true }),
+      ).toBeVisible();
       await expectCleanLayout(page, "initial loading");
 
-      // Sections resolve one at a time.
-      api.hold.invites.resolve();
+      api.hold.hosts.resolve();
       api.hold.principals.resolve();
-      await expectCleanLayout(page, "partially loaded");
-      api.hold.audit.resolve();
       api.hold = {};
-      await expect(page.getByText("m4-hermes", { exact: true })).toBeVisible();
+      const main = page.getByRole("main");
+      await expect(main.locator('[data-host="m5-mbp"]')).toBeVisible();
+      // Agents appear under their host with the roster's state, humans by
+      // name, the legacy agent on its own; ids stay behind copy buttons.
+      await expect(
+        main.locator('[data-host-agent="codex.m5-mbp"]'),
+      ).toContainText("Working");
+      await expect(main.getByText("riley@example.com")).toBeVisible();
+      await expect(main.getByText("Standalone agents")).toBeVisible();
+      await expect(main.getByText(SELF_AGENT_ID, { exact: true })).toHaveCount(
+        0,
+      );
+      await expect(
+        main.getByText(/m5-mbp approved|approved m5-mbp/),
+      ).toBeVisible();
       await expectCleanLayout(page, "populated", bothEnds);
 
-      await page.getByRole("button", { name: /Show 2 resolved/ }).click();
-      await expectCleanLayout(page, "resolved invites shown", bothEnds);
-      await page.getByRole("button", { name: "Hide resolved" }).click();
-
-      // Refresh while populated: content must stay put and clean.
-      api.hold.principals = deferred();
-      await page.getByRole("button", { name: /Refresh/ }).click();
-      await expectCleanLayout(page, "refreshing over populated data");
-      api.hold.principals.resolve();
-      api.hold = {};
-
       api.fail = {
-        principals: { message: "principals backend unavailable ".repeat(6) },
-        invites: { message: "invites backend unavailable" },
+        hosts: { message: "hosts backend unavailable ".repeat(6) },
+        principals: { message: "principals backend unavailable" },
         audit: { message: "audit backend unavailable" },
       };
-      await page.getByRole("button", { name: /Refresh/ }).click();
-      await expect(page.getByText("invites backend unavailable")).toBeVisible();
-      await expectCleanLayout(page, "all sections failed", bothEnds);
+      await page.reload();
+      await expect(page.getByText("audit backend unavailable")).toBeVisible();
+      await expectCleanLayout(page, "sections failed", bothEnds);
 
       api.fail = {};
-      api.principals = [SELF_PRINCIPAL];
+      api.principals = [HUMANS[0]];
       api.invites = [];
       api.audit = [];
-      await page.getByRole("button", { name: /Refresh/ }).click();
-      await expect(page.getByText("No invites yet.")).toBeVisible();
+      api.hosts = [];
+      api.pending = [];
+      api.tokens = [];
+      api.agents = [];
+      await page.reload();
+      await expect(page.getByText("No machines enrolled yet")).toBeVisible();
       await expectCleanLayout(page, "empty workspace", bothEnds);
     });
 
-    test("paginated principals and audit events", async ({ page }) => {
+    test("approve and deny host enrollment", async ({ page }) => {
       const api = await installAccessApi(page, {
-        principalsNextCursor: "cursor-2",
-        auditNextCursor: "cursor-2",
+        pending: [
+          PENDING[0],
+          {
+            ...PENDING[0],
+            id: "henr_2",
+            requested_slug: "m5-mbp-2",
+            user_code: "OJQR-P6XT",
+          },
+        ],
       });
       await page.goto(ACCESS_PATH);
-      const loadMore = page.getByRole("button", { name: "Load more" });
-      await expect(loadMore).toHaveCount(2);
-      await expectCleanLayout(page, "load more available", bothEnds);
-
-      api.hold.principalsMore = deferred();
-      await loadMore.first().click();
-      await expectCleanLayout(page, "loading more principals");
-      api.hold.principalsMore.resolve();
-      await expect(loadMore).toHaveCount(1);
-
-      api.fail.auditMore = { message: "audit page two failed" };
-      await loadMore.click();
-      await expect(page.getByText("audit page two failed")).toBeVisible();
-      await expectCleanLayout(page, "load more failed", bothEnds);
-    });
-
-    test("create invite flow (self-hosted form)", async ({ page }) => {
-      const api = await installAccessApi(page);
-      await page.goto(ACCESS_PATH);
-      const create = page.getByRole("button", { name: "Create invite" });
-      await expect(create).toBeVisible();
-
-      await page.getByLabel(/Agent profile name/).fill("Claude Code");
-      await expect(page.getByLabel(/Agent username/)).toHaveValue(
-        "claude-code",
+      const first = page.locator('[data-host-enrollment="henr_1"]');
+      await expect(first.locator("[data-enrollment-code]")).toHaveText(
+        "J6FA-N4XI",
       );
-      await expectCleanLayout(page, "form filled");
+      await expect(first.locator("[data-enrollment-ip]")).toHaveText(
+        "203.0.113.17",
+      );
+      await expectCleanLayout(page, "pending requests", bothEnds);
 
-      api.fail.createInvite = {
-        message: "invite quota exceeded for this workspace ".repeat(4),
-      };
-      await create.click();
-      await expect(page.getByText(/invite quota exceeded/)).toBeVisible();
-      await expectCleanLayout(page, "create invite failed");
+      // Approval takes a second, deliberate step that repeats the code.
+      await first.getByRole("button", { name: "Approve…" }).click();
+      const confirm = first.locator("[data-enrollment-confirm]");
+      await expect(confirm).toContainText("J6FA-N4XI");
+      expect(api.calls).not.toContain("approve");
+      await expectCleanLayout(page, "approve confirmation");
+
+      api.fail.approve = { status: 409, message: "host slug already taken" };
+      await confirm.getByRole("button", { name: /Codes match/ }).click();
+      await expect(first.getByText("host slug already taken")).toBeVisible();
+      await expectCleanLayout(page, "approve failed");
 
       api.fail = {};
-      api.hold.createInvite = deferred();
-      await create.click();
-      await expect(
-        page.getByRole("button", { name: "Creating..." }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "creating invite");
-      api.hold.createInvite.resolve();
-      api.hold = {};
-
-      await expect(page.getByText("Invite created successfully")).toBeVisible();
-      await expect(page.getByText(api.createdToken)).toBeVisible();
-      await expectCleanLayout(page, "agent invite created", bothEnds);
-      // The form stays usable while the token is on screen.
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await expect(create).toBeEnabled();
-      await create.click({ trial: true });
-
-      await page.getByRole("button", { name: "Copy instructions" }).click();
-      await expect(
-        page.getByRole("button", { name: "Instructions copied" }),
-      ).toBeVisible();
-      expect(
-        await page.evaluate(() => navigator.clipboard.readText()),
-      ).toContain(api.createdToken);
-      await expectCleanLayout(page, "instructions copied", bothEnds);
-
-      await page.getByRole("button", { name: "Dismiss token banner" }).click();
-      await expect(page.getByText("Invite created successfully")).toHaveCount(
-        0,
+      await confirm.getByRole("button", { name: /Codes match/ }).click();
+      await expect(first).toHaveCount(0);
+      await expect(page.locator("[data-enrollment-notice]")).toContainText(
+        "Approved ci-runner-with-a-long-machine-name-3",
       );
-      await expectCleanLayout(page, "token dismissed");
+      await expectCleanLayout(page, "approved");
 
-      // Agent invite without a username: placeholder copy is longer.
-      await create.click();
-      await expect(page.getByText(/username placeholder/)).toBeVisible();
-      await expectCleanLayout(page, "agent invite without username", bothEnds);
-
-      // A second invite while the first token is showing replaces it.
-      await page.getByLabel("Kind").selectOption("human");
-      await expectCleanLayout(page, "human kind selected");
-      await create.click();
-      await expect(
-        page.getByRole("button", { name: "Copy token" }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "human invite created", bothEnds);
-      await page.getByRole("button", { name: "Copy token" }).click();
-      await expect(
-        page.getByRole("button", { name: "Token copied" }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "token copied");
-
-      await page.getByLabel("Kind").selectOption("any");
-      await expectCleanLayout(page, "any kind selected over banner");
-      await create.click();
-      await expect(
-        page.getByRole("button", { name: "Copy instructions" }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "any invite created", bothEnds);
-
-      // A failure after a success must not leave a stale token on screen.
-      api.fail.createInvite = { message: "second create failed" };
-      await create.click();
-      await expect(page.getByText("second create failed")).toBeVisible();
-      await expect(page.getByText("Invite created successfully")).toHaveCount(
-        0,
-      );
-      await expectCleanLayout(page, "failure after success");
+      await page
+        .locator('[data-host-enrollment="henr_2"]')
+        .getByRole("button", { name: "Deny" })
+        .click();
+      await expect(page.locator("[data-host-enrollment]")).toHaveCount(0);
+      expect(api.calls).toContain("deny");
+      await expectCleanLayout(page, "denied");
     });
 
-    test("create invite flow (hosted form) with a very long token", async ({
-      page,
-    }) => {
-      const api = await installAccessApi(page, {
-        createdToken: `oinv_${"yeJecICpb7U8xbmFtTzivIiQg2TI32f".repeat(6)}`,
-      });
+    test("host exclusions and revoke", async ({ page }) => {
+      const api = await installAccessApi(page, { pending: [] });
+      await page.goto(ACCESS_PATH);
+      const card = page.locator('[data-host="m5-mbp"]');
+      await card.getByRole("button", { name: "Edit" }).click();
+      const input = card.getByLabel("Name to exclude on m5-mbp");
+      await input.fill("Cursor!");
+      await expect(card.getByText(/Use lowercase letters/)).toBeVisible();
+      await expectCleanLayout(page, "invalid exclusion");
+      await input.fill("cursor");
+      await card.getByRole("button", { name: "Exclude", exact: true }).click();
+      await expect(
+        card.locator('[data-host-exclusion="cursor"]'),
+      ).toBeVisible();
+      expect(api.hosts[0].excluded_names).toEqual(["cursor"]);
+      await expectCleanLayout(page, "exclusion saved");
+
+      await card
+        .getByRole("button", { name: "Allow cursor on m5-mbp again" })
+        .click();
+      await expect(card.locator('[data-host-exclusion="cursor"]')).toHaveCount(
+        0,
+      );
+      await card.getByRole("button", { name: "Done" }).click();
+
+      await card.getByRole("button", { name: "Revoke host…" }).click();
+      const revoke = card.locator("[data-host-revoke-confirm]");
+      await expect(revoke).toContainText("all 3 of its agents");
+      const submit = revoke.getByRole("button", { name: "Revoke host" });
+      await expect(submit).toBeDisabled();
+      await revoke.getByLabel("Type m5-mbp to confirm").fill("m5-mb");
+      await expect(submit).toBeDisabled();
+      await expectCleanLayout(page, "revoke confirmation", bothEnds);
+
+      api.fail.revokeHost = { message: "revoke refused by policy" };
+      await revoke.getByLabel("Type m5-mbp to confirm").fill("m5-mbp");
+      await submit.click();
+      await expect(revoke.getByText("revoke refused by policy")).toBeVisible();
+      await expectCleanLayout(page, "revoke failed");
+
+      api.fail = {};
+      await submit.click();
+      await expect(
+        page.getByRole("button", { name: /Show 1 revoked host/ }),
+      ).toBeVisible();
+      expect(api.calls).toContain("revokeHost");
+      await expectCleanLayout(page, "host revoked", bothEnds);
+    });
+
+    test("headless enrollment token", async ({ page }) => {
+      const api = await installAccessApi(page, { pending: [] });
+      await page.goto(ACCESS_PATH);
+      await page.getByRole("button", { name: "Enroll a machine" }).click();
+      await expect(page.locator("[data-host-enroll-command]")).toContainText(
+        "host enroll",
+      );
+      await page
+        .getByPlaceholder("e.g. GitHub Actions runner")
+        .fill("GitHub Actions runner");
+      await page.getByRole("button", { name: "Create token" }).click();
+      const created = page.locator("[data-host-token-created]");
+      await expect(created).toContainText(api.hostToken);
+      await expect(created.locator("[data-host-token-command]")).toContainText(
+        `host enroll --token ${api.hostToken}`,
+      );
+      await expectCleanLayout(page, "token created", bothEnds);
+
+      await created.getByRole("button", { name: "Copy command" }).click();
+      expect(
+        await page.evaluate(() => navigator.clipboard.readText()),
+      ).toContain(api.hostToken);
+
+      await page
+        .locator('[data-host-token="htok_1"]')
+        .getByRole("button", { name: "Revoke" })
+        .click();
+      await expect(page.locator('[data-host-token="htok_1"]')).toHaveCount(0);
+      await page.getByRole("button", { name: /used or expired/ }).click();
+      await expect(page.locator('[data-host-token="htok_1"]')).toContainText(
+        "revoked",
+      );
+      await expectCleanLayout(page, "token revoked", bothEnds);
+    });
+
+    test("invite a person", async ({ page }) => {
+      const api = await installAccessApi(page, { pending: [] });
+      await page.goto(ACCESS_PATH);
+      api.fail.createInvite = { message: "invite quota exceeded ".repeat(4) };
+      await page.getByRole("button", { name: "Invite a person" }).click();
+      await expect(page.getByText(/invite quota exceeded/)).toBeVisible();
+      await expectCleanLayout(page, "invite failed");
+
+      api.fail = {};
+      await page.getByRole("button", { name: "Invite a person" }).click();
+      const banner = page.locator("[data-invite-token-banner]");
+      await expect(banner).toContainText(api.createdToken);
+      expect(
+        api.invites.every((invite) => invite.kind === "human"),
+      ).toBeTruthy();
+      await expectCleanLayout(page, "invite created", bothEnds);
+
+      await page
+        .locator(`[data-invite="${api.invites[1].id}"]`)
+        .getByRole("button", { name: "Revoke" })
+        .click();
+      await page
+        .getByRole("dialog", { name: "Revoke invite" })
+        .getByRole("button", { name: "Revoke" })
+        .click();
+      await expect(
+        page.locator(`[data-invite="${api.invites[1].id}"]`),
+      ).toHaveCount(0);
+      await expectCleanLayout(page, "invite revoked");
+    });
+
+    test("hosted mode sends people to Organizations", async ({ page }) => {
+      await installAccessApi(page, { pending: [] });
       await gotoAccessAsHosted(page);
       await expect(
         page.getByRole("link", { name: "your Organizations" }),
       ).toBeVisible();
-      await expect(page.getByLabel("Kind").locator("option")).toHaveCount(1);
-      await expectCleanLayout(page, "hosted form", bothEnds);
-
-      await page.getByLabel(/Agent username/).fill("claude-code");
-      await page.getByRole("button", { name: "Create invite" }).click();
-      await expect(page.getByText("Invite created successfully")).toBeVisible();
-      await expect(page.getByText(api.createdToken)).toBeVisible();
-      await expectCleanLayout(page, "hosted invite created", bothEnds);
-
-      await page.getByRole("button", { name: "Copy instructions" }).click();
-      await expectCleanLayout(page, "hosted instructions copied", bothEnds);
+      await expect(
+        page.getByRole("button", { name: "Invite a person" }),
+      ).toHaveCount(0);
+      await expectCleanLayout(page, "hosted", bothEnds);
     });
 
-    test("revoke invite flow", async ({ page }) => {
-      const api = await installAccessApi(page);
+    test("revoke a person and break glass", async ({ page }) => {
+      const api = await installAccessApi(page, { pending: [] });
       await page.goto(ACCESS_PATH);
-      const revoke = page
-        .getByRole("main")
-        .getByRole("button", { name: "Revoke", exact: true })
-        .first();
-      await revoke.click();
-      const dialog = page.getByRole("dialog", { name: "Revoke invite" });
+      await page
+        .locator('[data-principal="agent-second-human"]')
+        .getByRole("button", { name: "Revoke…" })
+        .click();
+      const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible();
-      await expectCleanLayout(page, "revoke invite modal");
+      await expectCleanLayout(page, "confirm revoke", bothEnds);
 
-      await dialog.getByRole("button", { name: "Cancel" }).click();
-      await expect(dialog).toHaveCount(0);
-      await expectCleanLayout(page, "revoke invite cancelled");
-
-      api.fail.revokeInvite = { message: "invite already consumed" };
-      await revoke.click();
-      await dialog.getByRole("button", { name: "Revoke" }).click();
-      await expect(page.getByText("invite already consumed")).toBeVisible();
-      await expectCleanLayout(page, "revoke invite failed");
-
-      api.fail = {};
-      api.hold.revokeInvite = deferred();
-      await revoke.click();
-      await dialog.getByRole("button", { name: "Revoke" }).click();
-      await expect(
-        page.getByRole("button", { name: "Revoking..." }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "revoking invite");
-      api.hold.revokeInvite.resolve();
-      api.hold = {};
-      await expect(page.getByText("No pending invites.")).toBeVisible();
-      await expectCleanLayout(page, "invite revoked", bothEnds);
-    });
-
-    test("revoke principal flow", async ({ page }) => {
-      const api = await installAccessApi(page);
-      await page.goto(ACCESS_PATH);
-      const row = page
-        .getByRole("main")
-        .locator("div.group\\/row")
-        .filter({ hasText: "m4-hermes" });
-      await row.getByRole("button", { name: "Revoke" }).click();
-      const revokeDialog = page.getByRole("dialog", {
-        name: "Revoke principal",
-      });
-      await expect(revokeDialog).toBeVisible();
-      await expectCleanLayout(page, "confirm principal revoke", bothEnds);
-
-      await page.getByRole("button", { name: "Cancel" }).click();
-      await expect(revokeDialog).toHaveCount(0);
-      await expectCleanLayout(page, "principal revoke cancelled");
-
-      api.fail.revokePrincipal = {
-        message: "revocation rejected by policy ".repeat(5),
-      };
-      await row.getByRole("button", { name: "Revoke" }).click();
-      await page.getByRole("button", { name: "Confirm revoke" }).click();
-      await expect(page.getByText(/revocation rejected/)).toBeVisible();
-      await expectCleanLayout(page, "principal revoke failed", bothEnds);
-
-      api.fail = {};
-      api.hold.revokePrincipal = deferred();
-      await page.getByRole("button", { name: "Confirm revoke" }).click();
-      await expect(
-        page.getByRole("button", { name: "Revoking…" }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "revoking principal");
-      api.hold.revokePrincipal.resolve();
-      api.hold = {};
-      await expect(revokeDialog).toHaveCount(0);
-      await expectCleanLayout(page, "principal revoked", bothEnds);
-
-      // Server reports last-human lockout: escalates to break-glass.
+      // Core reports the last human: the dialog escalates to break-glass.
       api.fail.revokePrincipal = {
         status: 409,
         body: {
@@ -604,120 +715,41 @@ for (const viewport of AUDIT_VIEWPORTS) {
           },
         },
       };
-      const humanRow = page
-        .getByRole("main")
-        .locator("div.group\\/row")
-        .filter({ hasText: "riley@example.com" });
-      await humanRow.getByRole("button", { name: "Revoke" }).click();
-      await page.getByRole("button", { name: "Confirm revoke" }).click();
-      await expect(
-        page.getByRole("dialog", { name: "Last active human principal" }),
-      ).toBeVisible();
-      await expectCleanLayout(page, "break glass escalation", bothEnds);
-    });
-
-    test("break-glass revoke of the last human", async ({ page }) => {
-      const otherHuman = principal({
-        agent_id: `agent_human_${LONG_HASH}`,
-        username: "only-other-human@example.com",
-        principal_kind: "human",
-        auth_method: "passkey",
-      });
-      const api = await installAccessApi(page, {
-        self: {
-          agent_id: "agent-hermes",
-          actor_id: "a",
-          username: "m4-hermes",
-        },
-        principals: [POPULATED_PRINCIPALS[1], otherHuman],
-        activeHumans: 1,
-      });
-      await page.goto(ACCESS_PATH);
-      await page.getByRole("button", { name: "Break glass" }).click();
+      await dialog.getByRole("button", { name: "Revoke access" }).click();
       const confirm = page.getByRole("button", {
-        name: "Allow human lockout and revoke",
+        name: "Allow lockout and revoke",
       });
       await expect(confirm).toBeDisabled();
-      await expectCleanLayout(page, "break glass empty", bothEnds);
-
-      await page
-        .getByRole("dialog")
-        .getByRole("textbox", { name: /to confirm$/ })
-        .fill(otherHuman.agent_id);
-      await page
-        .getByLabel("Human lockout reason")
-        .fill("Recovery via bootstrap token held by ops. ".repeat(3));
-      await expect(confirm).toBeEnabled();
-      await expectCleanLayout(page, "break glass ready", bothEnds);
-
-      api.fail.revokePrincipal = { message: "lockout revoke refused" };
-      await confirm.click();
-      await expect(page.getByText("lockout revoke refused")).toBeVisible();
-      await expectCleanLayout(page, "break glass failed", bothEnds);
+      await expectCleanLayout(page, "break glass", bothEnds);
 
       api.fail = {};
+      await dialog
+        .getByRole("textbox", { name: /to confirm$/ })
+        .fill("agent-second-human");
+      await page
+        .getByLabel("Lockout reason")
+        .fill("Recovery via bootstrap token held by ops. ".repeat(3));
+      await expect(confirm).toBeEnabled();
       await confirm.click();
       await expect(confirm).toHaveCount(0);
+      expect(api.calls).toContain("revokePrincipal");
       await expectCleanLayout(page, "break glass done", bothEnds);
     });
 
-    test("wake routing popovers", async ({ page }) => {
-      await installAccessApi(page);
-      await page.goto(ACCESS_PATH);
-      const main = page.getByRole("main");
-
-      await main.getByText("How wake routing works").click();
-      await expectCleanLayout(page, "wake routing help expanded");
-
-      for (const label of ["Online", "Offline", "Unregistered"]) {
-        const badge = main.getByRole("button", { name: label, exact: true });
-        await badge.scrollIntoViewIfNeeded();
-        await badge.click();
-        await expect(main.getByRole("tooltip")).toBeVisible();
-        await expectCleanLayout(page, `${label} popover open`);
-        if (label === "Unregistered") {
-          await page
-            .getByRole("button", { name: "Copy registration steps" })
-            .click();
-          await expect(
-            page.getByRole("button", { name: "Copied", exact: true }),
-          ).toBeVisible();
-          await expectCleanLayout(page, "wake registration copied");
-        }
-        await page.keyboard.press("Escape");
-        await expect(main.getByRole("tooltip")).toHaveCount(0);
-      }
-
-      // Popover and the revoke confirmation can be open together.
-      await main.getByRole("button", { name: "Online", exact: true }).click();
-      await main
-        .locator("div.group\\/row")
-        .filter({ hasText: "m4-hermes" })
-        .getByRole("button", { name: "Revoke" })
-        .click();
-      await expectCleanLayout(page, "popover with revoke confirmation");
-    });
-
     test("tour arrival banner", async ({ page }) => {
-      const api = await installAccessApi(page, {
-        principals: [SELF_PRINCIPAL],
+      await installAccessApi(page, {
+        principals: [HUMANS[0]],
+        hosts: [],
+        pending: [],
         invites: [],
         audit: [],
+        agents: [],
       });
-      await page.goto(`${ACCESS_PATH}?invite=agent&from=tour`);
+      await page.goto(`${ACCESS_PATH}?from=tour#hosts`);
       await expect(
-        page.getByText("Last step: connect your first agent"),
+        page.getByText("Last step: enroll the machine your agents run on"),
       ).toBeVisible();
-      await expect(page).toHaveURL(/\/access$/);
       await expectCleanLayout(page, "tour banner", bothEnds);
-
-      await page.getByRole("button", { name: "Create invite" }).click();
-      await expect(page.getByText("Invite created successfully")).toBeVisible();
-      await expect(
-        page.getByText("Last step: connect your first agent"),
-      ).toHaveCount(0);
-      expect(api.calls).toContain("createInvite");
-      await expectCleanLayout(page, "tour invite created", bothEnds);
     });
   });
 }

@@ -17,6 +17,12 @@ export const actorSessionReady = writable(false);
 export const selectedActorId = writable("");
 export const actorRegistry = writable([]);
 export const principalRegistry = writable([]);
+/**
+ * Agent roster summaries (`GET /agents`) for the current workspace. A derived
+ * agent is named by its host relation ("codex on m5-mbp") wherever the UI
+ * says who did something; see `buildActorNameMap`.
+ */
+export const agentRegistry = writable([]);
 
 const actorStateByWorkspace = new Map();
 
@@ -26,6 +32,7 @@ function createEmptyActorState() {
     selectedActorId: "",
     actorRegistry: [],
     principalRegistry: [],
+    agentRegistry: [],
   };
 }
 
@@ -44,6 +51,7 @@ function syncCurrentWorkspaceStores(workspaceSlug = getCurrentWorkspaceSlug()) {
   selectedActorId.set(state.selectedActorId);
   actorRegistry.set([...state.actorRegistry]);
   principalRegistry.set([...state.principalRegistry]);
+  agentRegistry.set([...state.agentRegistry]);
   return state;
 }
 
@@ -165,6 +173,36 @@ export function replacePrincipalRegistry(
   state.principalRegistry = [...(principals ?? [])];
   syncCurrentWorkspaceStores(workspaceSlug);
   return state.principalRegistry;
+}
+
+/**
+ * Replace the agent roster used for names. Re-publishes the actor registry so
+ * every label derived from `$actorRegistry` picks up the new names.
+ */
+export function replaceAgentRegistry(
+  agents,
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  const state = ensureActorState(workspaceSlug);
+  state.agentRegistry = [...(agents ?? [])];
+  if (String(workspaceSlug ?? "").trim() === getCurrentWorkspaceSlug()) {
+    syncCurrentWorkspaceStores(workspaceSlug);
+  }
+  return state.agentRegistry;
+}
+
+/** The roster entry for an actor id, agent id or handle, or null. */
+export function findAgentSummary(value, agents = get(agentRegistry)) {
+  const key = String(value ?? "")
+    .trim()
+    .replace(/^actor:/, "");
+  if (!key) return null;
+  return (
+    (agents ?? []).find(
+      (agent) =>
+        agent?.actor_id === key || agent?.id === key || agent?.handle === key,
+    ) ?? null
+  );
 }
 
 export function shouldShowActorGate(isReady, actorId) {
@@ -299,7 +337,11 @@ function humanizeUnmappedActorIdForUi(id) {
   return s;
 }
 
-export function buildActorNameMap(actors, principals = get(principalRegistry)) {
+export function buildActorNameMap(
+  actors,
+  principals = get(principalRegistry),
+  agents = get(agentRegistry),
+) {
   const map = new Map();
 
   for (const actor of actors ?? []) {
@@ -372,6 +414,18 @@ export function buildActorNameMap(actors, principals = get(principalRegistry)) {
     }
   }
 
+  // A host-derived agent is named by its host relation ("codex on m5-mbp"),
+  // which outranks the actor's own display name: the host is what tells the
+  // operator where the work ran.
+  for (const agent of agents ?? []) {
+    const label = String(agent?.display_name ?? "").trim();
+    if (!label || !agent?.host_id) continue;
+    for (const key of [agent.actor_id, agent.id, agent.handle]) {
+      const id = String(key ?? "").trim();
+      if (id) map.set(id, label);
+    }
+  }
+
   return map;
 }
 
@@ -379,6 +433,7 @@ export function lookupActorDisplayName(
   actorId,
   actors,
   principals = get(principalRegistry),
+  agents = get(agentRegistry),
 ) {
   if (!actorId) {
     return "Unknown actor";
@@ -387,7 +442,7 @@ export function lookupActorDisplayName(
     return SYSTEM_ACTOR_DISPLAY_LABEL;
   }
 
-  const map = buildActorNameMap(actors, principals);
+  const map = buildActorNameMap(actors, principals, agents);
   const key = String(actorId).trim();
   const resolved = map.get(key) ?? map.get(actorId);
   const humanized = humanizeUnmappedActorIdForUi(key);
