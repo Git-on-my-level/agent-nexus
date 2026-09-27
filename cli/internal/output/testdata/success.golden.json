@@ -1,8 +1,11 @@
 {
   "ok": true,
+  "schema_version": 2,
   "command": "version",
-  "data": {
+  "result": {
     "base_url": "http://127.0.0.1:8000",
     "cli_version": "dev"
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

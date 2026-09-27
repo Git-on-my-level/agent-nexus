@@ -8,8 +8,22 @@ import (
 )
 
 func preflightConfigIndependentUsage(args []string) (string, error) {
+	return preflightConfigIndependentUsageWithDebug(args, false)
+}
+
+func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string, error) {
 	if len(args) == 0 || hasHelpToken(args) {
 		return "", nil
+	}
+	if args[0] == "debug" {
+		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")
+		}
+		name, err := preflightConfigIndependentUsageWithDebug(args[1:], true)
+		return "debug " + name, err
+	}
+	if isDiagnosticGroup(args[0]) && !debug {
+		return args[0], errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
 	if isWorkCommandRoot(args[0]) {
 		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
@@ -69,7 +83,7 @@ type preflightFlagSpec struct {
 
 func preflightKnownCommandShape(args []string) error {
 	root := strings.TrimSpace(args[0])
-	if _, ok := preflightRootCommands()[root]; !ok {
+	if _, ok := preflightRootCommands()[root]; !ok && !isDiagnosticGroup(root) {
 		return errnorm.Usage("unknown_command", fmt.Sprintf("unknown command %q", root))
 	}
 
@@ -353,10 +367,10 @@ func preflightDocsIngestArgs(args []string) error {
 
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
-		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "meta": {}, "notifications": {},
+		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "draft": {}, "provenance": {}, "human": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
-		"actors": {}, "threads": {}, "topics": {}, "ref-edges": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {}, "events": {},
-		"inbox": {}, "derived": {}, "api": {}, "help": {}, "--help": {}, "-h": {},
+		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
+		"api": {}, "help": {}, "--help": {}, "-h": {},
 	}
 }
 
@@ -448,7 +462,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"path":      valueFlag,
 			"from-file": valueFlag,
 			"header":    valueFlag,
-			"raw":       boolFlag,
 		},
 		"auth register": {
 			"username":          valueFlag,

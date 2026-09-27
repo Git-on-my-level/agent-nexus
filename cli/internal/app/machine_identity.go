@@ -98,9 +98,11 @@ func resolveMachineCommandIdentity(command string) machineCommandIdentity {
 	if normalized == "" {
 		return machineCommandIdentity{Command: "root"}
 	}
-	if identity, ok := machineCommandIdentityByPath[normalized]; ok {
+	lookup := strings.TrimPrefix(normalized, "debug ")
+	if identity, ok := machineCommandIdentityByPath[lookup]; ok {
+		identity.Command = normalized
 		return identity
 	}
-	commandID := strings.ReplaceAll(normalized, " ", ".")
+	commandID := strings.ReplaceAll(lookup, " ", ".")
 	return machineCommandIdentity{Command: normalized, CommandID: commandID}
 }

@@ -31,7 +31,7 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 
 	registerOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "register", "--username", "Agent.One"})
 	registerPayload := assertEnvelopeOK(t, registerOut)
-	regData, _ := registerPayload["data"].(map[string]any)
+	regData, _ := registerPayload["result"].(map[string]any)
 	if regData == nil {
 		t.Fatalf("expected register data: %#v", registerPayload)
 	}
@@ -66,7 +66,7 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 
 	whoamiOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "whoami"})
 	whoamiPayload := assertEnvelopeOK(t, whoamiOut)
-	serverObj, _ := whoamiPayload["data"].(map[string]any)
+	serverObj, _ := whoamiPayload["result"].(map[string]any)
 	if serverObj == nil {
 		t.Fatalf("unexpected whoami payload: %#v", whoamiPayload)
 	}
@@ -103,14 +103,14 @@ func TestAuthRegisterLifecycleCommands(t *testing.T) {
 
 	tokenStatusOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "token-status"})
 	tokenPayload := assertEnvelopeOK(t, tokenStatusOut)
-	statusData, _ := tokenPayload["data"].(map[string]any)
+	statusData, _ := tokenPayload["result"].(map[string]any)
 	if statusData == nil || statusData["has_access_token"] != true {
 		t.Fatalf("unexpected token status payload: %#v", tokenPayload)
 	}
 
 	protectedOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "api", "call", "--path", "/protected"})
 	protectedPayload := assertEnvelopeOK(t, protectedOut)
-	protectedData, _ := protectedPayload["data"].(map[string]any)
+	protectedData, _ := protectedPayload["result"].(map[string]any)
 	if protectedData == nil {
 		t.Fatalf("unexpected protected api payload: %#v", protectedPayload)
 	}
@@ -190,8 +190,8 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 	if !strings.Contains(registerOut, "anx config use agent-text") {
 		t.Fatalf("expected active profile hint in register output=%s", registerOut)
 	}
-	if !strings.Contains(registerOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @agent.text)") {
-		t.Fatalf("expected wake registration hint in register output=%s", registerOut)
+	if !strings.Contains(registerOut, "result.profile.username=agent.text") {
+		t.Fatalf("expected registered username in output=%s", registerOut)
 	}
 
 	whoamiOut := runCLIForTest(t, home, env, nil, []string{
@@ -199,10 +199,10 @@ func TestAuthTextOutputIncludesWakeRoutingNextSteps(t *testing.T) {
 		"--agent", "agent-text",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @agent.text)") {
-		t.Fatalf("expected wake registration hint in whoami output=%s", whoamiOut)
+	if !strings.Contains(whoamiOut, "result.server.agent.username=agent.text") {
+		t.Fatalf("expected server username in whoami output=%s", whoamiOut)
 	}
-	if !strings.Contains(whoamiOut, "Server actor ID: agent-123") {
+	if !strings.Contains(whoamiOut, "result.server.agent.actor_id=agent-123") {
 		t.Fatalf("expected server actor id in whoami output=%s", whoamiOut)
 	}
 }
@@ -226,7 +226,7 @@ func TestAuthRegisterSupportsExistingActorLinking(t *testing.T) {
 		"--existing-actor-id", "actor-boss-kid",
 	})
 	payload := assertEnvelopeOK(t, registerOut)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("unexpected auth register payload: %#v", payload)
 	}
@@ -276,8 +276,8 @@ func TestAuthWhoAmIHintUsesServerResolvedUsername(t *testing.T) {
 		"--agent", "agent-renamed",
 		"auth", "whoami",
 	})
-	if !strings.Contains(whoamiOut, "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @server.name)") {
-		t.Fatalf("expected server-resolved wake registration hint output=%s", whoamiOut)
+	if !strings.Contains(whoamiOut, "result.server.agent.username=server.name") {
+		t.Fatalf("expected server-resolved username output=%s", whoamiOut)
 	}
 }
 
@@ -315,7 +315,7 @@ func TestAuthRegisterPersistsProfileDefaults(t *testing.T) {
 	if strings.HasPrefix(versionRaw, "{") {
 		t.Fatalf("expected text version output without --json, got possible JSON: %q", versionRaw)
 	}
-	if !strings.Contains(versionRaw, "Base URL: "+server.URL) {
+	if !strings.Contains(versionRaw, "fact result.base_url="+server.URL) {
 		t.Fatalf("expected text version with base url, got=%q", versionRaw)
 	}
 }
@@ -333,14 +333,14 @@ func TestAuthDefaultSelectsProfileForAdHocCommands(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "auth", "default", "beta"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(data["default_profile"])) != "beta" {
 		t.Fatalf("unexpected auth default payload: %#v", payload)
 	}
 
 	versionRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "version"})
 	versionPayload := assertEnvelopeOK(t, versionRaw)
-	versionData, _ := versionPayload["data"].(map[string]any)
+	versionData, _ := versionPayload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(versionData["agent"])) != "beta" {
 		t.Fatalf("unexpected version agent: %#v", versionPayload)
 	}
@@ -365,7 +365,7 @@ func TestAuthListShowsDefaultProfile(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "alpha", "auth", "list"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(data["default_profile"])) != "beta" {
 		t.Fatalf("unexpected auth list payload: %#v", payload)
 	}
@@ -449,13 +449,13 @@ func TestAuthPrincipalsListTaggableHandles(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
-	if !strings.Contains(raw, "Taggable handles (1):") || !strings.Contains(raw, "@milo") {
+	if !strings.Contains(raw, "result.count=1") || !strings.Contains(raw, "result.handles.0=milo") {
 		t.Fatalf("expected taggable handles header in output, got %q", raw)
 	}
 
 	handlesJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
 	handlesPayload := assertEnvelopeOK(t, handlesJSON)
-	handlesData, _ := handlesPayload["data"].(map[string]any)
+	handlesData, _ := handlesPayload["result"].(map[string]any)
 	handles, _ := handlesData["handles"].([]any)
 	if len(handles) != 1 || strings.TrimSpace(anyStr(handles[0])) != "milo" {
 		t.Fatalf("expected handles=[milo], got %#v", handlesPayload)
@@ -466,7 +466,7 @@ func TestAuthPrincipalsListTaggableHandles(t *testing.T) {
 
 	jsonRaw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--taggable"})
 	jsonPayload := assertEnvelopeOK(t, jsonRaw)
-	jsonData, _ := jsonPayload["data"].(map[string]any)
+	jsonData, _ := jsonPayload["result"].(map[string]any)
 	principals, _ := jsonData["principals"].([]any)
 	if len(principals) != 1 {
 		t.Fatalf("expected one taggable principal, got %#v", jsonPayload)
@@ -520,12 +520,12 @@ func TestAuthPrincipalsListFilteredEmptyPageShowsNextCursor(t *testing.T) {
 	}
 
 	taggableText := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--taggable"})
-	if !strings.Contains(taggableText, "No principals found.") || !strings.Contains(taggableText, "Next cursor: cursor-next-page") {
+	if !strings.Contains(taggableText, "result.count=0") || !strings.Contains(taggableText, "result.next_cursor=cursor-next-page") {
 		t.Fatalf("expected empty taggable text with next cursor, got %q", taggableText)
 	}
 
 	handlesText := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
-	if !strings.Contains(handlesText, "No taggable handles found.") || !strings.Contains(handlesText, "Next cursor: cursor-next-page") {
+	if !strings.Contains(handlesText, "result.count=0") || !strings.Contains(handlesText, "result.next_cursor=cursor-next-page") {
 		t.Fatalf("expected empty handles text with next cursor, got %q", handlesText)
 	}
 }
@@ -558,7 +558,7 @@ func TestAuthRegisterNotFoundHTMLSuggestsCoreBaseURL(t *testing.T) {
 	if errObj == nil {
 		t.Fatalf("missing error object: %#v", payload)
 	}
-	hint := strings.TrimSpace(anyStr(errObj["hint"]))
+	hint := strings.TrimSpace(anyStr(asMap(errObj["details"])["hint"]))
 	if !strings.Contains(hint, "anx-core") || !strings.Contains(hint, "/o/") {
 		t.Fatalf("expected base-url hint for non-core 404, got %q payload=%#v", hint, payload)
 	}
@@ -599,10 +599,10 @@ func TestAuthRegisterInternalErrorIsActionable(t *testing.T) {
 	if message := strings.TrimSpace(anyStr(errObj["message"])); !strings.Contains(message, "temporarily unavailable") {
 		t.Fatalf("expected actionable register error message, got %q payload=%#v", message, payload)
 	}
-	if hint := strings.TrimSpace(anyStr(errObj["hint"])); !strings.Contains(hint, "anx api call --path /readyz") {
+	if hint := strings.TrimSpace(anyStr(asMap(errObj["details"])["hint"])); !strings.Contains(hint, "anx api call --path /readyz") {
 		t.Fatalf("expected readiness hint, got %q payload=%#v", hint, payload)
 	}
-	if recoverable, _ := errObj["recoverable"].(bool); !recoverable {
+	if recoverable, _ := errObj["retryable"].(bool); !recoverable {
 		t.Fatalf("expected recoverable=true, payload=%#v", payload)
 	}
 }
@@ -657,13 +657,13 @@ func TestAuthInvitesListShowsConsumedInvites(t *testing.T) {
 	}
 
 	listOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "invites", "list"})
-	if !strings.Contains(listOut, "status=consumed") {
-		t.Fatalf("expected consumed invite status, got %q", listOut)
+	if !strings.Contains(listOut, "result.invites.0.consumed_at=") {
+		t.Fatalf("expected consumed invite timestamp, got %q", listOut)
 	}
 
 	jsonOut := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "invites", "list"})
 	payload := assertEnvelopeOK(t, jsonOut)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("unexpected auth invites list payload: %#v", payload)
 	}
@@ -723,25 +723,25 @@ func TestAuthPrincipalsAndAuditList(t *testing.T) {
 	}
 
 	principalsOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--limit", "1"})
-	if !strings.Contains(principalsOut, "status=revoked") {
+	if !strings.Contains(principalsOut, "result.principals.0.revoked=true") {
 		t.Fatalf("expected revoked principal status in output, got %q", principalsOut)
 	}
 
 	principalsJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--limit", "1"})
 	principalsPayload := assertEnvelopeOK(t, principalsJSON)
-	principalsData, _ := principalsPayload["data"].(map[string]any)
+	principalsData, _ := principalsPayload["result"].(map[string]any)
 	if principalsData == nil || strings.TrimSpace(anyStr(principalsData["next_cursor"])) != "cursor-principals" {
 		t.Fatalf("unexpected principals payload: %#v", principalsPayload)
 	}
 
 	auditOut := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "audit", "list", "--limit", "1"})
-	if !strings.Contains(auditOut, "invite_revoked") || !strings.Contains(auditOut, "invite=invite-1") {
+	if !strings.Contains(auditOut, "invite_revoked") || !strings.Contains(auditOut, "result.events.0.invite_id=invite-1") {
 		t.Fatalf("expected auth audit details in output, got %q", auditOut)
 	}
 
 	auditJSON := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "audit", "list", "--limit", "1"})
 	auditPayload := assertEnvelopeOK(t, auditJSON)
-	auditData, _ := auditPayload["data"].(map[string]any)
+	auditData, _ := auditPayload["result"].(map[string]any)
 	if auditData == nil || strings.TrimSpace(anyStr(auditData["next_cursor"])) != "cursor-audit" {
 		t.Fatalf("unexpected auth audit payload: %#v", auditPayload)
 	}
@@ -817,13 +817,13 @@ func TestAuthPrincipalsListHandlesOnly(t *testing.T) {
 	}
 
 	out := runCLIForTest(t, home, env, nil, []string{"--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
-	if !strings.Contains(out, "@milo") || strings.Contains(out, "@jordan") {
+	if !strings.Contains(out, "result.handles.0=milo") || strings.Contains(out, "result.handles.0=jordan") {
 		t.Fatalf("expected only taggable handle in text output, got %q", out)
 	}
 
 	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "list", "--handles-only"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("unexpected handles-only payload: %#v", payload)
 	}
@@ -860,7 +860,7 @@ func TestAuthPrincipalsRevoke(t *testing.T) {
 
 	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--base-url", server.URL, "--agent", "agent-a", "auth", "principals", "revoke", "--agent-id", "agent-999", "--allow-human-lockout", "--human-lockout-reason", "incident recovery"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("unexpected auth principals revoke payload: %#v", payload)
 	}

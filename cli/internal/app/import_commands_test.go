@@ -13,13 +13,13 @@ func TestRunImportIsConfigLenient(t *testing.T) {
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"import"})
-	if !strings.Contains(raw, "Import guide") {
+	if !strings.Contains(raw, "result.summary=") {
 		t.Fatalf("expected import bootstrap help, got %q", raw)
 	}
 	if !strings.Contains(raw, "anx help import") {
 		t.Fatalf("expected import read order guidance, got %q", raw)
 	}
-	if !strings.Contains(raw, "threads") || !strings.Contains(raw, "docs") || !strings.Contains(raw, "artifacts") {
+	if !strings.Contains(raw, "result.subcommands.0=scan") || !strings.Contains(raw, "result.principles.dedupe_before_writes=true") {
 		t.Fatalf("expected import object model guidance, got %q", raw)
 	}
 }
@@ -57,7 +57,7 @@ func TestImportScanJSON(t *testing.T) {
 	if payload["command"] != "import scan" {
 		t.Fatalf("unexpected command field: %#v", payload["command"])
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("expected data in envelope: %#v", payload)
 	}

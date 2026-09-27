@@ -64,18 +64,6 @@ func (a *App) invokeArtifactContent(ctx context.Context, cfg config.Resolved, co
 		if err := os.WriteFile(outPath, body, 0o644); err != nil {
 			return nil, errnorm.Wrap(errnorm.KindLocal, "artifact_content_write_failed", fmt.Sprintf("failed to write %s", outPath), err)
 		}
-		if !authCfg.JSON {
-			return &commandResult{Text: fmt.Sprintf("wrote %d bytes to %s", len(body), outPath)}, nil
-		}
-	}
-
-	if !authCfg.JSON {
-		if len(body) > 0 {
-			if _, err := a.Stdout.Write(body); err != nil {
-				return nil, errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write artifact content", err)
-			}
-		}
-		return &commandResult{RawWritten: true}, nil
 	}
 
 	data := map[string]any{

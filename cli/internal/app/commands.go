@@ -20,8 +20,30 @@ import (
 )
 
 func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved) (string, *commandResult, error) {
+	return a.runCommandWithDebug(ctx, args, cfg, false)
+}
+
+func isDiagnosticGroup(group string) bool {
+	switch group {
+	case "threads", "events", "ref-edges", "derived", "actors", "inbox", "meta":
+		return true
+	}
+	return false
+}
+
+func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config.Resolved, debug bool) (string, *commandResult, error) {
 	if len(args) == 0 {
 		return "root", nil, errnorm.Usage("command_required", "a command is required")
+	}
+	if args[0] == "debug" {
+		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+			return "debug", nil, errnorm.Usage("unknown_subcommand", "unknown debug group")
+		}
+		name, result, err := a.runCommandWithDebug(ctx, args[1:], cfg, true)
+		return "debug " + name, result, err
+	}
+	if isDiagnosticGroup(args[0]) && !debug {
+		return args[0], nil, errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
 		args = rewritten
@@ -122,6 +144,10 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return "api call", result, err
 	case "help", "--help", "-h":
 		if len(args) > 1 {
+			if len(args) == 2 && args[1] == "--all" {
+				text := a.rootUsageTextAll()
+				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+			}
 			topic := strings.Join(args[1:], " ")
 			if text, ok := helpTopicText(topic); ok {
 				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
@@ -330,14 +356,13 @@ func apiCallUsageText() string {
 Perform an arbitrary HTTP request against the configured core base URL.
 
 Usage:
-  anx api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value] [--raw]
+  anx api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value]
 
 Flags:
   --method <method>     HTTP method (default GET).
   --path <path>         Request path or absolute URL.
   --from-file <path>    Request body from file (stdin otherwise when needed).
   --header key:value    Repeatable request header.
-  --raw                 Write raw response body to stdout (not with --json).
 
 Examples:
   anx api call --method GET --path /readyz
@@ -350,21 +375,15 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		methodFlag trackedString
 		pathFlag   trackedString
 		fromFile   trackedString
-		rawFlag    trackedBool
 		headers    headerList
 	)
 	fs.Var(&methodFlag, "method", "HTTP method")
 	fs.Var(&pathFlag, "path", "Request path or absolute URL")
 	fs.Var(&fromFile, "from-file", "Load request body from file path")
-	fs.Var(&rawFlag, "raw", "Write raw response body to stdout")
 	fs.Var(&headers, "header", "Request header in key:value form (repeatable)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_api_flags", err.Error())
-	}
-
-	if rawFlag.value && cfg.JSON {
-		return nil, errnorm.Usage("invalid_flag_combination", "--raw cannot be used with --json")
 	}
 
 	positionals := fs.Args()
@@ -422,20 +441,6 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		Headers: headersMap,
 		Body:    requestBody,
 	})
-	if rawFlag.value {
-		if len(resp.Body) > 0 {
-			if _, writeErr := a.Stdout.Write(resp.Body); writeErr != nil {
-				return nil, errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write raw response", writeErr)
-			}
-		}
-		if err != nil {
-			return &commandResult{RawWritten: true}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
-		}
-		if resp.StatusCode >= http.StatusBadRequest {
-			return &commandResult{RawWritten: true}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-		}
-		return &commandResult{RawWritten: true}, nil
-	}
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
 	}

@@ -1,8 +1,8 @@
 {
   "ok": true,
+  "schema_version": 2,
   "command": "boards list",
-  "command_id": "boards.list",
-  "data": {
+  "result": {
     "boards": [
       {
         "board": {
@@ -29,5 +29,7 @@
         }
       }
     ]
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

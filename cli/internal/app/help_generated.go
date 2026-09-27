@@ -953,6 +953,33 @@ func isHelpToken(value string) bool {
 }
 
 func (a *App) rootUsageText() string {
+	return strings.TrimSpace(`anx - Agent Nexus CLI
+
+Usage: anx [global flags] <command>
+
+Daily commands:
+  work          List, inspect, and create commitments (see command help for side_effect_class)
+  cards         Create, assign, move, and resolve cards (see command help for side_effect_class)
+  docs          Read and revise durable context (see command help for side_effect_class)
+  topics        Discuss project context (see command help for side_effect_class)
+  notifications Read agent notifications (see command help for side_effect_class)
+  workspace     Summarize the workspace (read_only)
+
+Setup commands:
+  doctor        Check local and core readiness (read_only)
+  update        Update the CLI (local_operational_write)
+  auth          Manage authentication (see command help for side_effect_class)
+  config        Inspect and select local configuration (see command help for side_effect_class)
+  help [topic]  Show command help (read_only)
+  debug <group> Inspect diagnostic resources (see command help for side_effect_class)
+
+Onboarding: anx help onboarding; anx debug meta doc agent-guide
+Agent skill: anx install skill --path ./SKILL.md
+Use anx help --all for the full command catalog.
+Global flags: --json, --base-url, --agent, --timeout`) + "\n"
+}
+
+func (a *App) rootUsageTextAll() string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(`anx - Agent Nexus CLI
 
@@ -960,7 +987,7 @@ Domain model:
   topics   Discuss and coordinate around a topic.
   boards   Track active work with columns and cards.
   docs     Maintain durable context and institutional knowledge.
-  threads  Inspect backing timelines only when diagnosing low-level state.
+  debug threads  Inspect backing timelines when diagnosing low-level state.
 
 Usage:
   anx [global flags] <command>
@@ -985,6 +1012,7 @@ Core Commands:
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request
+  debug         Inspect diagnostic resource groups
   help [topic]  Show onboarding help or generated command help
 `) + "\n")
 
@@ -1000,7 +1028,11 @@ Core Commands:
 			if count == 0 {
 				continue
 			}
-			b.WriteString(fmt.Sprintf("  %-12s %s (%d)\n", topic.Path, topic.Description, count))
+			path := topic.Path
+			if isDiagnosticGroup(path) {
+				path = "debug " + path
+			}
+			b.WriteString(fmt.Sprintf("  %-12s %s (%d)\n", path, topic.Description, count))
 		}
 	}
 
@@ -1009,7 +1041,7 @@ Core Commands:
 Onboarding:
   `+"`anx concepts`"+` for a quick primitive-selection guide.
   `+"`anx help onboarding`"+` for the offline quick-start topic.
-  `+"`anx meta doc agent-guide`"+` for the prescriptive bundled agent guide.
+  `+"`anx debug meta doc agent-guide`"+` for the prescriptive bundled agent guide.
   `+"`anx install skill --path ./SKILL.md`"+` to install the opinionated ANX agent skill.
 
 Global Flags:
@@ -1026,7 +1058,27 @@ Global Flags:
 }
 
 func helpTopicText(topic string) (string, bool) {
+	text, ok := helpTopicTextRaw(topic)
+	if !ok {
+		return "", false
+	}
+	return qualifyDiagnosticExamples(text), true
+}
+
+func qualifyDiagnosticExamples(text string) string {
+	for _, group := range []string{"threads", "events", "ref-edges", "derived", "actors", "inbox", "meta"} {
+		text = strings.ReplaceAll(text, "anx "+group+" ", "anx debug "+group+" ")
+		text = strings.ReplaceAll(text, "anx "+group+"`", "anx debug "+group+"`")
+		text = strings.ReplaceAll(text, "anx --json "+group+" ", "anx --json debug "+group+" ")
+	}
+	return text
+}
+
+func helpTopicTextRaw(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
+	if strings.HasPrefix(topic, "debug ") {
+		topic = strings.TrimPrefix(topic, "debug ")
+	}
 	if text, ok := workHelpText(topic); ok {
 		return text, true
 	}
@@ -1511,6 +1563,7 @@ func formatLocalHelperHelp(topic localHelperTopic, includeGlobalFlags bool) stri
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Local Help: %s\n\n", strings.TrimSpace(topic.Path)))
 	b.WriteString("- Kind: `local helper`\n")
+	b.WriteString(fmt.Sprintf("- Side effect class: `%s`\n", commandSideEffectClass(topic.Path)))
 	b.WriteString(fmt.Sprintf("- Summary: %s\n", strings.TrimSpace(topic.Summary)))
 	if strings.TrimSpace(topic.QuickStart) != "" {
 		b.WriteString(fmt.Sprintf("- Quick start: %s\n", strings.TrimSpace(topic.QuickStart)))
@@ -1546,6 +1599,7 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command, includeGloba
 	b.WriteString(fmt.Sprintf("- Command ID: `%s`\n", cmd.CommandID))
 	b.WriteString(fmt.Sprintf("- CLI path: `%s`\n", runtimePathFromRegistryPath(cmd.CLIPath)))
 	b.WriteString(fmt.Sprintf("- HTTP: `%s %s`\n", cmd.Method, cmd.Path))
+	b.WriteString(fmt.Sprintf("- Side effect class: `%s`\n", cmd.SideEffectClass))
 	if strings.TrimSpace(cmd.Stability) != "" {
 		b.WriteString(fmt.Sprintf("- Stability: `%s`\n", strings.TrimSpace(cmd.Stability)))
 	}
@@ -2027,6 +2081,9 @@ func mapRuntimePathToRegistryPath(path string) string {
 	if len(parts) == 0 {
 		return ""
 	}
+	if len(parts) > 1 && parts[0] == "debug" && isDiagnosticGroup(parts[1]) {
+		parts = parts[1:]
+	}
 	path = strings.Join(parts, " ")
 	// Live CLI paths that differ from OpenAPI x-anx-cli-path. This is not a
 	// compatibility table for deleted commands.
@@ -2067,7 +2124,10 @@ func runtimePathFromRegistryPath(path string) string {
 		"meta concepts get":                "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
-		return rewritten
+		path = rewritten
+	}
+	if len(strings.Fields(path)) > 0 && isDiagnosticGroup(strings.Fields(path)[0]) {
+		return "debug " + path
 	}
 	return path
 }
@@ -2097,7 +2157,7 @@ func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.ReplaceAll(command, "anx meta commands list", "anx meta commands")
 	command = strings.ReplaceAll(command, "anx meta concepts get", "anx meta concept")
 	command = strings.ReplaceAll(command, "anx meta concepts list", "anx meta concepts")
-	return command
+	return qualifyDiagnosticExamples(command)
 }
 
 func configLocalHelpText(topic string) (string, bool) {

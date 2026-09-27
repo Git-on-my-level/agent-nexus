@@ -262,7 +262,7 @@ func TestSecretCommandMachineIdentities(t *testing.T) {
 			if got := anyStringValue(payload["command"]); got != tt.wantCommand {
 				t.Fatalf("expected command %q, got %q", tt.wantCommand, got)
 			}
-			if got := anyStringValue(payload["command_id"]); got != tt.wantCommandID {
+			if got := anyStringValue(machineEnvelopeCommandID(payload)); got != tt.wantCommandID {
 				t.Fatalf("expected command_id %q, got %q", tt.wantCommandID, got)
 			}
 		})
@@ -294,7 +294,7 @@ func TestSecretGetRevealEnvelopeCommandID(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "secret get --reveal" {
 		t.Fatalf("expected command %q, got %q", "secret get --reveal", got)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "secrets.reveal" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "secrets.reveal" {
 		t.Fatalf("expected command_id %q, got %q", "secrets.reveal", got)
 	}
 }
@@ -325,7 +325,7 @@ func TestSecretGetRevealErrorEnvelopeCommandID(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "secret get --reveal" {
 		t.Fatalf("expected command %q, got %q", "secret get --reveal", got)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "secrets.reveal" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "secrets.reveal" {
 		t.Fatalf("expected command_id %q, got %q", "secrets.reveal", got)
 	}
 }
@@ -354,7 +354,7 @@ func TestSecretUpdateEnvelopeCommandID(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "secret update" {
 		t.Fatalf("expected command %q, got %q", "secret update", got)
 	}
-	if got := anyStringValue(payload["command_id"]); got != "secrets.update" {
+	if got := anyStringValue(machineEnvelopeCommandID(payload)); got != "secrets.update" {
 		t.Fatalf("expected command_id %q, got %q", "secrets.update", got)
 	}
 }

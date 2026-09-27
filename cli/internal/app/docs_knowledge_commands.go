@@ -61,15 +61,7 @@ func (a *App) runDocsGetCommand(ctx context.Context, args []string, cfg config.R
 	body := asMap(data["body"])
 	revision := extractNestedMap(body, "revision")
 	content := firstNonEmpty(anyString(revision["content"]), anyString(body["content"]), anyString(body["body_text"]))
-	if a.Stdout != nil {
-		if _, err := a.Stdout.Write([]byte(content)); err != nil {
-			return nil, err
-		}
-		if !strings.HasSuffix(content, "\n") {
-			_, _ = a.Stdout.Write([]byte("\n"))
-		}
-	}
-	return &commandResult{RawWritten: true}, nil
+	return &commandResult{Data: map[string]any{"content": content, "format": "md"}}, nil
 }
 
 func (a *App) runDocsSearchCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {

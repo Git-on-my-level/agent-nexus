@@ -277,6 +277,8 @@ routes remain.
 
 ## Workstream decisions
 
+(Append dated entries here: decision, reason, files.)
+
 - 2026-09-27 (S4): Run attribution is persisted as a `run_attribution` object in
   each event's durable payload wrapper, with `run_id`, `host_id`, `agent_id`, and
   `adapter`. Event reads expose the same object. Presence and progress notes
@@ -298,3 +300,5 @@ routes remain.
   infrastructure routes but must authenticate the host bridge when implemented.
   (`contracts/anx-openapi.yaml`, `contracts/anx-schema.yaml`,
   `contracts/non-openapi-endpoints.yaml`.)
+- 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
+- 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.
