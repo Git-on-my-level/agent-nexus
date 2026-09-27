@@ -308,7 +308,15 @@ async function installTasksApi(page, overrides = {}) {
     hold: {},
     fail: {},
     calls: [],
+    liveGate: null,
+    liveCount: 0,
     ...overrides,
+  };
+  // The list follows /stream/events. Each stream connection waits until the
+  // test sends one card event down it; `emitLive` releases the next one.
+  api.emitLive = () => {
+    api.liveGate ??= deferred();
+    api.liveGate.resolve();
   };
 
   await page.addInitScript(() => {
@@ -396,6 +404,24 @@ async function installTasksApi(page, overrides = {}) {
         generated_at: stamp(),
       });
     if (path === "/inbox") return json(200, { items: [], total: 0 });
+    if (path === "/events") return json(200, { events: [] });
+    if (path === "/stream/events") {
+      api.liveGate ??= deferred();
+      await api.liveGate.promise;
+      api.liveGate = null;
+      api.liveCount += 1;
+      const event = {
+        id: `evt-live-${api.liveCount}`,
+        type: "card_moved",
+        ts: new Date().toISOString(),
+        refs: ["card:release"],
+      };
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `id: ${event.id}\nevent: event\ndata: ${JSON.stringify({ event })}\n\n`,
+      });
+    }
     if (path === "/docs" || path === "/docs/search")
       return json(200, { documents: [] });
     if (path === "/artifacts")
@@ -505,7 +531,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       viewport: { width: viewport.width, height: viewport.height },
     });
 
-    test("table: loading, populated, reload failure and empty", async ({
+    test("table: loading, populated, live re-read failure and empty", async ({
       page,
     }) => {
       const api = await installTasksApi(page);
@@ -519,22 +545,27 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("link", { name: LONG_TITLE })).toBeVisible();
       await expectCleanLayout(page, "populated table", bothEnds);
 
-      // Refresh over populated data: the rows must stay put.
+      // No Reload button: a card event re-reads the list, and the rows stay
+      // put while it does.
+      await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
+      const reads = () =>
+        api.calls.filter((call) => call.name === "work").length;
+      const before = reads();
       api.hold.work = deferred();
-      await page.getByRole("button", { name: "Reload" }).click();
+      api.emitLive();
+      await expect.poll(reads, { timeout: 15000 }).toBeGreaterThan(before);
       await expectCleanLayout(page, "reloading over populated table");
       api.hold.work.resolve();
       api.hold = {};
-      await expect(page.getByRole("button", { name: "Reload" })).toBeEnabled();
 
-      // A failed reload keeps the last good rows plus a warning.
+      // A failed live re-read keeps the last good rows plus a warning.
       api.fail.work = { message: LONG_ERROR };
-      await page.getByRole("button", { name: "Reload" }).click();
+      api.emitLive();
       await expect(
         page.getByText("Showing the previously loaded records.", {
           exact: false,
         }),
-      ).toBeVisible();
+      ).toBeVisible({ timeout: 15000 });
       await expectCleanLayout(page, "reload failed over stale rows", bothEnds);
 
       // And with nothing loaded at all.
@@ -810,6 +841,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
       await expectCleanLayout(page, "detail details disclosure open", bothEnds);
 
+      // The read-by-read history is a disclosure under the source line.
+      await page.locator("summary", { hasText: "Observation history" }).click();
       await page.getByRole("button", { name: "Older observations" }).click();
       await expectCleanLayout(page, "detail older observations", bothEnds);
 

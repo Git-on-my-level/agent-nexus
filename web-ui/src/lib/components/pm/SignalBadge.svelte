@@ -10,4 +10,8 @@
   );
 </script>
 
-<span class="ui-badge {toneClass} {extraClass}">{@render children?.()}</span>
+<!-- The inner span carries the ellipsis: text in a centred flex box that
+     overflows is clipped at both ends, not truncated at the end. -->
+<span class="ui-badge {toneClass} {extraClass}"
+  ><span class="min-w-0 truncate">{@render children?.()}</span></span
+>

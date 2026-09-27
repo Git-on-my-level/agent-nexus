@@ -14,6 +14,7 @@
   import { authenticatedAgent, logoutAuthSession } from "$lib/authSession";
   import { hostedSession, loadHostedSession } from "$lib/hosted/session.js";
   import { navIconPath } from "$lib/icons.js";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import { settingsNavGroups } from "$lib/navigation";
   import { bindWorkspaceHref, workspacePath } from "$lib/workspacePaths";
   import { computeWorkspaceShellIdentity } from "$lib/workspaceShellIdentity.js";
@@ -32,13 +33,23 @@
     bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
 
+  // The person's name, as the sidebar shows it. The principal handle
+  // (`passkey.maya.chen.…`) is a machine identifier; it is only copyable.
+  let actorId = $derived(
+    $authenticatedAgent?.actor_id || $selectedActorId || "",
+  );
   let selectedActorName = $derived.by(() => {
     const resolvedName = lookupActorDisplayName(
-      $authenticatedAgent?.actor_id || $selectedActorId,
+      actorId,
       $actorRegistry,
       $principalRegistry,
     );
-    if ($authenticatedAgent?.username) return $authenticatedAgent.username;
+    const unresolved =
+      !resolvedName ||
+      resolvedName === actorId ||
+      resolvedName === "Unknown actor";
+    if (unresolved && $authenticatedAgent?.username)
+      return $authenticatedAgent.username;
     return resolvedName || "Unknown identity";
   });
 
@@ -255,18 +266,18 @@
           <p class="truncate text-meta font-medium text-fg">
             {shellIdentity.primaryLabel}
           </p>
-          {#if shellIdentity.secondaryLabel}
-            <p
-              class="truncate font-mono text-micro text-fg-subtle"
-              title={shellIdentity.secondaryLabel}
-            >
-              {shellIdentity.secondaryLabel}
-            </p>
-          {/if}
-          <p class="hidden text-micro text-fg-muted sm:block">
-            {$authenticatedAgent ? "Authenticated principal" : "Dev actor mode"}
+          <p class="text-micro text-fg-muted">
+            {$authenticatedAgent ? "Signed in" : "Dev actor mode"}
           </p>
         </div>
+        {#if actorId}
+          <CopyButton
+            value={actorId.startsWith("actor:") ? actorId : `actor:${actorId}`}
+            label="Copy actor id"
+            title="Copy your actor id for the CLI"
+            iconOnly
+          />
+        {/if}
       </div>
       <button
         class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-meta font-medium text-fg-muted transition-colors hover:bg-line-subtle hover:text-fg sm:px-4 sm:py-3"

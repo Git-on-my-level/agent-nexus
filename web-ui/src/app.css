@@ -902,6 +902,17 @@
     gap: 1px;
   }
 
+  .shell-account-menu-group-label {
+    margin: 0;
+    padding: 4px 8px 2px;
+    font-size: 10.5px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+  }
+
   .shell-account-menu-action--danger:hover {
     color: var(--danger-text);
   }

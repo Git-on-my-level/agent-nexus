@@ -1116,10 +1116,21 @@ export function createAnxCoreClient(options = {}) {
   return {
     baseUrl: resolvedBaseUrl,
     ...tableDrivenClient,
-    streamThreadEvents: async ({ threadId, lastEventId, signal, onEvent }) => {
+    /**
+     * `GET /stream/events`. `threadId` scopes to one backing thread; without
+     * it the stream is workspace-wide. `types` filters by event type.
+     */
+    streamEvents: async ({
+      threadId,
+      types,
+      lastEventId,
+      signal,
+      onEvent,
+    } = {}) => {
       const response = await invokeDirectRaw("/stream/events", {
         query: {
-          thread_id: String(threadId),
+          thread_id: threadId ? String(threadId) : undefined,
+          type: Array.isArray(types) && types.length ? types : undefined,
           last_event_id: lastEventId,
         },
         accept: "text/event-stream",

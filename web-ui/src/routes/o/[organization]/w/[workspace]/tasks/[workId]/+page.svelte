@@ -3,6 +3,10 @@
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { coreClient } from "$lib/coreClient";
+  import {
+    liveWorkspaceEvents,
+    TASK_LIST_EVENT_TYPES,
+  } from "$lib/liveWorkspaceEvents.js";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
@@ -29,7 +33,17 @@
     errorMessage,
     readErrorExplanation,
     receiptSignal,
+    workSourceKey,
+    humanizeInstants,
+    connectionName,
   } from "$lib/pm/presentation.js";
+  import {
+    evidenceSources,
+    observationHistory,
+    observationErrorText,
+    observationStatusLabel,
+    observationStatusTone,
+  } from "$lib/pm/evidence.js";
   let work = $state(null),
     observations = $state([]),
     nextCursor = $state(""),
@@ -61,61 +75,14 @@
   let refreshError = $derived(readErrorExplanation(work?.refresh?.last_error));
   let lastAttemptAt = $derived(work?.refresh?.last_attempt_at || "");
   let failedAttempts = $derived(Number(work?.refresh?.failures) || 0);
-  /**
-   * Consecutive failed reads with the same error collapse into one row. A
-   * reader learns more from "failed 30 times since 2h ago, last just now"
-   * than from thirty identical lines.
-   */
-  let evidenceRows = $derived.by(() => {
-    const rows = [];
-    for (const observation of observations) {
-      const failed = observation?.status === "error";
-      const message = failed ? observationErrorText(observation) : "";
-      const last = rows[rows.length - 1];
-      if (failed && last?.group && last.message === message) {
-        last.count += 1;
-        last.oldest = observation.observed_at || last.oldest;
-        continue;
-      }
-      if (failed) {
-        rows.push({
-          group: true,
-          count: 1,
-          message,
-          newest: observation.observed_at,
-          oldest: observation.observed_at,
-          observation,
-        });
-      } else rows.push({ group: false, observation });
-    }
-    return rows;
-  });
-  // A bare URL still deserves a distinct link name: its host and path.
-  function evidenceLinkText(url) {
-    try {
-      const parsed = new URL(url);
-      return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
-    } catch {
-      return "Open source evidence";
-    }
-  }
-  // A reader often reports the same URL for every claim; one link per URL.
-  function uniqueEvidence(list) {
-    const seen = new Set();
-    return (Array.isArray(list) ? list : []).filter((entry) => {
-      const key = String(entry?.url || entry?.ref || entry?.summary || "");
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-  function observationErrorText(observation) {
-    const error = observation?.error;
-    if (!error) return "";
-    return typeof error === "string"
-      ? error
-      : String(error.message || error.code || "");
-  }
+  let sources = $derived(evidenceSources(observations, work));
+  // Evidence links are distinct already; a long comment thread still gets a
+  // short list first.
+  const LINK_PREVIEW = 6;
+  let showAllLinks = $state(false);
+  // Other tasks that mirror this same source item through another connection.
+  // The Tasks table keeps one row per source item; the rest live here.
+  let mirrors = $state([]);
   let hasNext = $derived(
     Boolean(
       work?.next_actor ||
@@ -142,6 +109,8 @@
     work = null;
     observations = [];
     decisions = [];
+    mirrors = [];
+    showAllLinks = false;
     nextCursor = "";
     const results = await Promise.allSettled([
       coreClient.getWork(id),
@@ -151,13 +120,27 @@
     if (results[0].status === "fulfilled") {
       work = results[0].value.work;
       if (!work) error = "The workspace did not return this task.";
-      else void loadDecisions(ticket, work);
+      else {
+        void loadDecisions(ticket, work);
+        void loadMirrors(ticket, work);
+      }
     } else error = errorMessage(results[0].reason);
     if (results[1].status === "fulfilled") {
       observations = results[1].value.observations || [];
       nextCursor = results[1].value.next_cursor || "";
     } else evidenceError = errorMessage(results[1].reason);
     loading = false;
+  }
+  // The record only, in place: a live change must not blank the page the
+  // operator is reading.
+  async function refreshWorkRecord() {
+    const ticket = requestId;
+    try {
+      const result = await coreClient.getWork(workId);
+      if (ticket === requestId && result?.work) work = result.work;
+    } catch {
+      // The next change or Reload tries again.
+    }
   }
   async function loadDecisions(ticket, loadedWork) {
     decisionsLoading = true;
@@ -203,6 +186,24 @@
       if (ticket === requestId) decisionsLoading = false;
     }
   }
+  async function loadMirrors(ticket, loadedWork) {
+    const key = workSourceKey(loadedWork);
+    if (!key) return;
+    try {
+      const result = await coreClient.listWork({
+        source: loadedWork.source.authority,
+        limit: 200,
+      });
+      if (ticket !== requestId) return;
+      mirrors = (Array.isArray(result?.work) ? result.work : []).filter(
+        (other) =>
+          workSourceKey(other) === key &&
+          workKey(other) !== workKey(loadedWork),
+      );
+    } catch {
+      // Fail soft: the disclosure is context, not the page.
+    }
+  }
   async function loadMore() {
     if (loading) return;
     const ticket = requestId;
@@ -241,6 +242,17 @@
   }
   onMount(() => {
     let disposed = false;
+    // A move or assignment made elsewhere (the ⌘K palette, an agent, the
+    // board) re-reads this task; evidence still refreshes on Reload.
+    const stopLive = liveWorkspaceEvents({
+      client: coreClient,
+      types: TASK_LIST_EVENT_TYPES,
+      filter: (event) =>
+        Array.isArray(event.refs) && event.refs.includes(work?.ref || workId),
+      onChange: () => {
+        if (ready && work) void refreshWorkRecord();
+      },
+    });
     initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug: $page.params.workspace,
@@ -256,6 +268,7 @@
     return () => {
       disposed = true;
       requestId++;
+      stopLive();
     };
   });
 </script>
@@ -356,47 +369,119 @@
         {/if}
         <section>
           <h2 class="ui-label">Evidence</h2>
-          <!--
-            One line, not a three-up grid of timestamps beside a rail of
-            collection internals. A reader wants to know when we last read the
-            source and how to read it again; "Source activity", "Meaningful
-            progress", "Next due" and the collector's state machine were
-            answering a question nobody asked.
-          -->
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {#if nexusOwned && !lastCheckedAt}
-              <p class="text-meta text-fg-muted">
-                Created here — nothing to check
-              </p>
-            {:else}
-              <p class="text-meta text-fg">
-                {#if lastCheckedAt}Last read {sourceName}
-                  <time
-                    datetime={lastCheckedAt}
-                    title={formatAbsoluteDateTime(lastCheckedAt)}
-                    >{formatTimestamp(lastCheckedAt)}</time
-                  >{:else}Never read {sourceName} successfully{/if}{#if lastAttemptAt && failedAttempts}{" "}<span
+          {#if nexusOwned && !lastCheckedAt && !observations.length}
+            <p class="text-meta text-fg-muted">
+              Created here — nothing to check
+            </p>
+          {:else}
+            <!--
+              One line per source, not one block per read. A reader reports
+              the item and every comment on it each time it runs, so four
+              reads used to print twenty identical links. The line says what
+              was read, how often and when; the links follow once; the
+              read-by-read history is a disclosure.
+            -->
+            {#each sources as source (source.key)}
+              {@const visibleLinks = showAllLinks
+                ? source.links
+                : source.links.slice(0, LINK_PREVIEW)}
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <p class="text-meta text-fg" data-evidence-source>
+                  <span class="font-medium">{source.name}</span><span
                     class="text-fg-muted"
-                    >· last attempt <time
-                      datetime={lastAttemptAt}
-                      title={formatAbsoluteDateTime(lastAttemptAt)}
-                      >{formatTimestamp(lastAttemptAt)}</time
-                    >, {failedAttempts} failed</span
-                  >{/if}
+                    >{` · ${source.reads === 1 ? "1 observation" : `${source.reads} observations`}`}{#if source.lastAt}{" · last "}<time
+                        datetime={source.lastAt}
+                        title={formatAbsoluteDateTime(source.lastAt)}
+                        >{formatTimestamp(source.lastAt)}</time
+                      >{/if}</span
+                  >
+                </p>
+                {#if source.latestRead}
+                  <SignalBadge tone={observationStatusTone(source.latestRead)}
+                    >{observationStatusLabel(source.latestRead)}</SignalBadge
+                  >
+                {/if}
+              </div>
+              {#if source.latest && observationErrorText(source.latest) && source.latest.status === "error"}
+                <p class="mt-1 break-words text-micro text-warn-text">
+                  Last read failed <time
+                    datetime={source.latest.observed_at}
+                    title={formatAbsoluteDateTime(source.latest.observed_at)}
+                    >{formatTimestamp(source.latest.observed_at)}</time
+                  >: {humanizeInstants(observationErrorText(source.latest))}
+                </p>
+              {/if}
+              {#if source.latestRead?.uncertainty?.length}
+                <ul
+                  class="mt-1.5 list-disc break-words pl-5 text-meta text-warn-text"
+                >
+                  {#each source.latestRead.uncertainty as item}<li>
+                      {item}
+                    </li>{/each}
+                </ul>
+              {/if}
+              {#if source.links.length}
+                <ul
+                  class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-meta"
+                  aria-label="Evidence links"
+                >
+                  {#each visibleLinks as link (link.key)}
+                    <li class="min-w-0 break-words">
+                      {#if link.href}<a
+                          class="text-accent-text hover:underline"
+                          href={link.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={link.href}>{link.label} ↗</a
+                        >{:else}<span class="text-fg-muted">{link.label}</span
+                        >{/if}
+                    </li>
+                  {/each}
+                  {#if source.links.length > LINK_PREVIEW}
+                    <li>
+                      <button
+                        class="ui-prose-link text-micro"
+                        type="button"
+                        aria-expanded={showAllLinks}
+                        onclick={() => (showAllLinks = !showAllLinks)}
+                        >{showAllLinks
+                          ? "Show fewer"
+                          : `${source.links.length - LINK_PREVIEW} more`}</button
+                      >
+                    </li>
+                  {/if}
+                </ul>
+              {/if}
+            {:else}
+              <p class="text-meta text-fg-muted">
+                {lastCheckedAt ? "No reads loaded" : `Never read ${sourceName}`}
               </p>
-              <button
-                class="ui-btn-secondary"
-                onclick={refresh}
-                disabled={refreshing || refreshPending}
-                >{refreshing
-                  ? "Checking…"
-                  : refreshPending
-                    ? "Check pending"
-                    : `Check ${sourceName} now`}</button
-              >
-            {/if}
-          </div>
-          {#if refreshError && refreshError !== evidenceRows[0]?.message}
+            {/each}
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              {#if !nexusOwned}
+                <button
+                  class="ui-btn-secondary"
+                  onclick={refresh}
+                  disabled={refreshing || refreshPending}
+                  >{refreshing
+                    ? "Checking…"
+                    : refreshPending
+                      ? "Check pending"
+                      : `Check ${sourceName} now`}</button
+                >
+              {/if}
+              {#if lastAttemptAt && failedAttempts && !(sources[0]?.latest?.status === "error")}
+                <span class="text-micro text-fg-muted"
+                  >Last attempt <time
+                    datetime={lastAttemptAt}
+                    title={formatAbsoluteDateTime(lastAttemptAt)}
+                    >{formatTimestamp(lastAttemptAt)}</time
+                  >, {failedAttempts} failed</span
+                >
+              {/if}
+            </div>
+          {/if}
+          {#if refreshError && sources[0]?.latest?.status !== "error"}
             <p class="mt-2 break-words text-micro text-warn-text">
               {refreshError}
             </p>
@@ -411,18 +496,23 @@
                 onretry={() => load()}
               />
             </div>{/if}
-          <ol
-            class="mt-3 divide-y divide-line-subtle {observations.length
-              ? 'border-t border-line-subtle'
-              : ''}"
-          >
-            {#each evidenceRows as row, index (row.observation.id || index)}
-              {@const observation = row.observation}
-              {#if row.group}
-                <li class="py-3">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <SignalBadge tone="danger"
-                      >Read failed{#if row.count > 1}{" "}× {row.count}{/if}</SignalBadge
+          {#if observations.length}
+            <details class="mt-3 text-micro text-fg-muted">
+              <summary class="w-fit cursor-pointer"
+                >Observation history{nextCursor
+                  ? ""
+                  : ` (${observations.length})`}</summary
+              >
+              <ol
+                class="mt-2 divide-y divide-line-subtle border-t border-line-subtle"
+              >
+                {#each observationHistory(observations) as row, index (row.observation.id || index)}
+                  {@const observation = row.observation}
+                  <li class="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
+                    <SignalBadge tone={observationStatusTone(observation)}
+                      >{observationStatusLabel(
+                        observation,
+                      )}{#if row.count > 1}{" "}× {row.count}{/if}</SignalBadge
                     >
                     <span class="text-micro text-fg-muted">
                       {#if row.count > 1}between <time
@@ -431,87 +521,63 @@
                           >{formatTimestamp(row.oldest)}</time
                         > and{/if}
                       <time
-                        datetime={row.newest}
-                        title={formatAbsoluteDateTime(row.newest)}
-                        >{formatTimestamp(row.newest) || "time unknown"}</time
+                        datetime={observation.observed_at}
+                        title={formatAbsoluteDateTime(observation.observed_at)}
+                        >{formatTimestamp(observation.observed_at) ||
+                          "time unknown"}</time
                       >
                     </span>
-                  </div>
-                  {#if row.message}
-                    <p class="mt-1.5 break-words text-meta text-danger-text">
-                      {row.message}
-                    </p>
-                  {/if}
-                </li>
-              {:else}
-                <li class="py-3">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <SignalBadge
-                      tone={observation.verification === "verified"
-                        ? "ok"
-                        : observation.status === "error"
-                          ? "danger"
-                          : observation.status === "uncertain"
-                            ? "warn"
-                            : "neutral"}
-                      >{observation.verification === "verified"
-                        ? "Verified evidence"
-                        : observation.status === "error"
-                          ? "Read failed"
-                          : observation.status === "uncertain"
-                            ? "Uncertain report"
-                            : "Reported claim"}</SignalBadge
-                    ><time
-                      class="text-micro text-fg-muted"
-                      datetime={observation.observed_at}
-                      title={formatAbsoluteDateTime(observation.observed_at)}
-                      >{formatTimestamp(observation.observed_at) ||
-                        "time unknown"}</time
+                    {#if row.group}
+                      {#if row.message}<span
+                          class="basis-full break-words text-micro text-danger-text"
+                          >{humanizeInstants(row.message)}</span
+                        >{/if}
+                    {:else if observation.evidence?.length}
+                      <span class="text-micro text-fg-subtle"
+                        >· {observation.evidence.length === 1
+                          ? "1 link"
+                          : `${observation.evidence.length} links`}</span
+                      >
+                    {/if}
+                  </li>
+                {/each}
+              </ol>
+              {#if nextCursor}<button
+                  class="ui-btn-secondary mt-2"
+                  disabled={loading}
+                  onclick={loadMore}
+                  >{loading ? "Loading…" : "Older observations"}</button
+                >{/if}
+            </details>
+          {/if}
+          {#if mirrors.length}
+            <details class="mt-2 text-micro text-fg-muted">
+              <summary class="w-fit cursor-pointer"
+                >Also tracked through {mirrors.length === 1
+                  ? "another connection"
+                  : `${mirrors.length} other connections`}</summary
+              >
+              <ul class="mt-2 space-y-1">
+                {#each mirrors as mirror (workKey(mirror))}
+                  {@const mirrorRead = workFreshness(mirror)}
+                  <li class="flex flex-wrap items-center gap-2">
+                    <a
+                      class="text-accent-text hover:underline"
+                      href={workspaceHref(
+                        `/tasks/${encodeURIComponent(workKey(mirror))}`,
+                      )}
+                      >{mirror.source?.connection_id
+                        ? connectionName(mirror.source)
+                        : "Other connection"}</a
                     >
-                  </div>
-                  {#if observation.error}<p
-                      class="mt-1.5 break-words text-meta text-danger-text"
+                    <SignalBadge tone={mirrorRead.tone}
+                      >{mirrorRead.label}</SignalBadge
                     >
-                      {typeof observation.error === "string"
-                        ? observation.error
-                        : observation.error.message || observation.error.code}
-                    </p>{/if}
-                  {#if observation.uncertainty?.length}<ul
-                      class="mt-1.5 list-disc break-words pl-5 text-meta text-warn-text"
-                    >
-                      {#each observation.uncertainty as item}<li>
-                          {item}
-                        </li>{/each}
-                    </ul>{/if}
-                  {#if observation.evidence?.length}
-                    <ul class="mt-1.5 space-y-1">
-                      {#each uniqueEvidence(observation.evidence) as evidence}{@const url =
-                          safeSourceHref(evidence.url)}
-                        <li class="break-words text-meta text-fg">
-                          {#if url}<a
-                              class="text-accent-text hover:underline"
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
-                              >{evidence.summary ||
-                                evidence.ref ||
-                                evidenceLinkText(url)} ↗</a
-                            >{:else}{evidence.summary ||
-                              evidence.ref ||
-                              "Unlinked evidence"}{/if}
-                        </li>{/each}
-                    </ul>
-                  {/if}
-                </li>
-              {/if}
-            {/each}
-          </ol>
-          {#if nextCursor}<button
-              class="ui-btn-secondary mt-3"
-              disabled={loading}
-              onclick={loadMore}
-              >{loading ? "Loading…" : "Older observations"}</button
-            >{/if}
+                  </li>
+                {/each}
+              </ul>
+            </details>
+          {/if}
         </section>
         <section
           class={!decisionsLoading && !decisions.length && !decisionsError
@@ -690,7 +756,10 @@
                     class="text-accent-text hover:underline"
                     href={safeSourceHref(work.source.url)}
                     target="_blank"
-                    rel="noreferrer">Open source record ↗</a
+                    rel="noreferrer"
+                    data-task-source-link
+                    aria-keyshortcuts="O"
+                    title="Open source record (O)">Open source record ↗</a
                   >
                 </dd>{/if}
             </div>

@@ -5,6 +5,7 @@ import {
   isKnownSection,
   isMoreHubActivePath,
   navigationItems,
+  settingsNavGroups,
   settingsNavItems,
 } from "../../src/lib/navigation.js";
 
@@ -17,14 +18,23 @@ describe("navigation model", () => {
     ]);
   });
 
-  it("includes settings nav labels", () => {
+  it("groups Settings apart from Diagnostics", () => {
+    expect(
+      settingsNavGroups.map((group) => [
+        group.label,
+        group.items.map((item) => item.label),
+      ]),
+    ).toEqual([
+      ["Settings", ["Access", "Secrets", "Integrations"]],
+      // Infrastructure surfaces, explicitly labelled rather than reachable
+      // only by URL.
+      ["Diagnostics", ["Audit", "Threads"]],
+    ]);
     expect(settingsNavItems.map((item) => item.label)).toEqual([
       "Access",
       "Secrets",
       "Integrations",
       "Audit",
-      // Diagnostics group: infrastructure surfaces, explicitly labelled rather
-      // than reachable only by URL.
       "Threads",
     ]);
   });

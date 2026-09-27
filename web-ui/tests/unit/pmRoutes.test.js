@@ -56,6 +56,8 @@ const client = vi.hoisted(() =>
       "getHomeUnread",
       "respondInboxItem",
       "markHomeRead",
+      "streamEvents",
+      "listEvents",
     ].map((key) => [key, vi.fn()]),
   ),
 );
@@ -103,6 +105,12 @@ beforeEach(() => {
   client.listPmDecisions.mockResolvedValue({ items: [] });
   client.listInboxItems.mockResolvedValue({ items: [] });
   client.getHomeUnread.mockResolvedValue({ groups: [] });
+  client.listEvents.mockResolvedValue({ events: [] });
+  // An idle stream: open until the page unsubscribes.
+  client.streamEvents.mockImplementation(
+    ({ signal }) =>
+      new Promise((resolve) => signal?.addEventListener("abort", resolve)),
+  );
 });
 afterEach(() => cleanup());
 
@@ -146,7 +154,15 @@ describe("PM operator interactions", () => {
     expect(screen.queryByText("Old work")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
   });
-  it("retains a failed reload with an explicit outdated-data warning", async () => {
+  it("re-reads on a live task event and keeps rows when that read fails", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
     client.listWork
       .mockResolvedValueOnce({
         work: [work("card:one", "Loaded work")],
@@ -155,10 +171,27 @@ describe("PM operator interactions", () => {
       .mockRejectedValueOnce(new Error("Temporary outage"));
     render(WorkPage);
     await screen.findByText("Loaded work");
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Reload", exact: true }),
+    // No Reload button: the list follows the event stream.
+    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    expect(client.streamEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        types: expect.arrayContaining(["card_moved", "card_updated"]),
+      }),
     );
-    await screen.findByText("Temporary outage");
+    emit({
+      id: "evt-1",
+      event: "event",
+      data: {
+        event: {
+          id: "evt-1",
+          type: "card_moved",
+          ts: new Date().toISOString(),
+          refs: ["card:one"],
+        },
+      },
+    });
+    await screen.findByText("Temporary outage", {}, { timeout: 3000 });
     expect(screen.getByText("Loaded work")).toBeTruthy();
     expect(
       screen.getByText(/Showing the previously loaded records/),
@@ -184,7 +217,7 @@ describe("PM operator interactions", () => {
       refresh: { state: "queued" },
     });
     render(WorkDetail);
-    await screen.findByText("Reported claim");
+    await screen.findAllByText("Reported claim");
     expect(screen.queryByText("Verified evidence")).toBeNull();
     await fireEvent.click(
       screen.getByRole("button", { name: "Check GitHub now" }),
@@ -515,5 +548,109 @@ describe("PM operator interactions", () => {
     navigation.guards[0]({ cancel });
     expect(cancel).toHaveBeenCalledTimes(1);
     pending.resolve({ id: "turn-one" });
+  });
+
+  it("orders the table by attention and folds closed work behind a toggle", async () => {
+    const native = (ref, title, phase, board = "board:one") => ({
+      ref,
+      title,
+      phase,
+      board_ref: board,
+      source: { authority: "nexus" },
+      freshness: {},
+    });
+    const rows = [
+      native("card:done", "Finished thing", "done"),
+      native("card:backlog", "Someday thing", "backlog"),
+      native("card:blocked", "Stuck thing", "blocked"),
+      native("card:progress", "Moving thing", "in_progress"),
+    ];
+    const result = render(WorkViews, {
+      records: rows,
+      workspaceHref: (path) => path,
+      closedHref: "/tasks?closed=1",
+    });
+    const titles = () =>
+      [...result.container.querySelectorAll("tbody tr a")].map(
+        (node) => node.textContent,
+      );
+    expect(titles()).toEqual(["Stuck thing", "Moving thing", "Someday thing"]);
+    // One board and no source-backed task: neither column earns its place.
+    const headings = [...result.container.querySelectorAll("thead th")].map(
+      (node) => node.textContent.trim(),
+    );
+    expect(headings).toEqual(["Task", "Status", "Owner"]);
+    expect(screen.queryByText("created here")).toBeNull();
+    const toggle = result.container.querySelector("[data-work-closed-toggle]");
+    expect(toggle.textContent).toContain("1 done");
+    expect(toggle.getAttribute("href")).toBe("/tasks?closed=1");
+    await result.rerender({
+      records: [
+        ...rows,
+        {
+          ...native("card:gh", "Mirrored issue", "ready", "board:two"),
+          source: { authority: "github", native_id: "o/r#1" },
+          freshness: { last_observed_at: new Date().toISOString() },
+        },
+      ],
+      workspaceHref: (path) => path,
+      showClosed: true,
+      closedHref: "/tasks",
+    });
+    expect(titles()).toEqual([
+      "Stuck thing",
+      "Moving thing",
+      "Mirrored issue",
+      "Someday thing",
+      "Finished thing",
+    ]);
+    const wide = [...result.container.querySelectorAll("thead th")].map(
+      (node) => node.textContent.trim(),
+    );
+    expect(wide).toEqual(["Task", "Board", "Status", "Owner", "Last checked"]);
+  });
+  it("shows task evidence as one source line with each link once", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: {
+        ...work("card:one", "Issue work"),
+        source: { authority: "github", native_id: "org/repo#208" },
+      },
+    });
+    const issue = "https://github.com/org/repo/issues/208";
+    client.listWorkObservations.mockResolvedValue({
+      observations: [1, 2, 3, 4].map((n) => ({
+        id: `o${n}`,
+        status: "reported",
+        observed_at: `2026-09-01T12:0${n}:00Z`,
+        evidence: [
+          { url: issue, kind: "issue" },
+          ...[1, 2, 3, 4].map((c) => ({
+            url: `${issue}#issuecomment-${c}`,
+            kind: "comment",
+          })),
+        ],
+      })),
+    });
+    client.listWork.mockResolvedValue({ work: [] });
+    render(WorkDetail);
+    const line = await waitFor(() => {
+      const node = document.querySelector("[data-evidence-source]");
+      if (!node) throw new Error("no source line yet");
+      return node;
+    });
+    expect(line.textContent.replace(/\s+/g, " ")).toContain(
+      "GitHub #208 · 4 observations",
+    );
+    const links = screen.getByRole("list", { name: "Evidence links" });
+    expect(
+      [...links.querySelectorAll("a")].map((a) => a.textContent.trim()),
+    ).toEqual([
+      "Issue #208 ↗",
+      "Comment 1 ↗",
+      "Comment 2 ↗",
+      "Comment 3 ↗",
+      "Comment 4 ↗",
+    ]);
   });
 });

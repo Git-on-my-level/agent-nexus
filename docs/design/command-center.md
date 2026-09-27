@@ -302,3 +302,37 @@ routes remain.
   `contracts/non-openapi-endpoints.yaml`.)
 - 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
 - 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.
+### 2026-09-27 · O2 web noise pass and ⌘K palette (`cc/web-noise`)
+
+- **Live list helper is `liveWorkspaceEvents`** (`web-ui/src/lib/liveWorkspaceEvents.js`):
+  `liveWorkspaceEvents({ client, types, threadId?, filter?, onChange, debounceMs?, reconnectMs? }) → stop`.
+  It seeds its cursor from the newest matching `GET /events` row (core's stream replays
+  every matching event when `last_event_id` is empty or unknown), coalesces bursts, resumes
+  with `last_event_id`, backs off while core is unreachable and stops on 401/403. The
+  generic SSE client call is now `coreClient.streamEvents({ threadId?, types?, … })`
+  (replaces `streamThreadEvents`). The Inbox stream can adopt the helper as is. Reason:
+  one subscription path instead of per-page SSE code. Files: `liveWorkspaceEvents.js`,
+  `anxCoreClient.js`, `tasks/+page.svelte`, `docs/+page.svelte`, `tasks/[workId]/+page.svelte`.
+- **Task page keeps Reload.** Evidence arrives as work observations, which emit no ledger
+  event, so the task page follows card events for its record but keeps Reload for
+  evidence. The Tasks and Docs lists have no Reload.
+- **Board columns keep workflow order and rank.** Attention order applies to the table.
+  Within a board column the order is the card rank that drag-and-drop writes, so it is not
+  re-sorted; Done and Cancelled columns collapse to a count behind the same toggle and stay
+  drop targets. Reason: re-sorting a ranked column would make drops land somewhere other
+  than where they were dropped.
+- **Source-key dedupe picks the row whose reader works**, then the most recent good read,
+  then the oldest. All folded mirrors are listed on the kept task's page with their read
+  state (not only mirrors with distinct evidence: telling that apart would need each
+  mirror's observations on every table load). Files: `lib/pm/presentation.js`.
+- **Docs list drops comment counts entirely.** Core has no per-reader unread state for
+  docs, so a count cannot mean "new". The version chip stays; the "Versions" metric and
+  the metric strip component are deleted.
+- **Audit moved from Settings to Diagnostics.** Settings is Access, Secrets,
+  Integrations; Diagnostics is Audit, Threads. Same grouping on `/more` and in ⌘K.
+- **⌘K owns the letter shortcuts it shows** (G then I/T/D; M, A, O on a task; E on a
+  doc) via a capture-phase window listener in `CommandPalette.svelte`, so "G then T" wins
+  over the Tasks page's "T" and the layout file needed no change for shortcuts. Done is
+  not offered as a palette move (it needs an evidence ref). Assign is offered only for
+  Nexus-owned tasks and writes `cards.patch` `assignee_refs` with the chosen person first.
+  Action outcomes show in a notice rendered by the palette component.

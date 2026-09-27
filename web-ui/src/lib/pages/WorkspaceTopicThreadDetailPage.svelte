@@ -254,7 +254,7 @@
       }
       controller = new AbortController();
       try {
-        await coreClient.streamThreadEvents({
+        await coreClient.streamEvents({
           threadId: streamThreadId,
           lastEventId,
           signal: controller.signal,

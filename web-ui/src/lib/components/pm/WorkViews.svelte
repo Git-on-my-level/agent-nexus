@@ -18,6 +18,9 @@
     taskDetailPath,
     workFreshness,
     sortWorkBoardItems,
+    sortWorkByAttention,
+    isClosedWork,
+    CLOSED_PHASES,
   } from "$lib/pm/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   import {
@@ -38,8 +41,48 @@
     // The records are one page of the list; a column count is then a lower
     // bound, and says so the way the table header does.
     truncated = false,
+    // Done and Cancelled fold away by default; `closedHref` flips the toggle.
+    showClosed = false,
+    closedHref = "",
     onMove,
   } = $props();
+  // Attention order: Blocked, In progress, In review, Ready, Backlog; closed
+  // work after a toggle.
+  let ordered = $derived(sortWorkByAttention(records));
+  let openRows = $derived(ordered.filter((work) => !isClosedWork(work)));
+  let closedRows = $derived(ordered.filter((work) => isClosedWork(work)));
+  let tableRows = $derived(showClosed ? ordered : openRows);
+  let closedLabel = $derived.by(() => {
+    const done = closedRows.filter((work) => work.phase === "done").length;
+    const cancelled = closedRows.length - done;
+    return [
+      done ? `${done} done` : "",
+      cancelled ? `${cancelled} cancelled` : "",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+  });
+  // Board is plumbing when there is no choice: one board in view, no column
+  // and no card meta for it.
+  let multipleBoards = $derived(
+    new Set(
+      records
+        .map((work) => String(work?.board_ref ?? "").trim())
+        .filter(Boolean),
+    ).size > 1,
+  );
+  // "Last checked" means "last read from the source"; a task created here has
+  // no source, so the column exists only when a source-backed task is in view.
+  let anySourced = $derived(tableRows.some((work) => !isNexusOwned(work)));
+  let columns = $derived(
+    [
+      "Task",
+      multipleBoards ? "Board" : "",
+      "Status",
+      "Owner",
+      anySourced ? "Last checked" : "",
+    ].filter(Boolean),
+  );
   let groups = $derived(
     phaseGroups(records)
       .filter(
@@ -92,11 +135,16 @@
     const ref = String(work?.board_ref ?? "").trim();
     return boardTitles[ref] || ref.replace(/^board:/, "") || "—";
   }
+  function nextActorLabel(work) {
+    return work?.next_actor
+      ? actorDisplayLabel(work.next_actor, $actorRegistry, $principalRegistry)
+      : "";
+  }
 
   /**
-   * The last time we read this task from its source. A task Nexus owns has no
-   * source to read, so it says so rather than reporting "never checked" as if
-   * something were wrong — and never in the internal vocabulary ("Nexus-owned").
+   * The last time we read this task from its source. A task created here has
+   * no source to read, so its cell stays empty rather than repeating "created
+   * here" down the table.
    */
   function lastChecked(work, tick = now) {
     // `tick` is the page's 30s clock: naming it here is what makes the
@@ -112,7 +160,7 @@
       };
     }
     if (isNexusOwned(work)) {
-      return { text: "created here", title: "", datetime: "", muted: true };
+      return { text: "", title: "", datetime: "", muted: true };
     }
     return { text: "never", title: "", datetime: "", muted: true };
   }
@@ -395,7 +443,11 @@
       tracker asks for confirmation and files a request for you to approve.
     </p>
     {#each groups as group (group.key)}
-      {@const slots = slotsFor(group)}
+      {@const folded =
+        !showClosed &&
+        CLOSED_PHASES.has(group.key) &&
+        !(drag && pointerMoved && hover?.phase === group.key)}
+      {@const slots = folded ? [] : slotsFor(group)}
       <section
         class="w-72 shrink-0 rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[10.5rem] xl:flex-1 {hover?.phase ===
         group.key
@@ -413,63 +465,84 @@
             >{group.items.length}{truncated ? "+" : ""}</span
           >
         </div>
-        <div class="flex min-h-[4.5rem] flex-col gap-2">
-          {#each slots as slot (slot.key)}
-            {@const work = slot.work}
-            {@const key = slot.key}
-            {@const decisionId = work ? requestedDecisions[key] : ""}
-            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-            <div
-              class="work-card-slot outline-none {focusedKey === key
-                ? 'ring-1 ring-accent'
-                : ''}"
-              data-work-slot
-              data-work-ref={work ? workKey(work) : undefined}
-              data-placeholder={slot.placeholder ? "" : undefined}
-              tabindex={slot.placeholder ? undefined : 0}
-              role={slot.placeholder ? "presentation" : "group"}
-              aria-hidden={slot.placeholder ? "true" : undefined}
-              aria-label={work ? work.title || "Untitled task" : undefined}
-              aria-keyshortcuts={slot.placeholder
-                ? undefined
-                : "ArrowLeft ArrowRight Enter"}
-              aria-describedby={slot.placeholder
-                ? undefined
-                : "task-board-card-help"}
-              animate:flip={{ duration: slotFlipDuration }}
-              style={slot.placeholder
-                ? `height: ${drag?.height ?? 72}px`
-                : undefined}
-              onpointerdown={slot.placeholder
-                ? undefined
-                : (event) => handleCardPointerDown(event, work)}
-              ondragstart={handleCardDragStart}
-              onclickcapture={handleCardClickCapture}
-              onfocus={slot.placeholder ? undefined : () => (focusedKey = key)}
-              onkeydown={slot.placeholder
-                ? undefined
-                : (event) => handleCardKey(event, work)}
-            >
-              {#if !slot.placeholder}
-                <WorkCard
-                  {work}
-                  href={href(work)}
-                  boardTitle={boardLabel(work)}
-                  requested={Boolean(requested[key] || decisionId)}
-                  requestedHref={decisionId
-                    ? workspaceHref(
-                        `/inbox?item=decision:${encodeURIComponent(decisionId)}`,
-                      )
-                    : ""}
-                />
-              {/if}
-            </div>
-          {:else}
-            <p class="px-2 py-6 text-center text-micro text-fg-subtle">
-              Nothing here
-            </p>
-          {/each}
-        </div>
+        {#if folded}
+          <!-- Closed work folds like it does in the table. The column stays a
+               drop target; dropping on it opens it. -->
+          <div class="flex min-h-[4.5rem] flex-col gap-2">
+            {#if group.items.length && closedHref}
+              <a
+                class="ui-prose-link px-2 py-2 text-center text-micro"
+                href={closedHref}
+                data-sveltekit-noscroll
+                data-sveltekit-keepfocus>Show {group.items.length}</a
+              >
+            {:else}
+              <p class="px-2 py-6 text-center text-micro text-fg-subtle">
+                Nothing here
+              </p>
+            {/if}
+          </div>
+        {:else}
+          <div class="flex min-h-[4.5rem] flex-col gap-2">
+            {#each slots as slot (slot.key)}
+              {@const work = slot.work}
+              {@const key = slot.key}
+              {@const decisionId = work ? requestedDecisions[key] : ""}
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <div
+                class="work-card-slot outline-none {focusedKey === key
+                  ? 'ring-1 ring-accent'
+                  : ''}"
+                data-work-slot
+                data-work-ref={work ? workKey(work) : undefined}
+                data-placeholder={slot.placeholder ? "" : undefined}
+                tabindex={slot.placeholder ? undefined : 0}
+                role={slot.placeholder ? "presentation" : "group"}
+                aria-hidden={slot.placeholder ? "true" : undefined}
+                aria-label={work ? work.title || "Untitled task" : undefined}
+                aria-keyshortcuts={slot.placeholder
+                  ? undefined
+                  : "ArrowLeft ArrowRight Enter"}
+                aria-describedby={slot.placeholder
+                  ? undefined
+                  : "task-board-card-help"}
+                animate:flip={{ duration: slotFlipDuration }}
+                style={slot.placeholder
+                  ? `height: ${drag?.height ?? 72}px`
+                  : undefined}
+                onpointerdown={slot.placeholder
+                  ? undefined
+                  : (event) => handleCardPointerDown(event, work)}
+                ondragstart={handleCardDragStart}
+                onclickcapture={handleCardClickCapture}
+                onfocus={slot.placeholder
+                  ? undefined
+                  : () => (focusedKey = key)}
+                onkeydown={slot.placeholder
+                  ? undefined
+                  : (event) => handleCardKey(event, work)}
+              >
+                {#if !slot.placeholder}
+                  <WorkCard
+                    {work}
+                    href={href(work)}
+                    boardTitle={multipleBoards ? boardLabel(work) : ""}
+                    requested={Boolean(requested[key] || decisionId)}
+                    requestedHref={decisionId
+                      ? workspaceHref(
+                          `/inbox?item=decision:${encodeURIComponent(decisionId)}`,
+                        )
+                      : ""}
+                  />
+                {/if}
+              </div>
+            {:else}
+              <p class="px-2 py-6 text-center text-micro text-fg-subtle">
+                Nothing here
+              </p>
+            {/each}
+          </div>
+        {/if}
       </section>
     {/each}
   </div>
@@ -484,7 +557,7 @@
       <WorkCard
         work={drag.work}
         href={href(drag.work)}
-        boardTitle={boardLabel(drag.work)}
+        boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
         requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
       />
     </div>
@@ -492,126 +565,160 @@
 {:else}
   <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div
-    class="wide-scroll overflow-x-auto rounded-md border border-line"
-    role="region"
-    aria-label="Task table"
-    tabindex="0"
-  >
-    <!--
+  {#if !tableRows.length}
+    <p class="py-8 text-center text-meta text-fg-muted">
+      Nothing open. {closedLabel ? `Closed work: ${closedLabel}.` : ""}
+    </p>
+  {:else}
+    <div
+      class="wide-scroll overflow-x-auto rounded-md border border-line"
+      role="region"
+      aria-label="Task table"
+      tabindex="0"
+    >
+      <!--
       One DOM for both widths. Below 640px the same rows collapse into the
       two-line row the Inbox uses (title, then `board · status · time`) — a
       four-column table that scrolls sideways on a phone is a table nobody
       reads, and a second markup for mobile is a second thing to keep true.
     -->
-    <table class="work-table w-full border-collapse text-left text-meta">
-      <caption class="sr-only"
-        >Tracked tasks with board, status, owner and when each was last checked</caption
-      >
-      <thead class="text-micro uppercase tracking-wide text-fg-subtle">
-        <tr>
-          {#each ["Task", "Board", "Status", "Owner", "Last checked"] as heading}
-            <th
-              scope="col"
-              class="whitespace-nowrap border-b border-line px-3 py-2 font-semibold"
-              >{heading}</th
+      <table class="work-table w-full border-collapse text-left text-meta">
+        <caption class="sr-only"
+          >Tracked tasks, most in need of attention first</caption
+        >
+        <thead class="text-micro uppercase tracking-wide text-fg-subtle">
+          <tr>
+            {#each columns as heading}
+              <th
+                scope="col"
+                class="whitespace-nowrap border-b border-line px-3 py-2 font-semibold"
+                >{heading}</th
+              >
+            {/each}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line-subtle bg-panel">
+          {#each tableRows as work (workKey(work))}
+            {@const checked = lastChecked(work, now)}
+            {@const read = workFreshness(work, now)}
+            {@const tone = badgeTone(work.phase)}
+            <tr
+              class="h-10 align-middle hover:bg-panel-hover"
+              data-work-ref={work.ref}
             >
-          {/each}
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-line-subtle bg-panel">
-        {#each records as work (workKey(work))}
-          {@const checked = lastChecked(work, now)}
-          {@const read = workFreshness(work, now)}
-          {@const tone = badgeTone(work.phase)}
-          <tr
-            class="h-10 align-middle hover:bg-panel-hover"
-            data-work-ref={work.ref}
-          >
-            <th scope="row" class="min-w-56 max-w-96 px-3 py-1.5 font-normal">
-              <a
-                class="block truncate font-medium text-fg hover:text-accent-text"
-                href={href(work)}>{work.title || "Untitled task"}</a
-              >
-              {#if work.next_actor || work.next_action}
-                <p class="truncate text-micro text-fg-muted">
-                  {[work.next_actor, work.next_action]
-                    .filter(Boolean)
-                    .join(" — ")}
-                </p>
-              {/if}
-              <span class="work-row-meta text-micro text-fg-muted">
-                <span class="min-w-0 flex-1 truncate"
-                  >{boardLabel(work)} · {statusText(work)}</span
+              <th scope="row" class="min-w-56 max-w-96 px-3 py-1.5 font-normal">
+                <a
+                  class="block truncate font-medium text-fg hover:text-accent-text"
+                  href={href(work)}>{work.title || "Untitled task"}</a
                 >
-                {#if read.key === "error"}
-                  <SignalBadge tone="warn">{read.label}</SignalBadge>
+                {#if work.next_actor || work.next_action}
+                  <p class="truncate text-micro text-fg-muted">
+                    {[nextActorLabel(work), work.next_action]
+                      .filter(Boolean)
+                      .join(" — ")}
+                  </p>
                 {/if}
-                <span class="shrink-0 tabular-nums">{checked.text}</span>
-              </span>
-            </th>
-            <td class="max-w-40 px-3 py-1.5">
-              <span class="block truncate text-fg-muted"
-                >{boardLabel(work)}</span
-              >
-            </td>
-            <!-- A source can report a status of any length; capped and
+                <span class="work-row-meta text-micro text-fg-muted">
+                  <span class="min-w-0 flex-1 truncate"
+                    >{[multipleBoards ? boardLabel(work) : "", statusText(work)]
+                      .filter(Boolean)
+                      .join(" · ")}</span
+                  >
+                  {#if read.key === "error"}
+                    <SignalBadge tone="warn">{read.label}</SignalBadge>
+                  {/if}
+                  {#if checked.text}
+                    <span class="shrink-0 tabular-nums">{checked.text}</span>
+                  {/if}
+                </span>
+              </th>
+              {#if multipleBoards}
+                <td class="max-w-40 px-3 py-1.5">
+                  <span class="block truncate text-fg-muted"
+                    >{boardLabel(work)}</span
+                  >
+                </td>
+              {/if}
+              <!-- A source can report a status of any length; capped and
                  truncated so one verbose one cannot push Last checked off
                  the right edge of the table for every row. -->
-            <td class="max-w-48 px-3 py-1.5">
-              {#if tone}
-                <SignalBadge {tone}>{statusText(work)}</SignalBadge>
-              {:else}
-                <span
-                  class="flex items-center gap-1.5 text-fg-muted"
-                  title={statusText(work)}
-                >
+              <td class="max-w-48 px-3 py-1.5">
+                {#if tone}
+                  <SignalBadge {tone}>{statusText(work)}</SignalBadge>
+                {:else}
                   <span
-                    class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass(
-                      work.phase,
-                    )}"
-                    aria-hidden="true"
-                  ></span>
-                  <span class="truncate">{statusText(work)}</span>
-                </span>
+                    class="flex items-center gap-1.5 text-fg-muted"
+                    title={statusText(work)}
+                  >
+                    <span
+                      class="h-1.5 w-1.5 shrink-0 rounded-full {dotClass(
+                        work.phase,
+                      )}"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="truncate">{statusText(work)}</span>
+                  </span>
+                {/if}
+              </td>
+              <td class="max-w-40 overflow-hidden px-3 py-1.5">
+                {#if work.owner}
+                  <ActorLabel
+                    class="max-w-full"
+                    label={actorDisplayLabel(
+                      work.owner,
+                      $actorRegistry,
+                      $principalRegistry,
+                    )}
+                    seed={work.owner}
+                    size="xs"
+                    nameClass="text-meta text-fg truncate"
+                  />
+                {:else}
+                  <span class="text-fg-subtle">—</span>
+                {/if}
+              </td>
+              {#if anySourced}
+                <td class="whitespace-nowrap px-3 py-1.5">
+                  {#if read.key === "error"}
+                    <SignalBadge tone="warn">{read.label}</SignalBadge>
+                    <span class="ml-1.5 text-fg-subtle">{checked.text}</span>
+                  {:else if checked.datetime}
+                    <time
+                      class="tabular-nums text-fg-muted"
+                      datetime={checked.datetime}
+                      title={checked.title}>{checked.text}</time
+                    >
+                  {:else if checked.text}
+                    <span class="text-fg-subtle">{checked.text}</span>
+                  {/if}
+                </td>
               {/if}
-            </td>
-            <td class="max-w-40 overflow-hidden px-3 py-1.5">
-              {#if work.owner}
-                <ActorLabel
-                  class="max-w-full"
-                  label={actorDisplayLabel(
-                    work.owner,
-                    $actorRegistry,
-                    $principalRegistry,
-                  )}
-                  seed={work.owner}
-                  size="xs"
-                  nameClass="text-meta text-fg truncate"
-                />
-              {:else}
-                <span class="text-fg-subtle">—</span>
-              {/if}
-            </td>
-            <td class="whitespace-nowrap px-3 py-1.5">
-              {#if read.key === "error"}
-                <SignalBadge tone="warn">{read.label}</SignalBadge>
-                <span class="ml-1.5 text-fg-subtle">{checked.text}</span>
-              {:else if checked.datetime}
-                <time
-                  class="tabular-nums text-fg-muted"
-                  datetime={checked.datetime}
-                  title={checked.title}>{checked.text}</time
-                >
-              {:else}
-                <span class="text-fg-subtle">{checked.text}</span>
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </div>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+  {#if closedRows.length && closedHref}
+    <!-- Closed work is one quiet line under the table, not the first rows
+         of it. -->
+    <a
+      class="-mt-1 inline-flex w-fit items-center gap-1.5 rounded-sm text-micro text-fg-muted hover:text-fg"
+      href={closedHref}
+      aria-expanded={showClosed}
+      data-sveltekit-noscroll
+      data-sveltekit-keepfocus
+      data-work-closed-toggle
+      ><svg
+        class="h-2.5 w-2.5 transition-transform {showClosed ? 'rotate-90' : ''}"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"><path d="M7 4l7 6-7 6V4z" /></svg
+      >{showClosed ? `Hide ${closedLabel}` : closedLabel}{truncated
+        ? "+"
+        : ""}</a
+    >
+  {/if}
 {/if}
 
 <style>

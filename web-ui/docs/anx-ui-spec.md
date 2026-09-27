@@ -40,6 +40,7 @@ Agent Nexus web UI does **not**:
 - The UI MUST authenticate the current operator as an actor ID from the anx-core actor registry.
 - Every write operation MUST include the actor ID.
 - The UI displays actor `display_name` wherever `actor_id` appears.
+- Machine identifiers are not labels. Actor ids, machine-minted principal handles (`passkey.<slug>.<hex>`, `external.<hash>`), connection ids, thread refs and raw error payloads are never printed as the name of something. The UI shows the name (or a person-chosen handle) and keeps the identifier behind a copy affordance where an operator may need it for the CLI or a bug report: "Copy actor id" on `/more`, "Copy connection id" and "Copy error" on Integrations (connections read "GitHub · main" when a tool has more than one), "Copy ref" on the Threads list, task and doc pages and in ⌘K.
 - **Auth-first model**: Production deployments require authenticated principals by default.
   - Passkey registration/login creates a linked actor with `principal_kind=human`, `auth_method=passkey`.
   - Ed25519 key registration creates a linked actor with `principal_kind=agent`, `auth_method=public_key`.
@@ -78,7 +79,7 @@ Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appe
 
 Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
 
-**Open:** the Tasks table still renders a Board column for every row, including in a workspace whose only board is the one core provisioned. By the rule above that column is plumbing whenever there is no choice to make, but removing or conditioning it is a product decision about the Tasks table, not a copy fix, so it is recorded here rather than changed silently.
+The Tasks table and board cards name the board only when more than one board is in view; with one board there is no choice to make, so there is no Board column and no board name on a card.
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
@@ -109,8 +110,10 @@ The practical rule: if an operator has to learn a word to use the product, it be
 ### 2.1 Three product primitives
 
 The primary navigation units are **Inbox**, **Tasks**, and **Docs**. Ask PM is
-an action in the shell, not a nav category. Settings (Access, Secrets,
-Integrations, Audit) live in the sidebar footer and `/more`.
+an action in the shell, not a nav category. The account menu in the sidebar
+footer and the `/more` hub group the secondary destinations under two labels:
+**Settings** (Access, Secrets, Integrations) and **Diagnostics** (Audit,
+Threads). Sign out is the last item of the account menu.
 
 Tasks is the operator projection over work (`work.list` / `work.get`), shown as
 table or board. Boards and cards remain the backing store; they are not
@@ -119,8 +122,9 @@ inbox deep links and audit inspection at `/threads/...`.
 
 `/threads` and `/events` are **Diagnostics**, not product: they expose core
 primitives that are deliberately not operator nouns. Both are reachable only
-from the sidebar footer / `/more` hub — `/events` under Settings as "Audit",
-`/threads` under a "Diagnostics" group. They MUST NOT appear in primary nav.
+from the account menu / `/more` hub under the "Diagnostics" group (`/events`
+as "Audit", `/threads` as "Threads"), and from the ⌘K palette's "Go to" list.
+They MUST NOT appear in primary nav.
 A diagnostic surface is labelled and grouped rather than merely unlinked: an
 orphaned page reachable only by typing its URL is undiscoverable to the
 operator who needs it and unexplained to everyone else.
@@ -168,7 +172,7 @@ Mutable fields are interpretive and versioned through events. The timeline is du
 
 The workspace root redirects to Inbox. There is no Home unread-feed destination.
 
-Events is the full workspace event browser under settings. It reads `GET /events`,
+Events ("Audit") is the full workspace event browser under Diagnostics. It reads `GET /events`,
 supports URL/shareable filter intent for type, group, backing scope, topic, actor,
 search, time range, and cursor.
 Events stays under More on mobile rather than a primary bottom-nav slot.
@@ -195,11 +199,9 @@ A dedicated surface showing items that need operator attention.
 
 `/threads` is a filterable inspection list of backing conversations (docs-as-rooms, inbox deep links, audit). It is not a fourth product primitive and MUST NOT appear in primary nav. It is listed under the **Diagnostics** group in the sidebar footer / `/more` hub, so it is discoverable by link rather than only by URL.
 
-Document and thread list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
-
 **Filters:** lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
-Each row shows: title, lifecycle state, summary, and last activity timestamp.
+Each row shows: title, lifecycle state (when not active), last activity timestamp, and whether a topic is linked. The thread ref is not printed; a "Copy ref" icon button carries it for CLI use.
 
 ### 3.3 Thread / topic inspection detail
 
@@ -243,12 +245,30 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 - Nexus-owned Tasks board drops MUST persist through `cards.move` with public `card:` refs. Source-owned drops MUST file a PM decision rather than silently mutating the source.
 - `/boards` is not an operator destination, and neither is `/work` — the operator route is `/tasks`.
 - There is no card-detail modal on a board workspace.
+- **Attention order.** The table lists open work by what needs a look first: Blocked, In progress, In review, Ready, Backlog, then phases Nexus has no name for; within a phase, `work.list` order (most recently updated first). Done and Cancelled fold into one quiet toggle under the table ("3 done"); `?closed=1` shows them (URL-backed) and filtering by Done or Cancelled shows them regardless. On the board, columns keep workflow order and cards keep their rank (rank is what a drag writes); the Done and Cancelled columns collapse to their count with the same toggle and stay drop targets.
+- **One row per source item.** Tasks whose `source.authority` and `source.native_id` match (one GitHub issue read through two connections) show as one row: the one whose reader is not failing, then the most recently read, then the oldest. The folded tasks are listed on the kept task's page under "Also tracked through another connection", with their read state. Nexus-owned tasks never fold.
+- **Columns earn their place.** Board appears only when more than one board is in view. "Last checked" means the last read from the source, so it appears only when a source-backed task is in view, and a Nexus-owned row leaves it empty rather than repeating "created here". The next-actor line under a title shows the actor's name, never the actor id.
+- **Evidence on the task page is grouped by source.** One line per source ("GitHub #208 · 4 observations · last 1m ago") with the latest read's claim badge (Reported claim / Uncertain report / Verified evidence; "verified" is trusted only from `verification`), the latest read's uncertainty, then each distinct evidence link once, named by kind (Issue #208, Comment 1, Review · APPROVED, Check · build: completed / success); long lists show six and a "N more" toggle. A failed latest read is one warn line with the source's message (instants humanized). The read-by-read history, with consecutive identical reads folded ("Reported claim × 18 between 47m ago and 14m ago"), is an "Observation history" disclosure; raw reader payloads stay under Details.
+- **Live.** The Tasks list and the task page follow the workspace event stream (card and board events); there is no Reload button on the list. The task page keeps Reload for evidence, which arrives as observations rather than events.
 
 **Docs:**
 
 - The UI MUST present docs as canonical long-lived lineages with a mutable head and explicit revision history, not generic stored text blobs.
 - Doc create/edit workflows SHOULD use searchable thread-link pickers for common linkage flows, with manual raw-ID entry hidden behind an advanced path.
 - Doc detail SHOULD make the current head revision versus prior lineage history legible at a glance.
+- Docs list rows show the title, the head version chip (`v3`), tags and source, the last comment preview when it says more than the title, and the update time. There is no comment count or version count: the chip already says the version, and without per-reader unread state a comment total is the same noise on every row. The list follows the event stream (document events and comments on a listed doc) with no Reload button.
+
+### 3.6a Command palette (⌘K) and keyboard
+
+The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is keyboard-first and takes actions, not only searches. Rows are grouped, in this order:
+
+1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref, Ask PM about this task. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
+2. **Go to:** Inbox (G I), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination.
+3. **Search results:** tasks (one row per source item) and docs, from two characters on.
+
+Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through `applyTaskPhaseMove`, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
+
+Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then I/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G I/T/D and ⌘K alongside the page's own keys.
 
 ### 3.7 Access management
 
@@ -312,7 +332,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 ## 6. Concurrency
 
 - Agent Nexus web UI MUST assume multiple writers (operators and agents) may update anx-core concurrently.
-- The UI SHOULD poll or subscribe for changes and refresh when canonical state changes.
+- The UI SHOULD subscribe for changes and refresh when canonical state changes. List pages use `liveWorkspaceEvents` (`lib/liveWorkspaceEvents.js`) over `GET /stream/events`: it starts after the newest matching event (no history replay), filters by type and an optional predicate, coalesces bursts into one re-read, resumes with `last_event_id` after a drop, backs off while core is unreachable, and stops on 401/403. Tasks, Docs and the task page use it; thread detail keeps its own thread-scoped stream. A live re-read keeps the rows on screen and, on failure, says they may be stale.
 - For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the operator and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
 
 ---
