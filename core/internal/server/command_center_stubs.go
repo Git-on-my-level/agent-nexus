@@ -70,26 +70,6 @@ func commandCenterStubRouteAccess(r *http.Request) routeAccessRequirement {
 			return public // signed host proof is checked by the real handler
 		}
 	}
-	if path == "/runs" {
-		if method == http.MethodGet {
-			return authenticated
-		}
-		if method == http.MethodPost {
-			return write
-		}
-	}
-	if strings.HasPrefix(path, "/runs/") && strings.TrimPrefix(path, "/runs/") != "" && !strings.Contains(strings.TrimPrefix(path, "/runs/"), "/") && method == http.MethodGet {
-		return authenticated
-	}
-	if path == "/agents" && method == http.MethodGet {
-		return authenticated
-	}
-	if path == "/agents/me/presence" && method == http.MethodPatch {
-		return write
-	}
-	if strings.HasPrefix(path, "/agents/") && strings.TrimPrefix(path, "/agents/") != "" && !strings.Contains(strings.TrimPrefix(path, "/agents/"), "/") && method == http.MethodGet {
-		return authenticated
-	}
 	return unsupported
 }
 

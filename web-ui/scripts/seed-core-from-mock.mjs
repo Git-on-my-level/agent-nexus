@@ -138,6 +138,7 @@ async function main() {
     }
   }
 
+  let identityBundle = [];
   if (domainSeeded) {
     await seedActors();
     await seedTopics();
@@ -151,16 +152,18 @@ async function main() {
     // Register seeded agent principals before posting mention-heavy events so
     // @handle routing resolves against durable auth principals during seeding.
     if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
-      await seedDevFixtureIdentities();
+      identityBundle = (await seedDevFixtureIdentities()) ?? [];
     }
     const eventStats = await seedEvents();
     await rebuildDerived();
+    await seedCommandCenter(identityBundle);
 
     console.log(
       `Seed complete. Events posted=${eventStats.posted}, events skipped=${eventStats.skipped}.`,
     );
   } else if (process.env.ANX_DEV_SEED_IDENTITIES === "1") {
-    await seedDevFixtureIdentities();
+    identityBundle = (await seedDevFixtureIdentities()) ?? [];
+    await seedCommandCenter(identityBundle);
   }
 }
 
@@ -1814,7 +1817,6 @@ async function seedDevFixtureIdentities() {
   console.log(
     `Wrote dev identity bundle (${bundle.length} personas) to ${outPath}`,
   );
-
   await writeCliDogfoodInviteArtifacts({
     cliDogfoodDir: cliDogfoodResourcesDir,
     coreBaseUrl,
@@ -1850,6 +1852,103 @@ async function seedDevFixtureIdentities() {
     await writeFile(hintsPath, `${lines.join("\n")}\n`, "utf8");
     console.log(`Wrote bridge hints to ${hintsPath}`);
   }
+  return bundle;
+}
+
+// These actor IDs predate host enrollment. The identity workstream adopts them
+// under a seeded host; until then this branch has standalone agents and the
+// derived-agent-only mutation routes correctly refuse the fixture tokens.
+async function seedCommandCenter(bundle) {
+  if (!bundle.length || !["default", "game-dev-studio"].includes(scenarioName)) {
+    return;
+  }
+  const byActor = new Map(bundle.map((p) => [p.actor_id, p]));
+  const operator = byActor.get("actor-gds-producer");
+  if (!operator?.access_token) return;
+  const roster = await requestAuthGet("/agents", operator.access_token);
+  const rosterByActor = new Map((roster.agents ?? []).map((a) => [a.actor_id, a]));
+  const roles = [
+    ["working", "actor-gds-gameplay"],
+    ["waiting_on_human", "actor-gds-art"],
+    ["idle", "actor-gds-narrative"],
+    ["stale", "actor-gds-qa"],
+  ];
+  if (roles.some(([, actorId]) => rosterByActor.get(actorId)?.identity_kind === "standalone")) {
+    console.warn("Command-center roster seed awaits host adoption of game-studio fixture agents.");
+    return;
+  }
+  if (roles.some(([, actorId]) => !rosterByActor.get(actorId) || !byActor.get(actorId)?.access_token)) {
+    console.warn("Command-center roster seed awaits derived fixture identity tokens.");
+    return;
+  }
+  const cards = await requestAuthGet("/cards", operator.access_token);
+  const card = (cards.cards ?? []).find((c) =>
+    String(c.title ?? "") === "Run QA bug bash and triage release blockers",
+  );
+  if (!card?.ref || !card?.thread_id) {
+    throw new Error("command-center seed requires the bug-bash card ref and thread");
+  }
+  const now = new Date();
+  const observedAt = now.toISOString();
+  const runBase = (actorId, externalId, state) => ({
+    launcher: "agentctl",
+    external_id: externalId,
+    host_id: rosterByActor.get(actorId).host_id,
+    agent_id: rosterByActor.get(actorId).id,
+    adapter: rosterByActor.get(actorId).name,
+    state,
+    liveness: state === "running" ? "alive" : "stale",
+    result_collected: state === "completed",
+    labels: [`anx.card.${String(card.ref).slice(5)}`],
+    card_ref: card.ref,
+    started_at: new Date(now.getTime() - 12 * 60_000).toISOString(),
+    ...(state === "completed" ? { ended_at: observedAt } : {}),
+    last_observed_at: observedAt,
+  });
+  await requestAuthJson("POST", "/runs", runBase("actor-gds-gameplay", "exec-dev-working", "running"), byActor.get("actor-gds-gameplay").access_token);
+  await requestAuthJson("PATCH", "/agents/me/presence", {
+    current_card_ref: card.ref,
+    note: "Implementing the combat pass; capture build is next.",
+  }, byActor.get("actor-gds-gameplay").access_token);
+  await requestAuthJson("POST", "/runs", runBase("actor-gds-narrative", "exec-dev-idle", "completed"), byActor.get("actor-gds-narrative").access_token);
+  const waiting = rosterByActor.get("actor-gds-art");
+  if ((waiting.open_asks_count ?? 0) === 0) {
+    await requestAuthJson("POST", "/events", {
+      request_key: "dev-roster-art-review",
+      event: {
+        type: "human_attention_requested",
+        thread_id: card.thread_id,
+        refs: [`thread:${card.thread_id}`, card.ref],
+        summary: "Review the capture UI contrast before sign-off",
+        payload: {
+          kind: "review",
+          title: "Review capture UI contrast",
+          requester_actor_id: "actor-gds-art",
+          requester_agent_id: waiting.id,
+          subject_ref: card.ref,
+          response_proposals: ["Approve the contrast pass", "Request revisions"],
+        },
+        provenance: { sources: ["seed:game-dev-studio"] },
+      },
+    }, byActor.get("actor-gds-art").access_token);
+  }
+  const after = await requestAuthGet("/agents", operator.access_token);
+  const actual = new Map((after.agents ?? []).map((a) => [a.actor_id, a.state]));
+  for (const [expected, actorId] of roles) {
+    if (actual.get(actorId) !== expected) {
+      throw new Error(`command-center roster seed: ${actorId} is ${actual.get(actorId)}, expected ${expected}`);
+    }
+  }
+  console.log("Seeded command-center roster states: working, waiting, idle, stale.");
+}
+
+async function requestAuthGet(path, accessToken) {
+  const response = await fetch(`${coreBaseUrl}${path}`, {
+    headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
+  });
+  const parsed = parseJson(await response.text());
+  if (!response.ok) throw new Error(`GET ${path} -> ${response.status}: ${parsed?.error?.message ?? "failed"}`);
+  return parsed;
 }
 
 async function request(method, path, body, okStatuses = [200, 201]) {

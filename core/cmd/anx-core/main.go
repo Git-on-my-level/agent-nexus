@@ -23,6 +23,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/heartbeat"
 	"agent-nexus-core/internal/observation"
 	"agent-nexus-core/internal/pm"
@@ -512,6 +513,7 @@ func main() {
 		server.WithReadinessCheck("sidecars", "sidecar_unavailable", "sidecar readiness check failed", sidecarHost.Ready),
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
+		server.WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
 		server.WithPasskeySessionStore(passkeySessionStore),
