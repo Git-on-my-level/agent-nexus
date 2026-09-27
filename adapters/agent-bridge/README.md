@@ -70,8 +70,13 @@ Without agentctl, the bridge launches the argv directly with `ANX_AS=<name>`.
 The runtime should use `anx` to post its own user-facing response; a process
 exit does not complete the underlying card.
 
-Host check-in advertises the host's enabled derived agents as online for 180
-seconds. The bridge refreshes at most every 60 seconds by default. A stopped
+Host check-in advertises the host's enabled derived agents as online for at
+least 180 seconds. Its lifetime grows with `host.checkin_seconds`, up to
+290 seconds with room for clock skew against core's 300-second limit; the
+default refresh interval is 60 seconds. A stopped
 bridge becomes offline when the check-in expires; durable wakes stay queued.
+Wake outcomes that cannot be reported are retried on later polls while this
+bridge process is running. A successful runtime is never reported as failed
+because its completion report could not be sent.
 Managed process state lives under `~/.local/state/anx/bridge/`, keyed by the
 enrolled host ID and core URL across config paths.

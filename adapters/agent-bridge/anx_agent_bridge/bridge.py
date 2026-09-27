@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import uuid
+from typing import Any
 
 from .anx_client import Client, HostCLI
 from .config import Config, Runtime
@@ -23,6 +24,7 @@ class Bridge:
         self.client = client or Client(config, self.cli)
         self.instance_id = "anx-bridge-" + uuid.uuid4().hex
         self.last_checkin = 0.0
+        self.pending_reports: dict[str, tuple[str, str]] = {}
 
     def validate_roster(self) -> list[str]:
         # Derive every configured agent before reading the host roster. A fresh
@@ -46,20 +48,27 @@ class Bridge:
         self.last_checkin = time.monotonic()
 
     def run_once(self, *, checkin: bool = True) -> int:
+        self._report_pending()
         if checkin and time.monotonic() - self.last_checkin >= self.config.checkin_seconds:
             self.checkin()
         count = 0
         for name in self.config.runtimes:
-            for item in self.client.notifications(name):
-                if item.get("delivery_status") != "requested":
-                    continue
-                if item.get("target_handle") != f"{name}.{self.config.host_slug}":
-                    raise ValueError("notification target does not match derived handle")
+            try:
+                items = self.client.notifications(name)
+            except Exception:
+                LOG.exception("notifications for %s could not be polled", name)
+                continue
+            if not isinstance(items, list):
+                LOG.error("notifications for %s were not a list", name)
+                continue
+            for item in items:
                 try:
+                    if item.get("delivery_status") != "requested":
+                        continue
                     self.handle(name, item)
                     count += 1
                 except Exception:
-                    LOG.exception("wake %s failed", item.get("wakeup_id"))
+                    LOG.exception("wake %s for %s failed", item.get("wakeup_id") if isinstance(item, dict) else None, name)
         return count
 
     def run_forever(self) -> None:
@@ -81,14 +90,35 @@ class Bridge:
 
     def handle(self, name: str, item: dict[str, Any]) -> None:
         wakeup_id = str(item["wakeup_id"])
+        mismatch = item.get("target_handle") != f"{name}.{self.config.host_slug}"
+        if mismatch:
+            LOG.error("wake %s target %r does not match %s.%s; recording failure",
+                      wakeup_id, item.get("target_handle"), name, self.config.host_slug)
         self.cli.wake("claim", wakeup_id, self.instance_id)
         try:
+            if mismatch:
+                raise ValueError("notification target does not match derived handle")
             packet = self.client.wake_packet(name, wakeup_id)
             self.launch(self.config.runtimes[name], packet, item)
-            self.cli.wake("complete", wakeup_id, self.instance_id)
         except Exception as exc:
-            self.cli.wake("fail", wakeup_id, self.instance_id, str(exc))
+            self.pending_reports[wakeup_id] = ("fail", str(exc))
+            self._report(wakeup_id)
             raise
+        self.pending_reports[wakeup_id] = ("complete", "")
+        self._report(wakeup_id)
+
+    def _report(self, wakeup_id: str) -> None:
+        action, reason = self.pending_reports[wakeup_id]
+        try:
+            self.cli.wake(action, wakeup_id, self.instance_id, reason)
+        except Exception:
+            LOG.exception("wake %s %s report failed; will retry on next poll", wakeup_id, action)
+        else:
+            del self.pending_reports[wakeup_id]
+
+    def _report_pending(self) -> None:
+        for wakeup_id in tuple(self.pending_reports):
+            self._report(wakeup_id)
 
     def launch(self, runtime: Runtime, packet: dict[str, Any], item: dict[str, Any]) -> None:
         prompt = self._prompt(packet, item)

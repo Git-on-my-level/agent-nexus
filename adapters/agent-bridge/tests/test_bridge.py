@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -92,4 +93,132 @@ def test_config_rejects_agent_home(tmp_path):
     path = tmp_path / "bridge.toml"
     path.write_text('agent_home = "./old"\n[host]\nbase_url="http://x"\nid="h"\nslug="host"\n[agents.codex]\ncommand=["true"]\n')
     with pytest.raises(ValueError, match="obsolete"):
+        load_config(path)
+
+
+def test_bad_target_fails_without_blocking_other_wakes_or_future_polls(tmp_path, monkeypatch):
+    bridge, _, _ = setup_bridge(tmp_path, monkeypatch)
+    codex = bridge.config.runtimes["codex"]
+    bridge.config.runtimes["reviewer"] = Runtime("reviewer", "generic", codex.command, codex.cwd, {})
+    items = {
+        "codex": [
+            {"wakeup_id": "bad", "target_handle": "reviewer.test-host", "delivery_status": "requested"},
+            {"wakeup_id": "good-codex", "target_handle": "codex.test-host", "delivery_status": "requested"},
+        ],
+        "reviewer": [{"wakeup_id": "good-reviewer", "target_handle": "reviewer.test-host", "delivery_status": "requested"}],
+    }
+    bridge.client.notifications = lambda name: items[name]
+    bridge.client.wake_packet = lambda name, wakeup_id: {"trigger": {"text": wakeup_id}}
+    launched = []
+    bridge.launch = lambda runtime, packet, item: launched.append(item["wakeup_id"])
+    actions = []
+    def wake(action, wakeup_id, instance_id, error=""):
+        actions.append((action, wakeup_id, error))
+        if action in ("complete", "fail"):
+            for agent_items in items.values():
+                for item in agent_items:
+                    if item["wakeup_id"] == wakeup_id:
+                        item["delivery_status"] = "completed" if action == "complete" else "failed"
+    bridge.cli.wake = wake
+
+    assert bridge.run_once(checkin=False) == 2
+    assert launched == ["good-codex", "good-reviewer"]
+    assert ("fail", "bad", "notification target does not match derived handle") in actions
+    assert bridge.run_once(checkin=False) == 0
+    assert len([a for a in actions if a[1] == "bad"]) == 2
+
+
+def test_completion_report_failure_retries_without_failing_or_relaunching(tmp_path, monkeypatch):
+    bridge, _, _ = setup_bridge(tmp_path, monkeypatch)
+    launched = []
+    bridge.launch = lambda runtime, packet, item: launched.append(item["wakeup_id"])
+    actions = []
+    state = {"delivery_status": "requested"}
+    bridge.client.notifications = lambda name: [{"wakeup_id": "good", "target_handle": "codex.test-host", **state}]
+    bridge.client.wake_packet = lambda name, wakeup_id: {"trigger": {"text": "work"}}
+    def wake(action, wakeup_id, instance_id, error=""):
+        actions.append(action)
+        if action == "claim":
+            state["delivery_status"] = "claimed"
+        elif action == "complete" and actions.count("complete") == 1:
+            raise OSError("temporary completion outage")
+        elif action == "complete":
+            state["delivery_status"] = "completed"
+    bridge.cli.wake = wake
+
+    assert bridge.run_once(checkin=False) == 1
+    assert bridge.pending_reports == {"good": ("complete", "")}
+    assert bridge.run_once(checkin=False) == 0
+    assert bridge.pending_reports == {}
+    assert launched == ["good"]
+    assert actions == ["claim", "complete", "complete"]
+
+
+def test_failure_report_retries_and_does_not_block_next_wake(tmp_path, monkeypatch):
+    bridge, _, _ = setup_bridge(tmp_path, monkeypatch)
+    items = [
+        {"wakeup_id": "bad", "target_handle": "codex.test-host", "delivery_status": "requested"},
+        {"wakeup_id": "good", "target_handle": "codex.test-host", "delivery_status": "requested"},
+    ]
+    bridge.client.notifications = lambda name: items
+    bridge.client.wake_packet = lambda name, wakeup_id: {"trigger": {"text": wakeup_id}}
+    def launch(runtime, packet, item):
+        if item["wakeup_id"] == "bad":
+            raise RuntimeError("runtime died")
+    bridge.launch = launch
+    actions = []
+    def wake(action, wakeup_id, instance_id, error=""):
+        actions.append((action, wakeup_id))
+        if action == "claim":
+            next(item for item in items if item["wakeup_id"] == wakeup_id)["delivery_status"] = "claimed"
+        elif action == "fail" and actions.count(("fail", "bad")) == 1:
+            raise OSError("temporary failure report outage")
+        else:
+            next(item for item in items if item["wakeup_id"] == wakeup_id)["delivery_status"] = (
+                "completed" if action == "complete" else "failed"
+            )
+    bridge.cli.wake = wake
+
+    assert bridge.run_once(checkin=False) == 1
+    assert bridge.pending_reports == {"bad": ("fail", "runtime died")}
+    bridge.run_once(checkin=False)
+    assert bridge.pending_reports == {}
+    assert actions == [("claim", "bad"), ("fail", "bad"), ("claim", "good"),
+                       ("complete", "good"), ("fail", "bad")]
+
+
+def test_agent_poll_failure_does_not_block_other_agent(tmp_path, monkeypatch):
+    bridge, _, _ = setup_bridge(tmp_path, monkeypatch)
+    codex = bridge.config.runtimes["codex"]
+    bridge.config.runtimes["reviewer"] = Runtime("reviewer", "generic", codex.command, codex.cwd, {})
+    def notifications(name):
+        if name == "codex":
+            raise OSError("temporary read outage")
+        return [{"wakeup_id": "reviewer", "target_handle": "reviewer.test-host", "delivery_status": "requested"}]
+    bridge.client.notifications = notifications
+    bridge.client.wake_packet = lambda name, wakeup_id: {}
+    bridge.launch = lambda runtime, packet, item: None
+    actions = []
+    bridge.cli.wake = lambda action, wakeup_id, instance_id, error="": actions.append(action)
+    assert bridge.run_once(checkin=False) == 1
+    assert actions == ["claim", "complete"]
+
+
+@pytest.mark.parametrize("interval,expected_ttl", [(5, 180), (60, 180), (120, 290), (240, 290)])
+def test_checkin_ttl_tracks_configured_interval(tmp_path, monkeypatch, interval, expected_ttl):
+    bridge, _, calls = setup_bridge(tmp_path, monkeypatch)
+    cli = HostCLI(replace(bridge.config, checkin_seconds=interval))
+    cli.checkin("bridge-instance")
+    action = json.loads(calls.read_text().splitlines()[-1])
+    ttl = int(action[action.index("--ttl-seconds") + 1])
+    assert ttl == expected_ttl
+    assert interval < ttl <= 290
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "300"])
+def test_checkin_interval_must_allow_refresh_before_expiry(tmp_path, monkeypatch, value):
+    bridge, _, _ = setup_bridge(tmp_path, monkeypatch)
+    path = bridge.config.path
+    path.write_text(path.read_text().replace('[agents.codex]', f'checkin_seconds = {value}\n[agents.codex]'))
+    with pytest.raises(ValueError, match="checkin_seconds"):
         load_config(path)

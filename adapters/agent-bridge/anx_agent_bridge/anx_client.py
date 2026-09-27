@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from typing import Any
 
@@ -41,8 +42,13 @@ class HostCLI:
         return token
 
     def checkin(self, instance_id: str) -> Any:
+        # Core accepts at most five minutes from its clock. Leave ten seconds
+        # for clock skew while staying ahead of the longest 240s refresh.
+        ttl = min(290, max(180, math.ceil(2.5 * self.config.checkin_seconds)))
+        if ttl <= self.config.checkin_seconds:
+            raise ValueError("host bridge check-in TTL must exceed its refresh interval")
         return self._call("host", "bridge", "check-in", "--host-id", self.config.host_id,
-                          "--instance-id", instance_id, "--ttl-seconds", "180")
+                          "--instance-id", instance_id, "--ttl-seconds", str(ttl))
 
     def wake(self, action: str, wakeup_id: str, instance_id: str, error: str = "") -> Any:
         if action not in ("claim", "complete", "fail"):
