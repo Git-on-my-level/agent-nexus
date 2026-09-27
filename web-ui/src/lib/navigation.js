@@ -2,7 +2,8 @@
  * Primary navigation: the three product primitives — Inbox, Tasks, Docs.
  * The PM conversation is an action ("Ask PM" in the sidebar header and the
  * mobile bottom bar), not a destination category. Settings (Access, Secrets,
- * Integrations, Audit) live in the sidebar footer and the mobile More hub.
+ * Integrations) and Diagnostics (Audit, Threads) live in the account menu in
+ * the sidebar footer and in the mobile More hub.
  */
 export const navigationItems = [
   {
@@ -48,12 +49,6 @@ export const settingsNavGroups = [
         icon: "integrations",
         hint: "Source freshness and coverage",
       },
-      {
-        label: "Audit",
-        href: "/events",
-        icon: "audit",
-        hint: "Workspace history",
-      },
     ],
   },
   {
@@ -65,16 +60,22 @@ export const settingsNavGroups = [
     label: "Diagnostics",
     items: [
       {
+        label: "Audit",
+        href: "/events",
+        icon: "audit",
+        hint: "Workspace history",
+      },
+      {
         label: "Threads",
         href: "/threads",
-        icon: "link",
+        icon: "threads",
         hint: "Backing timelines",
       },
     ],
   },
 ];
 
-/** Flat view of the secondary destinations (kept for existing consumers). */
+/** Flat view of the secondary destinations, in group order. */
 export const settingsNavItems = settingsNavGroups.flatMap(
   (group) => group.items,
 );

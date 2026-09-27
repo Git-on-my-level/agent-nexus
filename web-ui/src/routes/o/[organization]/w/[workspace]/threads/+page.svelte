@@ -15,6 +15,7 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateEmpty from "$lib/components/state/StateEmpty.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   import {
     resourceDisplayLabel,
     resourceRouteSegment,
@@ -263,25 +264,23 @@
               >
             {/if}
           </div>
-          {#if thread.ref || thread.handle}
-            <p class="truncate font-mono text-micro text-fg-muted">
-              {thread.ref || thread.handle}
-            </p>
-          {/if}
-          {#if topicSeg}
-            <p class="truncate text-micro text-fg-muted">
-              Linked topic:
-              <span class="text-fg">{topicSeg}</span>
-            </p>
-          {:else}
-            <p class="truncate text-micro text-fg-muted">
-              No topic ref (non-topic or internal timeline)
-            </p>
-          {/if}
+          <!-- Names, not identifiers: the ref is one click away behind
+               Copy ref for whoever needs it on the CLI. -->
           <p class="text-micro text-fg-muted">
-            Updated {formatTimestamp(thread.updated_at) || "—"}
+            Updated {formatTimestamp(thread.updated_at) || "—"}{#if topicSeg}
+              · linked to a topic{/if}
           </p>
         </a>
+        {#if thread.ref || thread.handle}
+          <div class="flex shrink-0 items-center pr-2">
+            <CopyButton
+              value={thread.ref || `thread:${thread.handle}`}
+              label="Copy ref"
+              title={thread.ref || `thread:${thread.handle}`}
+              iconOnly
+            />
+          </div>
+        {/if}
       </div>
     {/each}
   </div>

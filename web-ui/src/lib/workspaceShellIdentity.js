@@ -1,10 +1,17 @@
+import { isSyntheticAnxHandle } from "$lib/actorSession";
 import { initialsFor } from "$lib/hosted/session.js";
+
+/** Machine-minted handles (`external.<hash>`, `passkey.<slug>.<hex>`) are not names. */
+function isMachineHandle(username) {
+  return isSyntheticAnxHandle(username) || /^external\./i.test(username);
+}
 
 /**
  * Build sidebar identity for the workspace shell: control plane shows account
  * profile (display name / email) while anx-core exposes a principal username
  * (often `external.*`). When both exist, prefer CP-friendly labels and show the
- * workspace handle as secondary copy.
+ * workspace handle as secondary copy only when a person chose it; a
+ * machine-minted handle is never shown as a label.
  *
  * @param {{
  *   hostedMode: boolean,
@@ -29,7 +36,10 @@ export function computeWorkspaceShellIdentity({
     if (cpPrimary) {
       return {
         primaryLabel: cpPrimary,
-        secondaryLabel: username && username !== cpPrimary ? username : "",
+        secondaryLabel:
+          username && username !== cpPrimary && !isMachineHandle(username)
+            ? username
+            : "",
         initials: initialsFor(hostedAccount),
       };
     }
