@@ -10,14 +10,12 @@ import (
 	"testing"
 )
 
-// Two CLI profiles on one core stand in for two hosts that cannot see each
-// other's disks. All document bodies and comments are synthetic fixtures.
-func TestDocsKnowledgeTwoProfileSearchAndComment(t *testing.T) {
+// Two derived agents on one enrolled host share workspace knowledge. All
+// document bodies and comments are synthetic fixtures.
+func TestDocsKnowledgeAcrossDerivedAgents(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	token := runToken()
-	h.registerAgentBootstrap(t, "host-a", "host-a."+token)
-	invite := h.createInviteToken(t, "host-a")
-	h.registerAgentInvite(t, "host-b", "host-b."+token, invite)
+	h.enrollHost(t, "host-a")
 
 	bodyPath := filepath.Join(t.TempDir(), "kb-shared-runbook.md")
 	if err := os.WriteFile(bodyPath, []byte("Synthetic runbook body token alphawhiz-"+token), 0o644); err != nil {
@@ -111,7 +109,7 @@ func firstSlicePath(t *testing.T, payload map[string]any, paths ...string) []any
 func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	token := runToken()
-	h.registerAgentBootstrap(t, "host-a", "host-a."+token)
+	h.enrollHost(t, "host-a")
 
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "lessons"), 0o755); err != nil {

@@ -83,21 +83,21 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 	registration := principal.Registration
 	if registration == nil {
 		base.State = WakeRoutingStateUnregistered
-		base.Summary = "Missing wake registration."
+		base.Summary = "Legacy standalone agent has no wake setup. Enroll its machine as a host to use host-based wake routing."
 		return base
 	}
 
 	registeredHandle := strings.TrimSpace(registration.Handle)
 	if registeredHandle != "" && registeredHandle != handle {
 		base.State = WakeRoutingStateUnknown
-		base.Summary = "Wake registration handle does not match the principal handle."
+		base.Summary = "Legacy wake setup does not match this agent handle."
 		return base
 	}
 
 	registeredActorID := strings.TrimSpace(registration.ActorID)
 	if registeredActorID == "" || registeredActorID != strings.TrimSpace(principal.ActorID) {
 		base.State = WakeRoutingStateUnknown
-		base.Summary = "Wake registration actor does not match the principal actor."
+		base.Summary = "Legacy wake setup does not match this agent identity."
 		return base
 	}
 
@@ -107,7 +107,7 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 	}
 	if status == "disabled" {
 		base.State = WakeRoutingStateDisabled
-		base.Summary = "Wake registration is disabled."
+		base.Summary = "Legacy wake setup is disabled."
 		return base
 	}
 
@@ -125,12 +125,12 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 	if targetWorkspaceID == "" {
 		if len(enabledBindings) == 0 {
 			base.State = WakeRoutingStateUnregistered
-			base.Summary = "Wake registration is not enabled for any workspace."
+			base.Summary = "Legacy wake setup is not enabled for a workspace."
 			return base
 		}
 	} else if !registration.SupportsWorkspace(targetWorkspaceID) {
 		base.State = WakeRoutingStateUnregistered
-		base.Summary = "Wake registration is not enabled for this workspace."
+		base.Summary = "Legacy wake setup is not enabled for this workspace."
 		return base
 	}
 
@@ -141,12 +141,12 @@ func DescribeWakeRouting(principal AuthPrincipalSummary, workspaceID string, now
 
 	if bridgeInstanceID == "" || !checkedInOK || !expiresOK {
 		base.State = WakeRoutingStateOffline
-		base.Summary = "Offline. The agent is registered for this workspace, but no fresh bridge heartbeat is available."
+		base.Summary = "Offline. This legacy agent has no fresh bridge heartbeat."
 		return base
 	}
 	if expiresAt.Before(now) {
 		base.State = WakeRoutingStateOffline
-		base.Summary = "Offline. The agent is registered for this workspace, but its last bridge heartbeat is stale."
+		base.Summary = "Offline. This legacy agent's last bridge heartbeat is stale."
 		return base
 	}
 	if checkedInAt.After(expiresAt) {

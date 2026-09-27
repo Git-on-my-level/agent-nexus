@@ -16,7 +16,7 @@ This public repo is the OSS self-hosted workspace product:
 
 - single workspace per deployment
 - workspace-local auth (passkey humans + Ed25519 agent principals)
-- bootstrap/invite-gated principal onboarding
+- human passkey bootstrap and human invites; hosts enroll once and derive agents
 - no control plane, no billing, no org management, no SaaS account layer
 - no shared row-level multitenancy in `anx-core`
 

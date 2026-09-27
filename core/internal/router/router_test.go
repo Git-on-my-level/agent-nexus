@@ -74,7 +74,7 @@ func TestRouteMentionSkipsSelfAuthoredMessages(t *testing.T) {
 	}
 }
 
-func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
+func TestRouteMentionQueuesNotificationForOfflineAgent(t *testing.T) {
 	state, err := NewStateStore("")
 	if err != nil {
 		t.Fatalf("NewStateStore: %v", err)
@@ -135,7 +135,7 @@ func TestRouteMentionQueuesNotificationForOfflineRegisteredAgent(t *testing.T) {
 		t.Fatalf("routeMention: %v", err)
 	}
 	if !ok {
-		t.Fatal("expected offline registered agent mention to queue a notification")
+		t.Fatal("expected offline agent mention to queue a notification")
 	}
 	if createArtifactCalls != 1 {
 		t.Fatalf("expected one wake artifact creation, got %d", createArtifactCalls)

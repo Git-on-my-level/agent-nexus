@@ -61,7 +61,7 @@ var authSubcommandSpec = subcommandSpec{
 var authInvitesSubcommandSpec = subcommandSpec{
 	command:  "auth invites",
 	valid:    []string{"list", "create", "revoke"},
-	examples: []string{"anx auth invites list", "anx auth invites create --kind agent", "anx auth invites revoke --invite-id <id>"},
+	examples: []string{"anx auth invites list", "anx auth invites create --kind human", "anx auth invites revoke --invite-id <id>"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

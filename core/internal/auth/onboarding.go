@@ -72,7 +72,7 @@ func NormalizePrincipalKind(raw string, allowAny bool) (PrincipalKind, error) {
 			return PrincipalKindAny, nil
 		}
 	}
-	return "", fmt.Errorf("kind must be %s, %s%s", PrincipalKindHuman, PrincipalKindAgent, func() string {
+	return "", fmt.Errorf("kind must be %s%s", PrincipalKindHuman, func() string {
 		if allowAny {
 			return ", or " + string(PrincipalKindAny)
 		}

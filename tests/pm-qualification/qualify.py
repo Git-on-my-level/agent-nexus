@@ -7,7 +7,6 @@ The report deliberately contains assertions and provenance, never response bodie
 from __future__ import annotations
 
 import argparse
-import base64
 import datetime as dt
 import hashlib
 import json
@@ -49,7 +48,8 @@ class Core:
         self.token = ""
         self.actor = ""
         self.bootstrap = uuid.uuid4().hex
-        self.profile = "qualification-" + uuid.uuid4().hex
+        self.agent_name = "qual-" + uuid.uuid4().hex[:12]
+        self.config_dir = self.directory / "anx-config"
         self.process = None
         self.log = None
         with socket.socket() as sock:
@@ -58,9 +58,14 @@ class Core:
         self.url = f"http://127.0.0.1:{self.port}"
 
     def start(self):
+        workspace = self.directory / "workspace"
+        workspace.mkdir(mode=0o700, exist_ok=True)
+        (workspace / ".anx-dev-insecure-auth").touch(mode=0o600, exist_ok=True)
         env = clean_env()
         env.update(ANX_BOOTSTRAP_TOKEN=self.bootstrap, ANX_SIDECAR_ROUTER_ENABLED="false",
-                   ANX_PROJECTION_MODE="manual", ANX_SHUTDOWN_TIMEOUT="2s")
+                   ANX_PROJECTION_MODE="manual", ANX_SHUTDOWN_TIMEOUT="2s",
+                   ANX_ALLOW_PASSKEY_DEV_BYPASS="1", ANX_HOSTED_DEV_MODE="1",
+                   ANX_ENABLE_DEV_ACTOR_MODE="1")
         self.log = (self.directory / "core.log").open("ab")
         self.process = subprocess.Popen(
             [str(self.binaries["core"]), "--listen-addr", f"127.0.0.1:{self.port}",
@@ -127,22 +132,36 @@ class Core:
         return payload
 
     def register(self):
-        # RFC 8032 test-vector public key. No private key or user profile is needed:
-        # auth bootstrap returns an ephemeral bearer token held only in memory.
-        public_key = base64.b64encode(bytes.fromhex(
-            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")).decode()
-        response = self.api("POST", "/auth/agents/register", {
-            "username": self.profile, "public_key": public_key,
+        # The bootstrap token creates the first human. A headless enrollment
+        # token then enrolls one host, which lazily derives this test persona.
+        response = self.api("POST", "/auth/passkey/dev/register", {
+            "display_name": "Synthetic qualification operator",
             "bootstrap_token": self.bootstrap}, (201,))
         self.token = response["tokens"]["access_token"]
-        self.actor = response["agent"]["actor_id"]
+        token = self.api("POST", "/auth/hosts/enrollment-tokens", {
+            "label": "Synthetic qualification host",
+            "expires_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=15)).isoformat().replace("+00:00", "Z")}, (201,))
+        result = subprocess.run(
+            [str(self.binaries["cli"]), "--json", "--config-dir", str(self.config_dir),
+             "--base-url", self.url, "host", "enroll", "--name", "qualification-host",
+             "--token", token["token"]],
+            capture_output=True, text=True, timeout=20,
+            env={**clean_env(), "HOME": str(self.directory)})
+        require(result.returncode == 0, "host enrollment failed")
+        try:
+            envelope = json.loads(result.stdout)
+        except ValueError:
+            raise AssertionError("host enrollment must emit a JSON envelope") from None
+        require(envelope.get("ok") is True, "host enrollment returned an error")
+        identity = self.cli("auth", "whoami")
+        self.actor = identity["result"]["agent"]["actor_id"]
 
     def cli(self, *args, body=None, ok=True):
         env = clean_env()
-        env["ANX_ACCESS_TOKEN"] = self.token
+        env["HOME"] = str(self.directory)
         result = subprocess.run(
-            [str(self.binaries["cli"]), "--json", "--base-url", self.url,
-             "--agent", self.profile, *args], input=None if body is None else json.dumps(body),
+            [str(self.binaries["cli"]), "--json", "--config-dir", str(self.config_dir),
+             "--base-url", self.url, "--as", self.agent_name, *args], input=None if body is None else json.dumps(body),
             capture_output=True, text=True, timeout=20, env=env)
         try:
             payload = json.loads(result.stdout)
@@ -196,8 +215,12 @@ def submit(core, work, obs):
 def baseline(core, other):
     core.cli("boards", "list")
     for token in ("", other.token):
-        require(core.http("GET", "/boards", token=token)[0] in (401, 403),
-                "workspace business read accepted absent/foreign-workspace token")
+        status, _ = core.http("POST", "/boards", {"board": {
+            "title": "Unauthenticated qualification mutation",
+            "document_refs": [], "pinned_refs": [],
+        }}, token=token)
+        require(status in (401, 403),
+                "workspace business write accepted absent/foreign-workspace token")
     board = core.board()
     board_id = ref(board, "board")
     core.restart(crash=True)

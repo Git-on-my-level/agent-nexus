@@ -32,8 +32,8 @@ func findAskInboxID(t *testing.T, h *liveCoreHarness, askID string) string {
 func TestDailyLoopAgainstCore(t *testing.T) {
 	t.Setenv("ANX_INTEGRATION_PORT", "8092")
 	h := newPasskeyLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "worker", "worker."+runToken())
-	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createInviteTokenKind(t, "worker", "human"))
+	h.enrollHost(t, "worker")
+	h.registerHumanPasskey(t, "operator", "S6 Operator", h.createHumanInviteToken(t))
 	id := mustStringPath(t, h.runCLIExpectOK(t, "worker", nil, "auth", "whoami").Payload, "result.agent.id")
 	sqlite, err := exec.LookPath("sqlite3")
 	if err != nil {

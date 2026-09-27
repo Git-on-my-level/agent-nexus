@@ -1,7 +1,7 @@
 ---
 name: anx-cli-onboard
 description: >-
-  Use the `anx` CLI effectively: configure base URL/auth/profile, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating Agent Nexus workflows.
+  Use the `anx` CLI effectively: configure the workspace and enrolled host, select a derived agent, discover the available command surface, choose the right primitive or higher-level abstraction, and choose text (default, LLM-friendly) or `--json` (programmatic) output as appropriate. Apply when running `anx`, interpreting its help/errors, or automating Agent Nexus workflows.
 ---
 
 # Agent Nexus CLI guide for agents
@@ -14,7 +14,7 @@ Use this guide when you need to operate `anx` well, not just get it running. Fav
 - Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
 - Prefer **default (non-JSON) output** for normal agent work: concise text for direct consumption, usually fewer tokens than JSON envelopes.
 - Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, or anything that parses the stable JSON envelope (including rich `error.details`).
-- Prefer profiles and env vars over repeated flags.
+- Enroll each machine once with `anx host enroll`; select a derived agent with `--as <name>` or `ANX_AS`.
 - Prefer discovery from the CLI itself over memorizing exact subcommands.
 
 ## Core model
@@ -25,7 +25,7 @@ Use this guide when you need to operate `anx` well, not just get it running. Fav
 - `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
 - `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
 - `boards`: structured coordination views. Use to group and review work across multiple objects.
-- `auth` and profiles: identity plus reusable config.
+- `auth` and `host`: identity, host enrollment, and reusable workspace config.
 - `meta` and help: runtime discovery for commands, concepts, and bundled docs.
 
 Heuristic:
@@ -55,14 +55,13 @@ For interrupt-driven work, a common loop is: `inbox` -> inspect related `thread`
 
 ## Configuration
 
-- Local **`make serve`**: bootstrap is usually **already consumed** by the seeded operator account; register the CLI with a **single-use invite** from `cli/dogfood-resources/invites.generated.json` (regenerated each serve) or from `anx auth invites create --kind agent` on an existing principal. See `cli/docs/runbook.md` (fixture seed) and `cli/README.md` (`anx secret` quirks).
-- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).
-- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
-- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
+- Local **`make serve`**: the seeded operator consumes bootstrap. Enroll a host using the local `anx host enroll --token <token>` setup flow documented by the dev server, then select a derived agent with `--as <name>` or `ANX_AS`.
+- Host identity and short-lived derived-agent tokens live under `~/.config/anx/hosts/`. Use `--config-dir` or `ANX_CONFIG_DIR` for callbacks and isolated environments.
+- Override the core URL per command with `--base-url` or `ANX_BASE_URL`.
 - If available, run `anx doctor` when config or connectivity is unclear.
 - If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface. Do not put a workspace browser path (for example `/o/.../w/...`) in `--base-url` or `ANX_BASE_URL` when the host serves the web UI separately: use the anx-core API origin (often the host that returns JSON from `GET /readyz`).
 
-Config precedence is typically: flags -> environment -> profile -> defaults.
+Config precedence is typically: flags -> environment -> defaults; host identity is resolved from the selected config directory.
 
 ## Discovery first
 
@@ -96,7 +95,7 @@ Use help output as the source of truth for exact flags, request shapes, enums, a
 When starting in a new environment:
 
 1. Set base URL.
-2. Register or select an agent/profile if required.
+2. Enroll the host once, then select a derived agent with `--as` / `ANX_AS` (or let agentctl/harness detection select it).
 3. Confirm identity.
 4. Run a cheap read command.
 
@@ -104,7 +103,7 @@ When stuck:
 
 - Re-run with `--json` when structured failure fields (`error.details`, etc.) would help.
 - Check help for the exact command path you are using.
-- Verify auth, base URL, and profile resolution before debugging payload shape.
+- Verify host enrollment, selected agent, and base URL before debugging payload shape.
 
 ## Maintenance rule
 

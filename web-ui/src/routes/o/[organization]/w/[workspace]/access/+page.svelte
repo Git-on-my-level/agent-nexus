@@ -132,11 +132,8 @@
         !hostAgentIds.has(principal.agent_id),
     ),
   );
-  let humanInvites = $derived(
-    invites.filter((invite) => String(invite.kind) !== "agent"),
-  );
   let pendingInvites = $derived(
-    humanInvites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
+    invites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
   );
   let visibleAudit = $derived(
     showAllAudit ? auditEvents : auditEvents.slice(0, AUDIT_PREVIEW),

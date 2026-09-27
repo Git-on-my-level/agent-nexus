@@ -1127,8 +1127,8 @@
           {:else if mentionCandidates.length === 0}
             {#if mentionSignedIn}
               <p class="px-3 py-2 text-micro text-fg-muted">
-                No registered agents are taggable in this workspace. See Access
-                to check registration and presence.
+                No enabled derived agents are taggable in this workspace. See
+                Access to check registration and presence.
               </p>
             {:else}
               <p class="px-3 py-2 text-micro text-fg-muted">
@@ -1207,7 +1207,7 @@
             <a
               class="text-accent-text hover:text-accent-text"
               href={workspacePath(organizationSlug, workspaceSlug, "/access")}
-              >registered agent</a
+              >agent access</a
             >.
           </p>
         {/if}
