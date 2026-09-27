@@ -143,58 +143,21 @@ func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
 
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	t.Parallel()
-
 	output := runHelpCommand(t, "debug", "meta", "doc", "agent-bridge")
-	if !strings.Contains(output, "## `agent-bridge`") {
-		t.Fatalf("expected agent-bridge markdown header output=%s", output)
-	}
-	if !strings.Contains(output, "anx-agent-bridge --version") {
-		t.Fatalf("expected install verification guidance output=%s", output)
-	}
-	if !strings.Contains(output, "anx bridge init-config") || !strings.Contains(output, "anx bridge doctor --config ./bridge.toml") {
-		t.Fatalf("expected first-run bootstrap guidance output=%s", output)
-	}
-	if strings.Contains(output, "router.toml") {
-		t.Fatalf("expected router bootstrap guidance to be removed output=%s", output)
+	for _, part := range []string{"one bridge per enrolled host", "anx host token", "anx bridge doctor --config ./bridge.toml", "agentctl run"} {
+		if !strings.Contains(strings.ToLower(output), strings.ToLower(part)) {
+			t.Fatalf("missing %q in %s", part, output)
+		}
 	}
 }
 
 func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	t.Parallel()
-
 	output := runHelpCommand(t, "debug", "meta", "doc", "wake-routing")
-	if !strings.Contains(output, "## `wake-routing`") {
-		t.Fatalf("expected wake-routing markdown header output=%s", output)
-	}
-	if !strings.Contains(output, "Use this when you want humans or agents to wake other agents") {
-		t.Fatalf("expected wake-routing overview output=%s", output)
-	}
-	if !strings.Contains(output, "wake registration now lives on the agent principal metadata") {
-		t.Fatalf("expected principal registration guidance output=%s", output)
-	}
-	if !strings.Contains(output, "curl -X PATCH \"$ANX_BASE_URL/agents/me\"") {
-		t.Fatalf("expected principal patch registration example output=%s", output)
-	}
-	if !strings.Contains(output, "\"registration\": {") {
-		t.Fatalf("expected registration payload wrapper output=%s", output)
-	}
-	if !strings.Contains(output, "agent-registration/v1") {
-		t.Fatalf("expected registration schema version output=%s", output)
-	}
-	if !strings.Contains(output, "anx-agent-bridge registration apply --config ./bridge.toml") {
-		t.Fatalf("expected bridge registration shortcut output=%s", output)
-	}
-	if !strings.Contains(output, "workspace records") || !strings.Contains(output, "ws_main") {
-		t.Fatalf("expected workspace-id discovery guidance output=%s", output)
-	}
-	if !strings.Contains(output, "Manual principal updates do not replace the live bridge-owned check-in endpoint") {
-		t.Fatalf("expected principal-update guidance output=%s", output)
-	}
-	if !strings.Contains(output, "server actor id as `<actor-id>`") {
-		t.Fatalf("expected actor-id sourcing guidance output=%s", output)
-	}
-	if !strings.Contains(output, "Do not hand-edit `status = \"active\"`") {
-		t.Fatalf("expected bridge readiness lifecycle warning output=%s", output)
+	for _, part := range []string{"@<name>.<host>", "host bridge check-in", "anx runs ingest"} {
+		if !strings.Contains(output, part) {
+			t.Fatalf("missing %q in %s", part, output)
+		}
 	}
 }
 

@@ -2,14 +2,12 @@ package app
 
 import (
 	"os"
-	"regexp"
 	"time"
 )
 
 var (
-	bridgeReadFile             = os.ReadFile
-	bridgeOpenFile             = os.OpenFile
-	bridgeSectionHeaderPattern = regexp.MustCompile(`^\s*\[([A-Za-z0-9_-]+)\]\s*(?:#.*)?$`)
+	bridgeReadFile = os.ReadFile
+	bridgeOpenFile = os.OpenFile
 
 	bridgeStartManagedProcess func(bridgeManagedConfig, string) (bridgeManagedRuntime, error)
 	bridgeStopManagedProcess  func(bridgeManagedRuntime, time.Duration, bool) (bridgeManagedRuntime, error)
@@ -33,12 +31,10 @@ type bridgeManagedRuntime struct {
 }
 
 type bridgeManagedConfig struct {
-	RuntimeKind              string
-	RunCommand               string
-	ConfigPath               string
-	DisplayName              string
-	ManagerDir               string
-	ProcessStatePath         string
-	LogPath                  string
-	ManagedPackageAutoUpdate bool
+	RuntimeKind      string
+	ConfigPath       string
+	DisplayName      string
+	ManagerDir       string
+	ProcessStatePath string
+	LogPath          string
 }

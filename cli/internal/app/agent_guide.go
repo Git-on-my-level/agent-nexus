@@ -31,7 +31,7 @@ func agentGuideSections() []guideSection {
 			"2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.",
 			"3. Run `anx work note \"What changed\"` after meaningful progress.",
 			"4. When blocked, run `anx work block \"Why\" --ask --recommend \"Preferred answer\"` or `anx ask \"Question\" --recommend \"Preferred answer\" [--alt \"Alternative\"]`. Use `anx review` for review and `anx escalate` for urgent intervention.",
-			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result. Exit 8 means timeout; exit 9 means declined.",
+			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.",
 			"6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.",
 		}},
 		{Title: "Runs and output", Lines: []string{

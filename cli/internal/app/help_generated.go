@@ -1851,11 +1851,12 @@ Inbox kinds:
 		return strings.TrimSpace(`CLI flags (` + "`inbox respond`" + `):
   --inbox-item-id <id>    Inbox item id or list alias (see ` + "`inbox list`" + `).
   --response-text <text>  Freeform response text.
+  --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (` + "`me`" + ` uses the active profile's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
-  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, optional fields).`)
+  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, ` + "`outcome`" + `, optional fields).`)
 	case "boards.cards.batch_add":
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).

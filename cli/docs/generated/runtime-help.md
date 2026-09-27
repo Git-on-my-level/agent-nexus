@@ -10,13 +10,13 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `profiles` (manual): CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
 - `env` (manual): Supported ANX_* environment variables and precedence.
 - `config` (manual): CLI config surface: default profile selection, effective settings, and clearing the persisted marker.
-- `agent-bridge` (manual): Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
-- `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
+- `agent-bridge` (manual): Install and operate one `anx-agent-bridge` runtime per enrolled host.
+- `wake-routing` (manual): How `@name.host` wake routing and host bridge presence work.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
 - `auth whoami` (manual): Show the enrolled host, derived agent and resolution source.
 - `config show` (manual): Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted).
-- `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
+- `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
@@ -203,16 +203,11 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs reply` (local-helper): Reply to an existing Document message.
 - `meta skill` (local-helper): Render the bundled opinionated ANX agent skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
-- `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into the bridge agent home auth state.
-- `bridge init-config` (local-helper): Write a bridge runtime config plus an agent home with wake subscriptions.
-- `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent wake registration.
-- `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
-- `bridge start` (local-helper): Start a managed bridge daemon for one config file.
-- `bridge stop` (local-helper): Stop a managed bridge daemon for one config file.
-- `bridge restart` (local-helper): Restart a managed bridge daemon for one config file.
-- `bridge status` (local-helper): Inspect managed process state for a bridge config.
-- `bridge logs` (local-helper): Read recent log lines for a managed bridge config.
+- `bridge install` (local-helper): Install the host bridge runtime.
+- `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
+- `bridge start` (local-helper): Start the one bridge process for an enrolled host.
+- `bridge stop` (local-helper): Stop a managed host bridge.
+- `bridge status` (local-helper): Inspect one host bridge process.
 - `import scan` (local-helper): Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
@@ -346,7 +341,7 @@ Daily loop
 2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.
 3. Run `anx work note "What changed"` after meaningful progress.
 4. When blocked, run `anx work block "Why" --ask --recommend "Preferred answer"` or `anx ask "Question" --recommend "Preferred answer" [--alt "Alternative"]`. Use `anx review` for review and `anx escalate` for urgent intervention.
-5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result. Exit 8 means timeout; exit 9 means declined.
+5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
 6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.
 
 
@@ -394,413 +389,54 @@ Config: anx config show prints the workspace URL, selected agent name, and sourc
 
 ## `agent-bridge`
 
-Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
+Install and operate one `anx-agent-bridge` runtime per enrolled host.
 
 ```text
 Agent bridge
 
-Use this when you want the preferred per-agent bridge path for wake registration and live `@handle` delivery.
+Enroll this machine once with anx host enroll. Run one bridge per enrolled host.
+The bridge obtains short-lived tokens through anx host token --as <name> and
+calls host-signed CLI helpers for check-in and wake mutations. It stores no
+agent keys, copied refresh tokens, or per-agent homes.
 
-What changed
-
-- The main CLI now owns the per-agent bootstrap path for fresh machines:
-  - `anx bridge install`
-  - `anx bridge import-auth`
-  - `anx bridge init-config`
-  - `anx bridge start|stop|restart|status|logs`
-  - `anx bridge workspace-id`
-  - `anx bridge doctor`
-- The Python package still owns runtime behavior:
-  - `anx-agent-bridge auth register`
-  - `anx-agent-bridge bridge run` under the hood
-  - `anx-agent-bridge notifications list|read|dismiss` for bridge-local pull flows
-- The workspace wake-routing service is deployment-owned and runs inside `anx-core`, not through `anx bridge`.
-- Registrations become taggable once the registration and workspace binding are valid. Fresh bridge check-in only controls whether delivery is immediate.
-
-Install on a fresh machine with only `anx`
-
-1. Install the bridge runtime into a managed Python `3.11+` virtualenv:
+Create one bridge.toml with [host] base_url, id, slug and one [agents.<name>]
+command array for each active, non-excluded derived agent. Then run:
 
   anx bridge install
-
-  By default, this installs the bridge package at the same git ref as your `anx` release tag and writes the launcher into `~/.local/bin`. Use `--ref main` when you need the latest default-branch commit ahead of that tag. Override `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH. For opt-in unattended alignment with that pinned ref during `anx bridge doctor` / `anx bridge start`, generate configs with `anx bridge init-config ... --managed-package-auto-update` so `[bridge].managed_package_auto_update` is set (same prerequisites as install: Python `3.11+`, `git`, outbound network access, macOS/Linux). Agents who leave it unset only get textual skew hints and should run `anx bridge install` manually (or pass `--bridge-config` during `anx update` alongside that opt-in when they want refreshes tied to CLI upgrades).
-
-2. If you need bridge test dependencies on the same machine:
-
-  anx bridge install --with-dev
-
-3. Verify the wrapper works:
-
-  anx-agent-bridge --version
-
-Contributor path from a repo checkout
-
-- For local development inside this repo, prefer:
-  - `make setup`
-  - `make doctor`
-  - `make test`
-- Local contributor rules for the adapter live in `adapters/agent-bridge/AGENTS.md`.
-
-Config generation
-
-Generate minimal configs from the CLI:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-  anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
-
-Use `--kind hermes` for the bundled Hermes ACP subprocess adapter and `--kind openclaw` for the bundled OpenClaw subprocess adapter. Use `subprocess` or `python-plugin` when you own a custom adapter implementation.
-
-This scaffolds an explicit agent home:
-
-- `.anx/agent.toml` anchors identity and auth state
-- `.anx/wake.toml` owns workspace wake subscriptions
-- `bridge.toml` owns adapter/runtime behavior
-
-These templates intentionally default the bridge lifecycle to:
-
-- `status = "pending"`
-- `checkin_interval_seconds = 60`
-- `checkin_ttl_seconds = 300`
-
-That is the guardrail for live delivery: the bridge still needs to check in before the agent shows online, but humans can tag a valid offline registration and let notifications queue.
-
-Workspace id source of truth
-
-- `<workspace-id>` must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- In the common single-workspace path, `anx bridge init-config` discovers the id from the active profile or core handshake.
-- If discovery fails, pass `--workspace-id <workspace-id>` explicitly.
-- If the agent already has wake registration metadata, use `anx bridge workspace-id --handle <handle>` to read its enabled workspace bindings.
-- If the workspace deployment documents the configured `workspace_id`, copy that exact value as the explicit override.
-- If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
-- The bundled example value `ws_main` is only a sample.
-- If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess.
-
-First-time agent-host path
-
-1. Install the runtime:
-
-  anx bridge install
-
-2. Render the bridge runtime config and agent home. For Hermes ACP:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-
-  For OpenClaw:
-
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-
-  For a custom subprocess adapter, render the config and then inspect the JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`:
-
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-
-  Add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding.
-
-3. If a matching `anx` profile already exists for the target principal, import it into the agent home:
-
-  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
-
-4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
-
-  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
-
-5. Start the managed bridge daemon from the main CLI:
-
   anx bridge start --config ./bridge.toml
-
-6. Confirm the process and readiness state before expecting immediate delivery:
-
   anx bridge status --config ./bridge.toml
   anx bridge doctor --config ./bridge.toml
+  anx bridge stop --config ./bridge.toml
 
-  Use `anx bridge logs --config ./bridge.toml` when you need the recent daemon output, and `anx bridge restart --config ./bridge.toml` if you change config or recover from a stale process.
-
-  The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
-
-7. Post a test wake message containing `@<handle>`.
-
-8. Confirm the durable trace:
-  - `message_posted`
-  - a queued wake record visible through `anx notifications list --status unread`
-  - if online, bridge reply `message_posted`
-  - if online, the wake record moves to completed delivery status
-  - if offline, the notification remains queued until the bridge reconnects
-
-9. Pull or dismiss queued notifications directly when needed:
-
-  anx notifications list --status unread
-  anx notifications dismiss --wakeup-id <wakeup-id>
-  anx-agent-bridge notifications list --config ./bridge.toml --status unread
-
-10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
-
-Lifecycle note
-
-- `anx-agent-bridge registration apply` updates the agent principal registration, but the bridge runtime still owns live presence updates.
-- The bridge runtime refreshes registration readiness on check-in.
-- If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
-- The preferred operational path is to manage the bridge daemon with `anx bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
-
-Troubleshooting
-
-- `anx-agent-bridge: command not found`:
-  - run `anx bridge install` or add the managed wrapper directory to PATH
-- bridge doctor says the bridge is offline:
-  - the bridge has not checked in yet or is no longer refreshing; start or restart `anx bridge start --config ./bridge.toml` and verify `.anx/wake.toml` points at the right workspace set
-- wake request is durable but never claimed:
-  - the bridge is offline, the embedded wake-routing sidecar in `anx-core` is unhealthy, or `workspace_id` is wrong
-- principal exists but wake still fails:
-  - inspect the principal registration for actor mismatch, disabled status, stale check-in, or missing workspace binding
-
-Related docs
-
-  anx help bridge
-  anx debug meta doc wake-routing
-  anx bridge doctor --config ./bridge.toml
+When agentctl is available, each wake uses agentctl run and a command
+subscription to anx runs ingest. A card subject adds anx.card.<slug>.
+Without agentctl, the runtime receives ANX_AS=<name>. The runtime should
+post its own response with anx; a run's end does not finish a card.
 ```
 
 ## `wake-routing`
 
-How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
+How `@name.host` wake routing and host bridge presence work.
 
 ```text
 Wake routing
 
-Use this when you want humans or agents to wake other agents from thread messages by tagging `@handle`.
+The core router turns @<name>.<host> mentions into durable wakes. A derived
+agent is taggable while its host is active and its name is not excluded.
+A fresh host bridge check-in controls immediate delivery; offline wakes stay
+queued. Run one bridge per enrolled host and configure an exact runtime argv
+for every active, non-excluded derived agent on that host.
 
-How it works
-
-- Wake routing is provided by a workspace-owned sidecar hosted inside `anx-core`, not by the per-agent CLI.
-- The durable wake registration now lives on the agent principal metadata, not in `docs`.
-- The bridge-owned readiness proof is direct presence state on that principal registration.
-- A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
-
-What counts as taggable
-
-- principal kind is `agent`
-- principal is not revoked
-- principal has a username/handle
-- principal has wake registration metadata
-- registration `actor_id` matches the principal actor
-- registration has an enabled binding for the current workspace
-- registration status is not `disabled` (often `pending` until the first bridge check-in, then `active`)
-
-What counts as online
-
-- the agent is already taggable
-- registration records a bridge instance id, signed proof, check-in timestamp, expiry timestamp, and covered workspace ids
-- the signed proof matches the registration's bridge signing public key and its expiry is still fresh for the current workspace
-
-Important lifecycle rule
-
-- Bridge-managed registrations still start as `pending` until the bridge checks in and finalizes the live registration payload.
-- Once registration and workspace binding are valid, humans can tag the agent even if the bridge is offline.
-- If the bridge stops checking in, the agent becomes offline but remains taggable; pending notifications queue until the bridge returns.
-
-How humans discover it
-
-- In the web UI Access page, look for registered agent principals and their `@handle`.
-- `Online` means immediate delivery is available now. `Offline` means tags still queue durable notifications for later delivery.
-
-How agents discover it
-
-- Read this topic with `anx debug meta doc wake-routing`.
-- Read the preferred runtime path with `anx debug meta doc agent-bridge`.
-- Use `anx help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
-- Let `anx bridge init-config` discover the durable workspace id from the active profile or core handshake; pass `--workspace-id` only when discovery fails or you need an explicit binding.
-- Use `anx bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for enabled bindings.
-- Use `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists.
-- Use `anx notifications list --status unread` to inspect queued notifications with the main CLI.
-- Use `anx notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
-- Use `anx auth whoami` to confirm your current username and actor id.
-- Use `anx auth principals list --handles-only` to inspect the exact handles that can be mentioned.
-- Use `anx auth principals list --taggable` if you want the filtered principal rows as well.
-- Use `anx auth principals list` for readable rows; add `--json` when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
-
-Preferred path when you are using `anx-agent-bridge`
-
-1. Install the runtime:
-
+  anx host enroll
   anx bridge install
-
-2. Generate the agent config. For Hermes ACP, use the bundled adapter:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-
-  For OpenClaw, use the bundled adapter:
-
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-
-  For custom adapters, use subprocess JSON or python_plugin:
-
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-
-  Add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding.
-
-  Inspect the exact stdin/stdout JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`.
-
-3. If matching `anx` auth already exists, import it into the agent home:
-
-  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
-
-4. Register auth and write the initial pending registration when auth does not already exist:
-
-  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
-
-  If auth already exists and you only need to rewrite the principal registration:
-
-  anx-agent-bridge registration apply --config ./bridge.toml
-
-5. Start the target bridge:
-
   anx bridge start --config ./bridge.toml
-
-6. Verify the bridge has checked in before expecting immediate delivery:
-
-  anx bridge status --config ./bridge.toml
-  anx bridge doctor --config ./bridge.toml
-  anx-agent-bridge registration status --config ./bridge.toml
-
-7. Pull or dismiss queued notifications directly when needed:
-
-  anx notifications list --status unread
-  anx-agent-bridge notifications list --config ./bridge.toml --status unread
-  anx notifications dismiss --wakeup-id <wakeup-id>
-
-8. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
-
-Generic ANX CLI lifecycle
-
-If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in endpoint.
-
-1. Confirm the identity you are registering:
-
-  anx auth whoami
-
-  Use the server-resolved username as `<handle>` and the server actor id as `<actor-id>`.
-
-2. Resolve the durable workspace id you want to enable:
-
-  - In the common single-workspace path, use `anx bridge init-config` and let it discover the id from the active profile or core handshake.
-  - If an existing registration is available, use `anx bridge workspace-id --handle <handle>` to inspect enabled bindings.
-  - If the workspace deployment documents the configured `workspace_id`, copy that exact value as the explicit override.
-  - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
-  - The bundled example value `ws_main` is only a sample.
-  - Do not use a workspace slug or URL path segment. If you cannot determine the real value, stop and ask the operator.
-
-3. Create a first-time registration payload such as `wake-registration.json`:
-
-  {
-    "registration": {
-      "version": "agent-registration/v1",
-      "handle": "<handle>",
-      "actor_id": "<actor-id>",
-      "delivery_mode": "pull",
-      "driver_kind": "custom",
-      "resume_policy": "resume_or_create",
-      "status": "pending",
-      "adapter_kind": "custom",
-      "updated_at": "<current-utc-timestamp>",
-      "workspace_bindings": [
-        {
-          "workspace_id": "<workspace-id>",
-          "enabled": true
-        }
-      ]
-    }
-  }
-
-4. For first-time registration, patch the current authenticated agent:
-
-  curl -X PATCH "$ANX_BASE_URL/agents/me" \
-    -H "Authorization: Bearer <access-token>" \
-    -H "Content-Type: application/json" \
-    --data @wake-registration.json
-
-5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
-
-  anx-agent-bridge registration apply --config ./bridge.toml
-
-Registration schema notes
-
-- Fields required for routing correctness are:
-  - `content.handle` matching the principal username
-  - `content.actor_id` matching the principal actor id
-  - at least one enabled `content.workspace_bindings[].workspace_id` matching the current workspace id
-- Bridge readiness fields are:
-  - `content.bridge_instance_id` identifies the currently checking-in bridge runtime
-  - `content.bridge_signing_public_key_spki_b64` stores the bridge-managed public proof key
-  - `content.bridge_checked_in_at` and `content.bridge_expires_at` define freshness
-  - `content.bridge_workspace_ids` lists the workspaces covered by the proof
-  - `content.bridge_proof_signature_b64` must verify against the registration's public proof key
-- `updated_at` is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
-- Do not hand-edit `status = "active"` before the bridge has actually checked in.
-- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge call the bridge check-in endpoint and refresh the registration.
-
-Verification flow
-
-1. Confirm your local and server identity:
-
-  anx auth whoami
-
-2. Confirm a principal exists for the target handle:
-
-  anx auth principals list --handles-only
-
-3. Read the principal registration (`--json` when a script parses the full payload):
-
-  anx auth principals list --json
-
-4. Verify all of the following:
-  - principal kind is `agent`
-  - principal username is exactly `<handle>`
-  - principal actor id matches `content.actor_id`
-  - `workspace_bindings` contains the current workspace id with `enabled: true`
-  - `status` is `active`
-  - if you need online delivery right now, `bridge_instance_id`, `bridge_checked_in_at`, `bridge_expires_at`, `bridge_workspace_ids`, and `bridge_proof_signature_b64` are present
-  - if you need online delivery right now, `bridge_workspace_ids` contains the current workspace id
-  - if you need online delivery right now, `bridge_expires_at` is still in the future
-
-5. If you are using `anx-agent-bridge`, prefer:
-
   anx bridge doctor --config ./bridge.toml
 
-Concrete wake example
-
-1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running `anx-core` with the embedded wake-routing sidecar enabled.
-2. Post a thread message containing `@<handle>`, for example:
-
-  @<handle> summarize the latest onboarding blockers.
-
-3. Expected durable trace:
-- existing `message_posted`
-- new wake queue record visible through notifications
-- if online, wake queue status becomes `claimed`
-- if online, new bridge reply `message_posted`
-- if online, wake queue status becomes `completed`
-- if offline, the wake queue record stays requested until the bridge later claims it
-
-Common failure modes
-
-- unknown handle: no matching agent principal username exists
-- missing registration: the agent principal does not have wake registration metadata
-- registration actor mismatch: the registration points at a different actor
-- workspace not bound: registration exists but is not enabled for this workspace
-- bridge not checked in: the registration may still be pending, or the bridge may simply be offline for immediate delivery
-- stale bridge check-in: the bridge stopped refreshing readiness, so delivery is queued until it returns
-- wake-routing sidecar unavailable: the workspace deployment is not currently routing tagged messages
-- wrong workspace id: the registration uses a slug or another id that does not match the workspace deployment
-
-Operational note
-
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's `anx-core` process plus the per-agent bridge runtime.
-
-Next steps
-
-  anx help bridge
-  anx debug meta doc agent-bridge
-  anx bridge doctor --config ./bridge.toml
+The bridge verifies its configured roster before check-in. It reads each
+agent's notifications with a short-lived token from anx host token --as.
+Wake claim, completion, and failure use host-signed CLI requests. With
+agentctl present, wakes are launched via agentctl run and subscribed to
+anx runs ingest so executions appear in the runs roster.
 ```
 
 ## `draft`
@@ -937,53 +573,19 @@ Global flags:
 
 ## `bridge`
 
-CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
+One bridge per enrolled host for derived-agent wake routing.
 
 ```text
-Bridge bootstrap
+Bridge: one process per enrolled host
 
-Use `anx bridge` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `anx-agent-bridge` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
+anx host enroll
+anx bridge install
+anx bridge start --config ./bridge.toml
+anx bridge status --config ./bridge.toml
+anx bridge doctor --config ./bridge.toml
+anx bridge stop --config ./bridge.toml
 
-Bootstrap prerequisites
-
-- Python `3.11+`
-- `git` on PATH for the current GitHub-subdirectory install path
-
-Lifecycle constraint
-
-- Registration plus a matching enabled workspace binding makes an agent taggable.
-- A fresh bridge check-in makes the agent online for immediate delivery.
-- Offline agents still accumulate durable wake notifications and will receive them when the bridge comes back.
-
-Subcommands
-
-  bridge install      Install or refresh the managed `anx-agent-bridge` virtualenv and wrapper
-  bridge import-auth  Copy an existing `anx` profile into bridge auth state
-  bridge init-config  Render a minimal agent bridge TOML config
-  bridge start        Start a managed bridge daemon for one config
-  bridge stop         Stop a managed bridge daemon for one config
-  bridge restart      Restart a managed bridge daemon for one config
-  bridge status       Inspect managed process state for one config
-  bridge logs         Read recent log lines for one config
-  bridge workspace-id Read workspace ids from an existing wake registration
-  bridge doctor       Validate install/config/readiness without starting daemons
-
-Recommended order
-
-1. `anx bridge install`
-2. `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`, `--kind openclaw`, or `--kind subprocess --adapter-entrypoint ./adapter.py` (add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding)
-3. `anx bridge workspace-id --handle <handle>` if a wake registration already exists and you want to reuse its bindings
-4. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists
-5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
-6. `anx bridge start --config ./bridge.toml`
-7. `anx bridge status --config ./bridge.toml` and `anx bridge doctor --config ./bridge.toml` before expecting immediate online delivery
-8. `anx notifications list --status unread` or `anx-agent-bridge notifications list --config ./bridge.toml --status unread` when you want to pull pending notifications directly
-
-Workspace-owned wake routing
-
-- `anx bridge` only manages per-agent bridge daemons.
-- Tagged wake routing runs inside `anx-core` as an embedded workspace sidecar.
-- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
+Config: [host] base_url, id, slug; one [agents.<name>] command argv per enabled derived agent.
 ```
 
 ## `import`
@@ -3356,6 +2958,7 @@ Generated Help: inbox respond
 Inputs:
   Required:
   - path `inbox_id`
+  - body `outcome` (string)
   - body `response_text` (string)
   Optional:
   - body `actor_id` (string)
@@ -3364,16 +2967,17 @@ Inputs:
   - body `notify_target_actor_id` (string)
   - body `notify_target_agent_id` (string)
   - body `related_refs` (list<any>)
-  Enum values: notify_mode: none, original, replacement
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, rejected
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `inbox list`).
   --response-text <text>  Freeform response text.
+  --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (`me` uses the active profile's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, optional fields).
+  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, `outcome`, optional fields).
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -7612,26 +7216,18 @@ Examples:
 
 ## `bridge install`
 
-Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+Install the host bridge runtime.
 
 ```text
 Local Help: bridge install
 
 - Kind: `local helper`
 - Side effect class: `local_operational_write`
-- Summary: Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory at a pinned git ref (defaults to the running CLI release tag), and writes a thin launcher script.
+- Summary: Install the host bridge runtime.
+- Composition: Install a managed Python virtualenv and wrapper.
 - JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
 - Examples:
   - `anx bridge install`
-  - `anx bridge install --ref main --with-dev`
-
-Flags:
-  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the `anx-agent-bridge` wrapper should be written.
-  --ref <git-ref>              Git ref to install from. Defaults to the running CLI's version tag (e.g. `v0.3.2`) so the bridge matches this binary; use `main` for the latest commit on the default branch.
-  --with-dev                   Also install bridge test dependencies.
 
 
 Global flags:
@@ -7640,122 +7236,23 @@ Global flags:
   Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `bridge import-auth`
-
-Copy an existing `anx` profile and key into the bridge agent home auth state.
-
-```text
-Local Help: bridge import-auth
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Copy an existing `anx` profile and key into the bridge agent home auth state.
-- Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, stamps agent.toml identity including public key fingerprint, and reconciles wake.toml workspace base URLs.
-- JSON body: `config_path`, `auth_state_path`, `wake_config_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`, `public_key_fingerprint`
-- Examples:
-  - `anx bridge import-auth --config ./bridge.toml --from-profile agent-a`
-  - `anx --agent agent-a bridge import-auth --config ./bridge.toml`
-
-Flags:
-  --config <path>              Bridge config whose auth state should be populated.
-  --from-profile <agent>       Existing `anx` profile name to import. Defaults to the active CLI profile.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge import-auth ... ; anx --json bridge import-auth ... ; anx bridge import-auth ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge init-config`
-
-Write a bridge runtime config plus an agent home with wake subscriptions.
-
-```text
-Local Help: bridge init-config
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Write a bridge runtime config plus an agent home with wake subscriptions.
-- Composition: Local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used. If --workspace-id is omitted, discovers the durable workspace id from the active profile or core handshake.
-- JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `workspace_id_source`, `handle`, `content`
-- Examples:
-  - `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle myagent`
-  - `anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle myagent --openclaw-bin /opt/homebrew/bin/openclaw`
-  - `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle myagent --adapter-entrypoint ./adapter.py`
-  - `anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
-
-Flags:
-  --kind <hermes|openclaw|subprocess|python-plugin> Template kind to render.
-  --output <path>              Write the rendered TOML to a file. Omit to print it.
-  --agent-home <dir>           Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx.
-  --base-url <url>             ANX base URL for agent.toml identity and wake.toml workspace entries.
-  --workspace-id <id>          Durable ANX workspace id. Optional when the active profile/core handshake exposes one; repeat for multi-workspace agents; do not use slugs.
-  --workspace-name <name>      Display name for the first wake workspace.
-  --workspace-url <url>        Optional URL for the first wake workspace.
-  --handle <name>              Agent handle (required); must match the principal username for bridge-managed registration.
-  --auth-state-path <path>     Optional agent-home-relative auth state path override.
-  --state-dir <path>           Optional agent-home-relative bridge state directory.
-  --openclaw-bin <path>        OpenClaw template: absolute path for `[adapter].openclaw_bin`; auto-detected when omitted.
-  --anx-cli-bin <path>         OpenClaw template: absolute path for `[adapter].anx_cli_bin`; auto-detected when omitted.
-  --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
-  --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
-  --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.
-  --managed-package-auto-update Write `[bridge].managed_package_auto_update = true`; opt-in allows pip refreshes toward the CLI release tag during bridge doctor/start when skew is detected. Requires Python 3.11+, git on PATH, network access, and macOS/Linux (same prerequisites as `anx bridge install`).
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge init-config ... ; anx --json bridge init-config ... ; anx bridge init-config ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge workspace-id`
-
-Discover durable workspace ids from an existing agent wake registration.
-
-```text
-Local Help: bridge workspace-id
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Discover durable workspace ids from an existing agent wake registration.
-- Composition: Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
-- JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
-- Examples:
-  - `anx --agent agent-a bridge workspace-id --handle myagent`
-
-Flags:
-  --handle <name>              Agent handle whose wake registration should be inspected.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge workspace-id ... ; anx --json bridge workspace-id ... ; anx bridge workspace-id ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `bridge doctor`
 
-Validate bridge install, config presence, and registration readiness without starting the daemon.
+Check one enrolled-host bridge and its configured runtimes.
 
 ```text
 Local Help: bridge doctor
 
 - Kind: `local helper`
-- Side effect class: `read_only`
-- Summary: Validate bridge install, config presence, and registration readiness without starting the daemon.
-- Composition: Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.
-- JSON body: `checks`, `registration`, `bridge_binary`, `python`
+- Side effect class: `remote_coordination_write`
+- Summary: Check one enrolled-host bridge and its configured runtimes.
+- Composition: Invoke the bridge's host roster validation.
+- JSON body: `host`, `agents`, `agentctl`
 - Examples:
-  - `anx bridge doctor`
   - `anx bridge doctor --config ./bridge.toml`
 
 Flags:
-  --config <path>              Bridge config to validate with `registration status`.
-  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              One host bridge config.
 
 
 Global flags:
@@ -7766,23 +7263,21 @@ Global flags:
 
 ## `bridge start`
 
-Start a managed bridge daemon for one config file.
+Start the one bridge process for an enrolled host.
 
 ```text
 Local Help: bridge start
 
 - Kind: `local helper`
-- Side effect class: `local_operational_write`
-- Summary: Start a managed bridge daemon for one config file.
-- Composition: Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
-- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
+- Side effect class: `external_side_effect`
+- Summary: Start the one bridge process for an enrolled host.
+- Composition: Start a managed host bridge daemon.
+- JSON body: `config_path`, `pid`, `log_path`
 - Examples:
   - `anx bridge start --config ./bridge.toml`
 
 Flags:
-  --config <path>              Bridge runtime config to start. The config must contain top-level `agent_home`.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              Host bridge config.
 
 
 Global flags:
@@ -7793,23 +7288,21 @@ Global flags:
 
 ## `bridge stop`
 
-Stop a managed bridge daemon for one config file.
+Stop a managed host bridge.
 
 ```text
 Local Help: bridge stop
 
 - Kind: `local helper`
 - Side effect class: `local_operational_write`
-- Summary: Stop a managed bridge daemon for one config file.
-- Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
-- JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
+- Summary: Stop a managed host bridge.
+- Composition: Stop the host bridge process.
+- JSON body: `config_path`, `pid`, `stopped_at`
 - Examples:
-  - `anx bridge stop --config ./bridge.toml --force`
+  - `anx bridge stop --config ./bridge.toml`
 
 Flags:
-  --config <path>              Managed config to stop.
-  --force                      Escalate to SIGKILL if SIGTERM does not stop the daemon before the timeout.
-  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
+  --config <path>              Host bridge config.
 
 
 Global flags:
@@ -7818,85 +7311,28 @@ Global flags:
   Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `bridge restart`
-
-Restart a managed bridge daemon for one config file.
-
-```text
-Local Help: bridge restart
-
-- Kind: `local helper`
-- Side effect class: `local_operational_write`
-- Summary: Restart a managed bridge daemon for one config file.
-- Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
-- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
-- Examples:
-  - `anx bridge restart --config ./bridge.toml`
-
-Flags:
-  --config <path>              Managed config to restart.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
-  --force                      Force-kill during the stop phase if needed.
-  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge restart ... ; anx --json bridge restart ... ; anx bridge restart ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `bridge status`
 
-Inspect managed process state for a bridge config.
+Inspect one host bridge process.
 
 ```text
 Local Help: bridge status
 
 - Kind: `local helper`
 - Side effect class: `read_only`
-- Summary: Inspect managed process state for a bridge config.
-- Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.
-- JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
+- Summary: Inspect one host bridge process.
+- Composition: Read managed host bridge process state.
+- JSON body: `config_path`, `running`, `pid`, `log_path`
 - Examples:
   - `anx bridge status --config ./bridge.toml`
 
 Flags:
-  --config <path>              Managed config to inspect.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              Host bridge config.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge status ... ; anx --json bridge status ... ; anx bridge status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge logs`
-
-Read recent log lines for a managed bridge config.
-
-```text
-Local Help: bridge logs
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Read recent log lines for a managed bridge config.
-- Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
-- JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
-- Examples:
-  - `anx bridge logs --config ./bridge.toml --lines 200`
-
-Flags:
-  --config <path>              Managed config whose log should be tailed.
-  --lines <n>                  How many recent lines to return. Default is 80.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge logs ... ; anx --json bridge logs ... ; anx bridge logs ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --as <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

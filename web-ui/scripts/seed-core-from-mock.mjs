@@ -1650,6 +1650,7 @@ async function seedCommandCenter(bundle) {
     await requestAuthJson("POST", `/inbox/${encodeURIComponent(item.id)}/respond`, {
       actor_id: operator.actor_id,
       response_text: "Decision recorded for the development scenario.",
+      outcome: "answered",
       notify_mode: "none",
       related_refs: [],
     }, operator.access_token, [201]);

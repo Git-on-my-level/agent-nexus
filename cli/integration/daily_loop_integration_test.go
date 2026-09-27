@@ -67,7 +67,7 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 	if timed.ExitCode != 8 {
 		t.Fatalf("await timeout exit=%d: %s", timed.ExitCode, timed.Stdout)
 	}
-	responded := h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, askID), "response_text": "Proceed"}, "debug", "inbox", "respond", "--from-file", "-")
+	responded := h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, askID), "response_text": "Proceed", "outcome": "answered"}, "debug", "inbox", "respond", "--from-file", "-")
 	answered := h.runCLI(t, "worker", nil, "await", askID, "--timeout", "1s")
 	if answered.ExitCode != 0 {
 		events := h.runCLIExpectOK(t, "worker", nil, "debug", "events", "list", "--type", "human_attention_responded")
@@ -91,10 +91,10 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 	h.runCLIExpectOK(t, "worker", nil, "review", "--from-file", reviewFile)
 	escalated := h.runCLIExpectOK(t, "worker", nil, "escalate", "Urgent decision", "--subject-ref", ref, "--recommend", "Proceed")
 	escalateID := mustStringPath(t, escalated.Payload, "result.ask_id")
-	h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, escalateID), "response_text": "Declined"}, "debug", "inbox", "respond", "--from-file", "-")
-	declined := h.runCLI(t, "worker", nil, "await", escalateID, "--timeout", "1s")
-	if declined.ExitCode != 9 {
-		t.Fatalf("decline exit=%d: %s", declined.ExitCode, declined.Stdout)
+	h.runCLIExpectOK(t, "operator", map[string]any{"inbox_item_id": findAskInboxID(t, h, escalateID), "response_text": "No, wait", "outcome": "rejected"}, "debug", "inbox", "respond", "--from-file", "-")
+	rejected := h.runCLI(t, "worker", nil, "await", escalateID, "--timeout", "1s")
+	if rejected.ExitCode != 9 {
+		t.Fatalf("reject exit=%d: %s", rejected.ExitCode, rejected.Stdout)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "work", "done", "--evidence", "https://example.test/receipt")
 	final := h.runCLIExpectOK(t, "worker", nil, "orient")

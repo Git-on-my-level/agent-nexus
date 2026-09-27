@@ -39,6 +39,18 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "update" {
 		return "local_operational_write"
 	}
+	if parts[0] == "bridge" && len(parts) > 1 {
+		switch parts[1] {
+		case "install", "stop":
+			return "local_operational_write"
+		case "start":
+			return "external_side_effect"
+		case "doctor":
+			return "remote_coordination_write"
+		case "status":
+			return "read_only"
+		}
+	}
 	if parts[0] == "import" {
 		if len(parts) > 1 && parts[1] == "apply" {
 			return "remote_coordination_write"
@@ -97,8 +109,24 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	if (command == "ask" || command == "review" || command == "escalate" || command == "work block") && anyString(root["ask_id"]) != "" {
 		actions = append(actions, action("Wait for answer", "anx", "await", anyString(root["ask_id"])))
 	}
-	if command == "await" && anyString(root["subject_ref"]) != "" && anyString(root["answer"]) != "" {
-		actions = append(actions, action("Record follow-up", "anx", "work", "note", anyString(root["answer"]), anyString(root["subject_ref"])))
+	if command == "await" {
+		subject := anyString(root["subject_ref"])
+		if strings.HasPrefix(subject, "card:") {
+			switch anyString(root["outcome"]) {
+			case "answered", "approved":
+				if answer := anyString(root["answer"]); answer != "" {
+					label := "Record answer"
+					if anyString(root["outcome"]) == "approved" {
+						label = "Record approval"
+					}
+					actions = append(actions, action(label, "anx", "work", "note", answer, subject))
+				}
+			case "acknowledged":
+				actions = append(actions, action("Review acknowledged work", "anx", "work", "get", subject))
+			}
+		} else {
+			actions = append(actions, action("Orient after response", "anx", "orient"))
+		}
 	}
 	if command == "orient" {
 		for _, raw := range asSlice(root["next"]) {
@@ -281,6 +309,13 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 				return []output.NextAction{action("Keep waiting", "anx", "await", target)}
 			}
 		}
+	case "rejected":
+		if details, ok := err.Details.(map[string]any); ok {
+			if subject := anyString(details["subject_ref"]); strings.HasPrefix(subject, "card:") {
+				return []output.NextAction{action("Revise rejected work", "anx", "work", "get", subject)}
+			}
+		}
+		return []output.NextAction{action("Orient after rejection", "anx", "orient")}
 	case "cli_outdated":
 		return []output.NextAction{action("Update CLI", "anx", "update")}
 	case "unknown_command", "unknown_subcommand":

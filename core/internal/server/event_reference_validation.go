@@ -38,6 +38,11 @@ func validateEventReferenceConventions(contract *schema.Contract, event map[stri
 	if err := validateRequiredPayloadKeys(eventType, payload, rule.PayloadMustInclude); err != nil {
 		return err
 	}
+	if eventType == humanAttentionRespondedEventType {
+		if err := schema.ValidateEnum(contract, "human_attention_response_outcome", getPayloadValue(payload, "outcome")); err != nil {
+			return fmt.Errorf("event.payload.outcome: %w", err)
+		}
+	}
 
 	if err := validateConditionalRefRules(eventType, payload, refs, rule.ConditionalRefs); err != nil {
 		return err

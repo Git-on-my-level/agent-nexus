@@ -227,9 +227,18 @@ func TestValidateDraftBodySupportsInboxRespond(t *testing.T) {
 		"actor_id":      "actor_1",
 		"inbox_item_id": "inbox:ask:thread_1:none:event_1",
 		"response_text": "Approved.",
+		"outcome":       "approved",
 	})
 	if len(errors) != 0 {
 		t.Fatalf("expected inbox.respond draft validation to pass, got %#v", errors)
+	}
+	invalid := validateDraftBody("inbox.respond", map[string]any{
+		"inbox_item_id": "inbox:ask:thread_1:none:event_1",
+		"response_text": "Approved.",
+		"outcome":       "maybe",
+	})
+	if len(invalid) != 1 || !strings.Contains(invalid[0], "outcome must be") {
+		t.Fatalf("expected invalid outcome, got %#v", invalid)
 	}
 }
 

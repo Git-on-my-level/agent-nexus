@@ -407,6 +407,7 @@ describe("anxCoreClient error messaging", () => {
 
     const out = await client.respondInboxItem("ask-item-9", {
       response_text: "Ship it.",
+      outcome: "answered",
       notify_mode: "none",
     });
 
@@ -417,6 +418,7 @@ describe("anxCoreClient error messaging", () => {
     expect(JSON.parse(requests[0].init.body)).toEqual({
       actor_id: "actor-1",
       response_text: "Ship it.",
+      outcome: "answered",
       notify_mode: "none",
     });
   });

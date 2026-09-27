@@ -11,12 +11,10 @@ requires-python = ">=3.11"
 authors = [{name = "OpenAI", email = "support@openai.com"}]
 dependencies = [
   "httpx>=0.27,<1.0",
-  "cryptography>=42,<47",
-  "agent-client-protocol>=0.6,<1.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "cryptography>=42,<47"]
 
 [project.scripts]
 anx-agent-bridge = "anx_agent_bridge.cli:main"

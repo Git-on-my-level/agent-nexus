@@ -98,6 +98,15 @@
         "topic_updated"
       ]
     },
+    "human_attention_response_outcome": {
+      "enum_policy": "strict",
+      "values": [
+        "acknowledged",
+        "answered",
+        "approved",
+        "rejected"
+      ]
+    },
     "lifecycle_state": {
       "enum_policy": "strict",
       "values": [

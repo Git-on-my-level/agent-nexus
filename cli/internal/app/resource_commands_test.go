@@ -997,6 +997,7 @@ func TestInboxRespondPostsGenericResponse(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", inboxID,
 		"--response-text", "Approved.",
+		"--outcome", "acknowledged",
 	})
 	assertEnvelopeOK(t, raw)
 }
@@ -3831,10 +3832,10 @@ func TestMessageCommandInvalidFlagsBeatAmbiguousProfileResolution(t *testing.T) 
 	}
 }
 
-func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
+func TestPreConfigUsagePreflightRejectsObsoleteBridgeRestart(t *testing.T) {
 	t.Parallel()
 
-	command, err := preflightConfigIndependentUsage([]string{
+	_, err := preflightConfigIndependentUsage([]string{
 		"bridge", "restart",
 		"--config", "./bridge.toml",
 		"--install-dir", "/tmp/anx-bridge",
@@ -3842,11 +3843,8 @@ func TestPreConfigUsagePreflightAcceptsBridgeRestartParserFlags(t *testing.T) {
 		"--timeout-seconds", "5",
 		"--force",
 	})
-	if err != nil {
-		t.Fatalf("expected bridge restart parser flags to pass preflight, got %v", err)
-	}
-	if command != "bridge restart" {
-		t.Fatalf("expected bridge restart command, got %q", command)
+	if err == nil {
+		t.Fatal("obsolete bridge restart accepted")
 	}
 }
 
@@ -4773,6 +4771,7 @@ func TestInboxRespondActorIDMeAliasFromProfile(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "Approved.",
+		"--outcome", "acknowledged",
 		"--actor-id", "me",
 	})
 	assertEnvelopeOK(t, raw)
@@ -4845,6 +4844,7 @@ func TestInboxRespondSkipsStdinWhenInboxItemIDFromFlags(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
+		"--outcome", "acknowledged",
 	})
 	assertEnvelopeOK(t, raw)
 }
@@ -4886,6 +4886,7 @@ func TestInboxRespondActorIDMeRequiresProfileActorID(t *testing.T) {
 		"debug", "inbox", "respond",
 		"--inbox-item-id", "inbox:1",
 		"--response-text", "OK.",
+		"--outcome", "acknowledged",
 		"--actor-id", "me",
 	})
 	payload := assertEnvelopeError(t, raw)

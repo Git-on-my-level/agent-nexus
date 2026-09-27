@@ -149,7 +149,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 		}
 		ref := responseAskID(payload)
 		if ref != "" {
-			answerByRequest[ref] = map[string]any{"text": payload["response_text"], "responder": payload["responding_actor_id"], "at": event["ts"], "response_event_id": event["id"]}
+			answerByRequest[ref] = map[string]any{"text": payload["response_text"], "outcome": payload["outcome"], "responder": payload["responding_actor_id"], "at": event["ts"], "response_event_id": event["id"]}
 		}
 	}
 	askMatched := 0
@@ -473,11 +473,8 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			if responseAskID(payload) != target {
 				continue
 			}
-			answer := anyString(payload["response_text"])
-			if strings.EqualFold(strings.TrimSpace(answer), "declined") {
-				return nil, false, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "declined", "operator declined the ask"), map[string]any{"ask_id": target, "answer": answer, "responder": payload["responding_actor_id"]})
-			}
-			return map[string]any{"ask_id": target, "answer": answer, "responder": payload["responding_actor_id"], "response_event_ref": "event:" + anyString(ev["id"]), "subject_ref": payload["subject_ref"]}, true, nil
+			result, responseErr := awaitResponseResult(target, ev)
+			return result, responseErr == nil, responseErr
 		}
 		return nil, false, nil
 	}
@@ -546,13 +543,12 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 					if anyString(ev["type"]) != "human_attention_responded" || responseAskID(payload) != target {
 						continue
 					}
-					answer := anyString(payload["response_text"])
-					if strings.EqualFold(strings.TrimSpace(answer), "declined") {
-						resp.Body.Close()
-						return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "declined", "operator declined the ask"), map[string]any{"ask_id": target, "answer": answer, "responder": payload["responding_actor_id"]})
-					}
 					resp.Body.Close()
-					result := &commandResult{Data: map[string]any{"ask_id": target, "answer": answer, "responder": payload["responding_actor_id"], "subject_ref": payload["subject_ref"]}}
+					data, responseErr := awaitResponseResult(target, ev)
+					if responseErr != nil {
+						return nil, responseErr
+					}
+					result := &commandResult{Data: data}
 					return result, nil
 				}
 			}
@@ -568,6 +564,24 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 	}
 	return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out"), map[string]any{"target": target, "timeout": wait.String()})
+}
+
+func awaitResponseResult(target string, event map[string]any) (map[string]any, error) {
+	payload := asMap(event["payload"])
+	outcome := anyString(payload["outcome"])
+	result := map[string]any{
+		"ask_id": target, "outcome": outcome, "answer": payload["response_text"],
+		"responder": payload["responding_actor_id"], "subject_ref": payload["subject_ref"],
+		"response_event_ref": "event:" + anyString(event["id"]),
+	}
+	switch outcome {
+	case "answered", "approved", "acknowledged":
+		return result, nil
+	case "rejected":
+		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", "operator rejected the request"), result)
+	default:
+		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "response event has no valid outcome"), result)
+	}
 }
 
 func (a *App) dailyAskEvent(ctx context.Context, cfg config.Resolved, ref string) (map[string]any, error) {

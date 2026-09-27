@@ -30,77 +30,9 @@ func init() {
 
 func init() {
 	localHelperTopics = append(localHelperTopics,
-		localHelperTopic{
-			Path:        "bridge start",
-			Summary:     "Start a managed bridge daemon for one config file.",
-			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`",
-			Composition: "Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.",
-			Examples: []string{
-				"anx bridge start --config ./bridge.toml",
-			},
-			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Bridge runtime config to start. The config must contain top-level `agent_home`."},
-				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
-			},
-		},
-		localHelperTopic{
-			Path:        "bridge stop",
-			Summary:     "Stop a managed bridge daemon for one config file.",
-			JSONShape:   "`kind`, `config_path`, `pid`, `stopped_at`, `last_signal`",
-			Composition: "Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.",
-			Examples: []string{
-				"anx bridge stop --config ./bridge.toml --force",
-			},
-			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Managed config to stop."},
-				{Name: "--force", Description: "Escalate to SIGKILL if SIGTERM does not stop the daemon before the timeout."},
-				{Name: "--timeout-seconds <n>", Description: "How long to wait after SIGTERM before failing or force-killing."},
-			},
-		},
-		localHelperTopic{
-			Path:        "bridge restart",
-			Summary:     "Restart a managed bridge daemon for one config file.",
-			JSONShape:   "`kind`, `config_path`, `pid`, `log_path`, `process_state_path`",
-			Composition: "Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.",
-			Examples: []string{
-				"anx bridge restart --config ./bridge.toml",
-			},
-			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Managed config to restart."},
-				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
-				{Name: "--force", Description: "Force-kill during the stop phase if needed."},
-				{Name: "--timeout-seconds <n>", Description: "How long to wait after SIGTERM before failing or force-killing."},
-			},
-		},
-		localHelperTopic{
-			Path:        "bridge status",
-			Summary:     "Inspect managed process state for a bridge config.",
-			JSONShape:   "`kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`",
-			Composition: "Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.",
-			Examples: []string{
-				"anx bridge status --config ./bridge.toml",
-			},
-			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Managed config to inspect."},
-				{Name: "--install-dir <dir>", Description: "Root directory for the managed bridge virtualenv."},
-				{Name: "--bin-dir <dir>", Description: "Directory where the managed `anx-agent-bridge` wrapper should exist."},
-			},
-		},
-		localHelperTopic{
-			Path:        "bridge logs",
-			Summary:     "Read recent log lines for a managed bridge config.",
-			JSONShape:   "`kind`, `config_path`, `log_path`, `lines`, `content`",
-			Composition: "Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.",
-			Examples: []string{
-				"anx bridge logs --config ./bridge.toml --lines 200",
-			},
-			Flags: []localHelperFlag{
-				{Name: "--config <path>", Description: "Managed config whose log should be tailed."},
-				{Name: "--lines <n>", Description: "How many recent lines to return. Default is 80."},
-			},
-		},
+		localHelperTopic{Path: "bridge start", Summary: "Start the one bridge process for an enrolled host.", JSONShape: "`config_path`, `pid`, `log_path`", Composition: "Start a managed host bridge daemon.", Examples: []string{"anx bridge start --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "Host bridge config."}}},
+		localHelperTopic{Path: "bridge stop", Summary: "Stop a managed host bridge.", JSONShape: "`config_path`, `pid`, `stopped_at`", Composition: "Stop the host bridge process.", Examples: []string{"anx bridge stop --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "Host bridge config."}}},
+		localHelperTopic{Path: "bridge status", Summary: "Inspect one host bridge process.", JSONShape: "`config_path`, `running`, `pid`, `log_path`", Composition: "Read managed host bridge process state.", Examples: []string{"anx bridge status --config ./bridge.toml"}, Flags: []localHelperFlag{{Name: "--config <path>", Description: "Host bridge config."}}},
 	)
 }
 
@@ -137,10 +69,7 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 	if err != nil {
 		return nil, err
 	}
-	preStartNotes, err := a.managedBridgeStartupAlignment(ctx, managedConfig, bridgeBinary, home, strings.TrimSpace(installDirFlag.value), strings.TrimSpace(binDirFlag.value), "")
-	if err != nil {
-		return nil, err
-	}
+
 	if existing, ok := loadManagedRuntimeState(managedConfig.ProcessStatePath); ok {
 		if running, _ := bridgeManagedRuntimeRunning(existing); running {
 			return nil, errnorm.WithDetails(
@@ -154,6 +83,9 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 			)
 		}
 	}
+	if _, err := runBridgeExternalOutput(ctx, bridgeBinary, "doctor", "--config", managedConfig.ConfigPath); err != nil {
+		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_not_ready", "host bridge doctor failed before start", err)
+	}
 	runtimeState, err := bridgeStartManagedProcess(managedConfig, bridgeBinary)
 	if err != nil {
 		return nil, err
@@ -162,21 +94,13 @@ func (a *App) runBridgeStart(ctx context.Context, args []string) (*commandResult
 		_, _ = bridgeStopManagedProcess(runtimeState, 2*time.Second, true)
 		return nil, err
 	}
-	lines := []string(nil)
-	for _, note := range preStartNotes {
-		if strings.TrimSpace(note) != "" {
-			lines = append(lines, note)
-		}
-	}
-	lines = append(lines,
+	lines := []string{
 		"Bridge runtime started.",
-		"Kind: "+runtimeState.Kind,
-		"Config: "+runtimeState.ConfigPath,
-		"PID: "+strconv.Itoa(runtimeState.PID),
-		"Log: "+runtimeState.LogPath,
-		"State: "+runtimeState.ProcessStatePath,
-		"Next step: anx bridge status --config "+shellSingleQuote(runtimeState.ConfigPath),
-	)
+		"Host config: " + runtimeState.ConfigPath,
+		"PID: " + strconv.Itoa(runtimeState.PID),
+		"Log: " + runtimeState.LogPath,
+		"Next step: anx bridge status --config " + shellSingleQuote(runtimeState.ConfigPath),
+	}
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
@@ -261,68 +185,10 @@ func (a *App) runBridgeStop(args []string) (*commandResult, error) {
 	}, nil
 }
 
-func (a *App) runBridgeRestart(ctx context.Context, args []string) (*commandResult, error) {
-	if runtime.GOOS == "windows" {
-		return nil, errnorm.Usage("unsupported_platform", "`anx bridge restart` currently supports macOS and Linux only")
-	}
-	fs := newSilentFlagSet("bridge restart")
-	var configFlag trackedString
-	var installDirFlag trackedString
-	var binDirFlag trackedString
-	var timeoutFlag trackedString
-	var force trackedBool
-	fs.Var(&configFlag, "config", "Managed bridge config to restart")
-	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed anx-agent-bridge wrapper should exist")
-	fs.Var(&timeoutFlag, "timeout-seconds", "How long to wait after SIGTERM before failing")
-	fs.Var(&force, "force", "Escalate to SIGKILL if SIGTERM does not stop the daemon")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge restart`")
-	}
-	configPath := strings.TrimSpace(configFlag.value)
-	if configPath == "" {
-		return nil, errnorm.Usage("invalid_request", "--config is required")
-	}
-	stopArgs := []string{"--config", configPath}
-	if strings.TrimSpace(timeoutFlag.value) != "" {
-		stopArgs = append(stopArgs, "--timeout-seconds", strings.TrimSpace(timeoutFlag.value))
-	}
-	if force.set && force.value {
-		stopArgs = append(stopArgs, "--force")
-	}
-	_, stopErr := a.runBridgeStop(stopArgs)
-	if stopErr != nil {
-		norm := errnorm.Normalize(stopErr)
-		if norm.Code != "bridge_not_managed" {
-			return nil, stopErr
-		}
-	}
-	startArgs := []string{"--config", configPath}
-	if strings.TrimSpace(installDirFlag.value) != "" {
-		startArgs = append(startArgs, "--install-dir", strings.TrimSpace(installDirFlag.value))
-	}
-	if strings.TrimSpace(binDirFlag.value) != "" {
-		startArgs = append(startArgs, "--bin-dir", strings.TrimSpace(binDirFlag.value))
-	}
-	result, err := a.runBridgeStart(ctx, startArgs)
-	if err != nil {
-		return nil, err
-	}
-	result.Text = "Bridge runtime restarted.\n" + result.Text
-	return result, nil
-}
-
 func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResult, error) {
 	fs := newSilentFlagSet("bridge status")
 	var configFlag trackedString
-	var installDirFlag trackedString
-	var binDirFlag trackedString
 	fs.Var(&configFlag, "config", "Managed bridge config to inspect")
-	fs.Var(&installDirFlag, "install-dir", "Root directory for the managed bridge virtualenv")
-	fs.Var(&binDirFlag, "bin-dir", "Directory where the managed anx-agent-bridge wrapper should exist")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -337,20 +203,6 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 	if err != nil {
 		return nil, err
 	}
-	home, err := a.bridgeHome()
-	if err != nil {
-		return nil, err
-	}
-	bridgeBinary, _ := resolveBridgeBinary(home, strings.TrimSpace(installDirFlag.value), strings.TrimSpace(binDirFlag.value))
-
-	registrationData := map[string]any{}
-	if managedConfig.RuntimeKind == "agent" && bridgeBinary != "" {
-		statusOut, statusErr := runBridgeExternalOutput(ctx, bridgeBinary, "registration", "status", "--config", managedConfig.ConfigPath)
-		if statusErr == nil {
-			_ = json.Unmarshal([]byte(statusOut), &registrationData)
-		}
-	}
-
 	runtimeState, ok := loadManagedRuntimeState(managedConfig.ProcessStatePath)
 	if !ok {
 		lines := []string{
@@ -371,7 +223,6 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 				"running":            false,
 				"log_path":           managedConfig.LogPath,
 				"process_state_path": managedConfig.ProcessStatePath,
-				"registration":       registrationData,
 			},
 		}, nil
 	}
@@ -399,15 +250,7 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 	if runtimeState.StoppedAt != "" {
 		lines = append(lines, "Stopped at: "+runtimeState.StoppedAt)
 	}
-	if managedConfig.RuntimeKind == "agent" {
-		if wakeable, _ := registrationData["wakeable"].(bool); wakeable {
-			lines = append(lines, "Presence: online for immediate delivery")
-		} else if len(registrationData) > 0 {
-			lines = append(lines, "Presence: offline or not ready for live delivery")
-		} else if bridgeBinary == "" {
-			lines = append(lines, "Registration: unavailable because anx-agent-bridge is not installed or not on PATH")
-		}
-	}
+
 	return &commandResult{
 		Text: strings.Join(lines, "\n"),
 		Data: map[string]any{
@@ -418,84 +261,6 @@ func (a *App) runBridgeStatus(ctx context.Context, args []string) (*commandResul
 			"pid":                runtimeState.PID,
 			"log_path":           runtimeState.LogPath,
 			"process_state_path": runtimeState.ProcessStatePath,
-			"registration":       registrationData,
-		},
-	}, nil
-}
-
-func (a *App) runBridgeLogs(args []string) (*commandResult, error) {
-	fs := newSilentFlagSet("bridge logs")
-	var configFlag trackedString
-	var linesFlag trackedString
-	fs.Var(&configFlag, "config", "Managed bridge config whose logs should be read")
-	fs.Var(&linesFlag, "lines", "How many recent lines to return")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_args", "unexpected positional arguments for `anx bridge logs`")
-	}
-	configPath := strings.TrimSpace(configFlag.value)
-	if configPath == "" {
-		return nil, errnorm.Usage("invalid_request", "--config is required")
-	}
-	managedConfig, err := loadBridgeManagedConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-	lineLimit := 80
-	if raw := strings.TrimSpace(linesFlag.value); raw != "" {
-		value, convErr := strconv.Atoi(raw)
-		if convErr != nil || value <= 0 {
-			return nil, errnorm.Usage("invalid_request", "--lines must be a positive integer")
-		}
-		lineLimit = value
-	}
-	logPath := managedConfig.LogPath
-	if runtimeState, ok := loadManagedRuntimeState(managedConfig.ProcessStatePath); ok && strings.TrimSpace(runtimeState.LogPath) != "" {
-		logPath = runtimeState.LogPath
-	}
-	content, err := bridgeReadFile(logPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			lines := []string{
-				"Bridge logs",
-				"Kind: " + managedConfig.RuntimeKind,
-				"Config: " + managedConfig.ConfigPath,
-				"Log: " + logPath,
-				"No managed log file exists yet. Start the runtime with: anx bridge start --config " + shellSingleQuote(managedConfig.ConfigPath),
-			}
-			return &commandResult{
-				Text: strings.Join(lines, "\n"),
-				Data: map[string]any{
-					"kind":        managedConfig.RuntimeKind,
-					"config_path": managedConfig.ConfigPath,
-					"log_path":    logPath,
-					"lines":       lineLimit,
-					"content":     "",
-				},
-			}, nil
-		}
-		return nil, errnorm.Wrap(errnorm.KindLocal, "bridge_log_read_failed", "failed to read bridge log file", err)
-	}
-	text := tailLines(string(content), lineLimit)
-	lines := []string{
-		"Bridge logs",
-		"Kind: " + managedConfig.RuntimeKind,
-		"Config: " + managedConfig.ConfigPath,
-		"Log: " + logPath,
-	}
-	if text != "" {
-		lines = append(lines, "", text)
-	}
-	return &commandResult{
-		Text: strings.Join(lines, "\n"),
-		Data: map[string]any{
-			"kind":        managedConfig.RuntimeKind,
-			"config_path": managedConfig.ConfigPath,
-			"log_path":    logPath,
-			"lines":       lineLimit,
-			"content":     text,
 		},
 	}, nil
 }
@@ -513,41 +278,46 @@ func loadBridgeManagedConfig(configPath string) (bridgeManagedConfig, error) {
 	if err := toml.Unmarshal(content, &root); err != nil {
 		return bridgeManagedConfig{}, errnorm.Wrap(errnorm.KindLocal, "bridge_config_toml_invalid", "bridge config is not valid TOML", err)
 	}
-	runtimeKind, runCommand, displayName, err := inferBridgeRuntimeKind(root, absPath)
+	runtimeKind, _, displayName, err := inferBridgeRuntimeKind(root, absPath)
 	if err != nil {
 		return bridgeManagedConfig{}, err
 	}
-	managerDir := bridgeManagerDir(absPath)
-	autoManaged := false
-	if bridgeRoot := bridgeTomlTable(root, "bridge"); bridgeRoot != nil {
-		autoManaged = asBool(bridgeRoot["managed_package_auto_update"])
-	}
+	host, _ := root["host"].(map[string]any)
+	managerDir := bridgeManagerDir(bridgeTomlString(host["base_url"]), bridgeTomlString(host["id"]))
+
 	return bridgeManagedConfig{
-		RuntimeKind:              runtimeKind,
-		RunCommand:               runCommand,
-		ConfigPath:               absPath,
-		DisplayName:              displayName,
-		ManagerDir:               managerDir,
-		ProcessStatePath:         filepath.Join(managerDir, "process.json"),
-		LogPath:                  filepath.Join(managerDir, "current.log"),
-		ManagedPackageAutoUpdate: autoManaged,
+		RuntimeKind:      runtimeKind,
+		ConfigPath:       absPath,
+		DisplayName:      displayName,
+		ManagerDir:       managerDir,
+		ProcessStatePath: filepath.Join(managerDir, "process.json"),
+		LogPath:          filepath.Join(managerDir, "current.log"),
 	}, nil
 }
 
-func inferBridgeRuntimeKind(root map[string]any, configPath string) (runtimeKind string, runCommand string, displayName string, err error) {
-	if _, ok := root["agent_home"]; ok {
-		return "agent", "bridge", filepath.Base(configPath), nil
+func inferBridgeRuntimeKind(root map[string]any, configPath string) (string, string, string, error) {
+	host, ok := root["host"].(map[string]any)
+	if !ok || bridgeTomlString(host["id"]) == "" || bridgeTomlString(host["slug"]) == "" || bridgeTomlString(host["base_url"]) == "" {
+		return "", "", "", errnorm.Usage("invalid_request", "bridge config requires [host] id, slug, and base_url")
 	}
-	return "", "", "", errnorm.Usage("invalid_request", "bridge config must contain top-level agent_home")
+	if _, old := root["agent_home"]; old {
+		return "", "", "", errnorm.Usage("invalid_request", "agent_home is obsolete")
+	}
+	agents, ok := root["agents"].(map[string]any)
+	if !ok || len(agents) == 0 {
+		return "", "", "", errnorm.Usage("invalid_request", "bridge config requires [agents.<name>] runtimes")
+	}
+	return "host", "", bridgeTomlString(host["slug"]), nil
 }
 
-func bridgeManagerDir(configPath string) string {
-	base := strings.TrimSuffix(filepath.Base(configPath), filepath.Ext(configPath))
-	base = sanitizeBridgeManagerName(base)
-	if base == "" {
-		base = "bridge"
+func bridgeManagerDir(baseURL, hostID string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.TempDir()
 	}
-	return filepath.Join(filepath.Dir(configPath), ".anx-bridge", base+"-"+shortBridgeHash(configPath))
+	return filepath.Join(home, ".local", "state", "anx", "bridge",
+		sanitizeBridgeManagerName(hostID)+"-"+shortBridgeHash(baseURL+"|"+hostID))
 }
 
 func sanitizeBridgeManagerName(value string) string {
@@ -609,7 +379,7 @@ func defaultBridgeStartManagedProcess(managedConfig bridgeManagedConfig, bridgeB
 	}
 	defer logHandle.Close()
 
-	cmd := exec.Command(bridgeBinary, managedConfig.RunCommand, "run", "--config", managedConfig.ConfigPath)
+	cmd := exec.Command(bridgeBinary, "run", "--config", managedConfig.ConfigPath)
 	cmd.Stdout = logHandle
 	cmd.Stderr = logHandle
 	cmd.Stdin = nil
@@ -627,7 +397,7 @@ func defaultBridgeStartManagedProcess(managedConfig bridgeManagedConfig, bridgeB
 		ProcessStatePath: managedConfig.ProcessStatePath,
 		LogPath:          managedConfig.LogPath,
 		BridgeBinary:     bridgeBinary,
-		Command:          []string{bridgeBinary, managedConfig.RunCommand, "run", "--config", managedConfig.ConfigPath},
+		Command:          []string{bridgeBinary, "run", "--config", managedConfig.ConfigPath},
 		PID:              pid,
 		PGID:             pid,
 		StartedAt:        time.Now().UTC().Format(time.RFC3339),
@@ -643,7 +413,7 @@ func defaultBridgeStartManagedProcess(managedConfig bridgeManagedConfig, bridgeB
 			details["log_tail"] = tailText
 		}
 		return bridgeManagedRuntime{}, errnorm.WithDetails(
-			errnorm.Local("bridge_start_failed", "bridge runtime exited immediately; inspect `anx bridge logs --config ...`"),
+			errnorm.Local("bridge_start_failed", "bridge runtime exited immediately; inspect the log path in error details"),
 			details,
 		)
 	}
@@ -757,4 +527,16 @@ func resolveBridgeBinary(home string, installDir string, binDir string) (string,
 		return "", errnorm.Local("bridge_binary_missing", "anx-agent-bridge wrapper not found; run `anx bridge install`")
 	}
 	return lookup, nil
+}
+
+func bridgeTomlString(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return ""
+	}
 }
