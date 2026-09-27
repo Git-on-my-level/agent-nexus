@@ -60,7 +60,6 @@ const coreClientMock = vi.hoisted(() => ({
   listHostEnrollmentTokens: vi.fn(),
   approveHostEnrollment: vi.fn(),
   denyHostEnrollment: vi.fn(),
-  listAgents: vi.fn(),
 }));
 
 vi.mock("$app/stores", () => ({
@@ -116,7 +115,6 @@ describe("access page", () => {
     coreClientMock.approveHostEnrollment.mockResolvedValue({
       enrollment: { ...PENDING, status: "approved" },
     });
-    coreClientMock.listAgents.mockResolvedValue({ agents: [] });
   });
 
   afterEach(() => {

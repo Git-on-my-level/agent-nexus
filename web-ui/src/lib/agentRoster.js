@@ -2,16 +2,21 @@ import { get, writable } from "svelte/store";
 
 import { replaceAgentRegistry } from "$lib/actorSession";
 import { coreClient } from "$lib/coreClient";
-import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+import {
+  liveAgentChanges,
+  liveWorkspaceEvents,
+} from "$lib/liveWorkspaceEvents.js";
 
 /**
  * The workspace agent roster (`GET /agents`), kept current for the shell.
  *
  * One loader per workspace feeds the Agents nav badge, the Agents page and
  * the name registry (derived agents are named "codex on m5-mbp" everywhere).
- * It re-reads on workspace events and on a light timer: presence notes and
- * run observations change an agent's state without writing a workspace
- * event, and "working for 14m" has to keep counting.
+ * It re-reads when core's roster stream (`GET /stream/agents`) says the
+ * roster changed (on connect, after run, presence, host and bridge changes,
+ * and after a reconnect), when an ask is filed or answered (workspace
+ * events, which move agents in and out of "waiting on you"), when the tab
+ * becomes visible, and on a slow fallback timer for server restarts.
  */
 
 export const agentRoster = writable(
@@ -24,8 +29,14 @@ export const agentRoster = writable(
   }),
 );
 
-const POLL_MS = 30_000;
+const FALLBACK_POLL_MS = 120_000;
 const EVENT_DELAY_MS = 800;
+
+/** Workspace events that change who is waiting on a human. */
+const ASK_EVENT_TYPES = [
+  "human_attention_requested",
+  "human_attention_responded",
+];
 
 /** @type {null | { workspace: string, users: number, stop: () => void, refresh: () => Promise<void> }} */
 let controller = null;
@@ -95,15 +106,20 @@ export function startAgentRoster(workspace) {
     const visible = () => typeof document === "undefined" || !document.hidden;
     const timer = setInterval(() => {
       if (visible()) void run();
-    }, POLL_MS);
+    }, FALLBACK_POLL_MS);
     const onVisibility = () => {
       if (visible()) void run();
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibility);
     }
-    const stopLive = liveWorkspaceEvents({
+    const stopRosterStream = liveAgentChanges({
       client: coreClient,
+      onChange: () => run(),
+    });
+    const stopAskEvents = liveWorkspaceEvents({
+      client: coreClient,
+      types: ASK_EVENT_TYPES,
       debounceMs: EVENT_DELAY_MS,
       onChange: () => run(),
     });
@@ -114,7 +130,8 @@ export function startAgentRoster(workspace) {
       stop: () => {
         stopped = true;
         clearInterval(timer);
-        stopLive();
+        stopRosterStream();
+        stopAskEvents();
         if (typeof document !== "undefined") {
           document.removeEventListener("visibilitychange", onVisibility);
         }

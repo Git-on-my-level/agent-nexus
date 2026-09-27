@@ -12,7 +12,6 @@
     formatDurationSeconds,
     inboxAskPath,
     isRunActive,
-    matchInboxItem,
     runDuration,
     runLabel,
     runStateLabel,
@@ -43,7 +42,6 @@
 
   let detail = $state(null);
   let messages = $state([]);
-  let inboxItems = $state([]);
   let principal = $state(null);
   let host = $state(null);
   let loading = $state(true);
@@ -88,17 +86,12 @@
     showAllActivity ? activity : activity.slice(0, ACTIVITY_PREVIEW),
   );
   let openAsks = $derived(
-    (detail?.open_asks ?? []).map((ask) => {
-      const item = matchInboxItem(ask, inboxItems);
-      const since =
-        item?.source_event_time || item?.trigger_at || item?.created_at || "";
-      return {
-        ask,
-        href: inboxAskPath(item ?? { id: "" }),
-        since,
-        wait: formatAge(since, now),
-      };
-    }),
+    (detail?.open_asks ?? []).map((ask) => ({
+      ask,
+      href: inboxAskPath(ask),
+      since: ask.created_at,
+      wait: formatAge(ask.created_at, now),
+    })),
   );
   let runs = $derived(detail?.recent_runs ?? []);
   let activeRun = $derived(agent?.active_run ?? null);
@@ -122,31 +115,24 @@
       detail = response ?? null;
       const actorId = response?.agent?.actor_id;
       const hostId = response?.agent?.host_id;
-      const [events, inbox, principals, hostResponse] =
-        await Promise.allSettled([
-          actorId
-            ? coreClient.listEvents({
-                actor_id: actorId,
-                type: "message_posted",
-                limit: 20,
-              })
-            : Promise.resolve({ events: [] }),
-          (response?.open_asks?.length ?? 0) > 0
-            ? coreClient.listInboxItems()
-            : Promise.resolve({ items: [] }),
-          canManage && !principal
-            ? coreClient.listPrincipals({ limit: 200 })
-            : Promise.resolve(null),
-          hostId ? coreClient.getHost(hostId) : Promise.resolve(null),
-        ]);
+      const [events, principals, hostResponse] = await Promise.allSettled([
+        actorId
+          ? coreClient.listEvents({
+              actor_id: actorId,
+              type: "message_posted",
+              limit: 20,
+            })
+          : Promise.resolve({ events: [] }),
+        canManage && !principal
+          ? coreClient.listPrincipals({ limit: 200 })
+          : Promise.resolve(null),
+        hostId ? coreClient.getHost(hostId) : Promise.resolve(null),
+      ]);
       if (key !== agentKey) return;
       if (events.status === "fulfilled") {
         messages = Array.isArray(events.value?.events)
           ? events.value.events
           : [];
-      }
-      if (inbox.status === "fulfilled") {
-        inboxItems = Array.isArray(inbox.value?.items) ? inbox.value.items : [];
       }
       if (principals.status === "fulfilled" && principals.value) {
         principal =
@@ -186,7 +172,8 @@
   $effect(() => {
     const loadedAt = $agentRoster.loadedAt;
     if (!loadedAt || loading || !detail) return;
-    if (lastRosterLoad && loadedAt - lastRosterLoad < 10_000) return;
+    // The roster stream can fire in bursts; one history re-read per 3 s.
+    if (lastRosterLoad && loadedAt - lastRosterLoad < 3_000) return;
     const first = !lastRosterLoad;
     lastRosterLoad = loadedAt;
     if (!first) void load(agentKey, { quiet: true });
@@ -439,7 +426,13 @@
                 <span class="text-accent-text">Running</span>
                 {activeRun.adapter}{activeRun.model
                   ? ` ${activeRun.model}`
-                  : ""} for {formatDurationSeconds(activeRun.duration_seconds)}
+                  : ""} for {formatDurationSeconds(
+                  Number(activeRun.duration_seconds) +
+                    Math.max(
+                      0,
+                      Math.floor((now - ($agentRoster.loadedAt || now)) / 1000),
+                    ),
+                )}
                 <a
                   class="text-fg-subtle hover:text-fg hover:underline"
                   href="#runs">see run</a

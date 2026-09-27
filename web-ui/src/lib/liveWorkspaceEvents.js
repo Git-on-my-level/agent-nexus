@@ -15,6 +15,12 @@
  * good on an auth failure (the page's own reads surface that). Each
  * subscriber coalesces bursts into one callback.
  *
+ * `liveAgentChanges` is the same pattern over `GET /stream/agents`, core's
+ * ephemeral roster invalidation (`agents_changed`, sent once on connect and
+ * after run, presence, host and bridge changes). It has no replay cursor, so
+ * every connect is itself a change: callers refetch `GET /agents` on each
+ * notification and keep a slow fallback timer for restarts.
+ *
  * Usage (Svelte 5):
  *
  *   onMount(() => liveWorkspaceEvents({
@@ -54,6 +60,63 @@ export function liveWorkspaceEvents({
     return () => {};
   }
   const wanted = new Set(Array.isArray(types) ? types : []);
+  return subscribe({
+    client,
+    key: `events:${String(threadId ?? "").trim()}`,
+    accept: (event) => !wanted.size || wanted.has(event?.type),
+    filter,
+    onChange,
+    debounceMs,
+    reconnectMs,
+  });
+}
+
+/**
+ * Roster invalidations from `GET /stream/agents`. `onChange` runs on connect
+ * (core's first notification), on every change and after a reconnect.
+ *
+ * @param {{
+ *   client: { streamAgentChanges?: (options: object) => Promise<void> },
+ *   onChange: (changes: object[]) => void | Promise<void>,
+ *   debounceMs?: number,
+ *   reconnectMs?: number,
+ * }} options
+ * @returns {() => void} stop
+ */
+export function liveAgentChanges({
+  client,
+  onChange,
+  debounceMs = 250,
+  reconnectMs = 3000,
+}) {
+  if (
+    !client ||
+    typeof client.streamAgentChanges !== "function" ||
+    typeof onChange !== "function"
+  ) {
+    return () => {};
+  }
+  return subscribe({
+    client,
+    key: "agents",
+    accept: () => true,
+    filter: () => true,
+    onChange,
+    debounceMs,
+    reconnectMs,
+  });
+}
+
+/** One subscriber on a shared hub, with its own filter and debounce. */
+function subscribe({
+  client,
+  key,
+  accept,
+  filter,
+  onChange,
+  debounceMs,
+  reconnectMs,
+}) {
   let stopped = false;
   let flushTimer = null;
   let pending = [];
@@ -71,8 +134,7 @@ export function liveWorkspaceEvents({
   }
 
   const subscriber = (event) => {
-    if (stopped) return;
-    if (wanted.size && !wanted.has(event?.type)) return;
+    if (stopped || !accept(event)) return;
     try {
       if (!filter(event)) return;
     } catch {
@@ -83,9 +145,7 @@ export function liveWorkspaceEvents({
     flushTimer = setTimeout(flush, debounceMs);
   };
 
-  const release = joinHub(client, String(threadId ?? "").trim(), subscriber, {
-    reconnectMs,
-  });
+  const release = joinHub(client, key, subscriber, { reconnectMs });
 
   return () => {
     stopped = true;
@@ -98,16 +158,16 @@ export function liveWorkspaceEvents({
 /** @type {WeakMap<object, Map<string, ReturnType<typeof createHub>>>} */
 const hubsByClient = new WeakMap();
 
-function joinHub(client, threadId, subscriber, options) {
+function joinHub(client, key, subscriber, options) {
   let hubs = hubsByClient.get(client);
   if (!hubs) {
     hubs = new Map();
     hubsByClient.set(client, hubs);
   }
-  let hub = hubs.get(threadId);
+  let hub = hubs.get(key);
   if (!hub || hub.closed) {
-    hub = createHub(client, threadId, options);
-    hubs.set(threadId, hub);
+    hub = createHub(client, key, options);
+    hubs.set(key, hub);
   }
   hub.subscribers.add(subscriber);
   hub.start();
@@ -116,12 +176,18 @@ function joinHub(client, threadId, subscriber, options) {
     joined.subscribers.delete(subscriber);
     if (joined.subscribers.size) return;
     joined.close();
-    if (hubs.get(threadId) === joined) hubs.delete(threadId);
+    if (hubs.get(key) === joined) hubs.delete(key);
   };
 }
 
-/** One stream connection shared by every subscriber of a scope. */
-function createHub(client, threadId, { reconnectMs = 3000 } = {}) {
+/**
+ * One stream connection shared by every subscriber of a key: `agents` for
+ * the roster invalidation stream, `events:<thread id or empty>` for the
+ * workspace event stream.
+ */
+function createHub(client, key, { reconnectMs = 3000 } = {}) {
+  const agents = key === "agents";
+  const threadId = agents ? "" : key.slice("events:".length);
   const subscribers = new Set();
   let started = false;
   let controller = null;
@@ -168,30 +234,48 @@ function createHub(client, threadId, { reconnectMs = 3000 } = {}) {
     return !connectedOnce && Number.isFinite(ts) && ts < startedAt - 5_000;
   }
 
+  function notify(event) {
+    for (const subscriber of [...subscribers]) {
+      subscriber(event);
+    }
+  }
+
   async function connect() {
     if (hub.closed) return;
-    if (!connectedOnce && !lastEventId) await seedCursor();
+    if (!agents && !connectedOnce && !lastEventId) await seedCursor();
     if (hub.closed) return;
     controller = new AbortController();
     let delivered = false;
     const openedAt = Date.now();
     try {
-      await client.streamEvents({
-        threadId: threadId || undefined,
-        lastEventId: lastEventId || undefined,
-        signal: controller.signal,
-        onEvent: (message) => {
-          delivered = true;
-          if (message?.id) lastEventId = String(message.id);
-          if (message?.event !== "event") return;
-          const event = message?.data?.event;
-          if (!event || typeof event !== "object") return;
-          if (isHistory(event)) return;
-          for (const subscriber of [...subscribers]) {
-            subscriber(event);
-          }
-        },
-      });
+      if (agents) {
+        await client.streamAgentChanges({
+          signal: controller.signal,
+          onEvent: (message) => {
+            delivered = true;
+            if (message?.event !== "agents_changed") return;
+            notify({
+              type: "agents_changed",
+              revision: message?.data?.revision ?? null,
+            });
+          },
+        });
+      } else {
+        await client.streamEvents({
+          threadId: threadId || undefined,
+          lastEventId: lastEventId || undefined,
+          signal: controller.signal,
+          onEvent: (message) => {
+            delivered = true;
+            if (message?.id) lastEventId = String(message.id);
+            if (message?.event !== "event") return;
+            const event = message?.data?.event;
+            if (!event || typeof event !== "object") return;
+            if (isHistory(event)) return;
+            notify(event);
+          },
+        });
+      }
     } catch (error) {
       if (hub.closed || error?.name === "AbortError") return;
       if (error?.status === 401 || error?.status === 403) {

@@ -7,11 +7,8 @@
     actorRegistry,
     principalRegistry,
   } from "$lib/actorSession";
-  import {
-    agentRoster,
-    refreshAgentRoster,
-    startAgentRoster,
-  } from "$lib/agentRoster.js";
+  import { refreshAgentRoster } from "$lib/agentRoster.js";
+  import { liveAgentChanges } from "$lib/liveWorkspaceEvents.js";
   import { formatAge } from "$lib/agentPresence.js";
   import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
   import { authenticatedAgent } from "$lib/authSession";
@@ -98,20 +95,6 @@
   let tourArrived = $state(false);
   let hostsSectionEl = $state(null);
 
-  // Roster states are authoritative for agents; host reads embed summaries.
-  let rosterById = $derived(
-    new Map(
-      ($agentRoster.workspace === workspaceSlug ? $agentRoster.agents : []).map(
-        (agent) => [agent.id, agent],
-      ),
-    ),
-  );
-  function hostAgents(host) {
-    return (host?.agents ?? []).map((agent) => ({
-      ...agent,
-      ...(rosterById.get(agent.id) ?? {}),
-    }));
-  }
   let activeHosts = $derived(hosts.filter((host) => !host.revoked_at));
   let revokedHosts = $derived(hosts.filter((host) => host.revoked_at));
   let hostById = $derived(new Map(hosts.map((host) => [host.id, host])));
@@ -432,14 +415,19 @@
   onMount(() => {
     if (!canManageAccess) return;
     void loadAll();
-    const releaseRoster = startAgentRoster(workspaceSlug);
+    // Host cards show agent states; core's roster stream says when they move.
+    const stopAgentChanges = liveAgentChanges({
+      client: coreClient,
+      debounceMs: 600,
+      onChange: () => loadHosts(),
+    });
     const poll = setInterval(() => {
       now = Date.now();
       if (!document.hidden) void pollPending();
     }, PENDING_POLL_MS);
     return () => {
       clearInterval(poll);
-      releaseRoster();
+      stopAgentChanges();
     };
   });
 </script>
@@ -642,7 +630,7 @@
           {#each activeHosts as host (host.id)}
             <HostCard
               {host}
-              agents={hostAgents(host)}
+              agents={host.agents ?? []}
               canManage={canManageAccess}
               {workspaceHref}
               {now}
@@ -666,7 +654,7 @@
             {#each revokedHosts as host (host.id)}
               <HostCard
                 {host}
-                agents={hostAgents(host)}
+                agents={host.agents ?? []}
                 {workspaceHref}
                 {now}
               />
