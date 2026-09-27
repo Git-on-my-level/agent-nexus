@@ -277,9 +277,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
 	}
-	if parsed.name == "pm conversations list" && !cfg.JSON {
-		a.enrichConversationListTurns(ctx, cfg, result)
-	}
 	if parsed.name == "work context" {
 		observationPath := path + "/observations"
 		if len(parsed.query) > 0 {
@@ -329,6 +326,9 @@ func workHelpText(topic string) (string, bool) {
 		b.WriteString("\n\n")
 	} else {
 		fmt.Fprintf(&b, "Local Help: %s\n\n", topic)
+		if exact {
+			fmt.Fprintf(&b, "Side effect class: %s\n\n", commandSideEffectClass(topic))
+		}
 	}
 	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.\n\n")
 	if exact {
@@ -853,29 +853,6 @@ func applyPMTurnClaimBody(parsed parsedWorkCommand, cfg config.Resolved, object 
 	runner := firstNonEmpty(parsed.runnerID, anyString(object["runner_id"]), strings.TrimSpace(cfg.ActorID))
 	if runner != "" {
 		object["runner_id"] = runner
-	}
-}
-
-func (a *App) enrichConversationListTurns(ctx context.Context, cfg config.Resolved, result *commandResult) {
-	body := commandResultBody(result)
-	rows, _ := body["items"].([]any)
-	for i, row := range rows {
-		item := asMap(row)
-		if len(conversationLatestTurn(item)) > 0 {
-			continue
-		}
-		id := anyString(item["id"])
-		if id == "" {
-			continue
-		}
-		got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
-		if err != nil {
-			continue
-		}
-		if turn := conversationLatestTurn(commandResultBody(got)); len(turn) > 0 {
-			item["latest_turn"] = turn
-			rows[i] = item
-		}
 	}
 }
 

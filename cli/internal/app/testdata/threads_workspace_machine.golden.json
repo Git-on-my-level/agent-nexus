@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "command": "threads workspace",
-  "command_id": "threads.workspace",
-  "data": {
+  "schema_version": 2,
+  "command": "debug threads workspace",
+  "result": {
     "collaboration": {
       "artifact_count": 1,
       "key_artifacts": [
@@ -129,5 +129,7 @@
       "title": "Machine-facing consistency"
     },
     "total_review_items": 1
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

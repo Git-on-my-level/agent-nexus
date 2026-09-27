@@ -13,7 +13,7 @@ import (
 func TestRunMetaDocsPrintsBundledRuntimeReference(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "docs")
+	output := runHelpCommand(t, "debug", "meta", "docs")
 	if !strings.Contains(output, "# ANX Runtime Help Reference") {
 		t.Fatalf("expected runtime docs header output=%s", output)
 	}
@@ -40,7 +40,7 @@ func TestRunMetaDocsPrintsBundledRuntimeReference(t *testing.T) {
 func TestRunMetaDocPrintsSingleTopicMarkdown(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "doc", "threads")
+	output := runHelpCommand(t, "debug", "meta", "doc", "threads")
 	if !strings.Contains(output, "## `threads`") {
 		t.Fatalf("expected threads markdown header output=%s", output)
 	}
@@ -55,14 +55,14 @@ func TestRunMetaDocPrintsSingleTopicMarkdown(t *testing.T) {
 func TestRunMetaDocPrintsLocalAuthLifecycleTopicMarkdown(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "doc", "auth whoami")
+	output := runHelpCommand(t, "debug", "meta", "doc", "auth whoami")
 	if !strings.Contains(output, "## `auth whoami`") {
 		t.Fatalf("expected auth whoami markdown header output=%s", output)
 	}
 	if !strings.Contains(output, "Local Help: auth whoami") {
 		t.Fatalf("expected embedded auth whoami help text output=%s", output)
 	}
-	if !strings.Contains(output, "anx meta doc wake-routing") {
+	if !strings.Contains(output, "anx debug meta doc wake-routing") {
 		t.Fatalf("expected wake-routing next step output=%s", output)
 	}
 }
@@ -70,7 +70,7 @@ func TestRunMetaDocPrintsLocalAuthLifecycleTopicMarkdown(t *testing.T) {
 func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "doc", "agent-guide")
+	output := runHelpCommand(t, "debug", "meta", "doc", "agent-guide")
 	if !strings.Contains(output, "## `agent-guide`") {
 		t.Fatalf("expected agent-guide markdown header output=%s", output)
 	}
@@ -91,7 +91,7 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
 	t.Parallel()
 
-	profiles := runHelpCommand(t, "meta", "doc", "profiles")
+	profiles := runHelpCommand(t, "debug", "meta", "doc", "profiles")
 	if !strings.Contains(profiles, "## `profiles`") || !strings.Contains(profiles, "Active profile resolution") {
 		t.Fatalf("expected profiles docs output=%s", profiles)
 	}
@@ -99,12 +99,12 @@ func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
 		t.Fatalf("expected precedence guidance output=%s", profiles)
 	}
 
-	env := runHelpCommand(t, "meta", "doc", "environment")
+	env := runHelpCommand(t, "debug", "meta", "doc", "environment")
 	if !strings.Contains(env, "## `env`") || !strings.Contains(env, "ANX_PROFILE_PATH") || !strings.Contains(env, "ANX_JSON") {
 		t.Fatalf("expected env docs via alias output=%s", env)
 	}
 
-	config := runHelpCommand(t, "meta", "doc", "configuration")
+	config := runHelpCommand(t, "debug", "meta", "doc", "configuration")
 	if !strings.Contains(config, "## `config`") || !strings.Contains(config, "Config surface for the active CLI profile") {
 		t.Fatalf("expected config docs via alias output=%s", config)
 	}
@@ -113,12 +113,12 @@ func TestRunMetaDocPrintsProfileAndEnvDocs(t *testing.T) {
 func TestRunMetaDocsListAndSearch(t *testing.T) {
 	t.Parallel()
 
-	listOutput := runHelpCommand(t, "meta", "docs", "--list")
+	listOutput := runHelpCommand(t, "debug", "meta", "docs", "--list")
 	if !strings.Contains(listOutput, "# ANX Runtime Help Topics") || !strings.Contains(listOutput, "`profiles`") {
 		t.Fatalf("expected topic list output=%s", listOutput)
 	}
 
-	searchOutput := runHelpCommand(t, "meta", "docs", "--search", "profile")
+	searchOutput := runHelpCommand(t, "debug", "meta", "docs", "--search", "profile")
 	if !strings.Contains(searchOutput, "`profiles`") || !strings.Contains(searchOutput, "`config show`") {
 		t.Fatalf("expected profile search output=%s", searchOutput)
 	}
@@ -131,8 +131,8 @@ func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
 	t.Parallel()
 
 	for _, args := range [][]string{
-		{"--json", "meta", "docs", "--list", "--write-dir", t.TempDir()},
-		{"--json", "meta", "docs", "--search", "profile", "--write-dir", t.TempDir()},
+		{"--json", "debug", "meta", "docs", "--list", "--write-dir", t.TempDir()},
+		{"--json", "debug", "meta", "docs", "--search", "profile", "--write-dir", t.TempDir()},
 	} {
 		stdout := runCLIForTestJSONError(t, t.TempDir(), map[string]string{}, args)
 		if !strings.Contains(stdout, "use --write-dir only with full") {
@@ -144,7 +144,7 @@ func TestRunMetaDocsRejectsWriteDirWithListOrSearch(t *testing.T) {
 func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "doc", "agent-bridge")
+	output := runHelpCommand(t, "debug", "meta", "doc", "agent-bridge")
 	if !strings.Contains(output, "## `agent-bridge`") {
 		t.Fatalf("expected agent-bridge markdown header output=%s", output)
 	}
@@ -162,7 +162,7 @@ func TestRunMetaDocPrintsAgentBridgeMarkdown(t *testing.T) {
 func TestRunMetaDocPrintsWakeRoutingMarkdown(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "doc", "wake-routing")
+	output := runHelpCommand(t, "debug", "meta", "doc", "wake-routing")
 	if !strings.Contains(output, "## `wake-routing`") {
 		t.Fatalf("expected wake-routing markdown header output=%s", output)
 	}

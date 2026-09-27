@@ -66,7 +66,7 @@ func TestRunVersionFlag(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "CLI version:") {
+	if !strings.Contains(stdout.String(), "fact result.cli_version=") {
 		t.Fatalf("expected version output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -134,7 +134,7 @@ func TestRunVersionUsesProfileJSONDefault(t *testing.T) {
 	if payload["ok"] != true {
 		t.Fatalf("expected ok=true payload=%#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil || data["base_url"] != "http://profile:8000" {
 		t.Fatalf("unexpected version payload: %#v", payload)
 	}
@@ -194,7 +194,7 @@ func TestRunMetaDocsIsConfigLenient(t *testing.T) {
 	cli.UserHomeDir = func() (string, error) { return home, nil }
 	cli.ReadFile = os.ReadFile
 
-	exitCode := cli.Run([]string{"meta", "docs"})
+	exitCode := cli.Run([]string{"debug", "meta", "docs"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -231,7 +231,7 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 	cli.UserHomeDir = func() (string, error) { return home, nil }
 	cli.ReadFile = os.ReadFile
 
-	exitCode := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:9", "inbox", "respond", "--help"})
+	exitCode := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:9", "debug", "inbox", "respond", "--help"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -242,7 +242,7 @@ func TestRunSubcommandTrailingHelpIsConfigLenientWithMultipleProfiles(t *testing
 	if payload["ok"] != true {
 		t.Fatalf("expected ok=true payload=%#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	helpText, _ := data["help_text"].(string)
 	if !strings.Contains(helpText, "inbox respond") {
 		t.Fatalf("expected inbox respond help in output, got %q", helpText)
@@ -279,15 +279,15 @@ func TestRunMetaUtilityCommandsDispatchGeneratedEndpoints(t *testing.T) {
 		t.Fatalf("write profile: %v", err)
 	}
 
-	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "meta", "livez"})
+	livezRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "debug", "meta", "livez"})
 	livezPayload := assertEnvelopeOK(t, livezRaw)
-	if got := anyStringValue(livezPayload["command"]); got != "meta livez" {
+	if got := anyStringValue(livezPayload["command"]); got != "debug meta livez" {
 		t.Fatalf("unexpected livez envelope: %#v", livezPayload)
 	}
 
-	opsRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "meta", "ops", "health"})
+	opsRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "agent-a", "debug", "meta", "ops", "health"})
 	opsPayload := assertEnvelopeOK(t, opsRaw)
-	if got := anyStringValue(opsPayload["command"]); got != "meta ops health" {
+	if got := anyStringValue(opsPayload["command"]); got != "debug meta ops health" {
 		t.Fatalf("unexpected ops health envelope: %#v", opsPayload)
 	}
 }
@@ -314,7 +314,7 @@ func TestRunTrailingGlobalBaseURLIsAccepted(t *testing.T) {
 	if strings.TrimSpace(stderr.String()) != "" {
 		t.Fatalf("expected no stderr for trailing global flag, got %q", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "CLI version:") || !strings.Contains(stdout.String(), "Base URL: http://127.0.0.1:8000") {
+	if !strings.Contains(stdout.String(), "fact result.cli_version=") || !strings.Contains(stdout.String(), "fact result.base_url=http://127.0.0.1:8000") {
 		t.Fatalf("expected version output with trailing global flag, got %q", stdout.String())
 	}
 }
@@ -475,7 +475,7 @@ func TestRunDoctorJSON(t *testing.T) {
 		OK   bool `json:"ok"`
 		Data struct {
 			Checks []map[string]any `json:"checks"`
-		} `json:"data"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("decode doctor json: %v", err)
@@ -547,7 +547,7 @@ func TestRunDoctorRefreshesProfileBeforePublicWakeProofChecks(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--agent", "sleepy", "doctor"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	checks, _ := data["checks"].([]any)
 	if tokenCalls.Load() != 1 {
 		t.Fatalf("expected doctor to refresh via /auth/token once, got %d calls; output=%s", tokenCalls.Load(), raw)
@@ -623,7 +623,7 @@ func TestRunAPICallJSONWithStdinBody(t *testing.T) {
 	if payload["ok"] != true {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("unexpected nil data payload: %#v", payload)
 	}
@@ -676,7 +676,7 @@ func TestRunAPICallJSONWithFromFileBody(t *testing.T) {
 	}
 }
 
-func TestRunAPICallRaw(t *testing.T) {
+func TestRunAPICallTextProjection(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -700,12 +700,12 @@ func TestRunAPICallRaw(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--base-url", server.URL, "api", "call", "--raw", "--path", "/plain"})
+	exitCode := cli.Run([]string{"--base-url", server.URL, "api", "call", "--path", "/plain"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
 	}
-	if stdout.String() != "raw-response" {
-		t.Fatalf("unexpected raw output: %q", stdout.String())
+	if !strings.Contains(stdout.String(), "fact result.body=raw-response") {
+		t.Fatalf("unexpected text projection: %q", stdout.String())
 	}
 }
 

@@ -104,14 +104,7 @@ func (a *App) Run(args []string) int {
 
 	if helpRequested || len(remaining) == 0 {
 		text := a.rootUsageText()
-		if jsonMode {
-			envelope := output.Envelope{OK: true, Command: "help", Data: map[string]any{"help_text": text}}
-			if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
-			}
-		} else {
-			a.writeOutput(a.Stdout, text)
-		}
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
 		return 0
 	}
 
@@ -122,7 +115,7 @@ func (a *App) Run(args []string) int {
 	}
 	authSub := authSubcommandSpec.normalize(subPeek)
 	configSub := configSubcommandSpec.normalize(subPeek)
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
 		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||
@@ -157,34 +150,45 @@ func (a *App) Run(args []string) int {
 		}
 	}
 
-	commandName, result, runErr := a.runCommand(context.Background(), remaining, resolved)
+	normalizedArgs, actorErr := normalizeActorArgs(remaining, resolved)
+	if actorErr != nil {
+		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, actorErr)
+	}
+	commandName, result, runErr := a.runCommand(context.Background(), normalizedArgs, resolved)
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
-		if result != nil && strings.TrimSpace(result.Text) != "" && !resolved.JSON {
-			a.writeOutput(a.Stderr, result.Text+"\n")
-		}
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 
 	if result != nil && result.RawWritten {
 		return 0
 	}
-	if resolved.JSON {
-		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: nil}
-		if result != nil {
-			envelope.Data = flattenEnvelopeData(result.Data, resolved.Headers || resolved.Verbose)
-		}
-		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-			a.writeOutput(a.Stderr, "failed to write JSON envelope: "+err.Error()+"\n")
-			return 1
-		}
-		return 0
+	var value any
+	if result != nil {
+		value = sanitizeEnvelopeResult(flattenEnvelopeData(result.Data, resolved.Headers))
 	}
-
-	if result != nil && strings.TrimSpace(result.Text) != "" {
-		a.writeOutput(a.Stdout, result.Text+"\n")
+	if value == nil && result != nil && result.Text != "" {
+		value = map[string]any{"text": result.Text}
+	}
+	warnings, repairs := resultWarnings(identity.Command, normalizedArgs, value)
+	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}); err != nil {
+		return 1
 	}
 	return 0
+}
+
+func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelope) error {
+	var err error
+	if jsonMode {
+		err = output.WriteEnvelopeJSON(w, envelope)
+	} else {
+		err = output.WriteEnvelopeText(w, envelope)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+	}
+	return err
 }
 
 type commandResult struct {
@@ -196,27 +200,32 @@ type commandResult struct {
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {
 	normalized := errnorm.Normalize(err)
 	errnorm.EnrichForCommand(normalized, identity.CommandID)
+	details := normalized.Details
+	if strings.TrimSpace(normalized.Hint) != "" {
+		copyDetails, ok := details.(map[string]any)
+		if !ok {
+			copyDetails = map[string]any{}
+		}
+		copyDetails["hint"] = normalized.Hint
+		details = copyDetails
+	}
 	if jsonMode {
 		envelope := output.Envelope{
-			OK:        false,
-			Command:   identity.Command,
-			CommandID: identity.CommandID,
+			OK:      false,
+			Command: identity.Command,
 			Error: &output.ErrorPayload{
 				Code:        normalized.Code,
 				Message:     normalized.Message,
-				Recoverable: errnorm.RecoverableValue(normalized),
-				Hint:        normalized.Hint,
-				Details:     normalized.Details,
+				Retryable:   errnorm.RecoverableValue(normalized),
+				ExitCode:    errnorm.ExitCode(err),
+				Details:     details,
+				NextActions: deriveErrorActions(identity.Command, normalized),
 			},
 		}
-		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
-		}
+		a.renderEnvelope(a.Stdout, true, envelope)
 	} else {
-		a.writeOutput(a.Stderr, fmt.Sprintf("Error (%s): %s\n", normalized.Code, normalized.Message))
-		if strings.TrimSpace(normalized.Hint) != "" {
-			a.writeOutput(a.Stderr, "Hint: "+strings.TrimSpace(normalized.Hint)+"\n")
-		}
+		envelope := output.Envelope{OK: false, Command: identity.Command, Error: &output.ErrorPayload{Code: normalized.Code, Message: normalized.Message, Retryable: errnorm.RecoverableValue(normalized), ExitCode: errnorm.ExitCode(err), Details: details, NextActions: deriveErrorActions(identity.Command, normalized)}}
+		a.renderEnvelope(a.Stderr, false, envelope)
 	}
 	return errnorm.ExitCode(err)
 }

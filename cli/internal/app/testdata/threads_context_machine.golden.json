@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "command": "threads context",
-  "command_id": "threads.context",
-  "data": {
+  "schema_version": 2,
+  "command": "debug threads context",
+  "result": {
     "collaboration_summary": {
       "artifact_count": 1,
       "key_artifacts": [
@@ -85,5 +85,7 @@
       "title": "Machine-facing consistency"
     },
     "thread_id": "thread_123"
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

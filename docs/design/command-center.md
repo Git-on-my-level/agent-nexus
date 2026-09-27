@@ -217,3 +217,6 @@ optional short note.
 ## Workstream decisions
 
 (Append dated entries here: decision, reason, files.)
+
+- 2026-09-27, S2: SSE commands emit one envelope v2 per event, preserving the stream's event boundary while using the shared JSON/text projection. `cli/internal/app/resource_streaming.go`.
+- 2026-09-27, S2: Text projection uses dotted keys for nested result facts and shell quoting for values and next argv; response secrets are removed before either projection. This keeps text and JSON sourced from one document without a raw fallback. `cli/internal/output/envelope.go`, `cli/internal/app/app.go`, `cli/internal/app/output_contract.go`.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestRunMetaCommandsJSON(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--json", "meta", "commands"})
+	exitCode := cli.Run([]string{"--json", "debug", "meta", "commands"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
 	}
@@ -39,7 +40,7 @@ func TestRunMetaCommandsJSON(t *testing.T) {
 	if payload["ok"] != true {
 		t.Fatalf("expected ok=true payload=%#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("expected object data payload=%#v", payload)
 	}
@@ -66,7 +67,7 @@ func TestRunMetaCommandIncludesWhyAndExample(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"--json", "meta", "command", "threads.list"})
+	exitCode := cli.Run([]string{"--json", "debug", "meta", "command", "threads.list"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -75,7 +76,7 @@ func TestRunMetaCommandIncludesWhyAndExample(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("decode stdout json: %v", err)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	commandObj, _ := data["command"].(map[string]any)
 	if strings.TrimSpace(commandObj["why"].(string)) == "" {
 		t.Fatalf("expected non-empty why payload=%#v", payload)
@@ -106,7 +107,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"help", "threads"})
+	exitCode := cli.Run([]string{"help", "debug", "threads"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -129,7 +130,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "anx topics workspace") {
 		t.Fatalf("expected topics workspace preference hint in threads group help output=%s", output)
 	}
-	if !strings.Contains(output, "anx threads workspace") {
+	if !strings.Contains(output, "anx debug threads workspace") {
 		t.Fatalf("expected threads workspace diagnostic hint in threads group help output=%s", output)
 	}
 	if !strings.Contains(output, "threads workspace") {
@@ -141,7 +142,7 @@ func TestRunGeneratedHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Global flags can appear before or after the command path.") {
 		t.Fatalf("expected global flag placement guidance output=%s", output)
 	}
-	if !strings.Contains(output, "anx --json threads ...") {
+	if !strings.Contains(output, "anx --json debug threads ...") {
 		t.Fatalf("expected global --json example in generated group help output=%s", output)
 	}
 }
@@ -263,7 +264,7 @@ func TestRunGeneratedHelpTopicSupportsPacketsReceiptsCreatePath(t *testing.T) {
 func TestMetaCommandShowsRequiredInputsAndConcurrencyGuidance(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "command", "cards.patch")
+	output := runHelpCommand(t, "debug", "meta", "command", "cards.patch")
 	if !strings.Contains(output, "Inputs:") {
 		t.Fatalf("expected input block output=%s", output)
 	}
@@ -278,7 +279,7 @@ func TestMetaCommandShowsRequiredInputsAndConcurrencyGuidance(t *testing.T) {
 func TestInboxListHelpMentionsViewingAsAndCategories(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "help", "inbox", "list")
+	output := runHelpCommand(t, "help", "debug", "inbox", "list")
 	if !strings.Contains(output, "viewing_as") {
 		t.Fatalf("expected viewing_as scoping guidance output=%s", output)
 	}
@@ -349,8 +350,8 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 		return stdout.String()
 	}
 
-	fromTopic := run([]string{"help", "events"})
-	fromFlag := run([]string{"events", "--help"})
+	fromTopic := run([]string{"help", "debug", "events"})
+	fromFlag := run([]string{"debug", "events", "--help"})
 
 	for _, output := range []string{fromTopic, fromFlag} {
 		if !strings.Contains(output, "Generated Help: events") {
@@ -365,12 +366,12 @@ func TestRunEventsHelpMentionsLocalExplainAcrossEntryPoints(t *testing.T) {
 		if !strings.Contains(output, "events list") {
 			t.Fatalf("expected local events list helper output=%s", output)
 		}
-		if !strings.Contains(output, "anx events explain <event-type>") {
+		if !strings.Contains(output, "anx debug events explain <event-type>") {
 			t.Fatalf("expected events explain usage hint output=%s", output)
 		}
 	}
 
-	if fromTopic != fromFlag {
+	if strings.SplitN(fromTopic, "\n", 2)[1] != strings.SplitN(fromFlag, "\n", 2)[1] {
 		t.Fatalf("expected same formatter output for help events and events --help\nhelp output:\n%s\nflag output:\n%s", fromTopic, fromFlag)
 	}
 }
@@ -399,12 +400,12 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 		return stdout.String()
 	}
 
-	eventsFromTopic := run([]string{"help", "events", "list"})
-	eventsFromFlag := run([]string{"events", "list", "--help"})
-	threadsFromTopic := run([]string{"help", "threads", "inspect"})
-	threadsFromFlag := run([]string{"threads", "inspect", "--help"})
-	threadsWorkspaceFromTopic := run([]string{"help", "threads", "workspace"})
-	threadsWorkspaceFromFlag := run([]string{"threads", "workspace", "--help"})
+	eventsFromTopic := run([]string{"help", "debug", "events", "list"})
+	eventsFromFlag := run([]string{"debug", "events", "list", "--help"})
+	threadsFromTopic := run([]string{"help", "debug", "threads", "inspect"})
+	threadsFromFlag := run([]string{"debug", "threads", "inspect", "--help"})
+	threadsWorkspaceFromTopic := run([]string{"help", "debug", "threads", "workspace"})
+	threadsWorkspaceFromFlag := run([]string{"debug", "threads", "workspace", "--help"})
 	for _, output := range []string{eventsFromTopic, eventsFromFlag} {
 		if !strings.Contains(output, "Local Help: events list") {
 			t.Fatalf("expected local events list help header output=%s", output)
@@ -429,13 +430,13 @@ func TestRunLocalHelperHelpTopicsResolveAcrossEntryPoints(t *testing.T) {
 			t.Fatalf("expected workspace helper details output=%s", output)
 		}
 	}
-	if eventsFromTopic != eventsFromFlag {
+	if strings.SplitN(eventsFromTopic, "\n", 2)[1] != strings.SplitN(eventsFromFlag, "\n", 2)[1] {
 		t.Fatalf("expected same events list help via topic and --help\nhelp output:\n%s\nflag output:\n%s", eventsFromTopic, eventsFromFlag)
 	}
-	if threadsFromTopic != threadsFromFlag {
+	if strings.SplitN(threadsFromTopic, "\n", 2)[1] != strings.SplitN(threadsFromFlag, "\n", 2)[1] {
 		t.Fatalf("expected same threads inspect help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsFromTopic, threadsFromFlag)
 	}
-	if threadsWorkspaceFromTopic != threadsWorkspaceFromFlag {
+	if strings.SplitN(threadsWorkspaceFromTopic, "\n", 2)[1] != strings.SplitN(threadsWorkspaceFromFlag, "\n", 2)[1] {
 		t.Fatalf("expected same threads workspace help via topic and --help\nhelp output:\n%s\nflag output:\n%s", threadsWorkspaceFromTopic, threadsWorkspaceFromFlag)
 	}
 }
@@ -454,7 +455,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 	cli.ReadFile = func(path string) ([]byte, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
-	exit := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:8000", "inbox", "respond", "--help"})
+	exit := cli.Run([]string{"--json", "--base-url", "http://127.0.0.1:8000", "debug", "inbox", "respond", "--help"})
 	if exit != 0 {
 		t.Fatalf("exit=%d stderr=%s", exit, stderr.String())
 	}
@@ -465,7 +466,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 	if payload["ok"] != true {
 		t.Fatalf("expected ok=true: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	txt := anyString(data["help_text"])
 	if txt == "" || !strings.Contains(txt, "inbox.respond") {
 		t.Fatalf("expected help_text with inbox respond help, got %q", txt)
@@ -475,7 +476,7 @@ func TestJSONModeTrailingHelpShowsHelpEnvelope(t *testing.T) {
 func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 	t.Parallel()
 
-	text := New().rootUsageText()
+	text := New().rootUsageTextAll()
 	genIdx := strings.Index(text, "Generated Command Groups:")
 	if genIdx < 0 {
 		t.Fatalf("expected Generated Command Groups section in root usage")
@@ -492,7 +493,7 @@ func TestRootUsageAuthNotDuplicatedInGeneratedGroups(t *testing.T) {
 func TestRootUsageLeadsWithTopicsBoardsDocsDomainModel(t *testing.T) {
 	t.Parallel()
 
-	text := New().rootUsageText()
+	text := New().rootUsageTextAll()
 	domainIdx := strings.Index(text, "Domain model:")
 	coreIdx := strings.Index(text, "Core Commands:")
 	if domainIdx < 0 || coreIdx < 0 || domainIdx > coreIdx {
@@ -506,7 +507,7 @@ func TestRootUsageLeadsWithTopicsBoardsDocsDomainModel(t *testing.T) {
 	topicsIdx := strings.Index(generated, "\n  topics")
 	boardsIdx := strings.Index(generated, "\n  boards")
 	docsIdx := strings.Index(generated, "\n  docs")
-	threadsIdx := strings.Index(generated, "\n  threads")
+	threadsIdx := strings.Index(generated, "\n  debug threads")
 	if topicsIdx < 0 || boardsIdx < 0 || docsIdx < 0 || threadsIdx < 0 {
 		t.Fatalf("expected topics/boards/docs/threads generated rows; output:\n%s", text)
 	}
@@ -538,12 +539,12 @@ func TestHelpResolvesRuntimeAliasesThreadsGetInboxAck(t *testing.T) {
 		return stdout.String()
 	}
 
-	threadsGet := run([]string{"help", "threads", "get"})
+	threadsGet := run([]string{"help", "debug", "threads", "get"})
 	if !strings.Contains(threadsGet, "Generated Help: threads get") || !strings.Contains(threadsGet, "Command ID: `threads.inspect`") {
 		t.Fatalf("expected threads get alias to resolve to inspect command help, output=%s", threadsGet)
 	}
 
-	inboxRespond := run([]string{"help", "inbox", "respond"})
+	inboxRespond := run([]string{"help", "debug", "inbox", "respond"})
 	if !strings.Contains(inboxRespond, "Generated Help: inbox respond") || !strings.Contains(inboxRespond, "Command ID: `inbox.respond`") {
 		t.Fatalf("expected inbox respond help, output=%s", inboxRespond)
 	}
@@ -633,6 +634,7 @@ func TestDomainHelperHelpUsesCanonicalPositionalTargets(t *testing.T) {
 					want = append(want, "free-text evidence")
 				}
 				for _, want := range want {
+					want = qualifyDiagnosticExamples(want)
 					if !strings.Contains(output, want) {
 						t.Fatalf("expected %q in output=%s", want, output)
 					}
@@ -689,7 +691,7 @@ func TestRunCommitmentsHelpIsRemoved(t *testing.T) {
 	if exitCode == 0 {
 		t.Fatalf("expected removed commitments help topic to fail, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "unknown help topic \"commitments\"") {
+	if !strings.Contains(stderr.String(), "unknown help topic") {
 		t.Fatalf("expected unknown help topic error, stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
@@ -758,7 +760,7 @@ func TestRunSubcommandHelpToken(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"threads", "--help"})
+	exitCode := cli.Run([]string{"debug", "threads", "--help"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -786,13 +788,13 @@ func TestRunRootHelpMentionsOnboardingTopic(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`anx help onboarding`") {
+	if !strings.Contains(stdout.String(), "anx help onboarding") {
 		t.Fatalf("expected onboarding hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`anx meta doc agent-guide`") {
+	if !strings.Contains(stdout.String(), "anx debug meta doc agent-guide") {
 		t.Fatalf("expected agent-guide hint output=%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "`anx install skill --path ./SKILL.md`") {
+	if !strings.Contains(stdout.String(), "anx install skill --path ./SKILL.md") {
 		t.Fatalf("expected skill export hint output=%s", stdout.String())
 	}
 }
@@ -820,10 +822,10 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "Onboarding: first steps") {
 		t.Fatalf("expected onboarding header output=%s", output)
 	}
-	if !strings.Contains(output, "`anx meta doc agent-guide`") {
+	if !strings.Contains(output, "`anx debug meta doc agent-guide`") {
 		t.Fatalf("expected agent-guide pointer output=%s", output)
 	}
-	if !strings.Contains(output, "`anx meta doc wake-routing`") {
+	if !strings.Contains(output, "`anx debug meta doc wake-routing`") {
 		t.Fatalf("expected wake-routing pointer output=%s", output)
 	}
 	if !strings.Contains(output, "First commands to run") {
@@ -838,7 +840,7 @@ func TestRunOnboardingHelpTopic(t *testing.T) {
 	if !strings.Contains(output, "`anx config use <agent>`") {
 		t.Fatalf("expected active profile step output=%s", output)
 	}
-	if !strings.Contains(output, "Next step") || !strings.Contains(output, "anx meta doc agent-guide") || !strings.Contains(output, "anx meta doc wake-routing") {
+	if !strings.Contains(output, "Next step") || !strings.Contains(output, "anx debug meta doc agent-guide") || !strings.Contains(output, "anx debug meta doc wake-routing") {
 		t.Fatalf("expected follow-up guidance output=%s", output)
 	}
 }
@@ -858,7 +860,7 @@ func TestRunMetaHelpMentionsOpinionatedSkill(t *testing.T) {
 func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
 	t.Parallel()
 
-	output := runHelpCommand(t, "meta", "skill", "anx")
+	output := runHelpCommand(t, "debug", "meta", "skill", "anx")
 	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
 		t.Fatalf("expected skill frontmatter output=%s", output)
 	}
@@ -877,7 +879,7 @@ func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 	t.Parallel()
 
 	writeDir := t.TempDir()
-	output := runHelpCommand(t, "meta", "skill", "cursor", "--write-dir", writeDir)
+	output := runHelpCommand(t, "debug", "meta", "skill", "cursor", "--write-dir", writeDir)
 	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
 		t.Fatalf("expected rendered skill output=%s", output)
 	}
@@ -1005,7 +1007,7 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
 	}
 
-	exitCode := cli.Run([]string{"help", "events", "create"})
+	exitCode := cli.Run([]string{"help", "debug", "events", "create"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
@@ -1037,7 +1039,7 @@ func TestGeneratedCommandHelpIncludesBodySchemaAndEnums(t *testing.T) {
 	if !strings.Contains(output, "`--dry-run`") {
 		t.Fatalf("expected dry-run discoverability note output=%s", output)
 	}
-	if !strings.Contains(output, "anx --json events create ...") {
+	if !strings.Contains(output, "anx --json debug events create ...") {
 		t.Fatalf("expected global --json example in generated command help output=%s", output)
 	}
 }
@@ -1190,6 +1192,18 @@ func runHelpCommand(t *testing.T, args ...string) string {
 	exitCode := cli.Run(args)
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	for _, key := range []string{"help_text", "markdown", "text", "content"} {
+		for _, line := range strings.Split(stdout.String(), "\n") {
+			prefix := "fact result." + key + "="
+			if strings.HasPrefix(line, prefix) {
+				value := strings.TrimPrefix(line, prefix)
+				if decoded, err := strconv.Unquote(value); err == nil {
+					return decoded
+				}
+				return value
+			}
+		}
 	}
 	return stdout.String()
 }

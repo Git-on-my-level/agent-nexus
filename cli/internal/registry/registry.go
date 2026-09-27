@@ -58,31 +58,32 @@ type CLIInput struct {
 }
 
 type Command struct {
-	CommandID      string            `json:"command_id"`
-	CLIPath        string            `json:"cli_path"`
-	Group          string            `json:"group,omitempty"`
-	Method         string            `json:"method"`
-	Path           string            `json:"path"`
-	OperationID    string            `json:"operation_id,omitempty"`
-	Summary        string            `json:"summary,omitempty"`
-	Description    string            `json:"description,omitempty"`
-	Why            string            `json:"why,omitempty"`
-	InputMode      string            `json:"input_mode,omitempty"`
-	HTTPInputMode  string            `json:"http_input_mode,omitempty"`
-	CLIInput       *CLIInput         `json:"cli_input,omitempty"`
-	Streaming      map[string]any    `json:"streaming,omitempty"`
-	OutputEnvelope string            `json:"output_envelope,omitempty"`
-	ErrorCodes     []string          `json:"error_codes,omitempty"`
-	Concepts       []string          `json:"concepts,omitempty"`
-	Stability      string            `json:"stability,omitempty"`
-	AgentNotes     string            `json:"agent_notes,omitempty"`
-	Examples       []Example         `json:"examples,omitempty"`
-	BodySchema     *BodySchema       `json:"body_schema,omitempty"`
-	PathParams     []string          `json:"path_params,omitempty"`
-	Adjacent       []string          `json:"adjacent_commands,omitempty"`
-	GoMethod       string            `json:"go_method,omitempty"`
-	TSMethod       string            `json:"ts_method,omitempty"`
-	Extra          map[string]string `json:"-"`
+	CommandID       string            `json:"command_id"`
+	CLIPath         string            `json:"cli_path"`
+	SideEffectClass string            `json:"side_effect_class"`
+	Group           string            `json:"group,omitempty"`
+	Method          string            `json:"method"`
+	Path            string            `json:"path"`
+	OperationID     string            `json:"operation_id,omitempty"`
+	Summary         string            `json:"summary,omitempty"`
+	Description     string            `json:"description,omitempty"`
+	Why             string            `json:"why,omitempty"`
+	InputMode       string            `json:"input_mode,omitempty"`
+	HTTPInputMode   string            `json:"http_input_mode,omitempty"`
+	CLIInput        *CLIInput         `json:"cli_input,omitempty"`
+	Streaming       map[string]any    `json:"streaming,omitempty"`
+	OutputEnvelope  string            `json:"output_envelope,omitempty"`
+	ErrorCodes      []string          `json:"error_codes,omitempty"`
+	Concepts        []string          `json:"concepts,omitempty"`
+	Stability       string            `json:"stability,omitempty"`
+	AgentNotes      string            `json:"agent_notes,omitempty"`
+	Examples        []Example         `json:"examples,omitempty"`
+	BodySchema      *BodySchema       `json:"body_schema,omitempty"`
+	PathParams      []string          `json:"path_params,omitempty"`
+	Adjacent        []string          `json:"adjacent_commands,omitempty"`
+	GoMethod        string            `json:"go_method,omitempty"`
+	TSMethod        string            `json:"ts_method,omitempty"`
+	Extra           map[string]string `json:"-"`
 }
 
 type MetaRegistry struct {
@@ -280,6 +281,9 @@ func parseMeta(content []byte) (MetaRegistry, error) {
 	if out.CommandCount != len(out.Commands) {
 		return MetaRegistry{}, fmt.Errorf("command_count mismatch: count=%d commands=%d", out.CommandCount, len(out.Commands))
 	}
+	for i := range out.Commands {
+		out.Commands[i].SideEffectClass = sideEffectClass(out.Commands[i])
+	}
 	sort.Slice(out.Commands, func(i, j int) bool { return out.Commands[i].CommandID < out.Commands[j].CommandID })
 	return out, nil
 }
@@ -307,9 +311,28 @@ func parseHelp(content []byte) (HelpRegistry, error) {
 	if out.CommandCount != len(out.Commands) {
 		return HelpRegistry{}, fmt.Errorf("command_count mismatch: count=%d commands=%d", out.CommandCount, len(out.Commands))
 	}
+	for i := range out.Commands {
+		out.Commands[i].SideEffectClass = sideEffectClass(out.Commands[i])
+	}
 	sort.Slice(out.Groups, func(i, j int) bool { return out.Groups[i].Name < out.Groups[j].Name })
 	sort.Slice(out.Commands, func(i, j int) bool { return out.Commands[i].CommandID < out.Commands[j].CommandID })
 	return out, nil
+}
+
+func sideEffectClass(cmd Command) string {
+	if strings.EqualFold(cmd.Method, "GET") {
+		return "read_only"
+	}
+	if strings.HasSuffix(cmd.CLIPath, " context") || strings.Contains(cmd.CLIPath, "token-status") {
+		return "read_only"
+	}
+	if strings.HasPrefix(cmd.CLIPath, "config ") || strings.HasPrefix(cmd.CLIPath, "draft ") || strings.HasPrefix(cmd.CLIPath, "bridge ") {
+		return "local_operational_write"
+	}
+	if strings.Contains(cmd.CLIPath, " dispatch") || strings.Contains(cmd.CLIPath, " exec") {
+		return "external_side_effect"
+	}
+	return "remote_coordination_write"
 }
 
 func (m MetaRegistry) CommandByID(commandID string) (Command, bool) {

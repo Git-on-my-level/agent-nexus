@@ -33,11 +33,11 @@ func TestDocsKnowledgeTwoProfileSearchAndComment(t *testing.T) {
 		"--verified-at", "2026-09-08T12:00:00Z",
 		"--handle", "kb-shared-runbook-"+token,
 	)
-	handle := firstStringPath(t, put.Payload, "data.body.document.handle", "data.document.handle")
+	handle := firstStringPath(t, put.Payload, "result.document.handle", "result.document.handle")
 	if !strings.Contains(handle, "kb-shared-runbook") {
 		t.Fatalf("put handle: %s stdout=%s", handle, put.Stdout)
 	}
-	source := firstStringPath(t, put.Payload, "data.body.document.source", "data.document.source")
+	source := firstStringPath(t, put.Payload, "result.document.source", "result.document.source")
 	if source != "https://example.invalid/kb/runbook.md" {
 		t.Fatalf("source pointer missing: %s", put.Stdout)
 	}
@@ -51,21 +51,21 @@ func TestDocsKnowledgeTwoProfileSearchAndComment(t *testing.T) {
 		"--verified-at", "2026-09-08T12:00:00Z",
 		"--handle", "kb-shared-runbook-"+token,
 	)
-	if firstStringPath(t, again.Payload, "data.body.document.handle", "data.document.handle") != handle {
+	if firstStringPath(t, again.Payload, "result.document.handle", "result.document.handle") != handle {
 		t.Fatalf("put was not idempotent by handle: %s vs %s", put.Stdout, again.Stdout)
 	}
 
 	search := h.runCLIExpectOK(t, "host-b", nil, "docs", "search", "alphawhiz-"+token, "--knowledge", "--host", "host-a", "--limit", "20")
-	docs := firstSlicePath(t, search.Payload, "data.body.documents", "data.documents")
+	docs := firstSlicePath(t, search.Payload, "result.documents", "result.documents")
 	if !searchHasHandle(docs, handle) {
 		t.Fatalf("host-b search missed host-a doc: %s", search.Stdout)
 	}
 
 	comment := h.runCLIExpectOK(t, "host-b", nil, "docs", "comment", handle, "comment token betawhiz-"+token+" from host B")
-	commentID := firstStringPath(t, comment.Payload, "data.body.comment.id", "data.comment.id")
+	commentID := firstStringPath(t, comment.Payload, "result.comment.id", "result.comment.id")
 
 	listed := h.runCLIExpectOK(t, "host-a", nil, "docs", "comments", handle)
-	comments := firstSlicePath(t, listed.Payload, "data.body.comments", "data.comments")
+	comments := firstSlicePath(t, listed.Payload, "result.comments", "result.comments")
 	found := false
 	for _, raw := range comments {
 		row, _ := raw.(map[string]any)
@@ -130,10 +130,10 @@ func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
 		"docs", "ingest", root,
 		"--source", "https://example.invalid/kb",
 	)
-	if firstIntPath(t, first.Payload, "data.created") != 2 {
+	if firstIntPath(t, first.Payload, "result.created") != 2 {
 		t.Fatalf("first ingest created: %s", first.Stdout)
 	}
-	if firstIntPath(t, first.Payload, "data.updated") != 0 || firstIntPath(t, first.Payload, "data.unchanged") != 0 {
+	if firstIntPath(t, first.Payload, "result.updated") != 0 || firstIntPath(t, first.Payload, "result.unchanged") != 0 {
 		t.Fatalf("first ingest should only create: %s", first.Stdout)
 	}
 
@@ -141,15 +141,15 @@ func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
 		"docs", "ingest", root,
 		"--source", "https://example.invalid/kb",
 	)
-	if firstIntPath(t, second.Payload, "data.created") != 0 || firstIntPath(t, second.Payload, "data.updated") != 0 {
+	if firstIntPath(t, second.Payload, "result.created") != 0 || firstIntPath(t, second.Payload, "result.updated") != 0 {
 		t.Fatalf("second ingest made new revisions: %s", second.Stdout)
 	}
-	if firstIntPath(t, second.Payload, "data.unchanged") != 2 {
+	if firstIntPath(t, second.Payload, "result.unchanged") != 2 {
 		t.Fatalf("second ingest unchanged: %s", second.Stdout)
 	}
 
 	search := h.runCLIExpectOK(t, "host-a", nil, "docs", "search", "NOW.md", "--knowledge", "--limit", "20")
-	docs := firstSlicePath(t, search.Payload, "data.body.documents", "data.documents")
+	docs := firstSlicePath(t, search.Payload, "result.documents", "result.documents")
 	if len(docs) == 0 {
 		t.Fatalf("search missed NOW.md: %s", search.Stdout)
 	}
@@ -158,7 +158,7 @@ func TestDocsIngestIdempotentByRelativePath(t *testing.T) {
 		t.Fatalf("search rows lacked NOW.md source: %s", search.Stdout)
 	}
 	history := h.runCLIExpectOK(t, "host-a", nil, "docs", "history", handle)
-	revisions := firstSlicePath(t, history.Payload, "data.body.revisions", "data.revisions")
+	revisions := firstSlicePath(t, history.Payload, "result.revisions", "result.revisions")
 	if len(revisions) != 1 {
 		t.Fatalf("expected 1 revision after second ingest, got %d: %s", len(revisions), history.Stdout)
 	}

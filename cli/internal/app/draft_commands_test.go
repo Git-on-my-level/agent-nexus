@@ -117,7 +117,7 @@ func TestDraftCreateAllowsDerivedRebuildWithoutActorID(t *testing.T) {
 		"--command", "derived.rebuild",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["command_id"])) != "derived.rebuild" {
 		t.Fatalf("unexpected command payload: %#v", payload)
 	}
@@ -153,7 +153,7 @@ func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 		"--command", "topics create",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["command_id"])) != "topics.create" {
 		t.Fatalf("unexpected command resolution payload: %#v", payload)
 	}
@@ -214,7 +214,7 @@ func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
 		"--draft-id", "help",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["draft_id"])) != "help" {
 		t.Fatalf("expected draft id=help payload=%#v", payload)
 	}
@@ -267,7 +267,7 @@ func TestDraftListStableJSON(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--agent", "agent-a", "draft", "list"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	drafts, _ := data["drafts"].([]any)
 	if len(drafts) != 1 {
 		t.Fatalf("unexpected drafts payload: %#v", payload)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestWriteEnvelopeJSONGolden(t *testing.T) {
 			envelope: Envelope{
 				OK:      true,
 				Command: "version",
-				Data: map[string]any{
+				Result: map[string]any{
 					"cli_version": "dev",
 					"base_url":    "http://127.0.0.1:8000",
 				},
@@ -33,11 +34,11 @@ func TestWriteEnvelopeJSONGolden(t *testing.T) {
 				OK:      false,
 				Command: "api call",
 				Error: &ErrorPayload{
-					Code:        "invalid_request",
-					Message:     "path is required",
-					Recoverable: true,
-					Hint:        "Run `anx help` for supported flags and usage.",
-					Details:     map[string]any{"flag": "--path"},
+					Code:      "invalid_request",
+					Message:   "path is required",
+					Retryable: true,
+					ExitCode:  2,
+					Details:   map[string]any{"flag": "--path"},
 				},
 			},
 			golden: "error.golden.json",
@@ -61,5 +62,21 @@ func TestWriteEnvelopeJSONGolden(t *testing.T) {
 				t.Fatalf("unexpected envelope output\n--- got ---\n%s\n--- want ---\n%s", buf.String(), string(expected))
 			}
 		})
+	}
+}
+
+func TestCardsListTextProjection(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	doc := Envelope{OK: true, Command: "cards list", Result: map[string]any{"cards": []any{map[string]any{"ref": "card:launch", "title": "Launch plan", "assignee_refs": []any{"actor:alice"}, "thread_id": "thread-1", "rank": "a"}}}}
+	if err := WriteEnvelopeText(&buf, doc); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, `card ref=card:launch title="Launch plan" assignees=actor:alice`) {
+		t.Fatalf("missing card row: %s", got)
+	}
+	if strings.Contains(got, "thread=") || strings.Contains(got, "rank=") || strings.Contains(got, "::") {
+		t.Fatalf("old card fields: %s", got)
 	}
 }

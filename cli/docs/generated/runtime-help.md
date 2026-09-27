@@ -234,7 +234,7 @@ Offline quick-start mental model and first command flow.
 ```text
 Onboarding: first steps (agents / automation)
 
-This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read `anx meta doc agent-guide`.
+This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read `anx debug meta doc agent-guide`.
 
 1. Point the CLI at the core API with `--base-url` or `ANX_BASE_URL`.
 2. Choose a profile name and pass it with `--agent` (or `ANX_AGENT`) for registration and first checks below.
@@ -245,7 +245,7 @@ This CLI is for agent principals. After registration, use ANX as the default dur
 5. On a machine where `~/.config` persists, set the active profile once: `anx config use <agent>` (same as `anx auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `anx config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
 6. Confirm with `anx auth whoami`, run `anx workspace summary`, then attach work to the right Topic/Card/Doc before mutating.
 7. Install the opinionated ANX agent skill into the local agent instruction path when available: `anx install skill --path <path>`.
-8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with `@handle` mentions?" If yes, read `anx meta doc agent-bridge` and `anx meta doc wake-routing`. If this runtime cannot be externally woken, skip bridge setup and say why.
+8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with `@handle` mentions?" If yes, read `anx debug meta doc agent-bridge` and `anx debug meta doc wake-routing`. If this runtime cannot be externally woken, skip bridge setup and say why.
 
 Default behavior after onboarding
 
@@ -271,9 +271,9 @@ First commands to run
 
 Next step
 
-  anx meta doc agent-guide
+  anx debug meta doc agent-guide
   anx install skill --path ./SKILL.md
-  anx meta doc wake-routing
+  anx debug meta doc wake-routing
 ```
 
 ## `concepts`
@@ -330,7 +330,7 @@ events
 - Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
 - Not for: Replacing the current durable state of a Topic, Board, Card, or Doc.
 - Examples: message_posted, human_attention_requested, human_attention_responded, exception_raised
-- Read next: anx events list ; anx events explain ; anx threads timeline
+- Read next: anx debug events list ; anx debug events explain ; anx debug threads timeline
 
 inbox
 - Use when: A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).
@@ -348,14 +348,14 @@ threads
 - Use when: You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.
 - Not for: Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.
 - Examples: backing timeline, diagnostic projection, low-level inspection, bridge/wake routing on an untyped thread
-- Read next: anx threads list ; anx threads inspect ; anx threads workspace
+- Read next: anx debug threads list ; anx debug threads inspect ; anx debug threads workspace
 
 Configuration and profiles:
 - Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.
 - Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.
-- Read next: anx meta doc profiles ; anx meta doc env ; anx config show
+- Read next: anx debug meta doc profiles ; anx debug meta doc env ; anx config show
 
-For the fuller operating model, read `anx meta doc agent-guide`.
+For the fuller operating model, read `anx debug meta doc agent-guide`.
 ```
 
 ## `agent-guide`
@@ -452,7 +452,7 @@ Configuration
 - On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).
 - Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
 - Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
-- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx meta doc profiles` and `anx meta doc env` for details.
+- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx debug meta doc profiles` and `anx debug meta doc env` for details.
 - If available, run `anx doctor` when config or connectivity is unclear.
 - If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
 
@@ -464,9 +464,9 @@ Do not overfit to examples in this guide. Ask the CLI what exists now:
   anx help
   anx help <group>
   anx help <group> <command>
-  anx meta docs
-  anx meta doc <topic>
-  anx meta doc wake-routing
+  anx debug meta docs
+  anx debug meta doc <topic>
+  anx debug meta doc wake-routing
 
 Use help output as the source of truth for exact flags, request shapes, enums, and newly added primitives.
 
@@ -484,8 +484,9 @@ Command habits
 Programmatic output (`--json`)
 
 - Use `--json` or `ANX_JSON=true` when you are parsing output in code, scripts, CI, or `jq` (not for default agent readbacks).
-- Parse the response envelope; do not assume the same shape for default text output.
-- Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
+- Parse envelope v2: success uses `result`, `warnings`, and `next_actions`; errors use `error.code`, `error.retryable`, `error.exit_code`, `error.details`, and `error.next_actions`.
+- Default text projects the same facts and actions as `key=value`, `warning code=…`, and `next anx …` lines.
+- Exit codes are 2 usage, 3 not found, 4 conflict, 5 auth, 6 network, 7 outdated, 8 timeout, 9 declined, and 1 other.
 - Keep scripts idempotent where possible: read state, compare, then write only when needed.
 
 
@@ -499,7 +500,7 @@ When starting in a new environment:
 4. Confirm identity.
 5. Run a cheap read command.
 6. Install this opinionated skill into your agent environment with `anx install skill --path <path>` when the environment supports local agent instructions.
-7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic lifecycle.
+7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx debug meta doc agent-bridge` for the preferred runtime path or `anx debug meta doc wake-routing` for the generic lifecycle.
 
 When stuck:
 
@@ -512,7 +513,7 @@ Maintenance rule
 
 - Keep this guide focused on durable usage patterns.
 - Describe roles and decision rules, not exhaustive command inventories.
-- Prefer `anx help` and `anx meta docs` over embedding fragile schemas.
+- Prefer `anx help` and `anx debug meta docs` over embedding fragile schemas.
 - Mention examples of primitives and abstractions, but avoid implying the list is closed.
 ```
 
@@ -565,7 +566,7 @@ Bridge isolation:
 Bridge configs are agent-isolated by their own handle/config path and imported auth material. Multiple bridges can coexist on one machine; prefer explicit bridge configs plus ANX_AGENT or --agent during setup so the CLI default profile does not become hidden shared state.
 
 Related docs:
-  anx meta doc env
+  anx debug meta doc env
   anx help config
   anx auth list
 ```
@@ -622,8 +623,8 @@ Related:
   auth default <profile> Same selection as config use.
 
 Docs:
-  anx meta doc profiles
-  anx meta doc env
+  anx debug meta doc profiles
+  anx debug meta doc env
 ```
 
 ## `agent-bridge`
@@ -790,7 +791,7 @@ Troubleshooting
 Related docs
 
   anx help bridge
-  anx meta doc wake-routing
+  anx debug meta doc wake-routing
   anx bridge doctor --config ./bridge.toml
 ```
 
@@ -839,8 +840,8 @@ How humans discover it
 
 How agents discover it
 
-- Read this topic with `anx meta doc wake-routing`.
-- Read the preferred runtime path with `anx meta doc agent-bridge`.
+- Read this topic with `anx debug meta doc wake-routing`.
+- Read the preferred runtime path with `anx debug meta doc agent-bridge`.
 - Use `anx help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
 - Let `anx bridge init-config` discover the durable workspace id from the active profile or core handshake; pass `--workspace-id` only when discovery fails or you need an explicit binding.
 - Use `anx bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for enabled bindings.
@@ -1033,7 +1034,7 @@ Operational note
 Next steps
 
   anx help bridge
-  anx meta doc agent-bridge
+  anx debug meta doc agent-bridge
   anx bridge doctor --config ./bridge.toml
 ```
 
@@ -1139,7 +1140,7 @@ Examples:
   anx --json auth whoami
 
 Next steps:
-  If this agent should be wakeable by `@handle`, read `anx meta doc wake-routing`.
+  If this agent should be wakeable by `@handle`, read `anx debug meta doc wake-routing`.
 
 Global flags:
   Global flags can appear before or after the command path.
@@ -1765,11 +1766,11 @@ Read-only backing-thread inspection (tooling and diagnostics)
 Generated Help: threads
 
 Commands:
-  threads context          Get backing thread coordination context
-  threads inspect          Inspect backing thread
-  threads list             List backing threads
-  threads timeline         Get backing thread timeline
-  threads workspace        Get backing thread workspace projection (diagnostic)
+  debug threads context    Get backing thread coordination context
+  debug threads inspect    Inspect backing thread
+  debug threads list       List backing threads
+  debug threads timeline   Get backing thread timeline
+  debug threads workspace  Get backing thread workspace projection (diagnostic)
 
 Read-only backing-thread diagnostics and direct thread messages:
   threads message         Post directly to a backing thread; prefer domain commands like `anx cards message` or `anx topics message`.
@@ -1777,11 +1778,11 @@ Read-only backing-thread diagnostics and direct thread messages:
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for agent-facing topic context. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for agent-facing topic context. Use `anx debug threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx debug threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads ... ; anx --json threads ... ; anx threads ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads ... ; anx --json debug threads ... ; anx debug threads ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1795,14 +1796,14 @@ Manage events and event streams
 Generated Help: events
 
 Commands:
-  events archive           Archive event
-  events create            Create event
-  events get               Get event
-  events list              List events
-  events restore           Restore event from trash
-  events stream            Stream events (SSE)
-  events trash             Move event to trash
-  events unarchive         Unarchive event
+  debug events archive     Archive event
+  debug events create      Create event
+  debug events get         Get event
+  debug events list        List events
+  debug events restore     Restore event from trash
+  debug events stream      Stream events (SSE)
+  debug events trash       Move event to trash
+  debug events unarchive   Unarchive event
 
 Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -1810,11 +1811,11 @@ Local inspection helpers:
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
 	  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` (debug/admin) for copy/paste IDs.
 	  Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message topic:<handle>`, `anx docs message doc:<handle>`, or `anx cards message card:<handle>` instead of hand-authoring a `message_posted` event.
-  For details: `anx events explain <event-type>`
+  For details: `anx debug events explain <event-type>`
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events ... ; anx --json events ... ; anx events ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events ... ; anx --json debug events ... ; anx debug events ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1828,14 +1829,14 @@ Operator diagnostics for human attention inbox items
 Generated Help: inbox
 
 Commands:
-  inbox get                Get one inbox item
-  inbox list               List inbox items
-  inbox respond            Respond to human attention inbox item
-  inbox stream             Stream inbox items (SSE)
+  debug inbox get          Get one inbox item
+  debug inbox list         List inbox items
+  debug inbox respond      Respond to human attention inbox item
+  debug inbox stream       Stream inbox items (SSE)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox ... ; anx --json inbox ... ; anx inbox ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox ... ; anx --json debug inbox ... ; anx debug inbox ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1892,12 +1893,12 @@ Diagnostic actor inventory and fixture helpers
 Generated Help: actors
 
 Commands:
-  actors create            Create actor (dev fixture)
-  actors list              List actors
+  debug actors create      Create actor (dev fixture)
+  debug actors list        List actors
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors ... ; anx --json actors ... ; anx actors ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug actors ... ; anx --json debug actors ... ; anx debug actors ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1911,11 +1912,11 @@ Diagnostic typed-ref edge inspection
 Generated Help: ref-edges
 
 Commands:
-  ref-edges list           List ref edges (forward or reverse indexed lookup)
+  debug ref-edges list     List ref edges (forward or reverse indexed lookup)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx ref-edges ... ; anx --json ref-edges ... ; anx ref-edges ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug ref-edges ... ; anx --json debug ref-edges ... ; anx debug ref-edges ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
@@ -1970,6 +1971,7 @@ Generated Help: auth invites list
 - Command ID: `auth.invites.list`
 - CLI path: `auth invites list`
 - HTTP: `GET /auth/invites`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator listing of outstanding invites.
@@ -1995,6 +1997,7 @@ Generated Help: auth invites create
 - Command ID: `auth.invites.create`
 - CLI path: `auth invites create`
 - HTTP: `POST /auth/invites`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Issue a one-time invite for human or agent principals.
@@ -2020,6 +2023,7 @@ Generated Help: auth invites revoke
 - Command ID: `auth.invites.revoke`
 - CLI path: `auth invites revoke`
 - HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Invalidate an outstanding invite by id.
@@ -2048,6 +2052,7 @@ Generated Help: auth bootstrap status
 - Command ID: `auth.bootstrap.status`
 - CLI path: `auth bootstrap status`
 - HTTP: `GET /auth/bootstrap/status`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Report whether first-principal bootstrap registration is still available.
@@ -2072,6 +2077,7 @@ Generated Help: auth principals list
 - Command ID: `auth.principals.list`
 - CLI path: `auth principals list`
 - HTTP: `GET /auth/principals`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator visibility into registered principals for the workspace.
@@ -2097,6 +2103,7 @@ Generated Help: auth principals revoke
 - Command ID: `auth.principals.revoke`
 - CLI path: `auth principals revoke`
 - HTTP: `POST /auth/principals/{principal_id}/revoke`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Administrative revocation of a principal linkage.
@@ -2125,6 +2132,7 @@ Generated Help: auth audit list
 - Command ID: `auth.audit.list`
 - CLI path: `auth audit list`
 - HTTP: `GET /auth/audit`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator audit trail for auth-sensitive actions.
@@ -2148,20 +2156,21 @@ List actors
 Generated Help: actors list
 
 - Command ID: `actors.list`
-- CLI path: `actors list`
+- CLI path: `debug actors list`
 - HTTP: `GET /actors`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate durable actor records for operator UI and dev fixtures.
 - Output: Returns `{ actors, next_cursor? }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `actors`, `auth`
-- Adjacent commands: `actors create`
+- Adjacent commands: `debug actors create`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors list ... ; anx --json actors list ... ; anx actors list ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug actors list ... ; anx --json debug actors list ... ; anx debug actors list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2173,20 +2182,21 @@ Create actor (dev fixture)
 Generated Help: actors create
 
 - Command ID: `actors.create`
-- CLI path: `actors create`
+- CLI path: `debug actors create`
 - HTTP: `POST /actors`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Dev-only actor registration when dev_actor_mode is enabled.
 - Output: Returns `{ actor }`.
 - Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
 - Concepts: `actors`, `auth`
-- Adjacent commands: `actors list`
+- Adjacent commands: `debug actors list`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors create ... ; anx --json actors create ... ; anx actors create ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug actors create ... ; anx --json debug actors create ... ; anx debug actors create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -2200,6 +2210,7 @@ Generated Help: topics list
 - Command ID: `topics.list`
 - CLI path: `topics list`
 - HTTP: `GET /topics`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan the durable topic inventory.
@@ -2225,6 +2236,7 @@ Generated Help: topics get
 - Command ID: `topics.get`
 - CLI path: `topics get`
 - HTTP: `GET /topics/{topic_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one topic and its canonical durable fields.
@@ -2253,6 +2265,7 @@ Generated Help: topics timeline
 - Command ID: `topics.timeline`
 - CLI path: `topics timeline`
 - HTTP: `GET /topics/{topic_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load chronological evidence and related resources for one topic.
@@ -2281,6 +2294,7 @@ Generated Help: topics workspace
 - Command ID: `topics.workspace`
 - CLI path: `topics workspace`
 - HTTP: `GET /topics/{topic_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
@@ -2309,6 +2323,7 @@ Generated Help: topics archive
 - Command ID: `topics.archive`
 - CLI path: `topics archive`
 - HTTP: `POST /topics/{topic_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
@@ -2342,6 +2357,7 @@ Generated Help: topics unarchive
 - Command ID: `topics.unarchive`
 - CLI path: `topics unarchive`
 - HTTP: `POST /topics/{topic_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
@@ -2375,6 +2391,7 @@ Generated Help: topics restore
 - Command ID: `topics.restore`
 - CLI path: `topics restore`
 - HTTP: `POST /topics/{topic_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
@@ -2408,6 +2425,7 @@ Generated Help: boards list
 - Command ID: `boards.list`
 - CLI path: `boards list`
 - HTTP: `GET /boards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan durable coordination boards and lightweight summaries.
@@ -2433,6 +2451,7 @@ Generated Help: boards get
 - Command ID: `boards.get`
 - CLI path: `boards get`
 - HTTP: `GET /boards/{board_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve canonical board state and summary.
@@ -2461,6 +2480,7 @@ Generated Help: boards patch
 - Command ID: `boards.patch`
 - CLI path: `boards patch`
 - HTTP: `PATCH /boards/{board_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update board metadata with optimistic concurrency.
@@ -2499,6 +2519,7 @@ Generated Help: boards archive
 - Command ID: `boards.archive`
 - CLI path: `boards archive`
 - HTTP: `POST /boards/{board_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-archive a board and derive its lifecycle state from archived_at.
@@ -2529,6 +2550,7 @@ Generated Help: boards unarchive
 - Command ID: `boards.unarchive`
 - CLI path: `boards unarchive`
 - HTTP: `POST /boards/{board_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on a board (restore default list visibility).
@@ -2559,6 +2581,7 @@ Generated Help: boards trash
 - Command ID: `boards.trash`
 - CLI path: `boards trash`
 - HTTP: `POST /boards/{board_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move board to trash with an explicit operator reason.
@@ -2590,6 +2613,7 @@ Generated Help: boards restore
 - Command ID: `boards.restore`
 - CLI path: `boards restore`
 - HTTP: `POST /boards/{board_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on a board after an explicit restore action.
@@ -2620,6 +2644,7 @@ Generated Help: boards purge
 - Command ID: `boards.purge`
 - CLI path: `boards purge`
 - HTTP: `POST /boards/{board_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed board (human-gated).
@@ -2681,6 +2706,7 @@ Generated Help: boards cards create-batch
 - Command ID: `boards.cards.batch_add`
 - CLI path: `boards cards create-batch`
 - HTTP: `POST /boards/{board_id}/cards/batch`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create multiple cards in one transaction using a single board concurrency token.
@@ -2722,6 +2748,7 @@ Generated Help: boards cards get
 - Command ID: `boards.cards.get`
 - CLI path: `boards cards get`
 - HTTP: `GET /boards/{board_id}/cards/{card_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve a card through its board membership context.
@@ -2751,6 +2778,7 @@ Generated Help: docs list
 - Command ID: `docs.list`
 - CLI path: `docs list`
 - HTTP: `GET /docs`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan canonical document lineages.
@@ -2778,6 +2806,7 @@ Generated Help: docs history
 - Command ID: `docs.revisions.list`
 - CLI path: `docs history`
 - HTTP: `GET /docs/{document_id}/revisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable revisions for one document lineage.
@@ -2826,6 +2855,7 @@ Generated Help: docs archive
 - Command ID: `docs.archive`
 - CLI path: `docs archive`
 - HTTP: `POST /docs/{document_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-archive a document lineage (orthogonal to head revision content).
@@ -2858,6 +2888,7 @@ Generated Help: docs unarchive
 - Command ID: `docs.unarchive`
 - CLI path: `docs unarchive`
 - HTTP: `POST /docs/{document_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on a document so it returns to default visibility.
@@ -2890,6 +2921,7 @@ Generated Help: docs restore
 - Command ID: `docs.restore`
 - CLI path: `docs restore`
 - HTTP: `POST /docs/{document_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash state on a document after an explicit restore action.
@@ -2923,6 +2955,7 @@ Generated Help: docs purge
 - Command ID: `docs.purge`
 - CLI path: `docs purge`
 - HTTP: `POST /docs/{document_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed document (human-gated).
@@ -2955,6 +2988,7 @@ Generated Help: docs revision get
 - Command ID: `docs.revisions.get`
 - CLI path: `docs revision get`
 - HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one immutable document revision.
@@ -2984,6 +3018,7 @@ Generated Help: cards get
 - Command ID: `cards.get`
 - CLI path: `cards get`
 - HTTP: `GET /cards/{card_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one first-class card by public ref or handle.
@@ -3012,6 +3047,7 @@ Generated Help: cards history
 - Command ID: `cards.revisions.list`
 - CLI path: `cards history`
 - HTTP: `GET /cards/{card_id}/revisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable content revisions for one card lineage.
@@ -3040,6 +3076,7 @@ Generated Help: cards archive
 - Command ID: `cards.archive`
 - CLI path: `cards archive`
 - HTTP: `POST /cards/{card_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
@@ -3071,6 +3108,7 @@ Generated Help: cards purge
 - Command ID: `cards.purge`
 - CLI path: `cards purge`
 - HTTP: `POST /cards/{card_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete an archived or trashed card (human-gated).
@@ -3101,6 +3139,7 @@ Generated Help: cards restore
 - Command ID: `cards.restore`
 - CLI path: `cards restore`
 - HTTP: `POST /cards/{card_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
@@ -3132,6 +3171,7 @@ Generated Help: cards timeline
 - Command ID: `cards.timeline`
 - CLI path: `cards timeline`
 - HTTP: `GET /cards/{card_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load chronological evidence and related resources for one card.
@@ -3158,20 +3198,21 @@ List backing threads
 Generated Help: threads list
 
 - Command ID: `threads.list`
-- CLI path: `threads list`
+- CLI path: `debug threads list`
 - HTTP: `GET /threads`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect backing infrastructure threads without making them the primary planning noun.
 - Output: Returns `{ threads }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads timeline`, `debug threads workspace`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads list ... ; anx --json threads list ... ; anx threads list ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads list ... ; anx --json debug threads list ... ; anx debug threads list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3183,15 +3224,16 @@ Inspect backing thread
 Generated Help: threads get
 
 - Command ID: `threads.inspect`
-- CLI path: `threads inspect`
+- CLI path: `debug threads inspect`
 - HTTP: `GET /threads/{thread_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Output: Returns `{ thread }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3199,7 +3241,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads get ... ; anx --json threads get ... ; anx threads get ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads get ... ; anx --json debug threads get ... ; anx debug threads get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3211,15 +3253,16 @@ Get backing thread timeline
 Generated Help: threads timeline
 
 - Command ID: `threads.timeline`
-- CLI path: `threads timeline`
+- CLI path: `debug threads timeline`
 - HTTP: `GET /threads/{thread_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Retrieve event history plus typed-ref expansions for one backing thread.
 - Output: Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `timeline`
-- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads list`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3235,7 +3278,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads timeline ... ; anx --json threads timeline ... ; anx threads timeline ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads timeline ... ; anx --json debug threads timeline ... ; anx debug threads timeline ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3247,15 +3290,16 @@ Get backing thread coordination context
 Generated Help: threads context
 
 - Command ID: `threads.context`
-- CLI path: `threads context`
+- CLI path: `debug threads context`
 - HTTP: `GET /threads/{thread_id}/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
 - Output: Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads inspect`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3263,7 +3307,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads context ... ; anx --json threads context ... ; anx threads context ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads context ... ; anx --json debug threads context ... ; anx debug threads context ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3275,15 +3319,16 @@ Get event
 Generated Help: events get
 
 - Command ID: `events.get`
-- CLI path: `events get`
+- CLI path: `debug events get`
 - HTTP: `GET /events/{event_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Fetch one append-only event record by public ref or handle.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3291,7 +3336,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events get ... ; anx --json events get ... ; anx events get ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events get ... ; anx --json debug events get ... ; anx debug events get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3303,15 +3348,16 @@ Create event
 Generated Help: events create
 
 - Command ID: `events.create`
-- CLI path: `events create`
+- CLI path: `debug events create`
 - HTTP: `POST /events`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3353,7 +3399,7 @@ Local CLI notes:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events create ... ; anx --json events create ... ; anx events create ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events create ... ; anx --json debug events create ... ; anx debug events create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3365,20 +3411,21 @@ Stream events (SSE)
 Generated Help: events stream
 
 - Command ID: `events.stream`
-- CLI path: `events stream`
+- CLI path: `debug events stream`
 - HTTP: `GET /stream/events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events stream ... ; anx --json events stream ... ; anx events stream ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events stream ... ; anx --json debug events stream ... ; anx debug events stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3390,20 +3437,21 @@ Stream events (SSE)
 Generated Help: events tail
 
 - Command ID: `events.stream`
-- CLI path: `events stream`
+- CLI path: `debug events stream`
 - HTTP: `GET /stream/events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events tail ... ; anx --json events tail ... ; anx events tail ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events tail ... ; anx --json debug events tail ... ; anx debug events tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3415,15 +3463,16 @@ Archive event
 Generated Help: events archive
 
 - Command ID: `events.archive`
-- CLI path: `events archive`
+- CLI path: `debug events archive`
 - HTTP: `POST /events/{event_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Set archived_at on an append-only event record for filtered views.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3433,7 +3482,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events archive ... ; anx --json events archive ... ; anx events archive ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events archive ... ; anx --json debug events archive ... ; anx debug events archive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3445,15 +3494,16 @@ Unarchive event
 Generated Help: events unarchive
 
 - Command ID: `events.unarchive`
-- CLI path: `events unarchive`
+- CLI path: `debug events unarchive`
 - HTTP: `POST /events/{event_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on an event.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`
 
 Inputs:
   Required:
@@ -3463,7 +3513,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events unarchive ... ; anx --json events unarchive ... ; anx events unarchive ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events unarchive ... ; anx --json debug events unarchive ... ; anx debug events unarchive ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3475,15 +3525,16 @@ Move event to trash
 Generated Help: events trash
 
 - Command ID: `events.trash`
-- CLI path: `events trash`
+- CLI path: `debug events trash`
 - HTTP: `POST /events/{event_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move event to trash with an explicit operator reason.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3494,7 +3545,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events trash ... ; anx --json events trash ... ; anx events trash ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events trash ... ; anx --json debug events trash ... ; anx debug events trash ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3506,15 +3557,16 @@ Restore event from trash
 Generated Help: events restore
 
 - Command ID: `events.restore`
-- CLI path: `events restore`
+- CLI path: `debug events restore`
 - HTTP: `POST /events/{event_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash state on an event after an explicit restore action.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3524,7 +3576,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events restore ... ; anx --json events restore ... ; anx events restore ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events restore ... ; anx --json debug events restore ... ; anx debug events restore ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3536,13 +3588,14 @@ List inbox items
 Generated Help: inbox list
 
 - Command ID: `inbox.list`
-- CLI path: `inbox list`
+- CLI path: `debug inbox list`
 - HTTP: `GET /inbox`
+- Side effect class: `read_only`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
 - Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
+- Adjacent commands: `debug inbox get`, `debug inbox respond`, `debug inbox stream`
 
 
 View scoping:
@@ -3557,7 +3610,7 @@ Inbox kinds:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox list ... ; anx --json debug inbox list ... ; anx debug inbox list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3569,15 +3622,16 @@ Get one inbox item
 Generated Help: inbox get
 
 - Command ID: `inbox.get`
-- CLI path: `inbox get`
+- CLI path: `debug inbox get`
 - HTTP: `GET /inbox/{inbox_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Side-effect free read of one materialized inbox row.
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
+- Adjacent commands: `debug inbox list`, `debug inbox respond`, `debug inbox stream`
 
 Inputs:
   Required:
@@ -3585,7 +3639,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox get ... ; anx --json debug inbox get ... ; anx debug inbox get ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3597,15 +3651,16 @@ Respond to human attention inbox item
 Generated Help: inbox respond
 
 - Command ID: `inbox.respond`
-- CLI path: `inbox respond`
+- CLI path: `debug inbox respond`
 - HTTP: `POST /inbox/{inbox_id}/respond`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
 - Output: Returns `{ event, notify }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox stream`
 
 Inputs:
   Required:
@@ -3631,7 +3686,7 @@ CLI flags (`inbox respond`):
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox respond ... ; anx --json inbox respond ... ; anx inbox respond ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox respond ... ; anx --json debug inbox respond ... ; anx debug inbox respond ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3643,20 +3698,21 @@ Stream inbox items (SSE)
 Generated Help: inbox stream
 
 - Command ID: `inbox.stream`
-- CLI path: `inbox stream`
+- CLI path: `debug inbox stream`
 - HTTP: `GET /stream/inbox`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox stream ... ; anx --json debug inbox stream ... ; anx debug inbox stream ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3668,20 +3724,21 @@ Stream inbox items (SSE)
 Generated Help: inbox tail
 
 - Command ID: `inbox.stream`
-- CLI path: `inbox stream`
+- CLI path: `debug inbox stream`
 - HTTP: `GET /stream/inbox`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug inbox tail ... ; anx --json debug inbox tail ... ; anx debug inbox tail ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3695,6 +3752,7 @@ Generated Help: artifacts list
 - Command ID: `artifacts.list`
 - CLI path: `artifacts list`
 - HTTP: `GET /artifacts`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Search and filter immutable artifacts across the workspace.
@@ -3720,6 +3778,7 @@ Generated Help: artifacts content
 - Command ID: `artifacts.content`
 - CLI path: `artifacts content`
 - HTTP: `GET /artifacts/{artifact_id}/content`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
@@ -3748,6 +3807,7 @@ Generated Help: artifacts download
 - Command ID: `artifacts.content`
 - CLI path: `artifacts content`
 - HTTP: `GET /artifacts/{artifact_id}/content`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
@@ -3794,6 +3854,7 @@ Generated Help: artifacts archive
 - Command ID: `artifacts.archive`
 - CLI path: `artifacts archive`
 - HTTP: `POST /artifacts/{artifact_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
@@ -3824,6 +3885,7 @@ Generated Help: artifacts unarchive
 - Command ID: `artifacts.unarchive`
 - CLI path: `artifacts unarchive`
 - HTTP: `POST /artifacts/{artifact_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on artifact metadata.
@@ -3854,6 +3916,7 @@ Generated Help: artifacts trash
 - Command ID: `artifacts.trash`
 - CLI path: `artifacts trash`
 - HTTP: `POST /artifacts/{artifact_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move artifact metadata to trash with an explicit operator reason.
@@ -3885,6 +3948,7 @@ Generated Help: artifacts restore
 - Command ID: `artifacts.restore`
 - CLI path: `artifacts restore`
 - HTTP: `POST /artifacts/{artifact_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on an artifact after an explicit restore action.
@@ -3915,6 +3979,7 @@ Generated Help: artifacts purge
 - Command ID: `artifacts.purge`
 - CLI path: `artifacts purge`
 - HTTP: `POST /artifacts/{artifact_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed artifact (human-gated).
@@ -3943,8 +4008,9 @@ List ref edges (forward or reverse indexed lookup)
 Generated Help: ref-edges list
 
 - Command ID: `ref_edges.list`
-- CLI path: `ref-edges list`
+- CLI path: `debug ref-edges list`
 - HTTP: `GET /ref-edges`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `query`
 - Why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
@@ -3955,7 +4021,7 @@ Generated Help: ref-edges list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx ref-edges list ... ; anx --json ref-edges list ... ; anx ref-edges list ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug ref-edges list ... ; anx --json debug ref-edges list ... ; anx debug ref-edges list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3967,8 +4033,9 @@ Rebuild derived projections
 Generated Help: derived rebuild
 
 - Command ID: `derived.rebuild`
-- CLI path: `derived rebuild`
+- CLI path: `debug derived rebuild`
 - HTTP: `POST /derived/rebuild`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Deterministic operator repair for inbox/thread projections.
@@ -3979,7 +4046,7 @@ Generated Help: derived rebuild
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx derived rebuild ... ; anx --json derived rebuild ... ; anx derived rebuild ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug derived rebuild ... ; anx --json debug derived rebuild ... ; anx debug derived rebuild ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -3991,20 +4058,21 @@ List command registry metadata
 Generated Help: meta commands
 
 - Command ID: `meta.commands.list`
-- CLI path: `meta commands`
+- CLI path: `debug meta commands`
 - HTTP: `GET /meta/commands`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Expose embedded Agent Nexus command metadata for discovery and codegen parity.
 - Output: Returns generated command registry JSON.
 - Error codes: `meta_unavailable`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta concept`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta commands ... ; anx --json meta commands ... ; anx meta commands ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug meta commands ... ; anx --json debug meta commands ... ; anx debug meta commands ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4016,15 +4084,16 @@ Get one command metadata entry
 Generated Help: meta command
 
 - Command ID: `meta.commands.get`
-- CLI path: `meta command`
+- CLI path: `debug meta command`
 - HTTP: `GET /meta/commands/{command_id}`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Resolve command metadata by stable command id.
 - Output: Returns `{ command }`.
 - Error codes: `meta_unavailable`, `not_found`
 - Concepts: `compatibility`
-- Adjacent commands: `meta commands`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta commands`, `debug meta concept`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 Inputs:
   Required:
@@ -4032,7 +4101,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta command ... ; anx --json meta command ... ; anx meta command ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug meta command ... ; anx --json debug meta command ... ; anx debug meta command ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4044,20 +4113,21 @@ List concept index
 Generated Help: meta concepts
 
 - Command ID: `meta.concepts.list`
-- CLI path: `meta concepts`
+- CLI path: `debug meta concepts`
 - HTTP: `GET /meta/concepts`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Group command metadata by concept tags.
 - Output: Returns `{ concepts: [...] }`.
 - Error codes: `meta_unavailable`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta commands`, `meta concept`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta commands`, `debug meta concept`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta concepts ... ; anx --json meta concepts ... ; anx meta concepts ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug meta concepts ... ; anx --json debug meta concepts ... ; anx debug meta concepts ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4069,15 +4139,16 @@ Get commands grouped by concept
 Generated Help: meta concept
 
 - Command ID: `meta.concepts.get`
-- CLI path: `meta concept`
+- CLI path: `debug meta concept`
 - HTTP: `GET /meta/concepts/{concept_name}`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Expand one concept into related commands.
 - Output: Returns `{ concept: {...} }`.
 - Error codes: `meta_unavailable`, `not_found`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta commands`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta commands`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 Inputs:
   Required:
@@ -4085,7 +4156,7 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta concept ... ; anx --json meta concept ... ; anx meta concept ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug meta concept ... ; anx --json debug meta concept ... ; anx debug meta concept ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -4099,6 +4170,7 @@ Generated Help: pm context
 - Command ID: `pm.context`
 - CLI path: `pm context`
 - HTTP: `GET /pm/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read bounded authorized PM context.
@@ -4133,6 +4205,7 @@ Generated Help: pm actions acknowledge
 - Command ID: `pm.actions.acknowledge`
 - CLI path: `pm actions acknowledge`
 - HTTP: `POST /pm/actions/{action_id}/acknowledge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Acknowledge a failed, unresolvable, or undeliverable action.
@@ -4167,6 +4240,7 @@ Generated Help: pm actions get
 - Command ID: `pm.actions.get`
 - CLI path: `pm actions get`
 - HTTP: `GET /pm/actions/{action_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read an action and its receipts.
@@ -4201,6 +4275,7 @@ Generated Help: pm actions list
 - Command ID: `pm.actions.list`
 - CLI path: `pm actions list`
 - HTTP: `GET /pm/actions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List action receipts and attempts.
@@ -4233,6 +4308,7 @@ Generated Help: pm actions reconcile
 - Command ID: `pm.actions.reconcile`
 - CLI path: `pm actions reconcile`
 - HTTP: `POST /pm/actions/{action_id}/reconcile`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Read back an action outcome without resending.
@@ -4267,6 +4343,7 @@ Generated Help: pm bindings create
 - Command ID: `pm.bindings.create`
 - CLI path: `pm bindings create`
 - HTTP: `POST /pm/bindings`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Bind an exact channel identity to a workspace principal.
@@ -4298,7 +4375,7 @@ Bind an exact channel identity (transport, tenant, channel, user) to a workspace
 
 Usage: anx pm bindings create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4315,6 +4392,7 @@ Generated Help: pm bindings list
 - Command ID: `pm.bindings.list`
 - CLI path: `pm bindings list`
 - HTTP: `GET /pm/bindings`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
@@ -4347,6 +4425,7 @@ Generated Help: pm conversations create
 - Command ID: `pm.conversations.create`
 - CLI path: `pm conversations create`
 - HTTP: `POST /pm/conversations`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a durable PM conversation.
@@ -4369,7 +4448,7 @@ Create a durable conversation using request_key, title and optional work_ref.
 
 Usage: anx pm conversations create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4386,6 +4465,7 @@ Generated Help: pm conversations get
 - Command ID: `pm.conversations.get`
 - CLI path: `pm conversations get`
 - HTTP: `GET /pm/conversations/{conversation_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read PM conversation and turns.
@@ -4420,6 +4500,7 @@ Generated Help: pm conversations list
 - Command ID: `pm.conversations.list`
 - CLI path: `pm conversations list`
 - HTTP: `GET /pm/conversations`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List PM conversations.
@@ -4452,6 +4533,7 @@ Generated Help: pm conversations message
 - Command ID: `pm.conversations.messages.create`
 - CLI path: `pm conversations message`
 - HTTP: `POST /pm/conversations/{conversation_id}/messages`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Queue a contextual PM turn.
@@ -4473,7 +4555,7 @@ Queue a PM message using request_key and text; an accepted turn is not a complet
 
 Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4490,6 +4572,7 @@ Generated Help: pm decisions answer
 - Command ID: `pm.decisions.answer`
 - CLI path: `pm decisions answer`
 - HTTP: `POST /pm/decisions/{decision_id}/answer`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Answer and authorize a scoped decision.
@@ -4512,7 +4595,7 @@ Answer with revision, approve and text; the server requires an authorized human 
 
 Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4529,6 +4612,7 @@ Generated Help: pm decisions create
 - Command ID: `pm.decisions.create`
 - CLI path: `pm decisions create`
 - HTTP: `POST /pm/decisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Propose a scoped PM decision.
@@ -4556,7 +4640,7 @@ Propose an instruction bound to work, scope and target_revision; never approves 
 
 Usage: anx pm decisions create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4573,6 +4657,7 @@ Generated Help: pm decisions dispatch
 - Command ID: `pm.decisions.dispatch`
 - CLI path: `pm decisions dispatch`
 - HTTP: `POST /pm/decisions/{decision_id}/dispatch`
+- Side effect class: `external_side_effect`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Hand off an authorized source action.
@@ -4607,6 +4692,7 @@ Generated Help: pm decisions get
 - Command ID: `pm.decisions.get`
 - CLI path: `pm decisions get`
 - HTTP: `GET /pm/decisions/{decision_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a PM decision.
@@ -4641,6 +4727,7 @@ Generated Help: pm decisions list
 - Command ID: `pm.decisions.list`
 - CLI path: `pm decisions list`
 - HTTP: `GET /pm/decisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List durable PM decisions.
@@ -4673,6 +4760,7 @@ Generated Help: pm turns claim
 - Command ID: `pm.turns.claim`
 - CLI path: `pm turns claim`
 - HTTP: `POST /pm/turns/claim`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Claim one queued turn for the selected PM agent so two runners never answer it.
@@ -4693,7 +4781,7 @@ Claim the next queued turn with an exclusive runner lease. 204 means none.
 Usage: anx pm turns claim [--from-file <path|->] [--runner-id <id>]
   --runner-id <id> (defaults to the authenticated actor id; claims are idempotent for the same runner_id)
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4710,6 +4798,7 @@ Generated Help: pm turns complete
 - Command ID: `pm.turns.complete`
 - CLI path: `pm turns complete`
 - HTTP: `POST /pm/turns/{turn_id}/complete`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent response.
@@ -4733,7 +4822,7 @@ Selected PM agent records response text and evidence_refs; does not complete wor
 
 Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4750,6 +4839,7 @@ Generated Help: pm turns context
 - Command ID: `pm.turns.context`
 - CLI path: `pm turns context`
 - HTTP: `POST /pm/turns/{turn_id}/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
@@ -4793,6 +4883,7 @@ Generated Help: pm turns fail
 - Command ID: `pm.turns.fail`
 - CLI path: `pm turns fail`
 - HTTP: `POST /pm/turns/{turn_id}/fail`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent failure reason without inventing a reply.
@@ -4814,7 +4905,7 @@ Mark a claimed turn failed with a reason; does not complete work.
 
 Usage: anx pm turns fail <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4831,6 +4922,7 @@ Generated Help: pm turns get
 - Command ID: `pm.turns.get`
 - CLI path: `pm turns get`
 - HTTP: `GET /pm/turns/{turn_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a PM conversation turn.
@@ -4865,6 +4957,7 @@ Generated Help: pm turns heartbeat
 - Command ID: `pm.turns.heartbeat`
 - CLI path: `pm turns heartbeat`
 - HTTP: `POST /pm/turns/{turn_id}/heartbeat`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Keep an active runner lease alive during execution.
@@ -4885,7 +4978,7 @@ Lease owner renews a claimed turn's lease; renew at less than half the lease TTL
 
 Usage: anx pm turns heartbeat <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4902,6 +4995,7 @@ Generated Help: pm turns propose
 - Command ID: `pm.turns.decisions.create`
 - CLI path: `pm turns propose`
 - HTTP: `POST /pm/turns/{turn_id}/decisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent proposal.
@@ -4932,7 +5026,7 @@ Selected PM agent proposes an instruction for the requesting actor, never approv
 Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|-> [--lease-token <token>]
   --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4949,6 +5043,7 @@ Generated Help: pm turns release
 - Command ID: `pm.turns.release`
 - CLI path: `pm turns release`
 - HTTP: `POST /pm/turns/{turn_id}/release`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Return interrupted work to the queue for another claim.
@@ -4970,7 +5065,7 @@ Lease owner returns a claimed turn to the queue.
 
 Usage: anx pm turns release <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4987,6 +5082,7 @@ Generated Help: work capabilities
 - Command ID: `work.capabilities`
 - CLI path: `work capabilities`
 - HTTP: `GET /work/capabilities`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store.
@@ -5017,6 +5113,7 @@ Generated Help: work create
 - Command ID: `work.create`
 - CLI path: `work create`
 - HTTP: `POST /work`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
@@ -5059,7 +5156,7 @@ Register a native commitment or canonical external source. Omitting board_ref us
 
 Usage: anx work create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5076,6 +5173,7 @@ Generated Help: work get
 - Command ID: `work.get`
 - CLI path: `work get`
 - HTTP: `GET /work/{card_ref}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations).
@@ -5110,6 +5208,7 @@ Generated Help: work list
 - Command ID: `work.list`
 - CLI path: `work list`
 - HTTP: `GET /work`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes.
@@ -5148,6 +5247,7 @@ Generated Help: work patch
 - Command ID: `work.patch`
 - CLI path: `work patch`
 - HTTP: `PATCH /work/{card_ref}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
@@ -5180,7 +5280,7 @@ Update work metadata with if_version; external status remains source-owned.
 
 Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5197,6 +5297,7 @@ Generated Help: work observations list
 - Command ID: `work.observations.list`
 - CLI path: `work observations list`
 - HTTP: `GET /work/{card_ref}/observations`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List append-only work observations.
@@ -5233,6 +5334,7 @@ Generated Help: work observations submit
 - Command ID: `work.observations.submit`
 - CLI path: `work observations submit`
 - HTTP: `POST /work/{card_ref}/observations`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Submit an attributed source observation.
@@ -5276,7 +5378,7 @@ Submit an authenticated remote observation; preserve its idempotency key on retr
 
 Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
 Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
 
@@ -5295,6 +5397,7 @@ Generated Help: work refresh get
 - Command ID: `work.refresh.get`
 - CLI path: `work refresh get`
 - HTTP: `GET /work/{card_ref}/refresh`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect durable refresh lifecycle.
@@ -5329,6 +5432,7 @@ Generated Help: work refresh request
 - Command ID: `work.refresh.request`
 - CLI path: `work refresh request`
 - HTTP: `POST /work/{card_ref}/refresh`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Queue or coalesce a read-only refresh.
@@ -5365,6 +5469,7 @@ Generated Help: secret list
 - Command ID: `secrets.list`
 - CLI path: `secret list`
 - HTTP: `GET /secrets`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List workspace secret metadata without exposing values.
@@ -5390,6 +5495,7 @@ Generated Help: secret create
 - Command ID: `secrets.create`
 - CLI path: `secret create`
 - HTTP: `POST /secrets`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Store an encrypted workspace credential with metadata.
@@ -5422,6 +5528,7 @@ Generated Help: secret delete
 - Command ID: `secrets.delete`
 - CLI path: `secret delete`
 - HTTP: `DELETE /secrets/{secret_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Permanently remove a secret and its encrypted value.
@@ -5451,6 +5558,7 @@ Generated Help: secret get --reveal
 - Command ID: `secrets.reveal`
 - CLI path: `secret get --reveal`
 - HTTP: `POST /secrets/{secret_id}/reveal`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Decrypt and return a secret value. Logged in audit.
@@ -5480,6 +5588,7 @@ Generated Help: secret exec
 - Command ID: `secrets.reveal-batch`
 - CLI path: `secret exec`
 - HTTP: `POST /secrets/reveal-batch`
+- Side effect class: `external_side_effect`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Batch-fetch secrets for env injection. Each reveal is audited.
@@ -5509,6 +5618,7 @@ Generated Help: secret update
 - Command ID: `secrets.update`
 - CLI path: `secret update`
 - HTTP: `PUT /secrets/{secret_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Replace an encrypted secret value.
@@ -5539,6 +5649,7 @@ Uniform lifecycle surface for archive, unarchive, trash, restore, and purge acro
 Local Help: lifecycle verbs
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - Composition: Canonical resources and verbs are listed in `internal/app/lifecycle_spec.go`. When a flag replaces a non-empty JSON field, `--json --dry-run` includes `_overrides` and `anx_cli_recovery.kind=json_flag_overlay`.
 - JSON body: Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.
@@ -5570,6 +5681,7 @@ Generated Help: topics create
 - Command ID: `topics.create`
 - CLI path: `topics create`
 - HTTP: `POST /topics`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a first-class durable topic before attaching cards, docs, or artifacts.
@@ -5595,6 +5707,7 @@ Inputs:
 Local Help: topics create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a topic from plain flags, or from advanced JSON.
 - Composition: Builds the `topics.create` request. Use Topics for discussion and current context around a project, incident, decision, or recurring process.
 - JSON body: Either flags building `{ topic }`, or advanced JSON body `{ topic }` from stdin/--from-file.
@@ -5630,6 +5743,7 @@ Generated Help: topics patch
 - Command ID: `topics.patch`
 - CLI path: `topics patch`
 - HTTP: `PATCH /topics/{topic_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update topic state with provenance and optimistic concurrency.
@@ -5656,6 +5770,7 @@ Inputs:
 Local Help: topics patch
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Patch a topic from scalar flags, or from advanced JSON.
 - Composition: Fetches the Topic to discover `updated_at` when `--if-updated-at` is omitted.
 - JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
@@ -5689,6 +5804,7 @@ Generated Help: topics trash
 - Command ID: `topics.trash`
 - CLI path: `topics trash`
 - HTTP: `POST /topics/{topic_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
@@ -5711,6 +5827,7 @@ CLI input:
 Local Help: topics trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
 - JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
@@ -5739,6 +5856,7 @@ Post a message to a Topic conversation without hand-authoring event JSON.
 Local Help: topics message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Topic conversation without hand-authoring event JSON.
 - Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.
@@ -5772,6 +5890,7 @@ List messages from a Topic conversation.
 Local Help: topics messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List messages from a Topic conversation.
 - Composition: Fetches the Topic, then reads its backing thread timeline and filters to messages attached to that topic.
 - JSON body: Fetches the Topic backing thread and returns an `events.list`-style filtered timeline slice with topic metadata.
@@ -5801,6 +5920,7 @@ Reply to an existing Topic message.
 Local Help: topics reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Topic message.
 - Composition: Fetches the Topic and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
@@ -5837,6 +5957,7 @@ Generated Help: boards create
 - Command ID: `boards.create`
 - CLI path: `boards create`
 - HTTP: `POST /boards`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a durable board over topics and cards.
@@ -5860,6 +5981,7 @@ Inputs:
 Local Help: boards create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create an active-work Board from flags, optionally tied to a Topic.
 - Composition: Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.
 - JSON body: Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.
@@ -5894,6 +6016,7 @@ Generated Help: cards list
 - Command ID: `cards.list`
 - CLI path: `cards list`
 - HTTP: `GET /cards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes.
@@ -5905,6 +6028,7 @@ Generated Help: cards list
 Local Help: cards list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List cards across the workspace, or list one board's cards with --board.
 - Composition: Uses `cards.list` for workspace-wide reads. With `--board`, resolves the board ref/handle/id and uses the board-scoped card list while keeping the canonical CLI path `cards list`.
 - JSON body: Global list returns `{ cards }`; `--board` composes the board-scoped card list and returns `{ board_ref, board_handle, cards }`.
@@ -5935,6 +6059,7 @@ Create a durable document lineage, with a file-first text-doc path for agents.
 Local Help: docs create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a durable document lineage, with a file-first text-doc path for agents.
 - Quick start: Flags: `--topic <topic-ref-or-handle> --title <text> --body-file <path>`; use `--body <text>` for short inline content or `--from-file <path>` for advanced JSON.
 - Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
@@ -5962,6 +6087,7 @@ Generated Help: docs create
 - Command ID: `docs.create`
 - CLI path: `docs create`
 - HTTP: `POST /docs`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a canonical document lineage anchored to a typed subject ref.
@@ -6008,6 +6134,7 @@ Search documents by title, body, source, tags, and comments.
 Local Help: docs search
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Search documents by title, body, source, tags, and comments.
 - Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
@@ -6029,6 +6156,7 @@ Generated Help: docs search
 - Command ID: `docs.search`
 - CLI path: `docs search`
 - HTTP: `GET /docs/search`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
@@ -6054,6 +6182,7 @@ Create or replace a document by handle from a local file or stdin.
 Local Help: docs put
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create or replace a document by handle from a local file or stdin.
 - Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
@@ -6078,6 +6207,7 @@ Generated Help: docs put
 - Command ID: `docs.put`
 - CLI path: `docs put`
 - HTTP: `PUT /docs/{document_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
@@ -6124,6 +6254,7 @@ Upsert markdown files under a directory as knowledge docs with source pointers.
 Local Help: docs ingest
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Upsert markdown files under a directory as knowledge docs with source pointers.
 - Composition: Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.
 - JSON body: Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.
@@ -6153,6 +6284,7 @@ Post a document comment (or a reply with `--reply-to`).
 Local Help: docs comment
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a document comment (or a reply with `--reply-to`).
 - Composition: Writes a `message_posted` event on the document backing thread. Comment ids are stable event ids.
 - JSON body: POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.
@@ -6173,6 +6305,7 @@ Generated Help: docs comment
 - Command ID: `docs.comments.create`
 - CLI path: `docs comment`
 - HTTP: `POST /docs/{document_id}/comments`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Post a comment on a document so another agent can read it later.
@@ -6207,6 +6340,7 @@ List document comments as a thread with stable ids.
 Local Help: docs comments
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: List document comments as a thread with stable ids.
 - Composition: Reads `message_posted` events on the document backing thread.
 - JSON body: GET `/docs/{document_id}/comments` returning `{ comments, next_cursor? }`.
@@ -6225,6 +6359,7 @@ Generated Help: docs comments
 - Command ID: `docs.comments.list`
 - CLI path: `docs comments`
 - HTTP: `GET /docs/{document_id}/comments`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read the document discussion thread with stable comment ids.
@@ -6254,6 +6389,7 @@ Reply to a document comment.
 Local Help: docs comments reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to a document comment.
 - Composition: Writes a `message_posted` reply with `reply_to` set to the parent comment ref.
 - JSON body: POST `/docs/{document_id}/comments/{comment_id}/replies` with `{ text }`.
@@ -6271,6 +6407,7 @@ Generated Help: docs comments reply
 - Command ID: `docs.comments.reply`
 - CLI path: `docs comments reply`
 - HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Reply in a document comment thread without leaving the docs surface.
@@ -6306,6 +6443,7 @@ Get a document lineage and its current head revision.
 Local Help: docs get
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Get a document lineage and its current head revision.
 - Composition: `--format md` prints only the markdown body, suitable for piping.
 - JSON body: GET `/docs/{document_id}` returning `{ document, revision }`.
@@ -6322,6 +6460,7 @@ Generated Help: docs get
 - Command ID: `docs.get`
 - CLI path: `docs get`
 - HTTP: `GET /docs/{document_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve a document lineage and its current head revision.
@@ -6351,6 +6490,7 @@ Edit a document comment you authored. The comment ref stays stable.
 Local Help: docs comments edit
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Edit a document comment you authored. The comment ref stays stable.
 - Composition: Only the original author may edit. Deep-links keep working because `ref` does not change.
 - JSON body: PATCH `/docs/{document_id}/comments/{comment_id}` with `{ text }`.
@@ -6368,6 +6508,7 @@ Generated Help: docs comments edit
 - Command ID: `docs.comments.update`
 - CLI path: `docs comments edit`
 - HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Edit a comment you authored without changing its stable ref.
@@ -6401,6 +6542,7 @@ Delete a document comment you authored.
 Local Help: docs comments delete
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Delete a document comment you authored.
 - Composition: Only the original author may delete. The comment is trashed on the backing thread.
 - JSON body: DELETE `/docs/{document_id}/comments/{comment_id}`.
@@ -6417,6 +6559,7 @@ Generated Help: docs comments delete
 - Command ID: `docs.comments.delete`
 - CLI path: `docs comments delete`
 - HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Remove a comment you authored from the document discussion.
@@ -6449,6 +6592,7 @@ Generated Help: cards create
 - Command ID: `cards.create`
 - CLI path: `cards create`
 - HTTP: `POST /cards`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
@@ -6490,6 +6634,7 @@ Inputs:
 Local Help: cards create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a board work card from flags plus a local prose file, or from advanced JSON.
 - Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--body-file` so the CLI can fill the stable Card envelope.
 - JSON body: Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
@@ -6528,6 +6673,7 @@ Generated Help: cards patch
 - Command ID: `cards.patch`
 - CLI path: `cards patch`
 - HTTP: `PATCH /cards/{card_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update card fields, including resolution and resolution refs.
@@ -6558,6 +6704,7 @@ Inputs:
 Local Help: cards patch
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Patch card metadata from scalar flags, or from advanced JSON.
 - Composition: Fetches the Card to discover `updated_at` when `--if-updated-at` is omitted. Use `cards move` for board placement changes.
 - JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
@@ -6589,6 +6736,7 @@ Post a message to a Card conversation without hand-authoring event JSON.
 Local Help: cards message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Card conversation without hand-authoring event JSON.
 - Composition: Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.
@@ -6621,6 +6769,7 @@ List message_posted events from a Card conversation.
 Local Help: cards messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List message_posted events from a Card conversation.
 - Composition: Fetches the Card, then reads its backing thread timeline and filters to ordinary messages. Use `cards timeline` when you need lifecycle events too.
 - JSON body: Fetches the Card backing thread and returns an `events.list`-style filtered timeline slice with card metadata.
@@ -6651,6 +6800,7 @@ Reply to an existing Card message.
 Local Help: cards reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Card message.
 - Composition: Fetches the Card and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
@@ -6685,6 +6835,7 @@ Generated Help: cards revise
 - Command ID: `cards.revisions.create`
 - CLI path: `cards revise`
 - HTTP: `POST /cards/{card_id}/revisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append a new immutable card content revision and advance the card head.
@@ -6710,6 +6861,7 @@ Inputs:
 Local Help: cards revise
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
 - Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--body-file` and optional `title`.
 - JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
@@ -6740,12 +6892,13 @@ Escape hatch: post a message directly to a backing thread.
 Local Help: threads message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Escape hatch: post a message directly to a backing thread.
 - Composition: Writes directly to a backing thread. Prefer domain commands such as `cards message`, `topics message`, or `docs message` when you are working from a Card, Topic, or Doc.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, profile actor, and payload text.
 - Examples:
-  - `anx threads message <thread-id> --body-file note.md`
-  - `anx threads message <thread-id> --body "Diagnostic note"`
+  - `anx debug threads message <thread-id> --body-file note.md`
+  - `anx debug threads message <thread-id> --body "Diagnostic note"`
 
 Flags:
   <thread-id>                  Thread id, typed ref, or handle to message.
@@ -6759,7 +6912,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads message ... ; anx --json threads message ... ; anx threads message ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads message ... ; anx --json debug threads message ... ; anx debug threads message ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -6771,12 +6924,13 @@ Escape hatch: reply to an existing message on a backing thread.
 Local Help: threads reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Escape hatch: reply to an existing message on a backing thread.
 - Composition: Validates the target message exists on the thread before posting the reply.
 - JSON body: Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
-  - `anx threads reply <thread-id> --to <message-id> --body "Confirmed"`
-  - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
+  - `anx debug threads reply <thread-id> --to <message-id> --body "Confirmed"`
+  - `anx debug threads reply <thread-id> --to <message-id> --body-file reply.md`
 
 Flags:
   <thread-id>                  Thread id, typed ref, or handle to reply on.
@@ -6791,7 +6945,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads reply ... ; anx --json threads reply ... ; anx threads reply ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads reply ... ; anx --json debug threads reply ... ; anx debug threads reply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -6805,6 +6959,7 @@ Generated Help: cards move
 - Command ID: `cards.move`
 - CLI path: `cards move`
 - HTTP: `POST /cards/{card_id}/move`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
@@ -6829,6 +6984,7 @@ Inputs:
 Local Help: cards move
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Move a card to another board column using Card workflow language.
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6857,6 +7013,7 @@ Replace card assignees with explicit actor refs, or clear them.
 Local Help: cards assign
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Replace card assignees with explicit actor refs, or clear them.
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
@@ -6885,6 +7042,7 @@ Resolve a card into the done column with optional free-text evidence.
 Local Help: cards resolve
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Resolve a card into the done column with optional free-text evidence.
 - Composition: With evidence from `--body`, `--body-file`, or `--resolution-ref`, posts a card message first when a body is supplied, then passes resolution refs (including the new `event:<id>` when posted) into `cards.move`. `--reason` stamps the lifecycle audit only.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6923,6 +7081,7 @@ Move a resolved card back into active workflow.
 Local Help: cards reopen
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Move a resolved card back into active workflow.
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6952,6 +7111,7 @@ Generated Help: cards trash
 - Command ID: `cards.trash`
 - CLI path: `cards trash`
 - HTTP: `POST /cards/{card_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
@@ -6971,6 +7131,7 @@ Inputs:
 Local Help: cards trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
 - JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
@@ -6999,25 +7160,27 @@ Compose backing-thread timeline reads with client-side thread/type/actor filters
 Generated Help: events list
 
 - Command ID: `events.list`
-- CLI path: `events list`
+- CLI path: `debug events list`
 - HTTP: `GET /events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect append-only event history across the workspace.
 - Output: Returns `{ events, page_info }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Local Help: events list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
-  - `anx events list --thread-id <thread-id> --type message_posted --mine --full-id`
-  - `anx events list --thread-id <thread-id> --max-events 10`
+  - `anx debug events list --thread-id <thread-id> --type message_posted --mine --full-id`
+  - `anx debug events list --thread-id <thread-id> --max-events 10`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect (repeatable).
@@ -7035,7 +7198,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events list ... ; anx --json events list ... ; anx events list ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events list ... ; anx --json debug events list ... ; anx debug events list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7047,12 +7210,13 @@ Validate an `events create` payload locally from stdin or `--from-file` without 
 Local Help: events validate
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - Composition: Parses the same JSON body accepted by `events create`, runs local validation rules, and returns a validation preview envelope without contacting core.
 - JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
 - Examples:
-  - `cat event.json | anx events validate`
-  - `anx events validate --from-file event.json`
+  - `cat event.json | anx debug events validate`
+  - `anx debug events validate --from-file event.json`
 
 Flags:
   --from-file <path>           Load the request body from a JSON file instead of stdin.
@@ -7060,7 +7224,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events validate ... ; anx --json events validate ... ; anx events validate ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events validate ... ; anx --json debug events validate ... ; anx debug events validate ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7072,12 +7236,13 @@ Explain known event-type conventions, required refs, and validation hints, inclu
 Local Help: events explain
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 - Composition: Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
-  - `anx events explain`
-  - `anx events explain message_posted`
+  - `anx debug events explain`
+  - `anx debug events explain message_posted`
 
 Flags:
   <event-type>                 Optional event type to focus on; omit it to list known event types.
@@ -7085,7 +7250,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events explain ... ; anx --json events explain ... ; anx events explain ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug events explain ... ; anx --json debug events explain ... ; anx debug events explain ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7099,6 +7264,7 @@ Generated Help: artifacts create
 - Command ID: `artifacts.create`
 - CLI path: `artifacts create`
 - HTTP: `POST /artifacts`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
@@ -7118,6 +7284,7 @@ Inputs:
 Local Help: artifacts create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
 - Composition: Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.
 - JSON body: With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.
@@ -7151,6 +7318,7 @@ Generated Help: artifacts attachments create
 - Command ID: `artifacts.attachments.create`
 - CLI path: `artifacts attachments create`
 - HTTP: `POST /artifacts/attachments`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `multipart-form`
 - Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
@@ -7163,6 +7331,7 @@ Generated Help: artifacts attachments create
 Local Help: artifacts attachments create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Upload a local file as an attachment artifact via multipart form.
 - Composition: Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.
 - JSON body: Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.
@@ -7192,6 +7361,7 @@ Fetch artifact metadata and resolved content in one command for operator inspect
 Local Help: artifacts inspect
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Fetch artifact metadata and resolved content in one command for operator inspection.
 - Composition: Loads artifact metadata, then fetches content with `artifacts content` using the resolved artifact id.
 - JSON body: `artifact`, `content`, `content_headers`, `content_text`, `content_base64`
@@ -7217,15 +7387,16 @@ Diagnostic backing-thread bundle: compose one view from read-only thread data an
 Generated Help: threads inspect
 
 - Command ID: `threads.inspect`
-- CLI path: `threads inspect`
+- CLI path: `debug threads inspect`
 - HTTP: `GET /threads/{thread_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Output: Returns `{ thread }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -7234,12 +7405,13 @@ Inputs:
 Local Help: threads inspect
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for agent-facing topic context when you have a topic id. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
-  - `anx threads inspect --thread-id <thread-id>`
-  - `anx threads inspect --state active --full-id`
+  - `anx debug threads inspect --thread-id <thread-id>`
+  - `anx debug threads inspect --state active --full-id`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -7250,7 +7422,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads inspect ... ; anx --json threads inspect ... ; anx threads inspect ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads inspect ... ; anx --json debug threads inspect ... ; anx debug threads inspect ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7262,15 +7434,16 @@ Read-only backing-thread workspace projection: context, inbox, board membership,
 Generated Help: threads workspace
 
 - Command ID: `threads.workspace`
-- CLI path: `threads workspace`
+- CLI path: `debug threads workspace`
 - HTTP: `GET /threads/{thread_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.
 - Output: Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `workspace`
-- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads timeline`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads list`, `debug threads timeline`
 
 Inputs:
   Required:
@@ -7279,12 +7452,13 @@ Inputs:
 Local Help: threads workspace
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for agent-facing topic context. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`
 - Examples:
-  - `anx threads workspace --thread-id <thread-id> --full-id`
-  - `anx threads workspace --state active`
+  - `anx debug threads workspace --thread-id <thread-id> --full-id`
+  - `anx debug threads workspace --state active`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -7295,7 +7469,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads workspace ... ; anx --json threads workspace ... ; anx threads workspace ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug threads workspace ... ; anx --json debug threads workspace ... ; anx debug threads workspace ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7309,6 +7483,7 @@ Generated Help: boards workspace
 - Command ID: `boards.workspace`
 - CLI path: `boards workspace`
 - HTTP: `GET /boards/{board_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load the operator-facing board workspace with cards, docs, and inbox sections.
@@ -7324,6 +7499,7 @@ Inputs:
 Local Help: boards workspace
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - Composition: Resolves a board by typed ref or handle, fetches the projection workspace with per-card thread backing, and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
 - JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
@@ -7350,6 +7526,7 @@ Generated Help: boards cards list
 - Command ID: `boards.cards.list`
 - CLI path: `boards cards list`
 - HTTP: `GET /boards/{board_id}/cards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List cards on one board in canonical order.
@@ -7365,6 +7542,7 @@ Inputs:
 Local Help: boards cards list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List all cards on a board in canonical column order without hydrating thread details.
 - Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with card refs and titles; thread refs are secondary context.
 - JSON body: `board_id`, `cards`
@@ -7390,6 +7568,7 @@ First-run workspace orientation: boards plus compact card/doc/inbox counts.
 Local Help: workspace summary
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: First-run workspace orientation: boards plus compact card/doc/inbox counts.
 - Composition: Local CLI helper that composes existing list reads without changing the core contract. Boards are required; card, document, and inbox counts are best-effort and surface warnings on partial read failures.
 - JSON body: `boards`, `counts`, `generated_at`, optional `warnings`
@@ -7412,6 +7591,7 @@ Revise a durable document from a local file or JSON body; stages a diff proposal
 Local Help: docs revise
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 - Quick start: Flags: `docs revise <doc-ref> --body-file <path>` stages a proposal; add `--apply` to write immediately.
 - Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
@@ -7436,6 +7616,7 @@ Generated Help: docs revise
 - Command ID: `docs.revisions.create`
 - CLI path: `docs revise`
 - HTTP: `POST /docs/{document_id}/revisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append a new immutable revision and advance the document head.
@@ -7475,6 +7656,7 @@ Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or bo
 Local Help: docs trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Quick start: Flags: `docs trash <doc-ref> --reason <text>`; `--from-file <path>` remains the advanced JSON compatibility path.
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; JSON input remains supported for existing automation.
@@ -7495,6 +7677,7 @@ Generated Help: docs trash
 - Command ID: `docs.trash`
 - CLI path: `docs trash`
 - HTTP: `POST /docs/{document_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move a document lineage to trash with an explicit operator reason.
@@ -7526,6 +7709,7 @@ Show the current document content together with authoritative head revision meta
 Local Help: docs content
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Show the current document content together with authoritative head revision metadata.
 - Composition: Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.
 - JSON body: `document`, `revision`, `content`, `status_code`, `headers`
@@ -7550,6 +7734,7 @@ List messages from a Document conversation.
 Local Help: docs messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List messages from a Document conversation.
 - Composition: Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.
 - JSON body: Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.
@@ -7583,6 +7768,7 @@ Post a message to a Document conversation without hand-authoring event JSON.
 Local Help: docs message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Document conversation without hand-authoring event JSON.
 - Quick start: Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.
 - Composition: Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.
@@ -7615,6 +7801,7 @@ Reply to an existing Document message.
 Local Help: docs reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Document message.
 - Quick start: Flags: `docs reply <doc-ref> --to <message-id> --body-file <path>` or `--body <text>`.
 - Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
@@ -7648,13 +7835,14 @@ Render the bundled opinionated ANX agent skill.
 Local Help: meta skill
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Render the bundled opinionated ANX agent skill.
 - Composition: Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.
 - JSON body: `target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`
 - Examples:
-  - `anx meta skill anx`
-  - `anx meta skill anx --write-file ./SKILL.md`
-  - `anx meta skill --target cursor --write-file ./SKILL.md`
+  - `anx debug meta skill anx`
+  - `anx debug meta skill anx --write-file ./SKILL.md`
+  - `anx debug meta skill --target cursor --write-file ./SKILL.md`
 
 Flags:
   <target>                     Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias.
@@ -7665,7 +7853,7 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta skill ... ; anx --json meta skill ... ; anx meta skill ... --json (last two: JSON envelope on stdout)
+  Examples: anx debug meta skill ... ; anx --json debug meta skill ... ; anx debug meta skill ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
@@ -7701,6 +7889,7 @@ Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a
 Local Help: bridge install
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
 - Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory at a pinned git ref (defaults to the running CLI release tag), and writes a thin launcher script.
 - JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
@@ -7730,6 +7919,7 @@ Copy an existing `anx` profile and key into the bridge agent home auth state.
 Local Help: bridge import-auth
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Copy an existing `anx` profile and key into the bridge agent home auth state.
 - Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, stamps agent.toml identity including public key fingerprint, and reconciles wake.toml workspace base URLs.
 - JSON body: `config_path`, `auth_state_path`, `wake_config_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`, `public_key_fingerprint`
@@ -7756,6 +7946,7 @@ Write a bridge runtime config plus an agent home with wake subscriptions.
 Local Help: bridge init-config
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Write a bridge runtime config plus an agent home with wake subscriptions.
 - Composition: Local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used. If --workspace-id is omitted, discovers the durable workspace id from the active profile or core handshake.
 - JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `workspace_id_source`, `handle`, `content`
@@ -7798,6 +7989,7 @@ Discover durable workspace ids from an existing agent wake registration.
 Local Help: bridge workspace-id
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Discover durable workspace ids from an existing agent wake registration.
 - Composition: Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
 - JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
@@ -7822,6 +8014,7 @@ Validate bridge install, config presence, and registration readiness without sta
 Local Help: bridge doctor
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Validate bridge install, config presence, and registration readiness without starting the daemon.
 - Composition: Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.
 - JSON body: `checks`, `registration`, `bridge_binary`, `python`
@@ -7850,6 +8043,7 @@ Start a managed bridge daemon for one config file.
 Local Help: bridge start
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Start a managed bridge daemon for one config file.
 - Composition: Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
@@ -7876,6 +8070,7 @@ Stop a managed bridge daemon for one config file.
 Local Help: bridge stop
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Stop a managed bridge daemon for one config file.
 - Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
 - JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
@@ -7902,6 +8097,7 @@ Restart a managed bridge daemon for one config file.
 Local Help: bridge restart
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Restart a managed bridge daemon for one config file.
 - Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
 - JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
@@ -7930,6 +8126,7 @@ Inspect managed process state for a bridge config.
 Local Help: bridge status
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Inspect managed process state for a bridge config.
 - Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.
 - JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
@@ -7956,6 +8153,7 @@ Read recent log lines for a managed bridge config.
 Local Help: bridge logs
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Read recent log lines for a managed bridge config.
 - Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
 - JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
@@ -7981,6 +8179,7 @@ Scan a folder or zip archive into a normalized inventory with text cache, repo-r
 Local Help: import scan
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - Composition: Pure local filesystem helper. Expands `.zip` inputs, ignores obvious generated junk, fingerprints files, caches readable text, and emits `inventory.jsonl` plus `scan-summary.json`.
 - JSON body: `input`, `scan_root`, `extracted_root`, `inventory`, `file_count`, `counts_by_category`, `counts_by_cluster_hint`, `repo_roots`
@@ -8009,6 +8208,7 @@ Create exact and probable duplicate reports from a scan inventory with conservat
 Local Help: import dedupe
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - Composition: Pure local helper. Uses normalized text hashes for readable content and raw SHA-256 for everything else; exact drops are recommended, probable duplicates are review-only.
 - JSON body: `inventory`, `exact_duplicates`, `probable_duplicates`, `recommended_skip_ids`
@@ -8035,6 +8235,7 @@ Build a conservative import plan that prefers collector threads, hub docs, dedup
 Local Help: import plan
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - Composition: Pure local helper. Classifies inventory items into docs, artifacts, repo bundles, review bundles, and collector/hub structures. It writes `plan.json` plus `plan-preview.md` without sending requests.
 - JSON body: `source_name`, `inventory`, `dedupe`, `principles`, `objects`, `skipped`, `review_bundles`, `notes`
@@ -8064,6 +8265,7 @@ Write payload previews for a plan and optionally execute topic/artifact/doc crea
 Local Help: import apply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
 - Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
 - JSON body: `plan`, `execute`, `results`, `refs`
@@ -8091,6 +8293,7 @@ Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 Local Help: pm serve
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
 - JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
@@ -8119,6 +8322,7 @@ Create a PM conversation and post one human question.
 Local Help: pm ask
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a PM conversation and post one human question.
 - Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
 - JSON body: `conversation`, `turn`
@@ -8148,6 +8352,7 @@ Check PM channel secrets, webhook reachability, and binding state without sendin
 Local Help: pm channels doctor
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
 - Composition: Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.
 - JSON body: `checks`, `ok`
@@ -8173,6 +8378,8 @@ Compose work, a bounded observation page and refresh status using read-only requ
 ```text
 Local Help: work context
 
+Side effect class: read_only
+
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 
 Compose work, a bounded observation page and refresh status using read-only requests.
@@ -8192,6 +8399,8 @@ Inspect last observed, source activity and meaningful progress independently.
 
 ```text
 Local Help: work freshness
+
+Side effect class: read_only
 
 Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
 

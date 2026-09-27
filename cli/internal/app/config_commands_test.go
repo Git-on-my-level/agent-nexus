@@ -24,7 +24,7 @@ func TestConfigUseSetsActiveProfile(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "beta"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(data["active_profile"])) != "beta" {
 		t.Fatalf("unexpected config use payload: %#v", payload)
 	}
@@ -34,7 +34,7 @@ func TestConfigUseSetsActiveProfile(t *testing.T) {
 
 	versionRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "version"})
 	versionPayload := assertEnvelopeOK(t, versionRaw)
-	versionData, _ := versionPayload["data"].(map[string]any)
+	versionData, _ := versionPayload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(versionData["agent"])) != "beta" {
 		t.Fatalf("unexpected version agent: %#v", versionPayload)
 	}
@@ -53,7 +53,7 @@ func TestConfigUseOmitsMultiProfileWarningForSingleProfile(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "solo"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if _, exists := data["warnings"]; exists {
 		t.Fatalf("did not expect warning for one profile: %#v", payload)
 	}
@@ -76,7 +76,7 @@ func TestConfigUseStillSucceedsWhenProfileListAdvisoryFails(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "use", "solo"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(data["active_profile"])) != "solo" {
 		t.Fatalf("unexpected config use payload: %#v", payload)
 	}
@@ -100,7 +100,7 @@ func TestConfigUseNormalizedSubcommandIsConfigLenient(t *testing.T) {
 	assertEnvelopeOK(t, raw)
 	versionRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "version"})
 	versionPayload := assertEnvelopeOK(t, versionRaw)
-	versionData, _ := versionPayload["data"].(map[string]any)
+	versionData, _ := versionPayload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(versionData["agent"])) != "b" {
 		t.Fatalf("unexpected agent: %#v", versionPayload)
 	}
@@ -122,7 +122,7 @@ func TestConfigUseWorksWithMultipleProfilesWithoutPriorDefault(t *testing.T) {
 	assertEnvelopeOK(t, raw)
 	versionRaw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "version"})
 	versionPayload := assertEnvelopeOK(t, versionRaw)
-	versionData, _ := versionPayload["data"].(map[string]any)
+	versionData, _ := versionPayload["result"].(map[string]any)
 	if strings.TrimSpace(anyStr(versionData["agent"])) != "b" {
 		t.Fatalf("unexpected agent: %#v", versionPayload)
 	}
@@ -141,7 +141,7 @@ func TestConfigUnsetClearsDefaultMarker(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "config", "unset"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if cleared, _ := data["cleared"].(bool); !cleared {
 		t.Fatalf("expected cleared=true: %#v", payload)
 	}
@@ -172,9 +172,9 @@ func TestConfigShowRedactsTokens(t *testing.T) {
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--agent", "sec", "config", "show"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
-	if strings.TrimSpace(anyStr(data["access_token"])) != "(redacted)" {
-		t.Fatalf("expected redacted access_token, got %#v", data["access_token"])
+	data, _ := payload["result"].(map[string]any)
+	if _, exposed := data["access_token"]; exposed {
+		t.Fatalf("access_token should be omitted, got %#v", data["access_token"])
 	}
 	rawJSON, _ := json.Marshal(data)
 	if strings.Contains(string(rawJSON), "super-secret") {
@@ -201,10 +201,10 @@ func TestConfigShowTextIncludesPrecedenceAndEnvHints(t *testing.T) {
 	}
 
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--agent", "sec", "config", "show"})
-	if !strings.Contains(raw, "command flags > environment variables > profile/default marker/autodiscovery > built-in defaults") {
+	if !strings.Contains(raw, "result.precedence.0=flags") || !strings.Contains(raw, "result.precedence.1=environment") {
 		t.Fatalf("expected precedence in text output: %s", raw)
 	}
-	if !strings.Contains(raw, "ANX_AGENT") || !strings.Contains(raw, "anx meta doc profiles") {
+	if !strings.Contains(raw, "ANX_AGENT") || !strings.Contains(raw, "result.sources.agent=flag:--agent") {
 		t.Fatalf("expected env hints and docs links in text output: %s", raw)
 	}
 }

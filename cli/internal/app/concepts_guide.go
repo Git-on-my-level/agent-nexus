@@ -92,6 +92,7 @@ func conceptsGuideData() map[string]any {
 		})
 	}
 	return map[string]any{
+		"text":              conceptsGuideText(),
 		"guide_topic":       "concepts",
 		"summary":           "Quick guide to the core ANX primitives and when to use each.",
 		"primitives":        primitives,
