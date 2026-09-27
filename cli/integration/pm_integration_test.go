@@ -14,9 +14,9 @@ import (
 
 func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "worker", "worker."+runToken())
+	h.enrollHost(t, "worker")
 	h.selectPMAgent(t, "worker")
-	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createInviteTokenKind(t, "worker", "human"))
+	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createHumanInviteToken(t))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Synthetic PM approval test", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
 	ref := mustStringPath(t, work.Payload, "result.work.ref")
@@ -61,10 +61,8 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 
 func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.enrollHost(t, "pm")
 	h.selectPMAgent(t, "pm")
-	invite := h.createInviteToken(t, "pm")
-	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
 	script := filepath.Join(t.TempDir(), "fake-harness.sh")
 	body := "#!/bin/sh\n" +
@@ -137,10 +135,8 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 
 func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.enrollHost(t, "pm")
 	h.selectPMAgent(t, "pm")
-	invite := h.createInviteToken(t, "pm")
-	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
 	script := filepath.Join(t.TempDir(), "fail-harness.sh")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho harness exploded >&2\nexit 1\n"), 0o755); err != nil {
@@ -192,7 +188,7 @@ func readFileOrEmpty(path string) string {
 
 func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "reader", "reader."+runToken())
+	h.enrollHost(t, "reader")
 	for i := 0; i < 3; i++ {
 		h.runCLIExpectOK(t, "reader", map[string]any{"request_key": fmt.Sprint("conversation-", i), "title": fmt.Sprint("Synthetic conversation ", i)}, "pm", "conversations", "create", "--from-file", "-")
 	}
@@ -212,8 +208,6 @@ func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	if wrongKind.ExitCode == 0 {
 		t.Fatalf("conversation cursor accepted for decisions: %s", wrongKind.Stdout)
 	}
-	invite := h.createInviteToken(t, "reader")
-	h.registerAgentInvite(t, "other", "other."+runToken(), invite)
 	wrongPrincipal := h.runCLI(t, "other", nil, "pm", "conversations", "list", "--limit", "1", "--cursor", cursor)
 	if wrongPrincipal.ExitCode == 0 {
 		t.Fatalf("cursor crossed principal boundary: %s", wrongPrincipal.Stdout)

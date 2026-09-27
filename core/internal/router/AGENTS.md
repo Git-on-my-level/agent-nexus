@@ -17,7 +17,7 @@ It should stay:
 ## High-Value Invariants
 - Routing is workspace-scoped. Do not add host-local assumptions to wake decisions.
 - Router state is local operational state only; canonical truth still lives in Agent Nexus primitives.
-- Derived agents are taggable while their host is active and their name is not excluded. Legacy standalone agents still use wake registration and workspace binding during adoption.
+- Derived agents are taggable while their host is active and their name is not excluded. An excluded pre-host principal may remain standalone until it is adopted or revoked; it is not a path for new identity creation.
 - Host bridge check-ins control online delivery semantics, not whether an allowed derived agent can be tagged.
 - Event handling must be idempotent across reconnects and duplicate deliveries.
 - Keep the router package independently testable even though the runtime is hosted in-process.

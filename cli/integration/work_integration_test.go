@@ -12,7 +12,7 @@ import (
 // SQLite workspace. All resources and evidence are synthetic test fixtures.
 func TestUnifiedWorkObservationReplayScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "reporter", "reporter."+runToken())
+	h.enrollHost(t, "reporter")
 	board := h.runCLIExpectOK(t, "reporter", map[string]any{"board": map[string]any{"title": "Synthetic unified work", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	boardRef := mustStringPath(t, board.Payload, "result.board.ref")
 	create := map[string]any{"board_ref": boardRef, "title": "Synthetic externally owned commitment", "source": map[string]any{"authority": "github", "connection_id": "synthetic", "native_id": "fixture/repository/issues/1"}}
@@ -82,7 +82,7 @@ func TestUnifiedWorkObservationReplayScenario(t *testing.T) {
 
 func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "owner", "owner."+runToken())
+	h.enrollHost(t, "owner")
 	board := h.runCLIExpectOK(t, "owner", map[string]any{"board": map[string]any{"title": "Synthetic pagination", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	boardRef := mustStringPath(t, board.Payload, "result.board.ref")
 	refs := map[string]bool{}
@@ -121,7 +121,7 @@ func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 	}
 	// A key authenticated in another central workspace must not read or report here.
 	other := newLiveCoreHarness(t)
-	other.registerAgentBootstrap(t, "foreign", "foreign."+runToken())
+	other.enrollHost(t, "foreign")
 	foreign := *other
 	foreign.baseURL = h.baseURL
 	var ref string
@@ -143,9 +143,7 @@ func TestUnifiedWorkPaginationAndWorkspaceAuthorization(t *testing.T) {
 
 func TestSecondMachineCLIObservationDedupSurvivesRestart(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "machine-a", "machine-a."+runToken())
-	invite := h.createInviteToken(t, "machine-a")
-	h.registerAgentInvite(t, "machine-b", "machine-b."+runToken(), invite)
+	h.enrollHost(t, "machine-a")
 	board := h.runCLIExpectOK(t, "machine-a", map[string]any{"board": map[string]any{"title": "Synthetic second machine", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	boardRef := mustStringPath(t, board.Payload, "result.board.ref")
 	work := h.runCLIExpectOK(t, "machine-a", map[string]any{"board_ref": boardRef, "title": "Remote CLI commitment", "source": map[string]any{"authority": "github", "connection_id": "synthetic", "native_id": "fixture/repository/issues/second-machine"}}, "work", "create", "--from-file", "-")

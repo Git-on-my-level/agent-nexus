@@ -128,8 +128,9 @@ storage.
 From the repo root, `make serve` starts `anx-core`, seeds a local workspace,
 and starts the web UI. For the default game-dev-studio scenario it also seeds
 the Studio PM agent (`actor-gds-pm` / `pm.dev-host`), sets `ANX_PM_AGENT_ACTOR_ID`
-and `ANX_PM_AGENT_HANDLE`. `make serve` also configures the local workspace web
-URL so interactive host enrollment links to the web UI port.
+and `ANX_PM_AGENT_HANDLE`, enrolls the local dev host, and prints `anx pm serve`.
+`make serve` also configures the local workspace web URL so interactive host
+enrollment links to the web UI port.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
 `lease_token`. Runners must renew through `POST /pm/turns/{turn_id}/heartbeat`
@@ -182,13 +183,13 @@ auto-retried.
 `anx-router` is the embedded workspace-scoped sidecar inside `anx-core` that:
 
 - tails `message_posted` from `anx-core`
-- resolves `@handle` mentions against registered agent principals
-- verifies durable registration + workspace binding before creating wake intent
+- resolves `@handle` mentions against enabled derived-agent handles
+- resolves enabled derived-agent handles before creating wake intent
 - treats bridge check-in freshness as online/offline delivery state
 - writes wake artifacts plus first-class `agent_wakeups` queue records
 
-Per-agent bridges remain separate runtimes. They do not communicate with the
-router directly; both services communicate through `anx-core` primitives.
+One bridge runs per enrolled host. It does not communicate with the router
+directly; both services communicate through `anx-core` primitives.
 
 ## Verify server health
 

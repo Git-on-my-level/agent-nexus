@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,9 @@ if (build.status !== 0) {
 let mockServer;
 let mockBaseURL;
 if (process.env.ANX_MCP_SMOKE_MOCK === "1") {
+  const mockAnx = join(binDir, "anx-mock-token");
+  writeFileSync(mockAnx, '#!/bin/sh\nprintf \'%s\\n\' \'{"ok":true,"schema_version":2,"result":{"token":"mock-token","agent":{"handle":"mcp-smoke.mock-host"}}}\'\n');
+  chmodSync(mockAnx, 0o700);
   mockServer = http.createServer((req, res) => {
     if (req.headers.authorization !== "Bearer mock-token") {
       res.writeHead(401, { "Content-Type": "application/json" });
@@ -68,14 +71,15 @@ if (process.env.ANX_MCP_SMOKE_MOCK === "1") {
 }
 
 const args = ["--log-level", process.env.ANX_MCP_SMOKE_LOG_LEVEL || "error"];
-if (process.env.ANX_MCP_SMOKE_PROFILE) {
-  args.push("--profile", process.env.ANX_MCP_SMOKE_PROFILE);
+if (process.env.ANX_MCP_SMOKE_MOCK === "1") {
+  args.push("--anx", join(binDir, "anx-mock-token"));
 }
 if (mockBaseURL || process.env.ANX_MCP_SMOKE_BASE_URL || process.env.ANX_BASE_URL) {
   args.push("--base-url", mockBaseURL || process.env.ANX_MCP_SMOKE_BASE_URL || process.env.ANX_BASE_URL);
 }
-if (process.env.ANX_MCP_SMOKE_AGENT || process.env.ANX_AGENT || mockBaseURL) {
-  args.push("--agent", process.env.ANX_MCP_SMOKE_AGENT || process.env.ANX_AGENT || "mcp-smoke");
+const selectedAgent = process.env.ANX_MCP_SMOKE_AS || process.env.ANX_AS || (mockBaseURL ? "mcp-smoke" : "");
+if (selectedAgent) {
+  args.push("--as", selectedAgent);
 }
 
 const child = spawn(binPath, args, {

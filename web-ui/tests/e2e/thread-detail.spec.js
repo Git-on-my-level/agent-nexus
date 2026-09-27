@@ -412,7 +412,7 @@ test("thread detail separates messages from timeline and nests replies", async (
   await expect(
     page
       .locator('[role="tabpanel"]')
-      .getByRole("link", { name: "registered agent" }),
+      .getByRole("link", { name: "agent access" }),
   ).toHaveAttribute("href", /\/o\/local\/w\/local\/access$/);
   await expect(
     page.getByText("Earlier timeline-only message", { exact: true }),

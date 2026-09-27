@@ -88,11 +88,11 @@ These run directories are disposable. Delete old `cli/.tmp/pi-dogfood/<run-id>/`
 The runner also:
 - builds temporary `anx` and `anx-core` binaries
 - starts a managed `anx-core` on a random local port
-- starts that managed core with an ephemeral `ANX_BOOTSTRAP_TOKEN` so seed and principal registration flows run through standard authenticated paths
+- starts that managed core with an ephemeral `ANX_BOOTSTRAP_TOKEN` so the human bootstrap and one-time host enrollment use standard authenticated paths
 - starts managed-core runs with an ephemeral `ANX_BOOTSTRAP_TOKEN`, bootstraps a human for one-time host enrollment, then derives each Pi agent from the shared host key before Pi starts
 - links scenario temp principals to the seeded scenario actors when the CLI/core path supports `--existing-actor-id`, so Access and actor-aware UI reads line up with the scenario cast
 - seeds the core from CLI-owned scenario data under `cli/dogfood/pi/seed/`
-- for continuation chapters, reuses the prior managed core workspace and copies prior agent home directories so auth state and the seeded actors continue cleanly
+- for continuation chapters, reuses the prior managed core workspace and host config so host identity and seeded actors continue cleanly; Pi runtime homes remain separate per agent
 - points Pi at that isolated core via `ANX_BASE_URL`
 
 Constraints enforced by the run workspace:

@@ -379,7 +379,7 @@ export const QA_AUTH_AUDIT = [
     actor_username: QA_HOSTED_ACCOUNT.email,
     actor_agent_id: QA_AUTH_AGENT.agent_id,
     actor_actor_id: QA_AUTH_AGENT.actor_id,
-    invite_id: "oinv_qa_agent_launch",
+    invite_id: "oinv_qa_human_onboarding",
   },
   {
     event_id: "audit_invite_consumed_qa",

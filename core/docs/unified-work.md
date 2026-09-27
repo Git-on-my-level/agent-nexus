@@ -222,8 +222,10 @@ false. Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and
 `ANX_PM_RUNTIME_ENVELOPE_ENFORCED=true` only when an independently enforced
 read-only capability envelope already exists for that actor. The env flag is
 an operator attestation, not the envelope. Optionally `ANX_PM_BASE_URL`.
-Core then checks the selected principal's current wake registration and online
-state. A prompt, directory, or bounded-process wrapper is not isolation.
+Core then checks the selected principal's host relationship and host-bridge
+online state. A pre-host standalone principal still requires its existing
+bridge configuration while adoption remains supported. A prompt, directory, or
+bounded-process wrapper is not isolation.
 Missing or unready providers return unavailable, not canned text.
 GitHub/Multica/SSH source writes stay unavailable until a dedicated authorized
 executor is supplied.

@@ -42,7 +42,7 @@ remains a release gap even if unit tests or connectivity probes pass.
   together? Are unavailable provider, partial coverage, stale source and unknown
   delivery visible? Does a board interaction imply a source action that never
   happened? Are empty inbox and filtered-empty work distinguishable from health?
-- **CLI:** Do usage errors precede auth/profile resolution? Is every nonstreaming
+- **CLI:** Do usage errors precede host/agent resolution? Is every nonstreaming
   JSON result one envelope? Are unknown cursors and partial pages visible? Do
   read commands remain side-effect-free? Is report provenance server-bound?
 

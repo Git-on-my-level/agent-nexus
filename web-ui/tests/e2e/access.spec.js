@@ -184,8 +184,7 @@ test("lists agents under their host and people by name", async ({ page }) => {
   const main = page.getByRole("main");
   await expect(main.locator('[data-host-agent="codex.m5-mbp"]')).toBeVisible();
   await expect(main.getByText("riley@example.com")).toBeVisible();
-  // The derived agent is not repeated as a principal, and no invite form
-  // offers agent registration any more.
+  // The derived agent is not repeated as a principal, and invites stay human-only.
   await expect(main.locator('[data-principal="agent-codex"]')).toHaveCount(0);
   await expect(main.getByText("Standalone agents")).toHaveCount(0);
   await expect(main.getByLabel("Kind")).toHaveCount(0);

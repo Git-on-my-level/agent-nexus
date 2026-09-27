@@ -412,7 +412,7 @@ func shouldAutoAttachAuth(requestPath string) bool {
 		requestPath = "/" + requestPath
 	}
 	switch requestPath {
-	case "/health", "/livez", "/readyz", "/version", "/meta/handshake", "/auth/agents/register", "/auth/token":
+	case "/health", "/livez", "/readyz", "/version", "/meta/handshake", "/auth/token":
 		return false
 	}
 	return true

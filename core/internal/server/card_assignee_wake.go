@@ -11,7 +11,7 @@ import (
 )
 
 // enqueueCardAssigneeWakeBestEffort queues an agent wakeup when a card assignee changes to a
-// registered agent, keyed to the emitted card_created/card_updated lifecycle event.
+// taggable agent, keyed to the emitted card_created/card_updated lifecycle event.
 func enqueueCardAssigneeWakeBestEffort(
 	ctx context.Context,
 	opts handlerOptions,

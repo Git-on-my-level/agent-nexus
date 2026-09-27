@@ -17,7 +17,7 @@ import (
 
 func TestHostHeadlessTokenAndRuns(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "codex", "ignored")
+	h.enrollHost(t, "codex")
 	first := h.runCLIExpectOK(t, "codex", nil, "host", "token", "--as", "codex")
 	second := h.runCLIExpectOK(t, "codex", nil, "host", "token", "--as", "codex")
 	token := mustStringPath(t, first.Payload, "result.token")

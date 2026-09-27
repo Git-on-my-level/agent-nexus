@@ -333,7 +333,7 @@ Access (`/access`, under Settings) is where machines and people get and lose acc
 
 **Recent access events:** auth audit events as sentences with names and host names ("Maya Chen approved m5-mbp", "codex on m5-mbp used anx for the first time"); event ids sit behind a copy button on hover. Eight show first, then more, then older pages.
 
-There is no agent invite form, no pubkey paste and no per-agent wake-registration message. There is no Refresh button: actions re-read what they change.
+Agent identity is managed through host enrollment and host-level exclusions; there are no per-agent enrollment or wake controls. There is no Refresh button: actions re-read what they change.
 
 ### 3.8 Agents
 

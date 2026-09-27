@@ -33,9 +33,10 @@ Config can be passed via flags or env vars:
 `anx-router` is the embedded workspace wake-routing sidecar hosted by
 `anx-core`. It tails workspace `message_posted` events, resolves `@handle`
 mentions, verifies durable registration + workspace binding, and writes a wake
-queue record plus the wake artifact consumed by per-agent bridges.
-Bridge check-ins now control whether agents are online for immediate push
-delivery; offline but registered agents still accumulate durable notifications.
+queue record plus the wake artifact consumed by one host bridge. Agent handles
+are derived under an enrolled host; the host bridge check-in controls whether
+its enabled agents are online for immediate push delivery. Offline agents still
+accumulate durable notifications.
 
 For local development:
 

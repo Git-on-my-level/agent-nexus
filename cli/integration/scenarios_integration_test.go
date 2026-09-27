@@ -64,9 +64,7 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
-	workerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
+	h.enrollHost(t, "coordinator")
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
@@ -144,11 +142,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
-	workerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
-	reviewerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "reviewer", "reviewer."+runID, reviewerInvite)
+	h.enrollHost(t, "coordinator")
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
@@ -340,7 +334,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "investigator", "investigator."+runID)
+	h.enrollHost(t, "investigator")
 
 	artifact := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"artifact": map[string]any{
@@ -544,7 +538,7 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	return h
 }
 
-func (h *liveCoreHarness) registerAgentBootstrap(t *testing.T, agent string, username string) {
+func (h *liveCoreHarness) enrollHost(t *testing.T, agent string) {
 	t.Helper()
 	if h.adminToken != "" {
 		return
@@ -555,19 +549,9 @@ func (h *liveCoreHarness) registerAgentBootstrap(t *testing.T, agent string, use
 	h.runCLIExpectOK(t, agent, nil, "host", "enroll", "--name", "integration-host", "--token", mustStringPath(t, grant, "token"))
 }
 
-func (h *liveCoreHarness) registerAgentInvite(t *testing.T, agent string, username string, inviteToken string) {
+func (h *liveCoreHarness) createHumanInviteToken(t *testing.T) string {
 	t.Helper()
-	// Derived agents are created on first --as token grant.
-}
-
-func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) string {
-	t.Helper()
-	return "derived-agent-needs-no-invite"
-}
-
-func (h *liveCoreHarness) createInviteTokenKind(t *testing.T, issuerAgent, kind string) string {
-	t.Helper()
-	res := h.postCore(t, "/auth/invites", h.adminToken, map[string]any{"kind": kind})
+	res := h.postCore(t, "/auth/invites", h.adminToken, map[string]any{"kind": "human"})
 	return mustStringPath(t, res, "token")
 }
 
@@ -636,15 +620,10 @@ func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName,
 	}
 	var payload struct {
 		Agent struct {
-			AgentID  string `json:"agent_id"`
-			ActorID  string `json:"actor_id"`
-			Username string `json:"username"`
+			AgentID string `json:"agent_id"`
 		} `json:"agent"`
 		Tokens struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			TokenType    string `json:"token_type"`
-			ExpiresIn    int64  `json:"expires_in"`
+			AccessToken string `json:"access_token"`
 		} `json:"tokens"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -654,42 +633,6 @@ func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName,
 		t.Fatalf("passkey register missing fields: %s", raw)
 	}
 	h.humanTokens[agent] = payload.Tokens.AccessToken
-	dir := filepath.Join(h.homeDir, ".config", "anx", "profiles")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	expires := time.Now().UTC().Add(time.Duration(payload.Tokens.ExpiresIn) * time.Second).Format(time.RFC3339Nano)
-	if payload.Tokens.ExpiresIn <= 0 {
-		expires = time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339Nano)
-	}
-	profile := map[string]any{
-		"version":                 1,
-		"agent":                   agent,
-		"base_url":                h.baseURL,
-		"username":                payload.Agent.Username,
-		"agent_id":                payload.Agent.AgentID,
-		"actor_id":                payload.Agent.ActorID,
-		"access_token":            payload.Tokens.AccessToken,
-		"refresh_token":           payload.Tokens.RefreshToken,
-		"token_type":              firstNonEmpty(payload.Tokens.TokenType, "Bearer"),
-		"access_token_expires_at": expires,
-	}
-	encoded, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, agent+".json"), append(encoded, '\n'), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func (h *liveCoreHarness) runCLIExpectOK(t *testing.T, agent string, stdin any, args ...string) cliResult {
