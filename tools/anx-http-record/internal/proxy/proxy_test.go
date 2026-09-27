@@ -83,7 +83,7 @@ func TestRedactsSensitiveHeadersAndJSONBodyKeys(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	req, err := http.NewRequest(http.MethodPost, server.URL+"/auth/agents/register", strings.NewReader(`{"bootstrap_token":"top-secret","name":"casey"}`))
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/auth/passkey/dev/register", strings.NewReader(`{"bootstrap_token":"top-secret","display_name":"Casey"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

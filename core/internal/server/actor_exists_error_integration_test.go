@@ -34,30 +34,9 @@ func TestActorRegistryExistsQueryErrorReturns500(t *testing.T) {
 	})
 	serverURL := env.server.URL
 
-	publicKey, _ := generateKeyPair(t)
-	registerResp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
-		"username":        "exists.error.agent",
-		"public_key":      publicKey,
-		"bootstrap_token": testBootstrapToken,
-	}, "", http.StatusCreated)
-	defer registerResp.Body.Close()
-
-	var registerPayload struct {
-		Agent struct {
-			ActorID string `json:"actor_id"`
-		} `json:"agent"`
-		Tokens struct {
-			AccessToken string `json:"access_token"`
-		} `json:"tokens"`
-	}
-	if err := json.NewDecoder(registerResp.Body).Decode(&registerPayload); err != nil {
-		t.Fatalf("decode register response: %v", err)
-	}
-	actorID := registerPayload.Agent.ActorID
-	token := registerPayload.Tokens.AccessToken
-	if actorID == "" || token == "" {
-		t.Fatalf("unexpected register payload: %#v", registerPayload)
-	}
+	seeded := seedNotificationTestAgent(t, env, "exists-error.agent")
+	actorID := seeded.ActorID
+	token := seeded.AccessToken
 
 	boardResp := postJSONExpectStatusWithAuth(t, serverURL+"/boards", map[string]any{
 		"actor_id": actorID,

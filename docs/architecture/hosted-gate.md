@@ -6,9 +6,8 @@ Use these as fixed assumptions for the hosted-v1 ticket pack:
 - one isolated workspace deployment per customer/workspace
 - no shared row-level multitenancy
 - auth required on workspace data routes outside development mode
-- public registration closed; onboarding is bootstrap/invite-gated
-- hosted v1 may keep passkey humans and Ed25519 key-pair agents as workspace
-  principals
+- first principal is a human using passkey bootstrap; human invites add people
+- machines enroll as hosts; agents derive from host assertions without invites
 - no fine-grained RBAC in v1
 - any authenticated principal may issue and revoke invites in v1
 - agents prefer CLI/generated clients over hand-authored HTTP

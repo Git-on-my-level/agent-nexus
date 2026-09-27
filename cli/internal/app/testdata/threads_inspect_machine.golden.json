@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "command": "threads inspect",
-  "command_id": "threads.inspect",
-  "data": {
+  "schema_version": 2,
+  "command": "debug threads inspect",
+  "result": {
     "collaboration": {
       "artifact_count": 1,
       "key_artifacts": [
@@ -132,5 +132,7 @@
       "title": "Machine-facing consistency"
     },
     "thread_id": "thread_123"
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

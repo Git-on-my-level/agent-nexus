@@ -26,6 +26,7 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"work presence":            {path: "/agents/me/presence", method: "PATCH", body: true, summary: "Set the current derived agent's card and progress note."},
 	"work list":                {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
 	"work get":                 {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
 	"work create":              {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
@@ -81,7 +82,7 @@ func isWorkCommandRoot(root string) bool {
 }
 
 // Parsing is shared by preflight and execution, so malformed requests fail before
-// profile resolution, token refresh, file reads or network activity.
+// identity resolution, token grant, file reads or network activity.
 func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	out := parsedWorkCommand{query: url.Values{}}
 	if len(args) < 2 {
@@ -206,6 +207,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		text, _ := workHelpText(topic)
 		return &commandResult{Text: text, Data: map[string]any{"help_text": text}}, topic, nil
 	}
+	if len(args) >= 2 && args[0] == "work" && args[1] == "presence" {
+		return nil, "work presence", errnorm.Internal("not_implemented", "work presence awaits the derived-agent CLI implementation")
+	}
 	parsed, err := parseWorkCommand(args)
 	if err != nil {
 		return nil, parsed.name, err
@@ -277,9 +281,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
 	}
-	if parsed.name == "pm conversations list" && !cfg.JSON {
-		a.enrichConversationListTurns(ctx, cfg, result)
-	}
 	if parsed.name == "work context" {
 		observationPath := path + "/observations"
 		if len(parsed.query) > 0 {
@@ -329,8 +330,11 @@ func workHelpText(topic string) (string, bool) {
 		b.WriteString("\n\n")
 	} else {
 		fmt.Fprintf(&b, "Local Help: %s\n\n", topic)
+		if exact {
+			fmt.Fprintf(&b, "Side effect class: %s\n\n", commandSideEffectClass(topic))
+		}
 	}
-	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.\n\n")
+	b.WriteString("Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.\n\n")
 	if exact {
 		fmt.Fprintf(&b, "%s\n\nUsage: anx %s", spec.summary, topic)
 		if spec.idFlag != "" {
@@ -853,29 +857,6 @@ func applyPMTurnClaimBody(parsed parsedWorkCommand, cfg config.Resolved, object 
 	runner := firstNonEmpty(parsed.runnerID, anyString(object["runner_id"]), strings.TrimSpace(cfg.ActorID))
 	if runner != "" {
 		object["runner_id"] = runner
-	}
-}
-
-func (a *App) enrichConversationListTurns(ctx context.Context, cfg config.Resolved, result *commandResult) {
-	body := commandResultBody(result)
-	rows, _ := body["items"].([]any)
-	for i, row := range rows {
-		item := asMap(row)
-		if len(conversationLatestTurn(item)) > 0 {
-			continue
-		}
-		id := anyString(item["id"])
-		if id == "" {
-			continue
-		}
-		got, err := a.invokeRawJSON(ctx, cfg, "pm conversations get", "GET", "/pm/conversations/"+url.PathEscape(id)+"?limit=1", nil)
-		if err != nil {
-			continue
-		}
-		if turn := conversationLatestTurn(commandResultBody(got)); len(turn) > 0 {
-			item["latest_turn"] = turn
-			rows[i] = item
-		}
 	}
 }
 

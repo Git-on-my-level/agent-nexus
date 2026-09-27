@@ -1,42 +1,81 @@
 <script>
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { page } from "$app/stores";
   import { beforeNavigate, goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import {
     actorDisplayLabel,
     actorRegistry,
+    agentRegistry,
+    findAgentSummary,
     principalRegistry,
     selectedActorId,
   } from "$lib/actorSession";
   import { initializeAuthSession } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { formatTimestamp } from "$lib/formatDate";
+  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
   import {
     errorMessage,
     humanizeInstants,
     isNexusOwned,
     isSessionExpired,
     readErrorExplanation,
+    sentenceCase,
     taskDetailPath,
     workKey,
   } from "$lib/pm/presentation.js";
   import { navIconPath } from "$lib/icons.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
-  import { INBOX_CATEGORY_LABELS } from "$lib/inboxUtils.js";
+  import { INBOX_CATEGORY_LABELS, splitTypedRef } from "$lib/inboxUtils.js";
   import {
     INBOX_MAILBOXES,
     buildInboxRows,
     filterMailbox,
+    formatWait,
     inboxItemNeedsResponse,
     inboxRowBadge,
+    rowMatchesWorkRef,
+    rowWaitMs,
   } from "$lib/inboxMailbox.js";
+  import {
+    describeUpdateEvent,
+    eventPhrase,
+    eventPhraseParts,
+  } from "$lib/inboxDigest.js";
+  import {
+    invalidateInboxContext,
+    loadInboxContext,
+  } from "$lib/inboxContext.js";
+  import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
+  import { claimInboxCount, publishInboxCount } from "$lib/inboxCount.js";
+  import {
+    applyResponseOverlay,
+    defaultNotifyMode,
+    flushInboxResponse,
+    hasPendingInboxResponse,
+    inboxResponseOverlay,
+    onInboxResponseCommitted,
+    queueInboxResponse,
+    stashInboxRestore,
+    undoInboxResponse,
+  } from "$lib/inboxResponseQueue.js";
+  import { loadInboxSources, mergeInboxItems } from "$lib/inboxSources.js";
+  import {
+    inboxShortcutAction,
+    inboxShortcutList,
+    otherDialogOpen,
+  } from "$lib/inboxShortcuts.js";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import DecisionPanel from "$lib/components/pm/DecisionPanel.svelte";
+  import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
+  import InboxActorName from "$lib/components/inbox/InboxActorName.svelte";
+  import InboxContextStrip from "$lib/components/inbox/InboxContextStrip.svelte";
+  import InboxRespondPanel from "$lib/components/inbox/InboxRespondPanel.svelte";
+  import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
 
   let decisions = $state([]);
   let actions = $state([]);
@@ -52,12 +91,15 @@
   let answer = $state("");
   let choice = $state("");
   let reply = $state("");
+  let chosen = $state("");
+  let helpOpen = $state(false);
   let requestId = 0;
   let selectionRequest = 0;
   let ready = $state(false);
   let truncated = $state(false);
   let receiptsUnavailable = $state(false);
   let noticeElement = $state(null);
+  let detailPane = $state(null);
   // After an action, keyboard focus lands on the outcome, not on <body>.
   $effect(() => {
     if (notice && noticeElement) noticeElement.focus();
@@ -67,13 +109,32 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
-  let mailbox = $derived($page.url.searchParams.get("mailbox") || "needs-you");
+  let mailbox = $derived.by(() => {
+    const value = $page.url.searchParams.get("mailbox") || "";
+    return INBOX_MAILBOXES.some(([key]) => key === value) ? value : "needs-you";
+  });
   let urlItem = $derived($page.url.searchParams.get("item") || "");
+  // "Inbox for this task" links narrow the list to one task.
+  let workRef = $derived(
+    String($page.url.searchParams.get("work_ref") || "").trim(),
+  );
   // Holds the answered row until goto can pin it in the URL. Without this,
   // updating `decisions` moves the row out of the current mailbox and the
   // pane goes empty, which clears the notice.
   let heldItem = $state("");
-  let selectedId = $derived(urlItem || heldItem);
+  // The row the reader chose (by link, key or URL). Below lg the list and
+  // the detail are separate screens; only an explicit choice opens detail.
+  let explicitId = $derived(urlItem || heldItem);
+
+  function actorName(id) {
+    const raw = String(id ?? "").trim();
+    if (!raw) return "";
+    const label = actorDisplayLabel(raw, $actorRegistry, $principalRegistry);
+    // An id that resolves to itself is not a name.
+    return label && label !== raw && label !== raw.replace(/^actor:/, "")
+      ? label
+      : "";
+  }
 
   let rows = $derived(
     buildInboxRows({
@@ -81,18 +142,50 @@
       actions,
       receiptsUnavailable,
       work,
-      inboxItems,
+      inboxItems: applyResponseOverlay(inboxItems, $inboxResponseOverlay, now),
       updates,
       now,
       currentActorId: $selectedActorId || "",
+      actorName,
+      agentName: (id) => findAgentSummary(id, $agentRegistry)?.display_name,
     }),
   );
-  let visible = $derived(filterMailbox(rows, mailbox));
+  let scoped = $derived(
+    workRef ? rows.filter((row) => rowMatchesWorkRef(row, workRef)) : rows,
+  );
+  let visible = $derived(filterMailbox(scoped, mailbox));
   let counts = $derived({
-    "needs-you": filterMailbox(rows, "needs-you").length,
-    watching: filterMailbox(rows, "watching").length,
-    handled: filterMailbox(rows, "handled").length,
+    "needs-you": filterMailbox(scoped, "needs-you").length,
+    watching: filterMailbox(scoped, "watching").length,
+    handled: filterMailbox(scoped, "handled").length,
   });
+  let workRefTitle = $derived.by(() => {
+    if (!workRef) return "";
+    const task = work.find(
+      (item) => workKey(item) === workRef || item?.handle === workRef,
+    );
+    return String(task?.title || "").trim() || "this task";
+  });
+
+  // Without an explicit choice the pane shows the first row and stays on it
+  // while the list refreshes underneath, so a live update never swaps the
+  // item the reader is typing a reply to.
+  let stickyId = $state("");
+  let stickyMailbox = $state("");
+  $effect(() => {
+    const list = visible;
+    const box = mailbox;
+    if (!ready) return;
+    untrack(() => {
+      const keep =
+        box === stickyMailbox &&
+        stickyId &&
+        list.some((row) => row.id === stickyId);
+      if (!keep) stickyId = list[0]?.id || "";
+      stickyMailbox = box;
+    });
+  });
+  let selectedId = $derived(explicitId || stickyId);
   let selected = $derived(
     selectedId ? rows.find((row) => row.id === selectedId) || null : null,
   );
@@ -116,6 +209,8 @@
     visible.findIndex((item) => item.id === selected?.id),
   );
 
+  // Restores a draft after Undo, once the restored row is selected again.
+  let restoreDraft = null;
   let previousSelectedId = $state("");
   $effect(() => {
     const id = selected?.id || "";
@@ -125,8 +220,14 @@
       answer = "";
       choice = "";
       reply = "";
+      chosen = "";
       notice = "";
       supersededHref = "";
+      if (restoreDraft && restoreDraft.id === id) {
+        reply = restoreDraft.reply;
+        chosen = restoreDraft.chosen;
+        restoreDraft = null;
+      }
     });
   });
   $effect(() => {
@@ -136,32 +237,84 @@
     if (id) void untrack(() => loadSelected(id));
   });
 
+  // Context strip: what the selected item blocks and the latest note.
+  let context = $state(null);
+  let contextFor = $state("");
+  let contextLoading = $state(false);
+  let contextEpoch = $state(0);
+  $effect(() => {
+    const id = selectedId;
+    void contextEpoch;
+    const row = untrack(() => selected);
+    if (!row || row.kind !== "inbox") {
+      context = null;
+      contextFor = "";
+      contextLoading = false;
+      return;
+    }
+    if (contextFor !== id) {
+      context = null;
+      contextFor = id;
+    }
+    contextLoading = true;
+    void loadInboxContext(row.item, row.subject).then(
+      (value) => {
+        if (contextFor !== id) return;
+        context = value;
+        contextLoading = false;
+      },
+      () => {
+        if (contextFor === id) contextLoading = false;
+      },
+    );
+  });
+  const OPERATOR_SUBJECTS = new Set(["card", "document", "topic"]);
+  let contextSubject = $derived.by(() => {
+    const subject = selected?.kind === "inbox" ? selected.subject : null;
+    // Threads and boards are not operator nouns; they get no subject line.
+    if (!subject || !OPERATOR_SUBJECTS.has(subject.kind)) return null;
+    const document = context?.document;
+    if (subject.kind === "document") {
+      return {
+        title: String(document?.title || subject.title),
+        status: document?.head_revision_number
+          ? `v${document.head_revision_number}`
+          : "",
+      };
+    }
+    return { title: subject.title, status: subject.phaseLabel };
+  });
+  let contextRelation = $derived.by(() => {
+    const kind = String(selected?.category ?? "").toLowerCase();
+    const subjectKind = selected?.subject?.kind;
+    if (kind === "review") return "Review of";
+    if (subjectKind === "card" && inboxItemNeedsResponse(selected?.item))
+      return "Blocks";
+    return "On";
+  });
+
+  function subjectHref(subject) {
+    if (!subject?.ref) return "";
+    const { prefix, id } = splitTypedRef(subject.ref);
+    if (prefix === "card")
+      return workspaceHref(`/tasks/${encodeURIComponent(subject.ref)}`);
+    if (prefix === "document")
+      return workspaceHref(`/docs/${encodeURIComponent(id)}`);
+    return "";
+  }
+
   function href(changes) {
     const params = new URLSearchParams($page.url.searchParams);
     for (const [key, value] of Object.entries(changes)) {
       if (value) params.set(key, value);
       else params.delete(key);
     }
-    return `${workspaceHref("/inbox")}?${params}`;
+    const query = params.toString();
+    return query
+      ? `${workspaceHref("/inbox")}?${query}`
+      : workspaceHref("/inbox");
   }
 
-  /**
-   * The attention surface must not hide an obligation on page two. Follow
-   * cursors up to a bound; past it, say so instead of claiming completeness.
-   */
-  async function listAllPages(fetchPage, key, maxPages = 8) {
-    const collected = [];
-    let cursor;
-    let more = false;
-    for (let page = 0; page < maxPages; page += 1) {
-      const result = await fetchPage(cursor);
-      collected.push(...(Array.isArray(result?.[key]) ? result[key] : []));
-      cursor = result?.next_cursor || "";
-      more = Boolean(cursor) || result?.has_more === true;
-      if (!cursor) break;
-    }
-    return { [key]: collected, has_more: more && Boolean(cursor) };
-  }
   async function loadSelected(id) {
     const ticket = ++selectionRequest;
     try {
@@ -205,43 +358,37 @@
       cancel();
   });
 
-  async function load() {
+  /**
+   * Loads every source. A quiet load (live update, a committed response)
+   * keeps the list on screen and never clears an error the reader has not
+   * seen resolved.
+   */
+  let loadErrorText = $state("");
+  async function load({ quiet = false } = {}) {
     const ticket = ++requestId;
-    loading = true;
-    error = "";
-    actionError = "";
+    if (!quiet) {
+      loading = true;
+      error = "";
+      loadErrorText = "";
+      actionError = "";
+    }
     try {
       await initializeAuthSession({
         fetchFn: globalThis.fetch.bind(globalThis),
         workspaceSlug: $page.params.workspace,
         authDriver: "inbox",
       });
-      const results = await Promise.allSettled([
-        listAllPages(
-          (cursor) => coreClient.listPmDecisions({ limit: 50, cursor }),
-          "items",
-        ),
-        listAllPages(
-          (cursor) => coreClient.listPmActions({ limit: 50, cursor }),
-          "items",
-        ),
-        listAllPages(
-          (cursor) => coreClient.listWork({ limit: 50, cursor }),
-          "work",
-        ),
-        coreClient.listInboxItems({ status: "open", limit: 50 }),
-        coreClient.listInboxItems({ status: "completed", limit: 50 }),
-        coreClient.getHomeUnread(),
-      ]);
+      const results = await loadInboxSources();
+      if (ticket !== requestId) return;
+      let nextError = "";
       // A refused session will refuse the retry too; offer sign-in instead.
       sessionExpired = results.some(
         (result) =>
           result.status === "rejected" && isSessionExpired(result.reason),
       );
-      if (ticket !== requestId) return;
       if (results[0].status === "fulfilled") {
         decisions = results[0].value.items || [];
-      } else error = errorMessage(results[0].reason);
+      } else nextError = errorMessage(results[0].reason);
       // Each list is one page. Counts drawn from partial pages are lower
       // bounds, and the reader must be told so rather than shown a total.
       truncated = results.some(
@@ -256,45 +403,67 @@
       } else if (sessionExpired) {
         // The receipts are not in doubt, the session is; keep the last
         // classification and let the banner say what to do.
-        error = error || errorMessage(results[1].reason);
+        nextError = nextError || errorMessage(results[1].reason);
       } else {
         // Without receipts, an answered decision cannot be classified; say
         // so rather than quietly filing everything under Watching.
         receiptsUnavailable = true;
-        error = error || errorMessage(results[1].reason);
+        nextError = nextError || errorMessage(results[1].reason);
       }
       if (results[2].status === "fulfilled") {
         work = results[2].value.work || [];
       } else {
-        error = error || errorMessage(results[2].reason);
+        nextError = nextError || errorMessage(results[2].reason);
       }
       const openItems =
         results[3].status === "fulfilled" ? results[3].value.items || [] : [];
       const completedItems =
         results[4].status === "fulfilled" ? results[4].value.items || [] : [];
-      inboxItems = [
-        ...new Map(
-          [...openItems, ...completedItems]
-            .filter((item) => item?.id)
-            .map((item) => [item.id, item]),
-        ).values(),
-      ];
+      if (!quiet || results[3].status === "fulfilled") {
+        inboxItems = mergeInboxItems(openItems, completedItems);
+      }
       if (results[3].status === "rejected") {
-        error = error || errorMessage(results[3].reason);
+        nextError = nextError || errorMessage(results[3].reason);
       } else if (results[4].status === "rejected") {
-        error = error || errorMessage(results[4].reason);
+        nextError = nextError || errorMessage(results[4].reason);
       }
       if (results[5].status === "fulfilled") {
         updates = results[5].value.groups || [];
       }
+      if (nextError) {
+        error = nextError;
+        loadErrorText = nextError;
+      } else if (quiet && loadErrorText && error === loadErrorText) {
+        // The failure a live reload recovered from is no longer true.
+        error = "";
+        loadErrorText = "";
+      }
     } catch (err) {
-      if (ticket === requestId) error = errorMessage(err);
+      if (ticket === requestId && !quiet) error = errorMessage(err);
     } finally {
       if (ticket === requestId) {
         loading = false;
         ready = true;
       }
     }
+  }
+
+  // Live updates: any workspace event may move a row, so reload quietly,
+  // coalescing bursts. A reload never runs under an action in flight.
+  const LIVE_REFRESH_DELAY_MS = 600;
+  let liveTimer = null;
+  function scheduleLiveRefresh() {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => {
+      liveTimer = null;
+      if (busy) {
+        scheduleLiveRefresh();
+        return;
+      }
+      invalidateInboxContext();
+      contextEpoch += 1;
+      void load({ quiet: true });
+    }, LIVE_REFRESH_DELAY_MS);
   }
 
   async function recordAnswer(event) {
@@ -525,75 +694,177 @@
     }
   }
 
-  async function dismissInbox(item) {
-    if (!item?.id || busy) return;
-    busy = true;
-    error = "";
-    try {
-      await coreClient.respondInboxItem(item.id, {
-        response_text: "Acknowledged from inbox",
-        notify_mode: "none",
-      });
-      inboxItems = inboxItems.map((entry) =>
-        entry.id === item.id
-          ? {
-              ...entry,
-              status: "completed",
-              responded_at: new Date().toISOString(),
-            }
-          : entry,
-      );
-      notice = "Acknowledged. Removed from your inbox only.";
-    } catch (err) {
-      error = errorMessage(err);
-    } finally {
-      busy = false;
-    }
-  }
-
   async function markUpdateRead(group) {
     const ref = String(group?.group_ref ?? "").trim();
     if (!ref) return;
+    const next = neighbourId(`update:${ref}`);
     try {
       await coreClient.markHomeRead({ group_ref: ref });
       updates = updates.filter((entry) => entry.group_ref !== ref);
+      if (explicitId === `update:${ref}`) await select(next);
     } catch (err) {
       error = errorMessage(err);
     }
   }
 
+  /** The row to land on once `id` leaves the list: the next, else the previous. */
+  function neighbourId(id) {
+    const index = visible.findIndex((row) => row.id === id);
+    if (index < 0) return "";
+    return visible[index + 1]?.id || visible[index - 1]?.id || "";
+  }
+
+  async function select(id, { scroll = false } = {}) {
+    await goto(href({ item: id || "" }), {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+    if (!scroll || !id) return;
+    await tick();
+    const escaped = globalThis.CSS?.escape ? CSS.escape(id) : id;
+    document
+      .querySelector(`[data-inbox-row="${escaped}"]`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }
+
   /**
-   * Sends one response and moves the row to Handled, without leaving the pane.
-   * Same call the standalone item route makes; the proposals are the whole
-   * point of the item, so they belong where the item is read.
+   * Answers an inbox item behind the undo toast and moves on to the next
+   * row. The committed call is the one the standalone page makes: the text,
+   * and the requester notified when core can reach them.
    */
-  async function respondInbox(item, text) {
+  function respondInbox(
+    row,
+    text,
+    { acknowledge = false, proposal = "", outcome = "answered" } = {},
+  ) {
+    const item = row?.item;
     const body = String(text ?? "").trim();
     if (!item?.id || !body || busy) return;
-    busy = true;
-    error = "";
-    try {
-      await coreClient.respondInboxItem(item.id, {
-        response_text: body,
-        notify_mode: "none",
-      });
-      inboxItems = inboxItems.map((entry) =>
-        entry.id === item.id
-          ? {
-              ...entry,
-              status: "completed",
-              responded_at: new Date().toISOString(),
-              response_text: body,
-            }
-          : entry,
-      );
-      reply = "";
-      notice = "Response sent.";
-    } catch (err) {
-      error = errorMessage(err);
-    } finally {
-      busy = false;
+    const who = row.requester?.name || "";
+    const request = acknowledge
+      ? { response_text: body, outcome: "acknowledged", notify_mode: "none" }
+      : { response_text: body, outcome, notify_mode: defaultNotifyMode(item) };
+    const next = neighbourId(row.id);
+    const draft = reply;
+    queueInboxResponse({
+      itemId: item.id,
+      request,
+      message: acknowledge
+        ? "Acknowledged"
+        : who
+          ? `Sent to ${who}`
+          : "Response sent",
+      restore: {
+        origin: "pane",
+        rowId: row.id,
+        mailbox,
+        reply: acknowledge || proposal ? draft : body,
+        chosen: proposal,
+      },
+    });
+    reply = "";
+    chosen = "";
+    void select(next, { scroll: true });
+  }
+
+  function acknowledgeInbox(row) {
+    respondInbox(row, "Acknowledged from inbox", { acknowledge: true });
+  }
+
+  function undoLastResponse() {
+    const entry = undoInboxResponse();
+    if (!entry) return;
+    const restore = entry.restore || {};
+    if (restore.origin === "item" && restore.href) {
+      stashInboxRestore(entry.itemId, restore);
+      void goto(restore.href);
+      return;
     }
+    const rowId = restore.rowId || "";
+    if (!rowId) return;
+    if (selected?.id === rowId) {
+      reply = restore.reply || "";
+      chosen = restore.chosen || "";
+    } else {
+      restoreDraft = {
+        id: rowId,
+        reply: restore.reply || "",
+        chosen: restore.chosen || "",
+      };
+    }
+    void goto(href({ mailbox: restore.mailbox || "needs-you", item: rowId }), {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
+  }
+
+  function paneElement(selector) {
+    return detailPane?.querySelector(selector) || null;
+  }
+
+  function handleKeydown(event) {
+    const shortcut = inboxShortcutAction(event, {
+      helpOpen,
+      modalOpen: !helpOpen && otherDialogOpen(),
+    });
+    if (!shortcut) return;
+    switch (shortcut.type) {
+      case "help":
+        helpOpen = true;
+        break;
+      case "close-help":
+        helpOpen = false;
+        break;
+      case "undo":
+        // Nothing waiting: leave ⌘Z to the browser.
+        if (!hasPendingInboxResponse()) return;
+        undoLastResponse();
+        break;
+      case "next":
+      case "previous": {
+        if (!visible.length) return;
+        const step = shortcut.type === "next" ? 1 : -1;
+        const index =
+          selectedIndex < 0
+            ? 0
+            : Math.min(visible.length - 1, Math.max(0, selectedIndex + step));
+        void select(visible[index].id, { scroll: true });
+        break;
+      }
+      case "proposal": {
+        const button = paneElement(
+          `[data-inbox-proposal="${shortcut.index}"]:not([disabled])`,
+        );
+        if (!button) return;
+        button.click();
+        break;
+      }
+      case "reply": {
+        const field = paneElement("textarea:not([disabled])");
+        if (!field) return;
+        field.focus();
+        break;
+      }
+      case "done": {
+        const control = paneElement(
+          '[data-inbox-shortcut="done"]:not([disabled])',
+        );
+        if (!control) return;
+        control.click();
+        break;
+      }
+      case "open": {
+        const link = paneElement('a[data-inbox-shortcut="open"]');
+        if (!link) return;
+        link.click();
+        break;
+      }
+      default:
+        return;
+    }
+    event.preventDefault();
   }
 
   function inboxKindLabel(row) {
@@ -616,6 +887,36 @@
     return observed ? formatTimestamp(observed) : "never";
   }
 
+  /** "3h 12m", and whether it is long enough to colour. */
+  function waitFor(row) {
+    const ms = rowWaitMs(row, now);
+    return {
+      text: formatWait(ms),
+      long: Number.isFinite(ms) && ms >= 60 * 60 * 1000,
+    };
+  }
+
+  function updateEvents(group) {
+    return (Array.isArray(group?.events) ? group.events : [])
+      .slice(0, 12)
+      .map((event) => ({
+        event,
+        described: describeUpdateEvent(event, {
+          titleFor: (ref) =>
+            work.find((item) => workKey(item) === ref)?.title || "",
+        }),
+      }));
+  }
+
+  function eventHref(described) {
+    const { prefix, id } = splitTypedRef(described?.objectRef);
+    if (prefix === "card")
+      return workspaceHref(`/tasks/${encodeURIComponent(described.objectRef)}`);
+    if (prefix === "document")
+      return workspaceHref(`/docs/${encodeURIComponent(id)}`);
+    return "";
+  }
+
   // A receipt that is still moving (pending, sending, unknown) is refreshed
   // on its own; nothing else on the page changes without the reader.
   const RECEIPT_IN_FLIGHT = new Set(["pending_delivery", "sending", "unknown"]);
@@ -624,8 +925,22 @@
       return;
     void refreshReceipt();
   }
+
+  // The sidebar count is this page's Needs you tab while the page is open.
+  $effect(() => {
+    if (!ready) return;
+    const count = rows.filter((row) => row.mailbox === "needs-you").length;
+    publishInboxCount($page.params.workspace, count, truncated);
+  });
+
   onMount(() => {
     void load();
+    const releaseCount = claimInboxCount();
+    const stopLive = liveWorkspaceEvents({
+      client: coreClient,
+      onChange: () => scheduleLiveRefresh(),
+    });
+    const stopCommitted = onInboxResponseCommitted(() => scheduleLiveRefresh());
     const timer = setInterval(() => {
       now = Date.now();
       refreshIfInFlight();
@@ -638,13 +953,26 @@
       requestId++;
       selectionRequest++;
       clearInterval(timer);
+      clearTimeout(liveTimer);
+      stopLive();
+      stopCommitted();
+      releaseCount();
       document.removeEventListener("visibilitychange", onVisible);
     };
   });
 </script>
 
 <svelte:window
+  onkeydown={handleKeydown}
   onbeforeunload={(event) => {
+    // A response inside its undo window goes out now rather than being lost
+    // with the tab; the prompt gives it time to land.
+    if (hasPendingInboxResponse()) {
+      void flushInboxResponse();
+      event.preventDefault();
+      event.returnValue = "";
+      return;
+    }
     if (answer.trim()) {
       event.preventDefault();
       event.returnValue = "";
@@ -676,9 +1004,6 @@
         </svg>
       </button>
       <a class="ui-btn-secondary" href={workspaceHref("/pm")}>Ask PM</a>
-      <button class="ui-btn-secondary" onclick={load} disabled={loading || busy}
-        >{loading ? "Loading inbox…" : "Reload"}</button
-      >
     {/snippet}
   </WorkspacePageHeader>
   <nav class="flex flex-wrap items-center gap-1" aria-label="Inbox mailbox">
@@ -694,6 +1019,21 @@
           >{/if}</a
       >
     {/each}
+    {#if workRef}
+      <span
+        class="ml-1 inline-flex max-w-full items-center gap-1.5 rounded-md border border-line px-2 py-1 text-micro text-fg-muted"
+        data-inbox-work-filter
+      >
+        <span class="min-w-0 truncate"
+          >Only <span class="text-fg">{workRefTitle}</span></span
+        >
+        <a
+          class="shrink-0 text-fg-subtle hover:text-fg"
+          href={href({ work_ref: "", item: "" })}
+          aria-label="Show the whole inbox">×</a
+        >
+      </span>
+    {/if}
     {#if truncated}
       <span class="ml-2 text-micro text-fg-subtle"
         >Not everything is loaded; the counts are lower bounds.</span
@@ -728,11 +1068,14 @@
       Loading inbox…
     </p>
   {:else}
+    {@const showDetail = Boolean(selectedId)}
     <div
-      class="grid overflow-hidden rounded-md border border-line bg-panel lg:min-h-[30rem] lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]"
+      class="grid overflow-hidden rounded-md border border-line bg-panel lg:min-h-[30rem] {showDetail
+        ? 'lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]'
+        : ''}"
     >
       <section
-        class="min-w-0 border-line lg:border-r {selectedId
+        class="min-w-0 border-line {showDetail ? 'lg:border-r' : ''} {explicitId
           ? 'hidden lg:block'
           : ''}"
         aria-label="Inbox list"
@@ -740,6 +1083,7 @@
         <ul class="divide-y divide-line-subtle">
           {#each visible as row (row.id)}
             {@const badge = inboxRowBadge(row, now)}
+            {@const wait = row.mailbox === "needs-you" ? waitFor(row) : null}
             <li>
               <a
                 class="flex h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 {selectedId ===
@@ -768,9 +1112,22 @@
                   class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
                 >
                   <span class="min-w-0 flex-1 truncate"
-                    >{row.source || row.kind}{#if row.requesterLabel}{" "}· from {row.requesterLabel}{/if}</span
+                    >{#if row.kind === "inbox" && row.requesterLabel}<span
+                        class="text-fg">{row.requesterLabel}</span
+                      >{#if row.source}{" "}· {row.source}{/if}{:else}{row.source ||
+                        row.kind}{/if}</span
                   >
-                  {#if row.time}
+                  {#if wait?.text}
+                    <span
+                      class="shrink-0 tabular-nums {wait.long
+                        ? 'text-warn-text'
+                        : ''}"
+                      title={row.waitingSince
+                        ? `Waiting since ${formatAbsoluteDateTime(row.waitingSince)}`
+                        : undefined}
+                      data-inbox-wait>{wait.text}</span
+                    >
+                  {:else if row.time}
                     <time class="shrink-0 tabular-nums" datetime={row.time}
                       >{formatTimestamp(row.time)}</time
                     >
@@ -804,234 +1161,399 @@
           {/each}
         </ul>
       </section>
-      <section
-        class="min-w-0 {selectedId ? '' : 'hidden lg:block'}"
-        aria-label="Selected inbox item"
-      >
-        <div
-          class="flex items-center gap-3 border-b border-line-subtle px-4 py-2 text-micro {selectedId
-            ? ''
-            : 'hidden'}"
+      {#if showDetail}
+        <section
+          class="flex min-w-0 flex-col {explicitId ? '' : 'hidden lg:flex'}"
+          aria-label="Selected inbox item"
+          bind:this={detailPane}
         >
-          <a class="text-accent-text lg:hidden" href={href({ item: "" })}
-            >← List</a
+          <div
+            class="flex items-center gap-3 border-b border-line-subtle px-4 py-2 text-micro"
           >
-          {#if selectedIndex > 0}
-            <a
-              class="text-fg-muted hover:text-fg"
-              href={href({ item: visible[selectedIndex - 1].id })}>Previous</a
+            <a class="text-accent-text lg:hidden" href={href({ item: "" })}
+              >← List</a
             >
-          {/if}
-          {#if selectedIndex >= 0 && selectedIndex < visible.length - 1}
-            <a
-              class="text-fg-muted hover:text-fg"
-              href={href({ item: visible[selectedIndex + 1].id })}>Next</a
-            >
-          {/if}
+            {#if selectedIndex > 0}
+              <a
+                class="text-fg-muted hover:text-fg"
+                href={href({ item: visible[selectedIndex - 1].id })}
+                aria-keyshortcuts="K"
+                title="Previous (K)">Previous</a
+              >
+            {/if}
+            {#if selectedIndex >= 0 && selectedIndex < visible.length - 1}
+              <a
+                class="text-fg-muted hover:text-fg"
+                href={href({ item: visible[selectedIndex + 1].id })}
+                aria-keyshortcuts="J"
+                title="Next (J)">Next</a
+              >
+            {/if}
 
-          <span class="ml-auto shrink-0 tabular-nums text-fg-subtle"
-            >{selectedIndex >= 0
-              ? `${selectedIndex + 1} of ${visible.length}`
-              : ""}</span
-          >
-        </div>
-        {#if selected?.kind === "decision"}
-          <DecisionPanel
-            selected={selectedDecision}
-            taskTitle={selectedTaskTitle}
-            work={selectedWork}
-            {action}
-            {busyWith}
-            actorLabel={(id) =>
-              id
-                ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
-                : ""}
-            currentActorId={$selectedActorId || ""}
-            pmHref={workspaceHref("/pm")}
-            replacement={selectedDecision?.superseded_by
-              ? decisions.find(
-                  (item) => item.id === selectedDecision.superseded_by,
-                ) || null
-              : null}
-            workHref={workspaceHref(
-              taskDetailPath({ ref: selectedDecision.work_ref }),
-            )}
-            {busy}
-            {actionError}
-            bind:answer
-            bind:choice
-            onAnswer={recordAnswer}
-            onDeliver={deliver}
-            onReconcile={reconcile}
-            onAcknowledge={acknowledge}
-            onRefreshReceipt={refreshReceipt}
-          />
-        {:else if selected?.kind === "task"}
-          {@const taskItem = selected.item}
-          {@const blockers = taskBlockers(taskItem)}
-          <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
-              {selected.title}
-            </h2>
-            {#if blockers.length}
-              <div>
-                <p class="ui-label">Blocked by</p>
-                <ul
-                  class="space-y-1 text-meta text-fg [overflow-wrap:anywhere]"
-                >
-                  {#each blockers as blocker}
-                    <li>{blocker}</li>
-                  {/each}
-                </ul>
-              </div>
-            {/if}
-            {#if taskItem?.next_action}
-              <p class="text-meta text-fg [overflow-wrap:anywhere]">
-                {#if taskItem.next_actor}<span class="text-fg-muted"
-                    >{taskItem.next_actor} —
-                  </span>{/if}{taskItem.next_action}
-              </p>
-            {/if}
-            <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
-              Last checked {taskLastChecked(
-                taskItem,
-              )}{#if taskItem?.refresh?.last_error?.message}
-                <span class="text-warn-text">
-                  · {humanizeInstants(
-                    readErrorExplanation(taskItem.refresh.last_error),
-                  )}</span
-                >{/if}
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <a
-                class="ui-btn-primary"
-                href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(selected.ref)}`}
-                >Ask PM about this</a
-              >
-              <a
-                class="ui-btn-secondary"
-                href={workspaceHref(taskDetailPath(taskItem))}>Open task</a
-              >
-            </div>
+            <span class="ml-auto shrink-0 tabular-nums text-fg-subtle"
+              >{selectedIndex >= 0
+                ? `${selectedIndex + 1} of ${visible.length}`
+                : ""}</span
+            >
           </div>
-        {:else if selected?.kind === "inbox"}
-          <div class="space-y-4 p-4 sm:p-5">
-            <div class="flex flex-wrap items-center gap-2">
-              {#if inboxKindLabel(selected)}
-                <span class="ui-label mb-0">{inboxKindLabel(selected)}</span>
-              {/if}
-              {#if selected.severity}
-                <SignalBadge
-                  tone={String(selected.severity).toLowerCase() === "critical"
-                    ? "danger"
-                    : "warn"}>{selected.severity}</SignalBadge
-                >
-              {/if}
-              {#if selected.requesterLabel}
-                <span
-                  class="min-w-0 text-micro text-fg-muted [overflow-wrap:anywhere]"
-                  >from {selected.requesterLabel}</span
-                >
-              {/if}
-            </div>
-            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
-              {selected.title}
-            </h2>
-            {#if selected.body}
-              <p
-                class="whitespace-pre-wrap text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
-              >
-                {selected.body}
-              </p>
-            {/if}
-            {#if inboxItemNeedsResponse(selected.item)}
-              {#if selected.responseProposals.length}
-                <div>
-                  <p class="ui-label">Send one of these</p>
-                  <div class="flex flex-wrap gap-2">
-                    {#each selected.responseProposals as proposal}
-                      <button
-                        class="ui-btn-secondary max-w-full [overflow-wrap:anywhere]"
-                        onclick={() => respondInbox(selected.item, proposal)}
-                        disabled={busy}
-                        type="button">{proposal}</button
-                      >
-                    {/each}
+          <div class="min-w-0 flex-1">
+            {#if selected?.kind === "decision"}
+              <DecisionPanel
+                selected={selectedDecision}
+                taskTitle={selectedTaskTitle}
+                work={selectedWork}
+                {action}
+                {busyWith}
+                actorLabel={(id) =>
+                  id
+                    ? actorDisplayLabel(id, $actorRegistry, $principalRegistry)
+                    : ""}
+                currentActorId={$selectedActorId || ""}
+                pmHref={workspaceHref("/pm")}
+                replacement={selectedDecision?.superseded_by
+                  ? decisions.find(
+                      (item) => item.id === selectedDecision.superseded_by,
+                    ) || null
+                  : null}
+                workHref={workspaceHref(
+                  taskDetailPath({ ref: selectedDecision.work_ref }),
+                )}
+                {busy}
+                {actionError}
+                bind:answer
+                bind:choice
+                onAnswer={recordAnswer}
+                onDeliver={deliver}
+                onReconcile={reconcile}
+                onAcknowledge={acknowledge}
+                onRefreshReceipt={refreshReceipt}
+              />
+            {:else if selected?.kind === "task"}
+              {@const taskItem = selected.item}
+              {@const blockers = taskBlockers(taskItem)}
+              {@const wait =
+                selected.mailbox === "needs-you" ? waitFor(selected) : null}
+              <div class="space-y-4 p-4 sm:p-5">
+                {#if wait?.text}
+                  <p class="text-micro text-fg-muted">
+                    Blocked for <span
+                      class="font-medium {wait.long
+                        ? 'text-warn-text'
+                        : 'text-fg'}">{wait.text}</span
+                    >
+                  </p>
+                {/if}
+                <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+                  {selected.title}
+                </h2>
+                {#if blockers.length}
+                  <div>
+                    <p class="ui-label">Blocked by</p>
+                    <ul
+                      class="space-y-1 text-meta text-fg [overflow-wrap:anywhere]"
+                    >
+                      {#each blockers as blocker}
+                        <li>{blocker}</li>
+                      {/each}
+                    </ul>
                   </div>
-                </div>
-              {/if}
-              <form
-                class="space-y-2"
-                onsubmit={(event) => {
-                  event.preventDefault();
-                  void respondInbox(selected.item, reply);
-                }}
-              >
-                <label class="ui-label" for="inbox-reply">Reply</label>
-                <textarea
-                  id="inbox-reply"
-                  class="ui-input min-h-20"
-                  bind:value={reply}
-                  placeholder="Reply…"
-                ></textarea>
+                {/if}
+                {#if taskItem?.next_action}
+                  <p class="text-meta text-fg [overflow-wrap:anywhere]">
+                    {#if taskItem.next_actor}<span class="text-fg-muted"
+                        >{actorName(taskItem.next_actor) || taskItem.next_actor} —
+                      </span>{/if}{taskItem.next_action}
+                  </p>
+                {/if}
+                {#if !isNexusOwned(taskItem)}
+                  <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
+                    Last checked {taskLastChecked(
+                      taskItem,
+                    )}{#if taskItem?.refresh?.last_error?.message}
+                      <span class="text-warn-text">
+                        · {humanizeInstants(
+                          readErrorExplanation(taskItem.refresh.last_error),
+                        )}</span
+                      >{/if}
+                  </p>
+                {/if}
                 <div class="flex flex-wrap gap-2">
-                  <button
+                  <a
                     class="ui-btn-primary"
-                    type="submit"
-                    disabled={busy || !reply.trim()}>Send reply</button
+                    href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(selected.ref)}`}
+                    >Ask PM about this</a
                   >
                   <a
                     class="ui-btn-secondary"
+                    href={workspaceHref(taskDetailPath(taskItem))}
+                    data-inbox-shortcut="open">Open task</a
+                  >
+                </div>
+              </div>
+            {:else if selected?.kind === "inbox"}
+              {@const needsResponse = inboxItemNeedsResponse(selected.item)}
+              {@const wait = needsResponse ? waitFor(selected) : null}
+              <div class="space-y-4 p-4 sm:p-5">
+                <div
+                  class="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-muted"
+                >
+                  {#if inboxKindLabel(selected)}
+                    <span class="ui-label mb-0">{inboxKindLabel(selected)}</span
+                    >
+                  {/if}
+                  {#if selected.severity}
+                    <SignalBadge
+                      tone={String(selected.severity).toLowerCase() ===
+                      "critical"
+                        ? "danger"
+                        : "warn"}>{sentenceCase(selected.severity)}</SignalBadge
+                    >
+                  {/if}
+                  {#if needsResponse}
+                    <span class="min-w-0 [overflow-wrap:anywhere]"
+                      ><InboxActorName
+                        name={selected.requester?.name}
+                        id={selected.requester?.id}
+                      />
+                      {#if wait?.text}has been blocked for <span
+                          class="font-medium {wait.long
+                            ? 'text-warn-text'
+                            : 'text-fg'}"
+                          title={`Asked ${formatAbsoluteDateTime(selected.waitingSince)}`}
+                          data-inbox-blocked-for>{wait.text}</span
+                        >{:else}is waiting on you{/if}</span
+                    >
+                  {:else}
+                    <span class="min-w-0 [overflow-wrap:anywhere]"
+                      >from <InboxActorName
+                        name={selected.requester?.name}
+                        id={selected.requester?.id}
+                      /></span
+                    >
+                  {/if}
+                </div>
+                <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+                  {selected.title}
+                </h2>
+                <InboxContextStrip
+                  relation={contextRelation}
+                  subject={contextSubject}
+                  subjectHref={subjectHref(selected.subject)}
+                  note={context?.note || null}
+                  noteAuthor={context?.note
+                    ? actorName(context.note.actorId) ||
+                      (context.note.byRequester
+                        ? selected.requester?.name || ""
+                        : "")
+                    : ""}
+                  loading={contextLoading && !context}
+                  presenceActorId={selected.requester?.id || ""}
+                />
+                {#if selected.body}
+                  <p
+                    class="whitespace-pre-wrap text-meta leading-relaxed text-fg [overflow-wrap:anywhere]"
+                  >
+                    {selected.body}
+                  </p>
+                {/if}
+                {#if needsResponse}
+                  <InboxRespondPanel
+                    kind={selected.category}
+                    proposals={selected.responseProposals}
+                    bind:draft={reply}
+                    {chosen}
+                    {busy}
+                    onSend={(text, outcome) =>
+                      respondInbox(selected, text, {
+                        outcome,
+                        proposal: selected.responseProposals.includes(text)
+                          ? text
+                          : "",
+                      })}
+                    onAcknowledge={() => acknowledgeInbox(selected)}
+                  >
+                    {#snippet after()}
+                      <a
+                        class="ui-btn-secondary"
+                        href={workspaceHref(
+                          `/inbox/${encodeURIComponent(selected.item.id)}`,
+                        )}>Open item</a
+                      >
+                    {/snippet}
+                  </InboxRespondPanel>
+                {:else}
+                  <div
+                    class="space-y-1 rounded-md border border-line-subtle bg-bg-soft px-3 py-2"
+                    data-inbox-answer
+                  >
+                    <p class="text-micro text-fg-muted">
+                      {#if selected.responder?.id && selected.responder.id === $selectedActorId}You
+                        answered{:else if selected.responder}Answered by <InboxActorName
+                          name={selected.responder.name}
+                          id={selected.responder.id}
+                        />{:else}Answered{/if}{#if selected.item?.responded_at}{" "}<time
+                          datetime={selected.item.responded_at}
+                          >{formatTimestamp(selected.item.responded_at)}</time
+                        >{/if}
+                    </p>
+                    {#if selected.item?.response_text}
+                      <p
+                        class="whitespace-pre-wrap text-meta text-fg [overflow-wrap:anywhere]"
+                      >
+                        {selected.item.response_text}
+                      </p>
+                    {/if}
+                  </div>
+                  <a
+                    class="ui-btn-secondary inline-flex"
                     href={workspaceHref(
                       `/inbox/${encodeURIComponent(selected.item.id)}`,
                     )}>Open item</a
                   >
+                {/if}
+              </div>
+            {:else if selected?.kind === "update"}
+              {@const entries = updateEvents(selected.item)}
+              <div class="space-y-4 p-4 sm:p-5">
+                <div class="space-y-1">
+                  <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
+                    {selected.title}
+                  </h2>
+                  <p class="text-meta text-fg-muted [overflow-wrap:anywhere]">
+                    {selected.source}
+                  </p>
+                </div>
+                {#if entries.length}
+                  <ol class="space-y-2" data-inbox-update-events>
+                    {#each entries as { event, described } (event.id)}
+                      {@const link = eventHref(described)}
+                      <li class="text-meta text-fg-muted">
+                        <p class="[overflow-wrap:anywhere]">
+                          <span class="font-medium text-fg"
+                            >{described.actorId &&
+                            described.actorId === $selectedActorId
+                              ? "You"
+                              : actorName(described.actorId) || "Someone"}</span
+                          >
+                          {#if link && described.objectTitle}
+                            {@const parts = eventPhraseParts(described)}
+                            {parts.before}<a
+                              class="text-fg hover:underline"
+                              href={link}>{parts.object}</a
+                            >{parts.after}
+                          {:else}
+                            {eventPhrase(described)}
+                          {/if}
+                          <span class="text-fg-subtle">
+                            ·
+                            <time datetime={described.ts}
+                              >{formatTimestamp(described.ts)}</time
+                            ></span
+                          >
+                        </p>
+                        {#if described.excerpt}
+                          <p
+                            class="mt-0.5 line-clamp-2 border-l-2 border-line pl-2 text-micro [overflow-wrap:anywhere]"
+                          >
+                            {described.excerpt}
+                          </p>
+                        {/if}
+                      </li>
+                    {/each}
+                  </ol>
+                  {#if (Number(selected.count) || 0) > entries.length}
+                    <p class="text-micro text-fg-subtle">
+                      {Number(selected.count) - entries.length} more not shown.
+                      <a
+                        class="ui-prose-link"
+                        href={`${workspaceHref("/events")}?q=${encodeURIComponent(selected.ref || "")}`}
+                        >Full history</a
+                      >
+                    </p>
+                  {/if}
+                {/if}
+                <div class="flex flex-wrap gap-2">
                   <button
                     class="ui-btn-secondary"
-                    onclick={() => dismissInbox(selected.item)}
-                    disabled={busy}
-                    type="button">Acknowledge</button
+                    type="button"
+                    data-inbox-shortcut="done"
+                    aria-keyshortcuts="E"
+                    title="Mark read (E)"
+                    onclick={() => markUpdateRead(selected.item)}
+                    >Mark read</button
                   >
                 </div>
-              </form>
-            {:else}
-              <a
-                class="ui-btn-secondary inline-flex"
-                href={workspaceHref(
-                  `/inbox/${encodeURIComponent(selected.item.id)}`,
-                )}>Open item</a
-              >
+              </div>
+            {:else if explicitId}
+              <p class="p-6 text-meta text-fg-muted">
+                This item is not in the loaded mailbox.
+              </p>
             {/if}
           </div>
-        {:else if selected?.kind === "update"}
-          <div class="space-y-4 p-4 sm:p-5">
-            <h2 class="text-subtitle text-fg [overflow-wrap:anywhere]">
-              {selected.title}
-            </h2>
-            <p class="text-meta text-fg-muted [overflow-wrap:anywhere]">
-              {selected.count || 0} updates since you last looked{#if selected.item?.newest_event?.summary}.
-                Newest: {selected.item.newest_event.summary}{/if}
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <a
-                class="ui-btn-secondary"
-                href={`${workspaceHref("/events")}?q=${encodeURIComponent(selected.ref || "")}`}
-                >Open in audit log</a
+          {#if selected}
+            {@const proposalCount =
+              selected.kind === "inbox" && inboxItemNeedsResponse(selected.item)
+                ? Math.min(5, selected.responseProposals.length)
+                : 0}
+            {@const canOpen =
+              selected.kind === "task" ||
+              (selected.kind === "decision" &&
+                !selectedDecision?.work_missing) ||
+              (selected.kind === "inbox" &&
+                Boolean(contextSubject && subjectHref(selected.subject)))}
+            <p
+              class="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-subtle px-4 py-2 text-micro text-fg-subtle lg:flex"
+              data-inbox-key-hints
+            >
+              {#if proposalCount}
+                <span
+                  ><kbd class="inbox-kbd"
+                    >{proposalCount > 1 ? `1–${proposalCount}` : "1"}</kbd
+                  > send</span
+                >
+                <span><kbd class="inbox-kbd">R</kbd> reply</span>
+                <span><kbd class="inbox-kbd">E</kbd> acknowledge</span>
+              {:else if selected.kind === "update"}
+                <span><kbd class="inbox-kbd">E</kbd> mark read</span>
+              {/if}
+              <span
+                ><kbd class="inbox-kbd">J</kbd>/<kbd class="inbox-kbd">K</kbd> move</span
               >
+              {#if canOpen}
+                <span><kbd class="inbox-kbd">O</kbd> open</span>
+              {/if}
               <button
-                class="ui-btn-secondary"
-                onclick={() => markUpdateRead(selected.item)}>Mark read</button
+                class="ml-auto hover:text-fg"
+                type="button"
+                onclick={() => (helpOpen = true)}
+                ><kbd class="inbox-kbd">?</kbd> all shortcuts</button
               >
-            </div>
-          </div>
-        {:else if selectedId || visible.length}
-          <p class="p-6 text-meta text-fg-muted">
-            {selectedId
-              ? "This item is not in the loaded mailbox."
-              : "Choose an item."}
-          </p>
-        {/if}
-      </section>
+            </p>
+          {/if}
+        </section>
+      {/if}
     </div>
   {/if}
+  <KeyboardShortcutsDialog
+    bind:open={helpOpen}
+    shortcuts={inboxShortcutList()}
+    title="Inbox shortcuts"
+  />
+  <InboxUndoToast onUndo={undoLastResponse} />
 </WorkspacePageShell>
+
+<style>
+  .inbox-kbd {
+    display: inline-block;
+    min-width: 1rem;
+    padding: 0 0.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--fg-muted);
+  }
+</style>

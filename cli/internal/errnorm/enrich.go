@@ -821,10 +821,9 @@ func enrichPatchNotSupportedMessage(msg string) (string, map[string]any) {
 }
 
 func enrichAgentRevoked() (string, map[string]any) {
-	return "This agent was revoked on the server; revoked principals cannot be reactivated. Register a new agent profile with `anx auth register` (new username/handle), then use that profile for this workspace.",
+	return "This agent was revoked on the server; ask a human auth-admin to review host enrollment and agent access.",
 		map[string]any{
-			"kind":         "agent_revoked",
-			"register_cli": "anx auth register",
+			"kind": "agent_revoked",
 		}
 }
 
@@ -974,18 +973,17 @@ func enrichKeyMismatch(httpStatus int, msg string) (string, map[string]any) {
 		if httpStatus != 401 {
 			return "", nil
 		}
-		return "The server rejected your agent key assertion (profile keys do not match this core or the registration is stale). Run `anx auth token-status`, then `anx auth rotate` for this `--agent` profile, or `anx auth register` if this core expects a fresh registration. When multiple profiles exist, pass `--agent` explicitly.",
+		return "The server rejected the key assertion. Run `anx doctor` to check this host's key, then ask a human auth-admin to re-enroll the host if its key changed.",
 			map[string]any{
-				"kind":       "key_mismatch",
-				"reason":     "key_assertion_failed",
-				"check_cli":  "anx auth token-status",
-				"rotate_cli": "anx auth rotate",
+				"kind":      "key_mismatch",
+				"reason":    "key_assertion_failed",
+				"check_cli": "anx doctor",
 			}
 	case "actor_id does not match authenticated principal":
 		if httpStatus != 403 {
 			return "", nil
 		}
-		return "The request uses an actor_id that does not match the authenticated profile. Use the actor_id from `anx auth whoami`, or select a different `--agent` profile that owns that actor_id.",
+		return "The request uses an actor_id that does not match the derived agent. Use the actor_id from `anx auth whoami`, or select the correct `--as` agent.",
 			map[string]any{
 				"kind":      "key_mismatch",
 				"reason":    "actor_id_mismatch",
@@ -1011,26 +1009,22 @@ func enrichAuth(code string, httpStatus int, msg string) (string, map[string]any
 }
 
 func wakeProofRequiredHintRecovery(httpStatus int) (string, map[string]any) {
-	hint := "The hosted workspace is asleep and this route cannot wake it directly. If this agent has a local profile, run `anx auth token-status`, then `anx auth whoami` to refresh via `/auth/token`; if the key is stale, run `anx auth rotate`. If token recovery fails with `invalid_token`, `key_mismatch`, or `agent_revoked`, use the hosted dashboard or an auth-admin invite to re-register."
+	hint := "The hosted workspace is asleep and this route cannot wake it directly. Run `anx auth whoami` to refresh the derived-agent token. If host assertion fails, ask a human auth-admin to review enrollment."
 	return hint, map[string]any{
 		"kind":             "hosted_wake_recovery",
 		"status":           httpStatus,
-		"check_cli":        "anx auth token-status",
 		"refresh_cli":      "anx auth whoami",
-		"rotate_cli":       "anx auth rotate",
-		"re_register_cli":  "anx auth register",
 		"recovery_route":   "/auth/token",
 		"blocked_route":    "current request",
-		"operator_surface": "hosted dashboard or auth-admin invite",
+		"operator_surface": "hosted dashboard or auth-admin enrollment",
 	}
 }
 
 func authHintRecovery(httpStatus int) (string, map[string]any) {
-	hint := "Authentication failed or the bearer token is no longer valid. Run `anx auth token-status` (use `--agent <profile>` if you use multiple profiles). If the token is expired or invalid, run `anx auth rotate` for that profile, or re-register with `anx auth register` if needed."
+	hint := "Authentication failed or the bearer token is no longer valid. Run `anx --as <name> auth whoami` to verify this host and derived agent. Ask a human auth-admin to review enrollment if assertion fails."
 	return hint, map[string]any{
-		"kind":       "auth_refresh",
-		"status":     httpStatus,
-		"check_cli":  "anx auth token-status",
-		"rotate_cli": "anx auth rotate",
+		"kind":      "auth_refresh",
+		"status":    httpStatus,
+		"check_cli": "anx --as <name> auth whoami",
 	}
 }

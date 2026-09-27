@@ -4,13 +4,13 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `163`
-- Baseline-allowed required-field gaps: `124`
-- Missing recommended examples: `145`
+- Command operations: `181`
+- Baseline-allowed required-field gaps: `120`
+- Missing recommended examples: `163`
 
 ## Baseline gap counts
 
-- `x-anx-agent-notes`: `115`
+- `x-anx-agent-notes`: `111`
 - `x-anx-cli-path`: `3`
 - `x-anx-concepts`: `1`
 - `x-anx-error-codes`: `4`
@@ -26,9 +26,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `agent.notifications.list` `GET /agent-notifications` missing `x-anx-agent-notes`
 - `agent.notifications.read` `POST /agent-notifications/read` missing `x-anx-agent-notes`
 - `agents.me.get` `GET /agents/me` missing `x-anx-agent-notes`
-- `agents.me.keys.rotate` `POST /agents/me/keys/rotate` missing `x-anx-agent-notes`
-- `agents.me.patch` `PATCH /agents/me` missing `x-anx-agent-notes`
-- `agents.me.revoke` `POST /agents/me/revoke` missing `x-anx-agent-notes`
 - `artifacts.archive` `POST /artifacts/{artifact_id}/archive` missing `x-anx-agent-notes`
 - `artifacts.content` `GET /artifacts/{artifact_id}/content` missing `x-anx-agent-notes`
 - `artifacts.create` `POST /artifacts` missing `x-anx-agent-notes`
@@ -38,7 +35,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `artifacts.restore` `POST /artifacts/{artifact_id}/restore` missing `x-anx-agent-notes`
 - `artifacts.trash` `POST /artifacts/{artifact_id}/trash` missing `x-anx-agent-notes`
 - `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive` missing `x-anx-agent-notes`
-- `auth.agents.register` `POST /auth/agents/register` missing `x-anx-agent-notes`
 - `auth.audit.list` `GET /auth/audit` missing `x-anx-agent-notes`
 - `auth.bootstrap.status` `GET /auth/bootstrap/status` missing `x-anx-agent-notes`
 - `auth.bootstrap.status` `GET /auth/bootstrap/status` missing `x-anx-error-codes`
@@ -151,10 +147,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - `agent.notifications.dismiss` `POST /agent-notifications/dismiss`
 - `agent.notifications.list` `GET /agent-notifications`
 - `agent.notifications.read` `POST /agent-notifications/read`
+- `agents.get` `GET /agents/{agent_id}`
+- `agents.list` `GET /agents`
 - `agents.me.get` `GET /agents/me`
-- `agents.me.keys.rotate` `POST /agents/me/keys/rotate`
-- `agents.me.patch` `PATCH /agents/me`
-- `agents.me.revoke` `POST /agents/me/revoke`
+- `agents.me.presence` `PATCH /agents/me/presence`
+- `agents.stream` `GET /stream/agents`
 - `artifacts.archive` `POST /artifacts/{artifact_id}/archive`
 - `artifacts.attachments.create` `POST /artifacts/attachments`
 - `artifacts.content` `GET /artifacts/{artifact_id}/content`
@@ -165,7 +162,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `artifacts.restore` `POST /artifacts/{artifact_id}/restore`
 - `artifacts.trash` `POST /artifacts/{artifact_id}/trash`
 - `artifacts.unarchive` `POST /artifacts/{artifact_id}/unarchive`
-- `auth.agents.register` `POST /auth/agents/register`
 - `auth.audit.list` `GET /auth/audit`
 - `auth.bootstrap.status` `GET /auth/bootstrap/status`
 - `auth.invites.create` `POST /auth/invites`
@@ -218,6 +214,21 @@ Generated from `contracts/anx-openapi.yaml`.
 - `events.unarchive` `POST /events/{event_id}/unarchive`
 - `home.read` `POST /home/read`
 - `home.unread` `GET /home/unread`
+- `hosts.bridge.check_in` `POST /hosts/{host_id}/bridge/check-in`
+- `hosts.enroll.approve` `POST /auth/hosts/enrollments/{enrollment_id}/approve`
+- `hosts.enroll.complete` `POST /auth/hosts/enrollments/{enrollment_id}/complete`
+- `hosts.enroll.deny` `POST /auth/hosts/enrollments/{enrollment_id}/deny`
+- `hosts.enroll.headless` `POST /auth/hosts/enrollments/headless`
+- `hosts.enroll.pending` `GET /auth/hosts/enrollments/pending`
+- `hosts.enroll.poll` `GET /auth/hosts/enrollments/{enrollment_id}`
+- `hosts.enroll.start` `POST /auth/hosts/enrollments`
+- `hosts.get` `GET /hosts/{host_id}`
+- `hosts.list` `GET /hosts`
+- `hosts.patch` `PATCH /hosts/{host_id}`
+- `hosts.revoke` `DELETE /hosts/{host_id}`
+- `hosts.tokens.create` `POST /auth/hosts/enrollment-tokens`
+- `hosts.tokens.list` `GET /auth/hosts/enrollment-tokens`
+- `hosts.tokens.revoke` `POST /auth/hosts/enrollment-tokens/{token_id}/revoke`
 - `inbox.get` `GET /inbox/{inbox_id}`
 - `inbox.list` `GET /inbox`
 - `inbox.respond` `POST /inbox/{inbox_id}/respond`
@@ -259,6 +270,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - `pm.turns.heartbeat` `POST /pm/turns/{turn_id}/heartbeat`
 - `pm.turns.release` `POST /pm/turns/{turn_id}/release`
 - `ref_edges.list` `GET /ref-edges`
+- `runs.get` `GET /runs/{run_id}`
+- `runs.list` `GET /runs`
+- `runs.upsert` `POST /runs`
 - `secrets.create` `POST /secrets`
 - `secrets.delete` `DELETE /secrets/{secret_id}`
 - `secrets.list` `GET /secrets`

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { computeWorkspaceShellIdentity } from "../../src/lib/workspaceShellIdentity.js";
 
 describe("computeWorkspaceShellIdentity", () => {
-  it("prefers control plane display name with workspace username as secondary", () => {
+  it("prefers control plane display name and hides a machine-minted handle", () => {
     const out = computeWorkspaceShellIdentity({
       hostedMode: true,
       hostedAccount: {
@@ -14,7 +14,7 @@ describe("computeWorkspaceShellIdentity", () => {
       authenticatedAgent: { username: "external.abc123" },
     });
     expect(out.primaryLabel).toBe("Alex Example");
-    expect(out.secondaryLabel).toBe("external.abc123");
+    expect(out.secondaryLabel).toBe("");
     expect(out.initials).toBe("AE");
   });
 
@@ -26,7 +26,17 @@ describe("computeWorkspaceShellIdentity", () => {
       authenticatedAgent: { username: "external.x" },
     });
     expect(out.primaryLabel).toBe("pat@example.com");
-    expect(out.secondaryLabel).toBe("external.x");
+    expect(out.secondaryLabel).toBe("");
+  });
+
+  it("keeps a person-chosen workspace username as secondary", () => {
+    const out = computeWorkspaceShellIdentity({
+      hostedMode: true,
+      hostedAccount: { display_name: "Alex Example" },
+      selectedActorName: "alex",
+      authenticatedAgent: { username: "alex" },
+    });
+    expect(out.secondaryLabel).toBe("alex");
   });
 
   it("omits secondary when CP primary matches workspace username", () => {

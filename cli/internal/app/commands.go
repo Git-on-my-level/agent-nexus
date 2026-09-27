@@ -7,12 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"agent-nexus-cli/internal/authcli"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
@@ -20,8 +18,30 @@ import (
 )
 
 func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved) (string, *commandResult, error) {
+	return a.runCommandWithDebug(ctx, args, cfg, false)
+}
+
+func isDiagnosticGroup(group string) bool {
+	switch group {
+	case "threads", "events", "ref-edges", "derived", "actors", "inbox", "meta":
+		return true
+	}
+	return false
+}
+
+func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config.Resolved, debug bool) (string, *commandResult, error) {
 	if len(args) == 0 {
 		return "root", nil, errnorm.Usage("command_required", "a command is required")
+	}
+	if args[0] == "debug" {
+		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
+			return "debug", nil, errnorm.Usage("unknown_subcommand", "unknown debug group")
+		}
+		name, result, err := a.runCommandWithDebug(ctx, args[1:], cfg, true)
+		return "debug " + name, result, err
+	}
+	if isDiagnosticGroup(args[0]) && !debug {
+		return args[0], nil, errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
 	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
 		args = rewritten
@@ -32,6 +52,22 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 			return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
 		}
 	}
+	if args[0] == "orient" {
+		result, err := a.runOrient(ctx, args[1:], cfg)
+		return "orient", result, err
+	}
+	if args[0] == "work" && len(args) >= 2 && isDailyWorkVerb(args[1]) {
+		result, err := a.runDailyWork(ctx, args[1], args[2:], cfg)
+		return "work " + args[1], result, err
+	}
+	if args[0] == "ask" || args[0] == "review" || args[0] == "escalate" {
+		result, err := a.runHumanAttentionCommand(ctx, args[0], args[1:], cfg)
+		return args[0], result, err
+	}
+	if args[0] == "await" {
+		result, err := a.runAwait(ctx, args[1:], cfg)
+		return "await", result, err
+	}
 	if isWorkCommandRoot(args[0]) {
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err
@@ -41,7 +77,7 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		result, err := a.runVersion(cfg)
 		return "version", result, err
 	case "doctor":
-		result, err := a.runDoctor(ctx, cfg)
+		result, err := a.runHostDoctor(ctx, cfg)
 		return "doctor", result, err
 	case "update":
 		result, err := a.runUpdate(ctx, args[1:], cfg)
@@ -51,6 +87,12 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return name, result, err
 	case "auth":
 		result, name, err := a.runAuth(ctx, args[1:], cfg)
+		return name, result, err
+	case "host":
+		result, name, err := a.runHost(ctx, args[1:], cfg)
+		return name, result, err
+	case "runs":
+		result, name, err := a.runRuns(ctx, args[1:], cfg)
 		return name, result, err
 	case "config":
 		result, name, err := a.runConfig(ctx, args[1:], cfg)
@@ -72,9 +114,6 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return name, result, err
 	case "provenance":
 		result, name, err := a.runProvenanceCommand(ctx, args[1:], cfg)
-		return name, result, err
-	case "human":
-		result, name, err := a.runHumanCommand(ctx, args[1:], cfg)
 		return name, result, err
 	case "secret":
 		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)
@@ -122,6 +161,10 @@ func (a *App) runCommand(ctx context.Context, args []string, cfg config.Resolved
 		return "api call", result, err
 	case "help", "--help", "-h":
 		if len(args) > 1 {
+			if len(args) == 2 && args[1] == "--all" {
+				text := a.rootUsageTextAll()
+				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
+			}
 			topic := strings.Join(args[1:], " ")
 			if text, ok := helpTopicText(topic); ok {
 				return "help", &commandResult{Text: text, Data: map[string]any{"help_text": text}}, nil
@@ -169,175 +212,19 @@ type doctorCheck struct {
 	DurationMS int64  `json:"duration_ms"`
 }
 
-func (a *App) runDoctor(ctx context.Context, cfg config.Resolved) (*commandResult, error) {
-	checks := make([]doctorCheck, 0, 4)
-	hasFailure := false
-
-	addCheck := func(name string, fn func() (bool, string, error)) {
-		started := time.Now()
-		ok, message, err := fn()
-		if err != nil {
-			ok = false
-			if strings.TrimSpace(message) == "" {
-				message = err.Error()
-			}
-		}
-		if !ok {
-			hasFailure = true
-		}
-		checks = append(checks, doctorCheck{Name: name, OK: ok, Message: message, DurationMS: time.Since(started).Milliseconds()})
-	}
-
-	addCheck("profile_path", func() (bool, string, error) {
-		_, err := os.Stat(cfg.ProfilePath)
-		if err == nil {
-			return true, "profile loaded from " + cfg.ProfilePath, nil
-		}
-		if os.IsNotExist(err) {
-			return true, "profile file not found; using defaults/env/flags", nil
-		}
-		return false, "", err
-	})
-
-	addCheck("base_url", func() (bool, string, error) {
-		parsed, err := url.Parse(cfg.BaseURL)
-		if err != nil {
-			return false, "", err
-		}
-		if parsed.Scheme == "" || parsed.Host == "" {
-			return false, "base url must include scheme and host", nil
-		}
-		return true, "base url parsed", nil
-	})
-
-	addCheck("auth_recovery", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		_, err := authcli.New(cfg).EnsureAccessToken(callCtx)
-		if err == nil {
-			return true, "local auth profile has usable access token material or refreshed via /auth/token", nil
-		}
-		normalized := errnorm.Normalize(err)
-		if normalized == nil {
-			return false, "", err
-		}
-		switch strings.TrimSpace(normalized.Code) {
-		case "profile_not_found":
-			return true, "no local auth profile; auth recovery is unavailable until registration", nil
-		case "profile_invalid":
-			return false, "profile is missing agent_id/key_id; re-register or select the correct --agent profile", nil
-		case "key_load_failed", "key_invalid":
-			return false, "profile key material is missing or invalid; restore the private key, rotate if you still have a valid token, or re-register", nil
-		case "invalid_token":
-			return false, "auth recovery reached /auth/token but local refresh/assertion material is invalid; run `anx auth rotate` or re-register with an invite", nil
-		case "key_mismatch":
-			return false, "auth recovery reached /auth/token but the server rejected the key assertion; run `anx auth rotate` if possible or re-register with an invite", nil
-		case "agent_revoked":
-			return false, "local profile is revoked; register a new agent profile with an invite", nil
-		case "wake_proof_required":
-			return false, "hosted workspace wake still blocked /auth/token; update the hosted control plane or use the web dashboard/admin recovery path", nil
-		default:
-			return false, firstNonEmpty(strings.TrimSpace(normalized.Hint), normalized.Error()), nil
-		}
-	})
-
-	client, err := httpclient.New(cfg)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
-	}
-
-	addCheck("core_health", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/readyz"})
-		if callErr != nil {
-			return false, "", callErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return false, doctorHTTPFailureMessage("health", resp), nil
-		}
-		return true, "core health endpoint reachable", nil
-	})
-
-	addCheck("core_handshake", func() (bool, string, error) {
-		callCtx, cancel := httpclient.WithTimeout(ctx, cfg.Timeout)
-		defer cancel()
-		resp, callErr := client.RawCall(callCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/meta/handshake"})
-		if callErr != nil {
-			return false, "", callErr
-		}
-		if resp.StatusCode != http.StatusOK {
-			return false, doctorHTTPFailureMessage("handshake", resp), nil
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(resp.Body, &payload); err != nil {
-			return false, "invalid JSON handshake response", err
-		}
-		if _, ok := payload["min_cli_version"]; !ok {
-			return false, "handshake response missing min_cli_version", nil
-		}
-		base := strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
-		if base == "" {
-			base = "(base-url)"
-		}
-		return true, fmt.Sprintf("handshake metadata available (GET %s/meta/handshake; not under /v1/...)", base), nil
-	})
-
-	summary := map[string]any{
-		"base_url": cfg.BaseURL,
-		"agent":    cfg.Agent,
-		"checks":   checks,
-	}
-	textLines := make([]string, 0, len(checks)+1)
-	textLines = append(textLines, fmt.Sprintf("Doctor checks for %s", cfg.BaseURL))
-	for _, check := range checks {
-		state := "PASS"
-		if !check.OK {
-			state = "FAIL"
-		}
-		textLines = append(textLines, fmt.Sprintf("[%s] %s (%dms): %s", state, check.Name, check.DurationMS, check.Message))
-	}
-
-	result := &commandResult{Data: summary, Text: strings.Join(textLines, "\n")}
-	if hasFailure {
-		return result, errnorm.WithDetails(errnorm.Local("doctor_failed", "doctor found failing checks"), summary)
-	}
-	return result, nil
-}
-
-func doctorHTTPFailureMessage(label string, resp httpclient.RawResponse) string {
-	base := fmt.Sprintf("%s status %d", label, resp.StatusCode)
-	normalized := errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-	if normalized == nil {
-		return base
-	}
-	parts := []string{base}
-	if code := strings.TrimSpace(normalized.Code); code != "" && code != "remote_error" {
-		parts = append(parts, "code="+code)
-	}
-	if msg := strings.TrimSpace(normalized.Message); msg != "" && !strings.HasPrefix(msg, "request failed with status") {
-		parts = append(parts, msg)
-	}
-	if hint := strings.TrimSpace(normalized.Hint); hint != "" {
-		parts = append(parts, "Hint: "+hint)
-	}
-	return strings.Join(parts, " — ")
-}
-
 func apiCallUsageText() string {
 	return strings.TrimSpace(`Local Help: api call
 
 Perform an arbitrary HTTP request against the configured core base URL.
 
 Usage:
-  anx api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value] [--raw]
+  anx api call [--method <method>] [--path <path>] [<method> <path>] [--from-file <file>] [--header key:value]
 
 Flags:
   --method <method>     HTTP method (default GET).
   --path <path>         Request path or absolute URL.
   --from-file <path>    Request body from file (stdin otherwise when needed).
   --header key:value    Repeatable request header.
-  --raw                 Write raw response body to stdout (not with --json).
 
 Examples:
   anx api call --method GET --path /readyz
@@ -350,21 +237,15 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		methodFlag trackedString
 		pathFlag   trackedString
 		fromFile   trackedString
-		rawFlag    trackedBool
 		headers    headerList
 	)
 	fs.Var(&methodFlag, "method", "HTTP method")
 	fs.Var(&pathFlag, "path", "Request path or absolute URL")
 	fs.Var(&fromFile, "from-file", "Load request body from file path")
-	fs.Var(&rawFlag, "raw", "Write raw response body to stdout")
 	fs.Var(&headers, "header", "Request header in key:value form (repeatable)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_api_flags", err.Error())
-	}
-
-	if rawFlag.value && cfg.JSON {
-		return nil, errnorm.Usage("invalid_flag_combination", "--raw cannot be used with --json")
 	}
 
 	positionals := fs.Args()
@@ -393,16 +274,19 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		return nil, errnorm.Usage("invalid_header", err.Error())
 	}
 	if _, hasAuthorization := headersMap["Authorization"]; !hasAuthorization && shouldAutoAttachAuth(requestPath) {
-		authService := authcli.New(cfg)
-		prof, authErr := authService.EnsureAccessToken(ctx)
-		if authErr == nil {
-			headersMap["Authorization"] = "Bearer " + prof.AccessToken
-		} else {
-			normalized := errnorm.Normalize(authErr)
-			if normalized == nil || normalized.Code != "profile_not_found" {
-				return nil, authErr
+		if cfg.AccessToken == "" {
+			if _, _, identityErr := a.identityName(cfg); identityErr == nil {
+				if resolved, resolveErr := a.resolveHostAgent(ctx, cfg); resolveErr == nil {
+					cfg = resolved
+				}
 			}
 		}
+		if cfg.AccessToken != "" {
+			headersMap["Authorization"] = "Bearer " + cfg.AccessToken
+		}
+	}
+	if cfg.RunID != "" && strings.ToUpper(method) != "GET" && strings.ToUpper(method) != "HEAD" {
+		headersMap["X-ANX-Run-Id"] = cfg.RunID
 	}
 	requestBody, err := a.readBodyInput(strings.TrimSpace(fromFile.value))
 	if err != nil {
@@ -422,20 +306,6 @@ func (a *App) runAPICall(ctx context.Context, args []string, cfg config.Resolved
 		Headers: headersMap,
 		Body:    requestBody,
 	})
-	if rawFlag.value {
-		if len(resp.Body) > 0 {
-			if _, writeErr := a.Stdout.Write(resp.Body); writeErr != nil {
-				return nil, errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write raw response", writeErr)
-			}
-		}
-		if err != nil {
-			return &commandResult{RawWritten: true}, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
-		}
-		if resp.StatusCode >= http.StatusBadRequest {
-			return &commandResult{RawWritten: true}, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
-		}
-		return &commandResult{RawWritten: true}, nil
-	}
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "failed to perform request", err)
 	}
@@ -542,7 +412,7 @@ func shouldAutoAttachAuth(requestPath string) bool {
 		requestPath = "/" + requestPath
 	}
 	switch requestPath {
-	case "/health", "/livez", "/readyz", "/version", "/meta/handshake", "/auth/agents/register", "/auth/token":
+	case "/health", "/livez", "/readyz", "/version", "/meta/handshake", "/auth/token":
 		return false
 	}
 	return true

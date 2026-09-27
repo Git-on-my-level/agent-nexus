@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 159
+- Command count: 181
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -14,46 +14,49 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent | 4 |
 | agents | 4 |
 | artifacts | 10 |
-| auth | 15 |
+| auth | 14 |
 | boards | 13 |
 | cards | 13 |
 | derived | 1 |
 | docs | 19 |
 | events | 8 |
 | home | 2 |
+| host | 15 |
 | inbox | 4 |
 | meta | 9 |
 | ops | 3 |
-| pm | 20 |
+| pm | 24 |
 | ref-edges | 1 |
+| runs | 3 |
 | secret | 6 |
 | threads | 5 |
 | topics | 10 |
 | usage | 1 |
-| work | 9 |
+| work | 10 |
 
 ## Counts by Classification
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 59 |
-| exposed_write | 57 |
-| gated_admin | 15 |
-| gated_sensitive | 13 |
-| unsupported_bootstrap_auth | 6 |
+| exposed_read | 66 |
+| exposed_write | 61 |
+| gated_admin | 21 |
+| gated_sensitive | 12 |
+| unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 5 |
+| unsupported_other | 2 |
 | unsupported_shell_shaped | 1 |
-| unsupported_streaming | 3 |
+| unsupported_streaming | 4 |
 
 ## Counts by Surface
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 116 | exposed_read + exposed_write + adapted |
-| hosted default | 58 | explicit read-only private-app allowlist |
-| gated | 28 | requires explicit admin/sensitive policy scope |
+| standalone default | 127 | exposed_read + exposed_write + adapted |
+| hosted default | 59 | explicit read-only private-app allowlist |
+| gated | 33 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 15 | not represented as direct MCP tools in v1 |
+| unsupported | 21 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -65,10 +68,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent.notifications.dismiss | agent | POST | /agent-notifications/dismiss | exposed_write | ordinary authenticated agent notification state write |
 | agent.notifications.list | agent | GET | /agent-notifications | exposed_read | bounded authenticated agent notification projection |
 | agent.notifications.read | agent | POST | /agent-notifications/read | exposed_write | ordinary authenticated agent notification state write |
+| agents.get | agents | GET | /agents/{agent_id} | exposed_read | agent roster detail is workspace presence data |
+| agents.list | agents | GET | /agents | exposed_read | agent roster is workspace presence data |
 | agents.me.get | agents | GET | /agents/me | exposed_read | authenticated caller self-inspection |
-| agents.me.keys.rotate | agents | POST | /agents/me/keys/rotate | gated_sensitive | agent key rotation changes credential material |
-| agents.me.patch | agents | PATCH | /agents/me | gated_admin | agent profile mutation changes principal metadata |
-| agents.me.revoke | agents | POST | /agents/me/revoke | gated_sensitive | revocation disables credentials |
+| agents.me.presence | work | PATCH | /agents/me/presence | exposed_write | an agent may report its current task and progress note |
+| agents.stream | agents | GET | /stream/agents | unsupported_streaming | ephemeral roster SSE needs a bounded read adapter before MCP exposure |
 | artifacts.archive | artifacts | POST | /artifacts/{artifact_id}/archive | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.attachments.create | artifacts | POST | /artifacts/attachments | unsupported_shell_shaped | multipart binary upload needs a dedicated MCP content adapter |
 | artifacts.content | artifacts | GET | /artifacts/{artifact_id}/content | exposed_read | artifact content read; executor must bound and redact output |
@@ -79,7 +83,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | artifacts.restore | artifacts | POST | /artifacts/{artifact_id}/restore | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.trash | artifacts | POST | /artifacts/{artifact_id}/trash | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.unarchive | artifacts | POST | /artifacts/{artifact_id}/unarchive | exposed_write | ordinary reversible artifact lifecycle write |
-| auth.agents.register | auth | POST | /auth/agents/register | unsupported_bootstrap_auth | agent registration is an auth bootstrap flow |
 | auth.audit.list | auth | GET | /auth/audit | gated_admin | auth audit inventory is administrative |
 | auth.bootstrap.status | auth | GET | /auth/bootstrap/status | unsupported_bootstrap_auth | bootstrap status is part of registration ceremony |
 | auth.invites.create | auth | POST | /auth/invites | gated_admin | invite issuance is administrative |
@@ -150,6 +153,21 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | events.unarchive | events | POST | /events/{event_id}/unarchive | exposed_write | ordinary reversible event lifecycle write |
 | home.read | home | POST | /home/read | exposed_write | ordinary home read-marker write |
 | home.unread | home | GET | /home/unread | exposed_read | home unread projection |
+| hosts.bridge.check_in | host | POST | /hosts/{host_id}/bridge/check-in | unsupported_other | bridge check-in is host-signed infrastructure traffic |
+| hosts.enroll.approve | host | POST | /auth/hosts/enrollments/{enrollment_id}/approve | gated_admin | approving a host grants machine-level credentials |
+| hosts.enroll.complete | host | POST | /auth/hosts/enrollments/{enrollment_id}/complete | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |
+| hosts.enroll.deny | host | POST | /auth/hosts/enrollments/{enrollment_id}/deny | gated_admin | enrollment decisions are auth administration |
+| hosts.enroll.headless | host | POST | /auth/hosts/enrollments/headless | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |
+| hosts.enroll.pending | host | GET | /auth/hosts/enrollments/pending | gated_admin | pending enrollments are auth administration |
+| hosts.enroll.poll | host | GET | /auth/hosts/enrollments/{enrollment_id} | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |
+| hosts.enroll.start | host | POST | /auth/hosts/enrollments | unsupported_bootstrap_auth | host enrollment is a local machine ceremony |
+| hosts.get | host | GET | /hosts/{host_id} | exposed_read | host detail without secrets is workspace presence data |
+| hosts.list | host | GET | /hosts | exposed_read | host inventory without secrets is workspace presence data |
+| hosts.patch | host | PATCH | /hosts/{host_id} | gated_admin | host exclusions and names are auth administration |
+| hosts.revoke | host | DELETE | /hosts/{host_id} | gated_admin | host revocation cascades to derived agent credentials |
+| hosts.tokens.create | host | POST | /auth/hosts/enrollment-tokens | gated_sensitive | headless enrollment tokens are one-time secrets |
+| hosts.tokens.list | host | GET | /auth/hosts/enrollment-tokens | gated_admin | enrollment token inventory is auth administration |
+| hosts.tokens.revoke | host | POST | /auth/hosts/enrollment-tokens/{token_id}/revoke | gated_admin | enrollment token revocation is auth administration |
 | inbox.get | inbox | GET | /inbox/{inbox_id} | exposed_read | inbox item read |
 | inbox.list | inbox | GET | /inbox | exposed_read | bounded inbox inventory read |
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human response submission requires human judgment |
@@ -166,6 +184,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops.blob.usage.rebuild | ops | POST | /ops/blob-usage/rebuild | gated_admin | blob usage rebuild is maintenance/ops |
 | ops.health | ops | GET | /ops/health | gated_admin | ops health can expose operational diagnostics |
 | ops.usage.summary | ops | GET | /ops/usage-summary | gated_admin | unversioned usage summary is ops/quota telemetry |
+| pm.actions.acknowledge | pm | POST | /pm/actions/{action_id}/acknowledge | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.actions.get | pm | GET | /pm/actions/{action_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.actions.list | pm | GET | /pm/actions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.actions.reconcile | pm | POST | /pm/actions/{action_id}/reconcile | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
@@ -183,10 +202,16 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.decisions.list | pm | GET | /pm/decisions | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.turns.claim | pm | POST | /pm/turns/claim | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.complete | pm | POST | /pm/turns/{turn_id}/complete | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
-| pm.turns.context | pm | GET | /pm/turns/{turn_id}/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.turns.context | pm | POST | /pm/turns/{turn_id}/context | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | pm.turns.decisions.create | pm | POST | /pm/turns/{turn_id}/decisions | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.fail | pm | POST | /pm/turns/{turn_id}/fail | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| pm.turns.get | pm | GET | /pm/turns/{turn_id} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| pm.turns.heartbeat | pm | POST | /pm/turns/{turn_id}/heartbeat | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| pm.turns.release | pm | POST | /pm/turns/{turn_id}/release | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | ref_edges.list | ref-edges | GET | /ref-edges | exposed_read | reference edge inventory read |
+| runs.get | runs | GET | /runs/{run_id} | exposed_read | run reports are workspace presence data |
+| runs.list | runs | GET | /runs | exposed_read | run reports are workspace presence data |
+| runs.upsert | runs | POST | /runs | unsupported_other | runs are reported by local launchers through anx runs ingest, not by MCP clients |
 | secrets.create | secret | POST | /secrets | gated_sensitive | secret payload write is sensitive |
 | secrets.delete | secret | DELETE | /secrets/{secret_id} | gated_sensitive | secret deletion is destructive |
 | secrets.list | secret | GET | /secrets | gated_admin | secret inventory is administrative |

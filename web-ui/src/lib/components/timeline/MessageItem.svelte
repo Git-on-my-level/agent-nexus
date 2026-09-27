@@ -11,6 +11,7 @@
   import { truncateActorDisplayName } from "$lib/avatarModel.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import MessageActions from "$lib/components/timeline/MessageActions.svelte";
+  import RunAttribution from "$lib/components/agents/RunAttribution.svelte";
   import { scrollAndHighlightTarget } from "$lib/deepLinkTargets";
   import { formatTimestamp } from "$lib/formatDate";
   import { resolveRefLink } from "$lib/refLinkModel.js";
@@ -398,6 +399,7 @@
             <span class="shrink-0 text-micro leading-tight text-fg-muted"
               >{formatTimestamp(message.ts) || "—"}</span
             >
+            <RunAttribution attribution={message.run_attribution} />
             {#if notificationReceipts.length > 0}
               <span class="ml-1 flex shrink-0 items-center gap-1 text-micro">
                 {#each notificationReceipts as row (row.key)}

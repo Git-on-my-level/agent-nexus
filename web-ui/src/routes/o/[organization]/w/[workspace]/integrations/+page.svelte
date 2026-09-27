@@ -5,8 +5,11 @@
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import {
+    connectionName,
     errorMessage,
+    humanizeInstants,
     readErrorExplanation,
+    sourceLabel,
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
@@ -16,6 +19,7 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
   let work = $state([]),
     capabilities = $state(null),
     loading = $state(true),
@@ -33,7 +37,8 @@
    * A source error is a JSON payload as often as it is a sentence. Printing
    * `{"code":"permission_denied","detail":…}` at a reader tells them nothing
    * they can act on, so the row says which source we cannot reach and when we
-   * will try again; the payload goes under a disclosure for whoever needs it.
+   * will try again. The source's own words sit under a disclosure, and the
+   * raw payload is copyable for a bug report, not printed.
    */
   function refreshErrorPayload(item) {
     const raw = item?.refresh?.last_error;
@@ -45,6 +50,19 @@
       return String(raw);
     }
   }
+  function sourceMessage(item) {
+    const raw = item?.refresh?.last_error;
+    if (!raw || typeof raw === "string") return "";
+    return humanizeInstants(String(raw.message ?? raw.detail ?? "").trim());
+  }
+  // Two connections to one tool read "GitHub · main" and "GitHub · jit";
+  // a single one just says "GitHub".
+  let labelCounts = $derived(
+    groups.reduce((counts, group) => {
+      counts[group.label] = (counts[group.label] || 0) + 1;
+      return counts;
+    }, {}),
+  );
   function retryLine(item) {
     const next = formatTimestamp(item?.refresh?.next_due_at);
     return next ? ` · retrying ${next}` : "";
@@ -145,11 +163,20 @@
       <header
         class="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle px-4 py-3"
       >
-        <div class="min-w-0">
-          <h2 class="text-meta font-semibold text-fg">{group.label}</h2>
-          <p class="mt-0.5 truncate font-mono text-micro text-fg-muted">
-            {group.source.connection_id || "no connection id"}
-          </p>
+        <div class="flex min-w-0 items-center gap-1">
+          <h2 class="truncate text-meta font-semibold text-fg">
+            {labelCounts[group.label] > 1
+              ? connectionName(group.source)
+              : group.label}
+          </h2>
+          {#if group.source.connection_id}
+            <CopyButton
+              value={group.source.connection_id}
+              label="Copy connection id"
+              title={`Copy connection id (${group.source.connection_id})`}
+              iconOnly
+            />
+          {/if}
         </div>
         <div class="flex flex-wrap gap-1.5">
           {#each [["fresh", "fresh", "ok"], ["stale", "stale", "warn"], ["error", "failed", "warn"], ["unknown", "unknown", "neutral"]] as [key, title, tone]}{#if group.counts[key]}<SignalBadge
@@ -175,13 +202,23 @@
                     item,
                   )}
                 </p>
-                <details class="mt-0.5 text-micro text-fg-muted">
-                  <summary class="w-fit cursor-pointer">Details</summary>
-                  <pre
-                    class="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-soft p-2 font-mono text-micro">{refreshErrorPayload(
-                      item,
-                    )}</pre>
-                </details>
+                {#if typeof item.refresh.last_error === "object"}
+                  <details class="mt-0.5 text-micro text-fg-muted">
+                    <summary class="w-fit cursor-pointer">Details</summary>
+                    <p class="mt-1 flex items-start gap-1 break-words">
+                      <span class="min-w-0 flex-1 [overflow-wrap:anywhere]"
+                        >{sourceMessage(item)
+                          ? `${sourceLabel(item.source)} said: ${sourceMessage(item)}`
+                          : `${sourceLabel(item.source)} sent no message.`}</span
+                      >
+                      <CopyButton
+                        value={refreshErrorPayload(item)}
+                        label="Copy error"
+                        iconOnly
+                      />
+                    </p>
+                  </details>
+                {/if}
               {/if}
             </div>
             <div class="text-micro text-fg-muted">

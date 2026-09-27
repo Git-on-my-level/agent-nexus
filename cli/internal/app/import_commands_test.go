@@ -13,13 +13,13 @@ func TestRunImportIsConfigLenient(t *testing.T) {
 
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"import"})
-	if !strings.Contains(raw, "Import guide") {
+	if !strings.Contains(raw, "result.summary=") {
 		t.Fatalf("expected import bootstrap help, got %q", raw)
 	}
 	if !strings.Contains(raw, "anx help import") {
 		t.Fatalf("expected import read order guidance, got %q", raw)
 	}
-	if !strings.Contains(raw, "threads") || !strings.Contains(raw, "docs") || !strings.Contains(raw, "artifacts") {
+	if !strings.Contains(raw, "result.subcommands.0=scan") || !strings.Contains(raw, "result.principles.dedupe_before_writes=true") {
 		t.Fatalf("expected import object model guidance, got %q", raw)
 	}
 }
@@ -57,7 +57,7 @@ func TestImportScanJSON(t *testing.T) {
 	if payload["command"] != "import scan" {
 		t.Fatalf("unexpected command field: %#v", payload["command"])
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("expected data in envelope: %#v", payload)
 	}
@@ -114,20 +114,13 @@ func TestImportApplyExecuteRequiresResolvedConfig(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
-	profilesDir := filepath.Join(home, ".config", "anx", "profiles")
-	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
-		t.Fatalf("mkdir profiles dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(profilesDir, "default.json"), []byte("{invalid"), 0o600); err != nil {
-		t.Fatalf("write malformed profile: %v", err)
-	}
 
 	planPath := filepath.Join(home, "plan.json")
 	if err := os.WriteFile(planPath, []byte(`{"created_at":"2026-03-12T00:00:00Z","source_name":"test","inventory":"inventory.jsonl","dedupe":"dedupe.json","objects":[]}`), 0o644); err != nil {
 		t.Fatalf("write plan: %v", err)
 	}
 
-	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "import", "apply", "--plan", planPath, "--execute"})
+	raw := runCLIForTest(t, home, map[string]string{"ANX_CONFIG_DIR": "relative-config"}, nil, []string{"--json", "import", "apply", "--plan", planPath, "--execute"})
 	payload := assertEnvelopeError(t, raw)
 	errPayload, _ := payload["error"].(map[string]any)
 	if anyStringValue(errPayload["code"]) != "config_resolution_failed" {

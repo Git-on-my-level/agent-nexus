@@ -54,8 +54,8 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 ### Agent auth conventions
 
 - Access tokens are passed as `Authorization: Bearer <access_token>`.
-- First-principal registration is bootstrap-token gated via `POST /auth/agents/register` or the passkey registration endpoints.
-- Once the first principal exists, further registration requires a valid invite token.
+- The first human registers through the bootstrap passkey ceremony. Hosts enroll after human approval or with a one-time human-created headless token.
+- Further human registration requires a human invite. Agents derive from enrolled hosts.
 - `GET /auth/bootstrap/status` exposes whether bootstrap registration is still available.
 - Passkey auth is available via:
   - `POST /auth/passkey/register/options`
@@ -63,7 +63,8 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
   - `POST /auth/passkey/login/options`
   - `POST /auth/passkey/login/verify`
 - `POST /auth/token` supports:
-  - `grant_type=assertion` using an Ed25519 key assertion
+  - `grant_type=host_assertion` using an enrolled host key for a derived agent
+  - `grant_type=assertion` for existing standalone agent principals awaiting adoption
   - `grant_type=refresh_token` using a refresh token
 - Refresh tokens are rotated on successful refresh.
 - Stable auth error codes include:
@@ -114,7 +115,7 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 - **Document body updates**: Canonical write is `POST /docs/{document_id}/revisions` (`docs.revisions.create`). There is no `PATCH /docs/{document_id}` on workspace core.
 - **List-only canonical enrichments**: `GET /topics` may include `timeline_message_count`; `GET /documents` may include `revision_count`, `timeline_message_count`, and `head_revision_character_count`. These are derived read hints for list rows, not writable fields. Message counts include non-trashed `message_posted` events on the backing `thread_id`. Character counts are best-effort UTF-8 rune counts of the decoded head revision body and may be omitted for large or unavailable blobs.
 - **Packets**: Receipts and reviews are created via `POST /packets/receipts` and `POST /packets/reviews` only.
-- **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction. Assigning a registered **agent** as the card assignee (via `assignee_refs`) enqueues an **agent wakeup**, visible to that agent as an **agent notification** (`GET /agent-notifications`).
+- **Cards**: Patch, move, and archive use first-class `PATCH /cards/{card_id}`, `POST /cards/{card_id}/move`, and `POST /cards/{card_id}/archive` (or trash/restore/purge as documented in OpenAPI). Board-scoped duplicate paths have been removed. **Batch card create** is `POST /boards/{board_id}/cards/batch` (`boards.cards.batch_add`): one `if_board_updated_at`, many `items`, single transaction. Assigning a taggable agent as the card assignee (via `assignee_refs`) enqueues an **agent wakeup**, visible to that agent as an **agent notification** (`GET /agent-notifications`).
 - **Card timeline vs. Discussion (intentional split)**: `GET /cards/{card_id}/timeline` (`cards.timeline`) is the card's **lifecycle/audit log** — it returns only `card_*` events for the card and intentionally omits `message_posted`, even when a message carries a `card:<id>` ref. A card's **Discussion** (messages) lives on the card's backing thread and is served by `GET /threads/{thread_id}/timeline` using the card's `thread_id`. This mirrors the unified message-on-thread model used by boards, topics, and documents: every primitive's Discussion is `message_posted` on its backing thread; the per-primitive timeline endpoints expose lifecycle/audit, not the conversation.
 - **SSE**: `GET /stream/events`, `GET /stream/inbox`, and `GET /stream/agent-notification-receipts` use `text/event-stream`; see OpenAPI `x-anx-input-mode` / streaming metadata.
 

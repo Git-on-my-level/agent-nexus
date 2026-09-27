@@ -60,9 +60,9 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "inbox",
 		UseWhen:     "A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).",
-		NotFor:      "Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
+		NotFor:      "Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
 		Examples:    []string{"asks", "reviews", "escalations"},
-		RelatedRead: []string{"anx human ask", "anx human review", "anx human escalate"},
+		RelatedRead: []string{"anx ask", "anx review", "anx escalate"},
 	},
 	{
 		Name:        "draft",
@@ -92,11 +92,12 @@ func conceptsGuideData() map[string]any {
 		})
 	}
 	return map[string]any{
+		"text":              conceptsGuideText(),
 		"guide_topic":       "concepts",
 		"summary":           "Quick guide to the core ANX primitives and when to use each.",
 		"primitives":        primitives,
 		"selection_rules":   conceptsSelectionRules(),
-		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc profiles", "anx meta doc env"},
+		"recommended_reads": []string{"anx help", "anx meta doc concepts", "anx meta doc agent-guide", "anx meta doc host identity", "anx meta doc env"},
 	}
 }
 
@@ -108,7 +109,7 @@ func conceptsSelectionRules() []string {
 		"Use cards for the canonical store over card rows (create, workflow writes, revisions, lifecycle).",
 		"Use work (`anx work list` / `anx work get`) for the operator Tasks projection over those same rows (freshness, observations, annotations). Layered, not a duplicate of cards.",
 		"Use events for immutable facts.",
-		"Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx human ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.",
+		"Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.",
 		"Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.",
 		"Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.",
 	}
@@ -145,18 +146,18 @@ func conceptsGuideText() string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString("\nConfiguration and profiles:\n")
-	b.WriteString("- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.\n")
-	b.WriteString("- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.\n")
-	b.WriteString("- Read next: anx meta doc profiles ; anx meta doc env ; anx config show\n")
+	b.WriteString("\nConfiguration and identity:\n")
+	b.WriteString("- Enroll this machine with `anx host enroll`; use `--as` or `ANX_AS` to select a derived agent.\n")
+	b.WriteString("- Precedence is command flags > environment variables > agentctl run context > harness detection > built-in defaults.\n")
+	b.WriteString("- Read next: anx meta doc host identity ; anx meta doc env ; anx config show\n")
 	b.WriteString("\nFor the fuller operating model, read `anx meta doc agent-guide`.\n")
 	return strings.TrimSpace(b.String())
 }
 
 func viewingAsData(cfg config.Resolved) map[string]any {
 	out := map[string]any{}
-	if profile := strings.TrimSpace(cfg.Agent); profile != "" {
-		out["profile"] = profile
+	if agent := strings.TrimSpace(cfg.Agent); agent != "" {
+		out["agent"] = agent
 	}
 	if username := strings.TrimSpace(cfg.Username); username != "" {
 		out["username"] = username
@@ -173,8 +174,8 @@ func formatViewingAsSummary(raw any) string {
 		return ""
 	}
 	parts := make([]string, 0, 3)
-	if profile := strings.TrimSpace(anyString(viewing["profile"])); profile != "" {
-		parts = append(parts, "profile="+profile)
+	if agent := strings.TrimSpace(anyString(viewing["agent"])); agent != "" {
+		parts = append(parts, "agent="+agent)
 	}
 	if username := strings.TrimSpace(anyString(viewing["username"])); username != "" {
 		parts = append(parts, "username="+username)

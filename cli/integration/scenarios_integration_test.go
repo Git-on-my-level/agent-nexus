@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -46,6 +47,8 @@ type liveCoreHarness struct {
 	server         *exec.Cmd
 	workspace      string
 	bootstrapToken string
+	adminToken     string
+	humanTokens    map[string]string
 }
 
 type cliResult struct {
@@ -61,9 +64,7 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
-	workerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
+	h.enrollHost(t, "coordinator")
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
@@ -78,8 +79,8 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 		},
 	}, "topics", "create")
 
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicID := mustStringPath(t, topic.Payload, "data.body.topic.id")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicID := mustStringPath(t, topic.Payload, "result.topic.id")
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
@@ -100,13 +101,13 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
+	}, "debug", "events", "create")
 
 	workerTopic := h.runCLIExpectOK(t, "worker", nil, "topics", "get", "--topic-id", topicID)
 	if !strings.Contains(workerTopic.Stdout, "Harness Incident") || !strings.Contains(workerTopic.Stdout, runID) {
 		t.Fatalf("expected worker topic read to include run title, got: %s", workerTopic.Stdout)
 	}
-	workerThread := h.runCLIExpectOK(t, "worker", nil, "threads", "get", "--thread-id", threadID)
+	workerThread := h.runCLIExpectOK(t, "worker", nil, "debug", "threads", "get", "--thread-id", threadID)
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -122,15 +123,15 @@ func TestThreadEventHandoffScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
+	}, "debug", "events", "create")
 
-	workerEventID := mustStringPath(t, ack.Payload, "data.body.event.id")
-	coordEvent := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", workerEventID)
+	workerEventID := mustStringPath(t, ack.Payload, "result.event.id")
+	coordEvent := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", workerEventID)
 	if !strings.Contains(coordEvent.Stdout, "Worker acknowledged harness thread") {
 		t.Fatalf("expected coordinator event read to include worker acknowledgement, got: %s", coordEvent.Stdout)
 	}
 
-	if got := mustStringPath(t, workerThread.Payload, "data.body.thread.thread_id"); got != threadID {
+	if got := mustStringPath(t, workerThread.Payload, "result.thread.thread_id"); got != threadID {
 		t.Fatalf("thread id mismatch: got %q want %q", got, threadID)
 	}
 }
@@ -141,11 +142,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "coordinator", "coordinator."+runID)
-	workerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "worker", "worker."+runID, workerInvite)
-	reviewerInvite := h.createInviteToken(t, "coordinator")
-	h.registerAgentInvite(t, "reviewer", "reviewer."+runID, reviewerInvite)
+	h.enrollHost(t, "coordinator")
 
 	topic := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"topic": map[string]any{
@@ -159,8 +156,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"provenance":    map[string]any{"sources": []any{"inferred"}},
 		},
 	}, "topics", "create")
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicID := mustStringPath(t, topic.Payload, "data.body.topic.id")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicID := mustStringPath(t, topic.Payload, "result.topic.id")
 
 	doc := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"document": map[string]any{
@@ -173,8 +170,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 			"sources": []string{"inferred"},
 		},
 	}, "docs", "create")
-	documentID := mustStringPath(t, doc.Payload, "data.body.document.id")
-	initialRevisionID := mustStringPath(t, doc.Payload, "data.body.revision.revision_id")
+	documentID := mustStringPath(t, doc.Payload, "result.document.id")
+	initialRevisionID := mustStringPath(t, doc.Payload, "result.revision.revision_id")
 
 	decision := h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"event": map[string]any{
@@ -196,8 +193,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	decisionEventID := mustStringPath(t, decision.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	decisionEventID := mustStringPath(t, decision.Payload, "result.event.id")
 
 	h.runCLIExpectOK(t, "coordinator", map[string]any{
 		"patch": map[string]any{
@@ -205,8 +202,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		},
 	}, "topics", "patch", "--topic-id", topicID)
 
-	h.runCLIExpectOK(t, "worker", nil, "threads", "context", "--thread-id", threadID)
-	h.runCLIExpectOK(t, "worker", nil, "events", "get", "--event-id", decisionEventID)
+	h.runCLIExpectOK(t, "worker", nil, "debug", "threads", "context", "--thread-id", threadID)
+	h.runCLIExpectOK(t, "worker", nil, "debug", "events", "get", "--event-id", decisionEventID)
 
 	ack := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -222,8 +219,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	ackEventID := mustStringPath(t, ack.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	ackEventID := mustStringPath(t, ack.Payload, "result.event.id")
 
 	workerUpdate := h.runCLIExpectOK(t, "worker", map[string]any{
 		"if_base_revision": initialRevisionID,
@@ -231,7 +228,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		"content_type":     "text",
 		"refs":             []string{"thread:" + threadID, "event:" + decisionEventID},
 	}, "docs", "revise", "--apply", "--document-id", documentID)
-	workerRevisionID := mustStringPath(t, workerUpdate.Payload, "data.body.revision.revision_id")
+	workerRevisionID := mustStringPath(t, workerUpdate.Payload, "result.revision.revision_id")
 
 	completion := h.runCLIExpectOK(t, "worker", map[string]any{
 		"event": map[string]any{
@@ -248,12 +245,12 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	completionEventID := mustStringPath(t, completion.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	completionEventID := mustStringPath(t, completion.Payload, "result.event.id")
 
-	h.runCLIExpectOK(t, "reviewer", nil, "threads", "context", "--thread-id", threadID)
+	h.runCLIExpectOK(t, "reviewer", nil, "debug", "threads", "context", "--thread-id", threadID)
 	preConflict := h.runCLIExpectOK(t, "reviewer", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, preConflict.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, preConflict.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("expected worker revision to be head before stale update, got %q want %q", got, workerRevisionID)
 	}
 
@@ -277,7 +274,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 	}
 
 	postConflict := h.runCLIExpectOK(t, "reviewer", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, postConflict.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, postConflict.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("stale overwrite advanced revision head: got %q want %q", got, workerRevisionID)
 	}
 
@@ -296,8 +293,8 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	reviewEventID := mustStringPath(t, review.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	reviewEventID := mustStringPath(t, review.Payload, "result.event.id")
 
 	h.runCLIExpectOK(t, "reviewer", map[string]any{
 		"patch": map[string]any{
@@ -310,13 +307,13 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		t.Fatalf("expected topic read to include run title, got: %s", coordTopic.Stdout)
 	}
 
-	coordCompletion := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", completionEventID)
+	coordCompletion := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", completionEventID)
 	if !strings.Contains(coordCompletion.Stdout, "message_posted") || !strings.Contains(coordCompletion.Stdout, runID) {
 		t.Fatalf("expected completion event output to include message_posted and run id, got: %s", coordCompletion.Stdout)
 	}
 
 	coordDoc := h.runCLIExpectOK(t, "coordinator", nil, "docs", "get", "--document-id", documentID)
-	if got := mustStringPath(t, coordDoc.Payload, "data.body.revision.revision_id"); got != workerRevisionID {
+	if got := mustStringPath(t, coordDoc.Payload, "result.revision.revision_id"); got != workerRevisionID {
 		t.Fatalf("coordinator saw unexpected doc head: got %q want %q", got, workerRevisionID)
 	}
 
@@ -325,7 +322,7 @@ func TestDocumentLifecycleConflictScenario(t *testing.T) {
 		t.Fatalf("expected document history to contain baseline and worker revisions, got: %s", history.Stdout)
 	}
 
-	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "events", "get", "--event-id", reviewEventID)
+	coordReview := h.runCLIExpectOK(t, "coordinator", nil, "debug", "events", "get", "--event-id", reviewEventID)
 	if !strings.Contains(coordReview.Stdout, "message_posted") || !strings.Contains(coordReview.Stdout, "conflict-safe") || !strings.Contains(coordReview.Stdout, runID) {
 		t.Fatalf("expected review event output to include review details, got: %s", coordReview.Stdout)
 	}
@@ -337,7 +334,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	runID := runToken()
 
-	h.registerAgentBootstrap(t, "investigator", "investigator."+runID)
+	h.enrollHost(t, "investigator")
 
 	artifact := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"artifact": map[string]any{
@@ -351,7 +348,7 @@ func TestProvenanceWalkScenario(t *testing.T) {
 		},
 		"content_type": "structured",
 	}, "artifacts", "create")
-	artifactRef := mustStringPath(t, artifact.Payload, "data.body.artifact.ref")
+	artifactRef := mustStringPath(t, artifact.Payload, "result.artifact.ref")
 
 	topic := h.runCLIExpectOK(t, "investigator", map[string]any{
 		"topic": map[string]any{
@@ -365,8 +362,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 			"provenance":    map[string]any{"sources": []any{artifactRef}},
 		},
 	}, "topics", "create")
-	threadID := mustStringPath(t, topic.Payload, "data.body.topic.thread_id")
-	topicHandle := mustStringPath(t, topic.Payload, "data.body.topic.handle")
+	threadID := mustStringPath(t, topic.Payload, "result.topic.thread_id")
+	topicHandle := mustStringPath(t, topic.Payload, "result.topic.handle")
 	threadRef := "thread:" + topicHandle
 
 	event := h.runCLIExpectOK(t, "investigator", map[string]any{
@@ -387,8 +384,8 @@ func TestProvenanceWalkScenario(t *testing.T) {
 				"sources": []string{"inferred"},
 			},
 		},
-	}, "events", "create")
-	eventID := mustStringPath(t, event.Payload, "data.body.event.id")
+	}, "debug", "events", "create")
+	eventID := mustStringPath(t, event.Payload, "result.event.id")
 
 	walk := h.runCLIExpectOK(t, "investigator", nil,
 		"provenance", "walk",
@@ -398,11 +395,11 @@ func TestProvenanceWalkScenario(t *testing.T) {
 	if got := mustStringPath(t, walk.Payload, "command"); got != "provenance walk" {
 		t.Fatalf("unexpected command name: got %q want provenance walk", got)
 	}
-	if got := mustStringPath(t, walk.Payload, "data.from"); got != "event:"+eventID {
+	if got := mustStringPath(t, walk.Payload, "result.from"); got != "event:"+eventID {
 		t.Fatalf("unexpected walk root: got %q want %q", got, "event:"+eventID)
 	}
 
-	data, _ := walk.Payload["data"].(map[string]any)
+	data, _ := walk.Payload["result"].(map[string]any)
 	if data == nil {
 		t.Fatalf("missing data payload: %#v", walk.Payload)
 	}
@@ -472,6 +469,17 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	coreBindMu.Lock()
 	defer coreBindMu.Unlock()
 	port := allocatePort(t)
+	if assigned := strings.TrimSpace(os.Getenv("ANX_INTEGRATION_PORT")); assigned != "" {
+		parsed, parseErr := strconv.Atoi(assigned)
+		if parseErr != nil || parsed < 1 || parsed > 65535 {
+			t.Fatalf("invalid ANX_INTEGRATION_PORT %q", assigned)
+		}
+		port = parsed
+		if conn, dialErr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond); dialErr == nil {
+			_ = conn.Close()
+			port = allocatePort(t)
+		}
+	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cmd := exec.Command(coreBin,
 		"--listen-addr", fmt.Sprintf("127.0.0.1:%d", port),
@@ -484,6 +492,9 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	cmd.Env = append(os.Environ(),
 		"ANX_BOOTSTRAP_TOKEN="+bootstrapToken,
 		"ANX_PROJECTION_MODE=manual",
+		"ANX_ALLOW_PASSKEY_DEV_BYPASS=1",
+		"ANX_HOSTED_DEV_MODE=1",
+		"ANX_ENABLE_DEV_ACTOR_MODE=1",
 	)
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Stdout = logFile
@@ -503,6 +514,7 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 		server:         cmd,
 		workspace:      workspace,
 		bootstrapToken: bootstrapToken,
+		humanTokens:    map[string]string{},
 	}
 
 	t.Cleanup(func() {
@@ -526,38 +538,65 @@ func newLiveCoreHarnessEnv(t *testing.T, extraEnv []string) *liveCoreHarness {
 	return h
 }
 
-func (h *liveCoreHarness) registerAgentBootstrap(t *testing.T, agent string, username string) {
+func (h *liveCoreHarness) enrollHost(t *testing.T, agent string) {
 	t.Helper()
-	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--bootstrap-token", h.bootstrapToken)
+	if h.adminToken != "" {
+		return
+	}
+	admin := h.postCore(t, "/auth/passkey/dev/register", "", map[string]any{"display_name": "CLI integration admin", "bootstrap_token": h.bootstrapToken})
+	h.adminToken = mustStringPath(t, admin, "tokens.access_token")
+	grant := h.postCore(t, "/auth/hosts/enrollment-tokens", h.adminToken, map[string]any{"label": "CLI integration host", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
+	h.runCLIExpectOK(t, agent, nil, "host", "enroll", "--name", "integration-host", "--token", mustStringPath(t, grant, "token"))
 }
 
-func (h *liveCoreHarness) registerAgentInvite(t *testing.T, agent string, username string, inviteToken string) {
+func (h *liveCoreHarness) createHumanInviteToken(t *testing.T) string {
 	t.Helper()
-	h.runCLIExpectOK(t, agent, nil, "auth", "register", "--username", username, "--invite-token", inviteToken)
+	res := h.postCore(t, "/auth/invites", h.adminToken, map[string]any{"kind": "human"})
+	return mustStringPath(t, res, "token")
 }
 
-func (h *liveCoreHarness) createInviteToken(t *testing.T, issuerAgent string) string {
+func (h *liveCoreHarness) postCore(t *testing.T, path, token string, body any) map[string]any {
 	t.Helper()
-	return h.createInviteTokenKind(t, issuerAgent, "agent")
-}
-
-func (h *liveCoreHarness) createInviteTokenKind(t *testing.T, issuerAgent, kind string) string {
-	t.Helper()
-	res := h.runCLIExpectOK(t, issuerAgent, nil, "auth", "invites", "create", "--kind", kind)
-	return mustStringPath(t, res.Payload, "data.token")
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequest("POST", h.baseURL+path, bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode >= 400 {
+		logs, _ := os.ReadFile(h.logPath)
+		t.Fatalf("POST %s: %d %s\ncore: %s", path, resp.StatusCode, data, logs)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
 func (h *liveCoreHarness) actorID(t *testing.T, agent string) string {
 	t.Helper()
 	res := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	return mustStringPath(t, res.Payload, "data.profile.actor_id")
+	return mustStringPath(t, res.Payload, "result.agent.actor_id")
 }
 
 func (h *liveCoreHarness) selectPMAgent(t *testing.T, agent string) {
 	t.Helper()
 	who := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	actor := mustStringPath(t, who.Payload, "data.profile.actor_id")
-	handle := mustStringPath(t, who.Payload, "data.profile.username")
+	actor := mustStringPath(t, who.Payload, "result.agent.actor_id")
+	handle := mustStringPath(t, who.Payload, "result.agent.handle")
 	restartCoreForWorkTest(t, h, "ANX_PM_AGENT_ACTOR_ID="+actor, "ANX_PM_AGENT_HANDLE="+handle)
 }
 
@@ -581,15 +620,10 @@ func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName,
 	}
 	var payload struct {
 		Agent struct {
-			AgentID  string `json:"agent_id"`
-			ActorID  string `json:"actor_id"`
-			Username string `json:"username"`
+			AgentID string `json:"agent_id"`
 		} `json:"agent"`
 		Tokens struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			TokenType    string `json:"token_type"`
-			ExpiresIn    int64  `json:"expires_in"`
+			AccessToken string `json:"access_token"`
 		} `json:"tokens"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -598,42 +632,7 @@ func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName,
 	if payload.Agent.AgentID == "" || payload.Tokens.AccessToken == "" {
 		t.Fatalf("passkey register missing fields: %s", raw)
 	}
-	dir := filepath.Join(h.homeDir, ".config", "anx", "profiles")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	expires := time.Now().UTC().Add(time.Duration(payload.Tokens.ExpiresIn) * time.Second).Format(time.RFC3339Nano)
-	if payload.Tokens.ExpiresIn <= 0 {
-		expires = time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339Nano)
-	}
-	profile := map[string]any{
-		"version":                 1,
-		"agent":                   agent,
-		"base_url":                h.baseURL,
-		"username":                payload.Agent.Username,
-		"agent_id":                payload.Agent.AgentID,
-		"actor_id":                payload.Agent.ActorID,
-		"access_token":            payload.Tokens.AccessToken,
-		"refresh_token":           payload.Tokens.RefreshToken,
-		"token_type":              firstNonEmpty(payload.Tokens.TokenType, "Bearer"),
-		"access_token_expires_at": expires,
-	}
-	encoded, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, agent+".json"), append(encoded, '\n'), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
+	h.humanTokens[agent] = payload.Tokens.AccessToken
 }
 
 func (h *liveCoreHarness) runCLIExpectOK(t *testing.T, agent string, stdin any, args ...string) cliResult {
@@ -652,13 +651,20 @@ func (h *liveCoreHarness) runCLI(t *testing.T, agent string, stdin any, args ...
 	t.Helper()
 
 	allArgs := make([]string, 0, len(args)+6)
-	allArgs = append(allArgs, "--json", "--base-url", h.baseURL, "--agent", agent)
+	allArgs = append(allArgs, "--json", "--base-url", h.baseURL)
+	if h.humanTokens[agent] == "" {
+		allArgs = append(allArgs, "--as", agent)
+	}
 	allArgs = append(allArgs, args...)
 
 	cmd := exec.Command(h.cliBin, allArgs...)
 	cmd.Env = append(os.Environ(),
 		"HOME="+h.homeDir,
 		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
+		"ANX_ACCESS_TOKEN="+h.humanTokens[agent],
+		"AGENTCTL_EXECUTION_ID=",
+		"AGENTCTL_ADAPTER=",
+		"AGENTCTL_HOST_ID=",
 	)
 
 	var stdinReader io.Reader
@@ -837,8 +843,8 @@ func getPathValue(payload map[string]any, path string) (any, bool) {
 		return v, true
 	}
 	// CLI --json envelopes flatten API `body` into `data` (see flattenEnvelopeData).
-	if strings.HasPrefix(path, "data.body.") {
-		alt := "data." + strings.TrimPrefix(path, "data.body.")
+	if strings.HasPrefix(path, "result.") {
+		alt := "result." + strings.TrimPrefix(path, "result.")
 		if v, ok := descendJSONPath(payload, alt); ok {
 			return v, true
 		}

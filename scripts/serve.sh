@@ -11,6 +11,10 @@ CORE_PORT="${CORE_PORT:-8000}"
 CORE_BASE_URL="${CORE_BASE_URL:-http://${CORE_HOST}:${CORE_PORT}}"
 CORE_WORKSPACE_ROOT="${CORE_WORKSPACE_ROOT:-${REPO_ROOT}/core/.anx-workspace}"
 WEB_UI_PORT="${WEB_UI_PORT:-5173}"
+# Core returns this workspace-scoped web route to interactive host enrollment.
+# Override it when serving a non-default workspace catalog or public origin.
+ANX_PUBLIC_WEB_UI_WORKSPACE_URL="${ANX_PUBLIC_WEB_UI_WORKSPACE_URL:-http://127.0.0.1:${WEB_UI_PORT}/o/local/w/local}"
+export ANX_PUBLIC_WEB_UI_WORKSPACE_URL
 RESET_DEV_WORKSPACE="${RESET_DEV_WORKSPACE:-1}"
 SEED_CORE="${SEED_CORE:-1}"
 FORCE_SEED="${FORCE_SEED:-0}"
@@ -136,11 +140,12 @@ ANX_LOCAL_MINIO_CONTAINER_NAME="${ANX_LOCAL_MINIO_CONTAINER_NAME:-anx-dev-minio}
 if [[ "${ANX_DEV_BLOB_BACKEND}" == "s3" ]]; then
 	# shellcheck source=/dev/null
 	source "${REPO_ROOT}/scripts/local-dev-blob-s3.sh"
-	if ! anx_local_s3_start; then
-		echo "Failed to start local MinIO. Install Docker or run with ANX_DEV_BLOB_BACKEND=filesystem." >&2
-		exit 1
+	if anx_local_s3_start; then
+		export ANX_LOCAL_MINIO_STARTED=1
+	else
+		echo "Local MinIO is unavailable; falling back to ANX_DEV_BLOB_BACKEND=filesystem." >&2
+		ANX_DEV_BLOB_BACKEND=filesystem
 	fi
-	export ANX_LOCAL_MINIO_STARTED=1
 fi
 
 if [ "$RESET_DEV_WORKSPACE" = "1" ]; then
@@ -186,7 +191,7 @@ export ANX_DEV_REGISTER_LINKED_ACTORS
 # bridge (`ANX_PM_BRIDGE_ENABLED`) for `anx pm serve`.
 if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev-studio" ]]; then
 	export ANX_PM_AGENT_ACTOR_ID="${ANX_PM_AGENT_ACTOR_ID:-actor-gds-pm}"
-	export ANX_PM_AGENT_HANDLE="${ANX_PM_AGENT_HANDLE:-dev.pm}"
+	export ANX_PM_AGENT_HANDLE="${ANX_PM_AGENT_HANDLE:-pm.dev-host}"
 	export ANX_PM_TURN_TIMEOUT="${ANX_PM_TURN_TIMEOUT:-10m}"
 fi
 
@@ -212,54 +217,14 @@ HOST="${CORE_HOST}" \
 	"${REPO_ROOT}/core/scripts/dev" &
 CORE_PID=$!
 
-# CLI dogfood: drop stale invite bundles before seed repopulates them.
-CLI_DOGFOOD_DIR="${REPO_ROOT}/cli/dogfood-resources"
-mkdir -p "${CLI_DOGFOOD_DIR}"
-rm -f "${CLI_DOGFOOD_DIR}"/*.generated.json
-
 if [ "$SEED_CORE" = "1" ]; then
 	ANX_BOOTSTRAP_TOKEN="${ANX_BOOTSTRAP_TOKEN}" \
-		ANX_CLI_DOGFOOD_RESOURCES_DIR="${CLI_DOGFOOD_DIR}" \
 		ANX_CORE_BASE_URL="${CORE_BASE_URL}" \
 		ANX_DEV_SEED_SCENARIO="${DEV_SEED_SCENARIO}" \
 		ANX_DEV_SEED_IDENTITIES="${ANX_DEV_SEED_IDENTITIES:-1}" \
 		ANX_FORCE_SEED="${FORCE_SEED}" \
 		node "${REPO_ROOT}/web-ui/scripts/seed-core-from-mock.mjs"
-	if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev-studio" ]]; then
-		ANX_DEV_PROFILE_INCLUDE_HUMAN=1 \
-			ANX_CORE_BASE_URL="${CORE_BASE_URL}" \
-			node "${REPO_ROOT}/scripts/anx-dev-profile-homes.mjs" ||
-			echo "warning: CLI profile homes failed; anx pm serve will need a manual profile" >&2
-		PM_HOME="${REPO_ROOT}/.tmp/anx-dev-profile-homes/pm"
-		MAYA_HOME="${REPO_ROOT}/.tmp/anx-dev-profile-homes/maya"
-		ANX_BIN="${REPO_ROOT}/cli/anx"
-		echo ""
-		echo "PM runner (external agent via agentctl; wake/bridge not required):"
-		echo "  make cli-build"
-		echo "  make pm-serve"
-		echo "  # or: HOME=${PM_HOME} ${ANX_BIN} --agent pm pm serve --work-dir ${REPO_ROOT}/.tmp/pm-runner --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'"
-		echo "Ask as Maya (seeded human):"
-		echo "  HOME=${MAYA_HOME} ${ANX_BIN} --agent maya pm ask --wait \"What needs my decision?\""
-		echo "Verify omp did not substitute the model:"
-		echo "  grep -o '\"provider\":\"[^\"]*\",\"model\":\"[^\"]*\"'"
-		echo ""
-	fi
-	if [ -n "${ANX_OBSERVATION_CONFIG:-}" ]; then
-		seed_observation_work() {
-			local id="$1"
-			local connection="$2"
-			curl -sS -X POST "${CORE_BASE_URL}/work" \
-				-H "Content-Type: application/json" \
-				-d "{\"actor_id\":\"actor-gds-producer\",\"board_ref\":\"board:board-gds-production\",\"id\":\"${id}\",\"title\":\"Public GitHub observation ${id}\",\"source\":{\"authority\":\"github\",\"connection_id\":\"${connection}\",\"native_id\":\"Git-on-my-level/agent-nexus#208\"}}" \
-				>/dev/null || echo "warning: could not seed observation work ${id}" >&2
-		}
-		seed_observation_work "card-anx-github-208" "github-main"
-		seed_observation_work "card-anx-github-208-jit" "github-jit"
-		echo "Observation dogfood: ANX_OBSERVATION_CONFIG=${ANX_OBSERVATION_CONFIG}"
-		echo "  builtin github-main → card:card-anx-github-208"
-		echo "  JIT github-jit → card:card-anx-github-208-jit"
-		echo ""
-	fi
+
 else
 	echo "Skipping core seed step (SEED_CORE=${SEED_CORE})."
 fi

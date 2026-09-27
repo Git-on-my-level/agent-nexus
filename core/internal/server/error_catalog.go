@@ -11,7 +11,7 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"access_denied":              {Recoverable: false, Hint: "Verify the deployment mode and endpoint access policy, then retry with the required auth context."},
 	"actor_exists":               {Recoverable: true, Hint: "Use a different actor id or read existing actors before retrying."},
 	"actor_registry_unavailable": {Recoverable: false, Hint: "Actor registry is unavailable; retry later or escalate to operator."},
-	"agent_revoked":              {Recoverable: false, Hint: "Revoked agents cannot authenticate; register a new agent profile."},
+	"agent_revoked":              {Recoverable: false, Hint: "This agent identity is permanently revoked. Ask a workspace auth-admin to review host enrollment and choose an unused agent name if you need another identity."},
 	"auth_unavailable":           {Recoverable: false, Hint: "Authentication is not configured on this core instance; retry later or escalate to operator."},
 	"auth_required":              {Recoverable: true, Hint: "Attach a valid Bearer token and retry."},
 	"cli_outdated":               {Recoverable: true, Hint: "Upgrade CLI to the minimum compatible version exposed by `/meta/handshake`."},

@@ -118,6 +118,7 @@
         "inbox_item_id",
         "kind",
         "response_text",
+        "outcome",
         "responding_actor_id"
       ]
     },

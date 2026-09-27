@@ -23,8 +23,8 @@ var apiSubcommandSpec = subcommandSpec{
 
 var bridgeSubcommandSpec = subcommandSpec{
 	command:  "bridge",
-	valid:    []string{"install", "import-auth", "init-config", "start", "stop", "restart", "status", "logs", "workspace-id", "doctor"},
-	examples: []string{"anx bridge install", "anx bridge import-auth --config ./bridge.toml --from-profile agent-a", "anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --handle myagent", "anx bridge workspace-id --handle myagent", "anx bridge start --config ./bridge.toml", "anx bridge status --config ./bridge.toml"},
+	valid:    []string{"install", "start", "stop", "status", "doctor"},
+	examples: []string{"anx bridge install", "anx bridge start --config ./bridge.toml", "anx bridge status --config ./bridge.toml", "anx bridge doctor --config ./bridge.toml"},
 }
 
 var notificationsSubcommandSpec = subcommandSpec{
@@ -38,43 +38,30 @@ var notificationsSubcommandSpec = subcommandSpec{
 
 var configSubcommandSpec = subcommandSpec{
 	command: "config",
-	valid:   []string{"use", "show", "unset"},
+	valid:   []string{"show"},
 	examples: []string{
-		"anx config use agent-a",
 		"anx config show",
 		"anx config show --json   # optional: JSON envelope for scripts",
-		"anx config unset",
 	},
 }
 
 var authSubcommandSpec = subcommandSpec{
 	command: "auth",
-	valid:   []string{"register", "whoami", "list", "default", "update-username", "rotate", "revoke", "token-status", "invites", "bootstrap", "principals", "audit"},
+	valid:   []string{"whoami", "invites", "bootstrap", "principals", "audit"},
 	examples: []string{
-		"anx auth register --username <username> --bootstrap-token <token>",
-		"anx auth register --username <username> --invite-token <token>",
 		"anx auth whoami",
-		"anx auth list",
-		"anx auth default <profile>",
 		"anx auth invites list",
-		"anx auth invites create --kind agent",
+		"anx auth invites create --kind human",
 		"anx auth bootstrap status",
 		"anx auth principals list",
-		"anx auth principals revoke --agent-id <agent-id>",
-		"anx auth principals revoke --agent-id <agent-id> --allow-human-lockout --human-lockout-reason 'incident recovery'",
 		"anx auth audit list",
-	},
-	aliases: map[string]string{
-		"status":   "token-status",
-		"profiles": "list",
-		"ls":       "list",
 	},
 }
 
 var authInvitesSubcommandSpec = subcommandSpec{
 	command:  "auth invites",
 	valid:    []string{"list", "create", "revoke"},
-	examples: []string{"anx auth invites list", "anx auth invites create --kind agent", "anx auth invites revoke --invite-id <id>"},
+	examples: []string{"anx auth invites list", "anx auth invites create --kind human", "anx auth invites revoke --invite-id <id>"},
 	aliases: map[string]string{
 		"ls": "list",
 	},

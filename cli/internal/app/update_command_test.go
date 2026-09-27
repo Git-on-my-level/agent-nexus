@@ -54,7 +54,7 @@ func TestRunUpdateCheckDoesNotCallHandshake(t *testing.T) {
 	if got := anyStringValue(payload["command"]); got != "update" {
 		t.Fatalf("unexpected command: %#v", payload)
 	}
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["target_version"]); got != "v0.0.3" {
 		t.Fatalf("expected latest release target version, got %#v", data)
 	}
@@ -94,7 +94,7 @@ func TestRunUpdateCheckFallsBackToLatestRelease(t *testing.T) {
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "update", "--check"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got := anyStringValue(data["target_version"]); got != "v0.0.3" {
 		t.Fatalf("expected latest release target version, got %#v", data)
 	}
@@ -146,7 +146,7 @@ func TestRunUpdateReplacesBinaryFromRequestedVersion(t *testing.T) {
 	home := t.TempDir()
 	raw := runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "update", "--version", version})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if got, _ := data["updated"].(bool); !got {
 		t.Fatalf("expected updated=true, got %#v", data)
 	}
@@ -178,7 +178,7 @@ func TestHelpUpdateTopic(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "anx update [--check] [--version <tag>] [--bridge-config <path>]") || !strings.Contains(stdout.String(), "--bridge-config <path>") {
+	if !strings.Contains(stdout.String(), "anx update [--check] [--version <tag>]") {
 		t.Fatalf("expected update help output, got %q", stdout.String())
 	}
 }

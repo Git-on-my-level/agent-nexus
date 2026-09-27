@@ -330,6 +330,117 @@ export function proposerLabel(
   return "Proposed";
 }
 
+/**
+ * The order an operator reads the task table in: what is stuck, then what is
+ * moving, then what waits for review, then what could start. Closed work
+ * (Done, Cancelled) is not in this list; the table folds it away.
+ */
+export const ATTENTION_ORDER = [
+  "blocked",
+  "in_progress",
+  "review",
+  "ready",
+  "backlog",
+];
+export const CLOSED_PHASES = new Set(["done", "cancelled"]);
+
+export function isClosedWork(work) {
+  return CLOSED_PHASES.has(String(work?.phase ?? ""));
+}
+
+function attentionRank(work) {
+  const phase = String(work?.phase || "unknown");
+  const index = ATTENTION_ORDER.indexOf(phase);
+  if (index >= 0) return index;
+  if (phase === "done") return ATTENTION_ORDER.length + 2;
+  if (phase === "cancelled") return ATTENTION_ORDER.length + 3;
+  // A phase Nexus has no name for still needs a look: after the known open
+  // phases, before anything closed.
+  return ATTENTION_ORDER.length + 1;
+}
+
+/**
+ * Stable attention sort. Within a phase the incoming order (work.list is most
+ * recently updated first) is kept.
+ */
+export function sortWorkByAttention(records) {
+  return (Array.isArray(records) ? records : [])
+    .map((work, index) => ({ work, index }))
+    .sort(
+      (a, b) =>
+        attentionRank(a.work) - attentionRank(b.work) || a.index - b.index,
+    )
+    .map((entry) => entry.work);
+}
+
+/**
+ * The identity of the thing a task mirrors: one GitHub issue read through two
+ * connections is one item. Nexus-owned work has no source key.
+ */
+export function workSourceKey(work) {
+  const source = work?.source ?? {};
+  const authority = String(source.authority ?? "")
+    .trim()
+    .toLowerCase();
+  const nativeId = String(source.native_id ?? "").trim();
+  if (!authority || authority === "nexus" || !nativeId) return "";
+  return `${authority}:${nativeId}`;
+}
+
+function lastGoodRead(work) {
+  const observed = Date.parse(work?.freshness?.last_observed_at ?? "");
+  return Number.isFinite(observed) ? observed : -Infinity;
+}
+
+/**
+ * Which of several tasks mirroring one source item is the one to show: the one
+ * whose reader works, then the one read most recently, then the oldest (the
+ * first one registered).
+ */
+function canonicalRank(a, b) {
+  const aFailing = workFreshness(a).key === "error" ? 1 : 0;
+  const bFailing = workFreshness(b).key === "error" ? 1 : 0;
+  if (aFailing !== bFailing) return aFailing - bFailing;
+  const read = lastGoodRead(b) - lastGoodRead(a);
+  if (read) return read;
+  const created =
+    (Date.parse(a?.created_at ?? "") || 0) -
+    (Date.parse(b?.created_at ?? "") || 0);
+  if (created) return created;
+  return String(workKey(a) ?? "").localeCompare(String(workKey(b) ?? ""));
+}
+
+/**
+ * Collapse tasks that share a source key to their canonical row.
+ *
+ * Returns the kept records (in their original order, at the canonical row's
+ * position) and, per kept task key, the tasks folded into it.
+ *
+ * @returns {{ records: object[], folded: Record<string, object[]> }}
+ */
+export function dedupeWorkBySource(records) {
+  const list = Array.isArray(records) ? records : [];
+  const bySource = new Map();
+  for (const work of list) {
+    const key = workSourceKey(work);
+    if (!key) continue;
+    if (!bySource.has(key)) bySource.set(key, []);
+    bySource.get(key).push(work);
+  }
+  const folded = {};
+  const hidden = new Set();
+  for (const group of bySource.values()) {
+    if (group.length < 2) continue;
+    const [keep, ...rest] = [...group].sort(canonicalRank);
+    folded[workKey(keep)] = rest;
+    for (const work of rest) hidden.add(work);
+  }
+  return {
+    records: list.filter((work) => !hidden.has(work)),
+    folded,
+  };
+}
+
 export function phaseGroups(records) {
   const keys = [
     ...PHASES.filter((phase) => phase !== "unknown"),
@@ -389,6 +500,21 @@ export function sourceLabel(source) {
     source?.authority ||
     "Authority unknown"
   );
+}
+/**
+ * A connection named for a person: "github-main" under GitHub reads
+ * "GitHub · main". The raw connection id stays available to copy where an
+ * operator configures it; it is not a label.
+ */
+export function connectionName(source) {
+  const label = sourceLabel(source);
+  const authority = String(source?.authority ?? "").trim();
+  let id = String(source?.connection_id ?? "").trim();
+  if (!id) return label;
+  if (authority && id.toLowerCase().startsWith(`${authority.toLowerCase()}-`))
+    id = id.slice(authority.length + 1);
+  const words = id.replace(/[-_]+/g, " ").trim();
+  return words ? `${label} · ${words}` : label;
 }
 /** True when core answered 401 for a missing, invalid or expired token. */
 export function isSessionExpired(error) {

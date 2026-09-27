@@ -46,7 +46,7 @@ func TestBuildPMPromptStaysSmallAndNamesTools(t *testing.T) {
 	if strings.Contains(prompt, "inventory") || strings.Contains(strings.ToLower(prompt), "full tracker") {
 		t.Fatal("prompt stuffed tracker context")
 	}
-	for _, needle := range []string{"What needs my decision?", "anx --agent pm work list", "anx --agent pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
+	for _, needle := range []string{"What needs my decision?", "anx --as pm work list", "anx --as pm pm context", "pm turns propose", "ANX_PM_LEASE_TOKEN", "--lease-token", "work_ref", "decision:", "---evidence---", "evidence_refs", "identical payload, instruction and target revision", "supersedes the earlier awaiting decision", "instead of duplicating"} {
 		if !strings.Contains(prompt, needle) {
 			t.Fatalf("missing %q in %s", needle, prompt)
 		}
@@ -251,25 +251,25 @@ func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
 		{
 			name:     "unclaimed sending",
 			turnBody: `{"id":"turn-1","status":"sending","claimed":false,"deadline":"2026-09-08T22:00:00Z"}`,
-			want:     "status: queued",
+			want:     "result.turn.status=sending",
 			hide:     "status: sending",
 		},
 		{
 			name:     "claimed sending",
 			turnBody: `{"id":"turn-2","status":"sending","claimed":true,"claimed_at":"2026-09-08T21:00:00Z","deadline":"2026-09-08T22:00:00Z"}`,
-			want:     "status: in progress",
+			want:     "result.turn.status=sending",
 			hide:     "status: sending",
 		},
 		{
 			name:     "delivered",
 			turnBody: `{"id":"turn-3","status":"delivered","claimed":true,"response":"Ready."}`,
-			want:     "status: delivered",
+			want:     "result.turn.status=delivered",
 			hide:     "status: sending",
 		},
 		{
 			name:     "failed",
 			turnBody: `{"id":"turn-4","status":"failed","claimed":true,"failure":"deadline passed"}`,
-			want:     "status: failed",
+			want:     "result.turn.status=failed",
 			hide:     "status: sending",
 		},
 	} {
@@ -297,9 +297,9 @@ func TestPMAskTextRendersQueuedAndInProgress(t *testing.T) {
 				t.Fatalf("unexpected %q in %s", tc.hide, text)
 			}
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
-			turn := asMap(asMap(payload["data"])["turn"])
+			turn := asMap(asMap(payload["result"])["turn"])
 			if strings.Contains(tc.name, "sending") && anyString(turn["status"]) != "sending" {
-				t.Fatalf("JSON remapped status: %v", payload["data"])
+				t.Fatalf("JSON remapped status: %v", payload["result"])
 			}
 		})
 	}
@@ -335,7 +335,7 @@ func TestPMAskReusesRecentEmptyConversation(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "ask", "--title", "Earlier", "Retry into the empty conversation"})
-	if !strings.Contains(text, "conversation: conv-empty") {
+	if !strings.Contains(text, "result.conversation_id=conv-empty") {
 		t.Fatalf("text=%s", text)
 	}
 	mu.Lock()
@@ -367,7 +367,7 @@ func TestPMAskDoesNotReuseStaleOrNonEmptyConversation(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "ask", "Need a new conversation"})
-	if !strings.Contains(text, "conversation: conv-new") {
+	if !strings.Contains(text, "result.conversation_id=conv-new") {
 		t.Fatalf("text=%s", text)
 	}
 }
@@ -403,7 +403,7 @@ func TestPMAskDoesNotReuseEmptyConversationWithMismatchedWorkRef(t *testing.T) {
 		"--title", "Store copy chat",
 		"Retry with work attached",
 	})
-	if !strings.Contains(text, "conversation: conv-new") {
+	if !strings.Contains(text, "result.conversation_id=conv-new") {
 		t.Fatalf("text=%s", text)
 	}
 	if anyString(createdBody["work_ref"]) != "card:launch" || anyString(createdBody["title"]) != "Store copy chat" {
@@ -439,7 +439,7 @@ func TestPMAskReusesEmptyConversationWhenWorkRefAndTitleMatch(t *testing.T) {
 		"--title", "Store copy chat",
 		"Retry into the matching conversation",
 	})
-	if !strings.Contains(text, "conversation: conv-empty") {
+	if !strings.Contains(text, "result.conversation_id=conv-empty") {
 		t.Fatalf("text=%s", text)
 	}
 	if creates != 0 {
@@ -487,7 +487,7 @@ func TestPMAskReusesMatchingEmptyConversationBehindNewerMismatch(t *testing.T) {
 		"--title", "Store copy chat",
 		"Retry into a matching empty conversation",
 	})
-	if !strings.Contains(text, "conversation: conv-empty") {
+	if !strings.Contains(text, "result.conversation_id=conv-empty") {
 		t.Fatalf("text=%s", text)
 	}
 	if creates != 0 {
@@ -556,21 +556,17 @@ func TestPMChannelsDoctorProbesWebhooksWithGETOnly(t *testing.T) {
 	}
 }
 
-func TestHarnessChildEnvRestoresPasswdHomeAndProfile(t *testing.T) {
+func TestHarnessChildEnvRestoresPasswdHomeAndAgent(t *testing.T) {
 	got := harnessChildEnv(config.Resolved{
-		Agent:       "pm",
-		BaseURL:     "http://127.0.0.1:8000",
-		ProfilePath: "/tmp/pm.json",
+		Agent:   "pm",
+		BaseURL: "http://127.0.0.1:8000",
 	}, []string{"HOME=/fake/profile-home", "PATH=/bin", "ZAI_API_KEY=already-set"})
 	home := envValue(got, "HOME")
 	if home == "/fake/profile-home" {
 		t.Fatal("child HOME stayed on the isolated profile home; omp needs the operator home for models.yml")
 	}
-	if envValue(got, "ANX_PROFILE_PATH") != "/tmp/pm.json" {
-		t.Fatalf("ANX_PROFILE_PATH=%q", envValue(got, "ANX_PROFILE_PATH"))
-	}
-	if envValue(got, "ANX_AGENT") != "pm" || envValue(got, "ANX_BASE_URL") != "http://127.0.0.1:8000" {
-		t.Fatalf("agent/base %q %q", envValue(got, "ANX_AGENT"), envValue(got, "ANX_BASE_URL"))
+	if envValue(got, "ANX_AS") != "pm" || envValue(got, "ANX_BASE_URL") != "http://127.0.0.1:8000" {
+		t.Fatalf("agent/base %q %q", envValue(got, "ANX_AS"), envValue(got, "ANX_BASE_URL"))
 	}
 	if envValue(got, "ZAI_API_KEY") != "already-set" {
 		t.Fatal("existing ZAI_API_KEY was rewritten")
@@ -579,9 +575,8 @@ func TestHarnessChildEnvRestoresPasswdHomeAndProfile(t *testing.T) {
 
 func TestHarnessChildEnvDoesNotInjectZAIAPIKey(t *testing.T) {
 	got := harnessChildEnv(config.Resolved{
-		Agent:       "pm",
-		BaseURL:     "http://127.0.0.1:8000",
-		ProfilePath: "/tmp/pm.json",
+		Agent:   "pm",
+		BaseURL: "http://127.0.0.1:8000",
 	}, []string{"PATH=/bin"})
 	if envValue(got, "ZAI_API_KEY") != "" {
 		t.Fatal("harness injected ZAI_API_KEY from disk")
@@ -1448,7 +1443,7 @@ func TestPMServeExitsAfterThreeForbiddenClaims(t *testing.T) {
 		t.Fatalf("claims=%d", claims)
 	}
 	logs := stderr.String()
-	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this profile is maya"
+	wantWhy := "claim forbidden: pm.respond requires the configured PM actor (ANX_PM_AGENT_ACTOR_ID); this agent is maya"
 	if !strings.Contains(logs, wantWhy) {
 		t.Fatalf("missing first forbidden explanation: %s", logs)
 	}

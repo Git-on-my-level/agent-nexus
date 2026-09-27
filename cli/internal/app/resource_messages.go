@@ -31,7 +31,7 @@ func (a *App) parseTopicMessageInput(ctx context.Context, args []string, cfg con
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the active profile")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the resolved agent")
 	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
@@ -109,7 +109,7 @@ func (a *App) parseDocMessageInput(ctx context.Context, args []string, cfg confi
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the active profile")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the resolved agent")
 	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
@@ -171,7 +171,7 @@ func (a *App) parseCardMessageInput(ctx context.Context, args []string, cfg conf
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the active profile")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the resolved agent")
 	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
@@ -235,7 +235,7 @@ func (a *App) parseThreadMessageInput(ctx context.Context, args []string, cfg co
 	fs.Var(&bodyFlag, "body", "Message body text")
 	fs.Var(&bodyFileFlag, "body-file", "Load message body text from a local file")
 	fs.Var(&summaryFlag, "summary", "Optional short event summary")
-	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the active profile")
+	fs.Var(&actorIDFlag, "actor-id", "Actor id; defaults from the resolved agent")
 	fs.Var(&refFlags, "ref", "Additional typed ref to attach to the message, repeatable")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render request without sending the mutation")
 	if err := fs.Parse(args); err != nil {
@@ -295,7 +295,7 @@ func (a *App) runCardMessagesCommand(ctx context.Context, args []string, cfg con
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
-	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
+	fs.Var(&mineFlag, "mine", "Filter to messages authored by resolved agent actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -376,7 +376,7 @@ func (a *App) runTopicMessagesCommand(ctx context.Context, args []string, cfg co
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
-	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
+	fs.Var(&mineFlag, "mine", "Filter to messages authored by resolved agent actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -420,7 +420,7 @@ func (a *App) runDocMessagesCommand(ctx context.Context, args []string, cfg conf
 	var mineFlag, fullIDFlag trackedBool
 	var includeArchived, archivedOnly, includeTrashed, trashedOnly bool
 	fs.Var(&actorIDFlag, "actor-id", "Filter to one actor id")
-	fs.Var(&mineFlag, "mine", "Filter to messages authored by active profile actor_id")
+	fs.Var(&mineFlag, "mine", "Filter to messages authored by resolved agent actor_id")
 	fs.Var(&fullIDFlag, "full-id", "(debug/admin) Render full event ids in default text output")
 	fs.Var(&maxEventsFlag, "max-events", "Return at most N most-recent matching messages (0 means unlimited)")
 	fs.BoolVar(&includeArchived, "include-archived", false, "Include archived events")
@@ -583,7 +583,7 @@ func buildMessagePostedBody(cfg config.Resolved, actorFlag string, target messag
 		actorID = strings.TrimSpace(cfg.ActorID)
 	}
 	if actorID == "" {
-		return nil, errnorm.Usage("invalid_request", "message commands require an actor_id; pass --actor-id or use a profile with actor_id")
+		return nil, errnorm.Usage("invalid_request", "message commands require an actor_id; pass --actor-id or resolve a derived agent with actor_id")
 	}
 	refs := []string{target.SubjectRef, "thread:" + target.ThreadID}
 	if target.BoardRef != "" {

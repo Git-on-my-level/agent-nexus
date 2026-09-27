@@ -14,7 +14,7 @@ Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on du
 ## Module Purpose
 `web-ui` is the operator control surface for Agent Nexus.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, Tasks (work projection), Docs, Ask PM, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention: Inbox triage, the Agents presence roster, Tasks (work projection), Docs, Ask PM, and settings (including host enrollment in Access). Boards and cards remain the store behind Tasks; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
 - Treat `anx-core` as the single source of truth for all durable state.
@@ -73,7 +73,7 @@ Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts:
 
 **Popover / menu dismiss:** `use:dismissOnEscape` from `src/lib/actions/dismissOnEscape.js` on the popover root while open (`enabled`, `onDismiss`). Capture-phase document listener; stops propagation so other handlers do not run.
 
-**Inbox respond form:** The response composer is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit` → `submitResponse()`). No per-field Mod+Enter handler is required.
+**Inbox respond form:** `InboxRespondPanel` (shared by the Inbox pane and `/inbox/{id}`) is a `<form>` with a submit control; ⌘/Ctrl+Enter uses Layer A (`requestSubmit` → `onsubmit`). No per-field Mod+Enter handler is required. Sends go through `lib/inboxResponseQueue.js` (undo window) rather than calling `respondInboxItem` directly, and triage keys go through `lib/inboxShortcuts.js`.
 
 - `make -C web-ui check`
 - `./scripts/test`

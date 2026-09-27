@@ -31,7 +31,7 @@ type localHelperTopic struct {
 var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
-	{Path: "auth", Description: "Register, inspect, and manage auth state"},
+	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
 	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
@@ -81,7 +81,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Topic title."},
 			{Name: "--summary <text>", Description: "Topic summary."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--owner-ref <typed-ref>", Description: "Owner typed ref, repeatable."},
 			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
 			{Name: "--board-ref <typed-ref>", Description: "Linked board typed ref, repeatable."},
@@ -105,7 +105,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--title <text>", Description: "Topic title."},
 			{Name: "--summary <text>", Description: "Topic summary."},
 			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from topics get when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -123,7 +123,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<topic-id>", Description: "Topic id or unique prefix to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the topic."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -144,7 +144,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -160,7 +160,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Topic ref, handle, or id whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
@@ -183,7 +183,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -200,7 +200,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "--title <text>", Description: "Board title."},
 			{Name: "--summary <text>", Description: "Optional board summary."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--topic <topic-ref-or-handle>", Description: "Primary topic typed ref or handle."},
 			{Name: "--document-ref <typed-ref>", Description: "Linked document typed ref, repeatable."},
 			{Name: "--ref <typed-ref>", Description: "Pinned/related typed ref, repeatable."},
@@ -244,7 +244,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--subject-ref <typed-ref>", Description: "Explicit document subject ref when not using --topic."},
 			{Name: "--title <text>", Description: "Document title for flag-built text docs."},
 			{Name: "--summary <text>", Description: "Optional document summary for list/detail headers."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref (repeatable)."},
 			{Name: "--body-file <path>", Description: "Load Markdown/text content from a local file, or stdin with `-`."},
 			{Name: "--body <text>", Description: "Inline document body text (Markdown/text) when not using --body-file."},
@@ -290,7 +290,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--handle <handle>", Description: "Public handle used as the idempotency key."},
 			{Name: "--body <text>", Description: "Inline body when not passing a path."},
 			{Name: "--body-file <path>", Description: "Load body from a file or stdin with `-`."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -307,7 +307,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--tags <tag>", Description: "Extra tags. `knowledge` is always applied."},
 			{Name: "--hosts <name>", Description: "Host names this knowledge tree applies to."},
 			{Name: "--verified-at <rfc3339>", Description: "When this knowledge tree was last verified."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -325,7 +325,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body <text>", Description: "Comment text."},
 			{Name: "--reply-to <comment-id>", Description: "Parent comment id for a reply."},
 			{Name: "--document-id <id>", Description: "Document id when not using the positional."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -356,7 +356,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Parent comment ref (`event:<handle>`) or id."},
 			{Name: "--body <text>", Description: "Reply text."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -385,7 +385,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
 			{Name: "--body <text>", Description: "Replacement comment text."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent."},
 		},
 	},
 	{
@@ -399,7 +399,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<doc>", Description: "Document ref, handle, or id."},
 			{Name: "<comment>", Description: "Comment ref (`event:<handle>`) or id."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent."},
 		},
 	},
 	{
@@ -443,14 +443,14 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Card summary/body."},
 			{Name: "--column-key <key>", Description: "Accepted for guidance only; use `anx cards move --column <key>` for placement."},
 			{Name: "--if-updated-at <timestamp>", Description: "Optimistic concurrency token; discovered from cards get when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file."},
 		},
 	},
 	{
 		Path:        "cards message",
 		Summary:     "Post a message to a Card conversation without hand-authoring event JSON.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, derived agent actor, and payload text.",
 		Composition: "Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.",
 		Examples: []string{
 			"anx cards message card:implement-login --body \"Implemented in 0729e75\"",
@@ -463,7 +463,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -480,7 +480,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id whose messages should be listed."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 		},
@@ -501,7 +501,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -527,7 +527,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "threads message",
 		Summary:     "Escape hatch: post a message directly to a backing thread.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, derived agent actor, and payload text.",
 		Composition: "Writes directly to a backing thread. Prefer domain commands such as `cards message`, `topics message`, or `docs message` when you are working from a Card, Topic, or Doc.",
 		Examples: []string{
 			"anx threads message <thread-id> --body-file note.md",
@@ -539,7 +539,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -559,7 +559,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -617,7 +617,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--summary <text>", Description: "Optional short evidence event summary."},
 			{Name: "--resolution <value>", Description: "Resolution value, default done."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
@@ -650,7 +650,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Card ref, handle, or id to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the card."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -668,7 +668,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--type <event-type>", Description: "Repeatable event type filter."},
 			{Name: "--types <csv>", Description: "Comma-separated event types."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
-			{Name: "--mine", Description: "Resolve to the active profile actor_id."},
+			{Name: "--mine", Description: "Resolve to the resolved agent actor_id."},
 			{Name: "--max-events <n>", Description: "Keep the most recent matching events."},
 			{Name: "--max <n>", Description: "Alias for --max-events."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output (non-JSON)."},
@@ -720,7 +720,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
 			{Name: "--summary <text>", Description: "Optional attachment summary."},
 			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--from-file <path>", Description: "Advanced JSON artifact create body from file; cannot be combined with --file."},
 		},
 	},
@@ -739,7 +739,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--refs <json>", Description: "Compatibility form: JSON array of typed refs."},
 			{Name: "--summary <text>", Description: "Optional attachment summary."},
 			{Name: "--artifact <json>", Description: "Optional JSON object merged into attachment metadata; refs and kind are ignored by the server."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 		},
 	},
 	{
@@ -842,7 +842,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Document ref, alias, or id to revise."},
 			{Name: "--body-file <path>", Description: "Load revised Markdown/text content from a local file or stdin with `-`."},
 			{Name: "--from-file <path>", Description: "Advanced JSON revision body from a file."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--apply", Description: "Apply immediately, or apply a staged proposal when combined with --proposal-id."},
 			{Name: "--proposal-id <proposal-id>", Description: "Staged proposal id to apply; must be combined with --apply."},
 			{Name: "--propose", Description: "Stage a proposal (default; included for explicitness)."},
@@ -862,7 +862,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "<ref>", Description: "Document ref, handle, or id to trash."},
 			{Name: "--reason <text>", Description: "Reason for trashing the document."},
 			{Name: "--from-file <path>", Description: "Advanced JSON request body from file or stdin (`-`)."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from profile when omitted."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; overlays JSON and defaults from resolved agent when omitted."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -890,7 +890,7 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Document ref, alias, or id."},
 			{Name: "--max-events <n>", Description: "Return at most N most-recent matching messages."},
-			{Name: "--mine", Description: "Filter to messages authored by the active profile actor_id."},
+			{Name: "--mine", Description: "Filter to messages authored by the resolved agent actor_id."},
 			{Name: "--actor-id <actor-id>", Description: "Filter to one actor id."},
 			{Name: "--full-id", Description: "(debug/admin) Render full event ids in default text output."},
 			{Name: "--include-archived", Description: "Include archived message events."},
@@ -903,7 +903,7 @@ var localHelperTopics = []localHelperTopic{
 		Path:        "docs message",
 		Summary:     "Post a message to a Document conversation without hand-authoring event JSON.",
 		QuickStart:  "Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.",
-		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.",
+		JSONShape:   "Builds an `events.create` body with `event.type=message_posted`, document/thread refs, derived agent actor, and payload text.",
 		Composition: "Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.",
 		Examples: []string{
 			`anx docs message doc:runbook --body-file note.md`,
@@ -915,7 +915,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load message body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -936,7 +936,7 @@ var localHelperTopics = []localHelperTopic{
 			{Name: "--body-file <path>", Description: "Load reply body text from a local file."},
 			{Name: "--summary <text>", Description: "Optional short event summary."},
 			{Name: "--ref <typed-ref>", Description: "Additional typed ref, repeatable."},
-			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the active profile when available."},
+			{Name: "--actor-id <actor-id>", Description: "Actor id; defaults from the resolved agent when available."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
 		},
 	},
@@ -953,6 +953,25 @@ func isHelpToken(value string) bool {
 }
 
 func (a *App) rootUsageText() string {
+	return strings.TrimSpace(`anx - Agent Nexus CLI
+
+Usage: anx [global flags] <command>
+
+Daily loop:
+  orient                  See me, my work, asks, notifications, stale items, and next steps (read_only)
+  work start [card]       Assign me, mark in progress, and set current card (remote_coordination_write)
+  work note <text> [card] Post progress and refresh presence (remote_coordination_write)
+  work block <why> [card] Mark blocked; add --ask --recommend <text> to ask (remote_coordination_write)
+  work done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
+  ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
+  await <ask-id|card-ref>   Wait on event stream for answer or state (read_only)
+
+Setup: anx host enroll; anx doctor; anx install skill --path ./SKILL.md
+Help: anx help onboarding; anx help <command>; anx help --all
+Global flags: --json, --base-url, --as, --timeout`) + "\n"
+}
+
+func (a *App) rootUsageTextAll() string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(`anx - Agent Nexus CLI
 
@@ -960,7 +979,7 @@ Domain model:
   topics   Discuss and coordinate around a topic.
   boards   Track active work with columns and cards.
   docs     Maintain durable context and institutional knowledge.
-  threads  Inspect backing timelines only when diagnosing low-level state.
+  debug threads  Inspect backing timelines when diagnosing low-level state.
 
 Usage:
   anx [global flags] <command>
@@ -971,12 +990,14 @@ Core Commands:
   update        Replace the installed CLI binary with the recommended or requested release
   concepts      Explain the core ANX primitives and when to use them
   bridge        Install, manage, and inspect the Python wake-routing bridge runtime
-  auth          Manage agent registration, profile auth, and token lifecycle
-  config        Inspect effective CLI config and set the active profile (base URL, agent)
+  auth          Inspect enrolled host and derived-agent identity
+  config        Inspect effective CLI config (base URL and derived agent)
   import        Bootstrap a precision-first workspace import and run local import helpers
   install       Install local ANX helper artifacts, including the opinionated agent skill
   draft         Stage write requests locally and commit them later
-  human         Surface ask, review, or escalation items to the human Inbox
+  ask|review|escalate  Request operator attention
+  orient        Read the personal daily snapshot
+  await         Wait for an answer or card state
   provenance    Walk refs/provenance links as a deterministic graph
   secret        Manage workspace secrets for agent credential injection
   work          Query commitments, context, freshness, refresh and capabilities
@@ -985,6 +1006,7 @@ Core Commands:
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request
+  debug         Inspect diagnostic resource groups
   help [topic]  Show onboarding help or generated command help
 `) + "\n")
 
@@ -1000,7 +1022,11 @@ Core Commands:
 			if count == 0 {
 				continue
 			}
-			b.WriteString(fmt.Sprintf("  %-12s %s (%d)\n", topic.Path, topic.Description, count))
+			path := topic.Path
+			if isDiagnosticGroup(path) {
+				path = "debug " + path
+			}
+			b.WriteString(fmt.Sprintf("  %-12s %s (%d)\n", path, topic.Description, count))
 		}
 	}
 
@@ -1009,13 +1035,14 @@ Core Commands:
 Onboarding:
   `+"`anx concepts`"+` for a quick primitive-selection guide.
   `+"`anx help onboarding`"+` for the offline quick-start topic.
-  `+"`anx meta doc agent-guide`"+` for the prescriptive bundled agent guide.
+  `+"`anx debug meta doc agent-guide`"+` for the prescriptive bundled agent guide.
   `+"`anx install skill --path ./SKILL.md`"+` to install the opinionated ANX agent skill.
 
 Global Flags:
   --json
   --base-url <url>
-  --agent <name>
+  --as <name>
+  --config-dir <absolute-path>
   --no-color
   --verbose
   --headers
@@ -1026,7 +1053,33 @@ Global Flags:
 }
 
 func helpTopicText(topic string) (string, bool) {
+	text, ok := helpTopicTextRaw(topic)
+	if !ok {
+		return "", false
+	}
+	return qualifyDiagnosticExamples(text), true
+}
+
+func qualifyDiagnosticExamples(text string) string {
+	for _, group := range []string{"threads", "events", "ref-edges", "derived", "actors", "inbox", "meta"} {
+		text = strings.ReplaceAll(text, "anx "+group+" ", "anx debug "+group+" ")
+		text = strings.ReplaceAll(text, "anx "+group+"`", "anx debug "+group+"`")
+		text = strings.ReplaceAll(text, "anx --json "+group+" ", "anx --json debug "+group+" ")
+	}
+	return text
+}
+
+func helpTopicTextRaw(topic string) (string, bool) {
 	topic = strings.TrimSpace(topic)
+	if strings.HasPrefix(topic, "debug ") {
+		topic = strings.TrimPrefix(topic, "debug ")
+	}
+	if topic == "work" {
+		return "Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.\n", true
+	}
+	if strings.HasPrefix(topic, "work ") && isDailyWorkVerb(strings.TrimPrefix(topic, "work ")) {
+		return "anx " + topic + " [card]: use anx help work for the daily loop.\n", true
+	}
 	if text, ok := workHelpText(topic); ok {
 		return text, true
 	}
@@ -1038,7 +1091,13 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "draft" {
 		return draftUsageText(), true
 	}
-	if topic == "human" {
+	if topic == "orient" {
+		return "anx orient [--stale-hours N]: bounded personal snapshot (read_only)\n", true
+	}
+	if topic == "await" {
+		return "anx await <ask-id|card-ref> [--until answered|state=<phase>] [--timeout <dur>]: wait on events (read_only)\n", true
+	}
+	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
 	}
 	if topic == "import" {
@@ -1056,51 +1115,19 @@ func helpTopicText(topic string) (string, bool) {
 	if topic == "concepts" || topic == "primitives" || topic == "primitives guide" {
 		return conceptsGuideText() + "\n", true
 	}
-	if topic == "profiles" {
-		return profilesDocText() + "\n", true
+	if topic == "host identity" {
+		return hostIdentityDocText() + "\n", true
 	}
 	if topic == "env" {
 		return envDocText() + "\n", true
 	}
 	if topic == "config" {
-		return strings.TrimSpace(`Config surface for the active CLI profile
-
-Use this group to set or inspect which local profile supplies base URL and auth when you omit --agent / --base-url.
-
-Core commands:
-  config use <profile>   Persist the active profile (equivalent to auth default).
-  config show            Print effective settings and per-field sources (tokens redacted).
-  config unset           Remove the default profile marker (~/.config/anx/default-profile).
-
-Related:
-  auth list              List profiles and which is active.
-  auth default <profile> Same selection as config use.
-
-Docs:
-  anx meta doc profiles
-  anx meta doc env`) + "\n", true
+		return "Config: anx config show prints the workspace URL, selected agent name, and sources (secrets redacted).\n", true
 	}
 	if topic == "auth" {
-		return strings.TrimSpace(`Auth lifecycle and registration surface
-
-Use this group to register a profile, inspect the active identity, and manage local auth state.
-
-Core commands:
-  auth register       Create or register a profile.
-  auth whoami         Inspect the active profile.
-  auth list           List local profiles.
-  auth default        Select the default profile.
-  auth update-username  Rename the current principal locally.
-  auth rotate         Rotate the active agent key.
-  auth revoke         Revoke the current profile.
-  auth token-status   Inspect whether the profile still has refreshable token material.
-
-	Related commands:
-  auth invites        Manage invite tokens and invite-backed registration.
-  auth bootstrap      Inspect bootstrap status before first registration.
-  auth principals     Inspect or revoke principals.
-  auth audit          Inspect audit records for auth activity.`) + "\n", true
+		return "Auth: anx auth whoami reports the enrolled host, derived agent and resolution source. Enroll with anx host enroll.\n", true
 	}
+
 	if topic == "auth principals" {
 		return strings.TrimSpace(`Auth principal administration
 
@@ -1133,7 +1160,7 @@ Examples:
 	if topic == "notifications" {
 		return strings.TrimSpace(`Agent notification surface
 
-Use this group to inspect and clear durable wake notifications for the active agent profile.
+Use this group to inspect and clear durable wake notifications for the resolved derived agent.
 
 Core commands:
   notifications list       List queued notifications, usually with --status unread.
@@ -1482,16 +1509,8 @@ Canonical card workflow:
    Tip: use ` + "`cards message card:<handle> --body-file update.md`" + ` for ordinary status updates. Use raw ` + "`events create`" + ` only for contract-level writes or unusual integrations.
    Board context is an input (` + "`--board`" + `) or filter (` + "`--board`" + `), not the card command namespace.`)
 	case "auth":
-		return strings.TrimSpace(`Local auth lifecycle helpers:
-  auth whoami             Validate the active profile against the server and show resolved identity.
-  auth list               List local CLI profiles and which one is active.
-  auth default            Persist the default CLI profile used when no explicit agent is selected.
-  auth update-username    Update the current principal username and sync the local profile.
-  auth rotate             Rotate the active agent key and refresh stored credentials.
-  auth revoke             Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
-  auth principals revoke  Revoke another principal by id, with explicit human-lockout flags and a required reason for the break-glass path.
-  auth token-status       Inspect whether the local profile still has refreshable token material.
-  Tip: use ` + "`anx auth bootstrap status`" + ` before first registration, ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` for the first principal, and ` + "`anx auth invites create --kind human|agent`" + ` before later registrations.`)
+		return "auth whoami  Show enrolled host, derived agent and identity resolution source.\n"
+
 	default:
 		return ""
 	}
@@ -1511,6 +1530,7 @@ func formatLocalHelperHelp(topic localHelperTopic, includeGlobalFlags bool) stri
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Local Help: %s\n\n", strings.TrimSpace(topic.Path)))
 	b.WriteString("- Kind: `local helper`\n")
+	b.WriteString(fmt.Sprintf("- Side effect class: `%s`\n", commandSideEffectClass(topic.Path)))
 	b.WriteString(fmt.Sprintf("- Summary: %s\n", strings.TrimSpace(topic.Summary)))
 	if strings.TrimSpace(topic.QuickStart) != "" {
 		b.WriteString(fmt.Sprintf("- Quick start: %s\n", strings.TrimSpace(topic.QuickStart)))
@@ -1546,6 +1566,7 @@ func formatGeneratedCommandHelp(topic string, cmd registry.Command, includeGloba
 	b.WriteString(fmt.Sprintf("- Command ID: `%s`\n", cmd.CommandID))
 	b.WriteString(fmt.Sprintf("- CLI path: `%s`\n", runtimePathFromRegistryPath(cmd.CLIPath)))
 	b.WriteString(fmt.Sprintf("- HTTP: `%s %s`\n", cmd.Method, cmd.Path))
+	b.WriteString(fmt.Sprintf("- Side effect class: `%s`\n", cmd.SideEffectClass))
 	if strings.TrimSpace(cmd.Stability) != "" {
 		b.WriteString(fmt.Sprintf("- Stability: `%s`\n", strings.TrimSpace(cmd.Stability)))
 	}
@@ -1611,7 +1632,7 @@ func formatGlobalFlagUsage(topic string) string {
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
 }
 
 func formatInputSchemaBlock(cmd registry.Command) string {
@@ -1718,7 +1739,7 @@ func fieldHelpText(commandID string, name string) string {
 	case name == "if_board_updated_at":
 		return "Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response."
 	case name == "actor_id" && commandID == "boards.cards.batch_add":
-		return "Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
+		return "Defaults from the resolved derived agent when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body."
 	case name == "request_key" && commandID == "boards.cards.batch_add":
 		return "Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body."
 	case name == "if_base_revision" && strings.HasPrefix(commandID, "cards."):
@@ -1804,7 +1825,7 @@ func formatCommandSpecificHelpBlock(cmd registry.Command) string {
   - ` + "`exception_raised`" + `
 
 Usually emitted by higher-level commands:
-  - ` + "`human_attention_requested`" + `: prefer ` + "`anx human ask|review|escalate`" + `
+  - ` + "`human_attention_requested`" + `: prefer ` + "`anx ask|review|escalate`" + `
 
 Local CLI notes:
   - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
@@ -1820,8 +1841,8 @@ Note: by default, archived and trashed events are excluded from the timeline out
 	case "inbox.list":
 		return strings.TrimSpace(`View scoping:
   - ` + "`inbox list`" + ` is read from the active CLI identity's perspective.
-  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with ` + "`--agent <profile>`" + ` or ` + "`ANX_AGENT`" + ` before reading or acting.
+  - The response includes ` + "`viewing_as`" + ` so you can confirm the resolved agent, username, and actor_id.
+  - Switch perspective with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + ` before reading or acting.
 
 Inbox kinds:
   - ` + "`ask`" + `: A requesting agent needs an answer, judgment, or missing context.
@@ -1831,16 +1852,17 @@ Inbox kinds:
 		return strings.TrimSpace(`CLI flags (` + "`inbox respond`" + `):
   --inbox-item-id <id>    Inbox item id or list alias (see ` + "`inbox list`" + `).
   --response-text <text>  Freeform response text.
+  --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
-  --actor-id <id>         Actor id (` + "`me`" + ` uses the active profile's actor when configured).
+  --actor-id <id>         Actor id (` + "`me`" + ` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via ` + "`--inbox-item-id`" + `.
-  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, optional fields).`)
+  Otherwise: JSON object on stdin (` + "`inbox_item_id`" + `, ` + "`response_text`" + `, ` + "`outcome`" + `, optional fields).`)
 	case "boards.cards.batch_add":
 		return strings.TrimSpace(`CLI input:
   - Provide a JSON object on stdin or via ` + "`--from-file`" + `; it must include ` + "`items`" + ` (array of card create payloads).
   - Board target: a single positional ` + "`<board-ref-or-handle>`" + ` before flags (preferred), or ` + "`--board-id <board-ref-or-handle>`" + ` for compatibility.
-  - ` + "`actor_id`" + ` defaults from the active profile when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
+  - ` + "`actor_id`" + ` defaults from the resolved agent when omitted from JSON; ` + "`--actor-id`" + ` sets or overrides it.
   - ` + "`--request-key`" + ` and ` + "`--if-board-updated-at`" + `, when non-empty, override the same keys in the JSON body.
 
 Agent tip: run ` + "`anx boards get <board-ref-or-handle> --json`" + ` (or ` + "`boards workspace`" + `) first, copy ` + "`board.updated_at`" + ` into ` + "`if_board_updated_at`" + `, or pass ` + "`--if-board-updated-at`" + ` from that value. Each item's ` + "`related_refs`" + ` must reference source threads not already backing another card on this board, or the server returns ` + "`conflict`" + `.`)
@@ -1883,12 +1905,8 @@ func runtimeSupportedCommandIDs() map[string]struct{} {
 
 func runtimeGeneratedHelpSpecs() []subcommandSpec {
 	specs := []subcommandSpec{
-		{
-			command:  "auth",
-			valid:    []string{"register"},
-			examples: authSubcommandSpec.examples,
-			aliases:  authSubcommandSpec.aliases,
-		},
+		{command: "runs", valid: []string{"list", "get", "ingest"}},
+		{command: "host", valid: []string{"list"}},
 		authInvitesSubcommandSpec,
 		authBootstrapSubcommandSpec,
 		authPrincipalsSubcommandSpec,
@@ -1978,54 +1996,27 @@ var runtimeRegistrySecretHelpPaths = []string{
 }
 
 func onboardingHelpText() string {
-	return strings.TrimSpace(`Onboarding: first steps (agents / automation)
+	return strings.TrimSpace(`Onboarding: daily loop
 
-This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read ` + "`anx meta doc agent-guide`" + `.
+1. Enroll this machine once per workspace with anx host enroll; a human approves it.
+2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
+3. Run anx orient. Confirm your handle, host, assigned work and next actions.
+4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
+5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
+6. Run anx work done --evidence <url|ref> when the card is complete.
+7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
-1. Point the CLI at the core API with ` + "`--base-url`" + ` or ` + "`ANX_BASE_URL`" + `.
-2. Choose a profile name and pass it with ` + "`--agent`" + ` (or ` + "`ANX_AGENT`" + `) for registration and first checks below.
-3. Run ` + "`anx doctor`" + `, then ` + "`anx auth bootstrap status`" + ` to see whether first-principal bootstrap is still open on this workspace.
-4. Register the agent profile:
-   - If bootstrap is available: ` + "`anx auth register --username <username> --bootstrap-token <token>`" + ` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (` + "`anx auth invites create --kind agent`" + ` from an already-authorized principal on that workspace), then ` + "`anx auth register --username <username> --invite-token <token>`" + `.
-5. On a machine where ` + "`~/.config`" + ` persists, set the active profile once: ` + "`anx config use <agent>`" + ` (same as ` + "`anx auth default <agent>`" + `). Later commands can omit ` + "`--base-url`" + ` / ` + "`--agent`" + `; use ` + "`anx config show`" + ` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with ` + "`anx auth whoami`" + `, run ` + "`anx workspace summary`" + `, then attach work to the right Topic/Card/Doc before mutating.
-7. Install the opinionated ANX agent skill into the local agent instruction path when available: ` + "`anx install skill --path <path>`" + `.
-8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with ` + "`@handle`" + ` mentions?" If yes, read ` + "`anx meta doc agent-bridge`" + ` and ` + "`anx meta doc wake-routing`" + `. If this runtime cannot be externally woken, skip bridge setup and say why.
-
-Default behavior after onboarding
-
-- Start non-trivial work with ` + "`anx workspace summary`" + ` and inspect likely related Topics, Cards, Docs, and notifications (` + "`anx notifications`" + `). Inbox is the operator attention queue.
-- Use Topics for current work conversation and coordination.
-- Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
-- Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
-- Use Topic/Doc/Card messages and replies for collaboration; use raw ` + "`events create`" + ` only for unusual contract-level records.
-- Use ` + "`anx human ask|review|escalate`" + ` when blocked, high consequence, or low confidence.
-
-First commands to run
-
-  anx --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
-  anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
-  anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
-  anx --agent <agent> auth whoami
-  anx --agent <agent> workspace summary
-  anx --agent <agent> topics list
-  anx --agent <agent> notifications list --status unread
-  anx install skill --path ./SKILL.md
-
-Next step
-
-  anx meta doc agent-guide
-  anx install skill --path ./SKILL.md
-  anx meta doc wake-routing`)
+Install the bundled skill: anx install skill --path ./SKILL.md
+Read the guide: anx debug meta doc agent-guide`) + "\n"
 }
 
 func mapRuntimePathToRegistryPath(path string) string {
 	parts := strings.Fields(strings.TrimSpace(path))
 	if len(parts) == 0 {
 		return ""
+	}
+	if len(parts) > 1 && parts[0] == "debug" && isDiagnosticGroup(parts[1]) {
+		parts = parts[1:]
 	}
 	path = strings.Join(parts, " ")
 	// Live CLI paths that differ from OpenAPI x-anx-cli-path. This is not a
@@ -2060,14 +2051,16 @@ func runtimePathFromRegistryPath(path string) string {
 	rewrites := map[string]string{
 		"pm conversations messages create": "pm conversations message",
 		"pm turns decisions create":        "pm turns propose",
-		"auth agents register":             "auth register",
 		"meta commands list":               "meta commands",
 		"meta commands get":                "meta command",
 		"meta concepts list":               "meta concepts",
 		"meta concepts get":                "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
-		return rewritten
+		path = rewritten
+	}
+	if len(strings.Fields(path)) > 0 && isDiagnosticGroup(strings.Fields(path)[0]) {
+		return "debug " + path
 	}
 	return path
 }
@@ -2090,14 +2083,13 @@ func generatedCommandByID(commandID string) (registry.Command, bool) {
 
 func runtimeCommandFromRegistryCommand(command string) string {
 	command = strings.TrimSpace(command)
-	command = strings.ReplaceAll(command, "anx auth agents register", "anx auth register")
 	command = strings.ReplaceAll(command, "anx events stream", "anx events tail")
 	command = strings.ReplaceAll(command, "anx inbox stream", "anx inbox tail")
 	command = strings.ReplaceAll(command, "anx meta commands get", "anx meta command")
 	command = strings.ReplaceAll(command, "anx meta commands list", "anx meta commands")
 	command = strings.ReplaceAll(command, "anx meta concepts get", "anx meta concept")
 	command = strings.ReplaceAll(command, "anx meta concepts list", "anx meta concepts")
-	return command
+	return qualifyDiagnosticExamples(command)
 }
 
 func configLocalHelpText(topic string) (string, bool) {
@@ -2107,20 +2099,11 @@ func configLocalHelpText(topic string) (string, bool) {
 		examples []string
 	}
 	topics := map[string]configTopic{
-		"config use": {
-			summary:  "Persist the named profile as the active default used when --agent and ANX_AGENT are omitted.",
-			usage:    "anx config use <profile>",
-			examples: []string{"anx config use agent-a", "anx --json config use agent-a"},
-		},
+
 		"config show": {
 			summary:  "Print effective CLI settings and the source of each field (access tokens are redacted).",
 			usage:    "anx config show",
 			examples: []string{"anx config show", "anx --json config show"},
-		},
-		"config unset": {
-			summary:  "Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.",
-			usage:    "anx config unset",
-			examples: []string{"anx config unset", "anx --json config unset"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]
@@ -2151,20 +2134,11 @@ func authLocalHelpText(topic string) (string, bool) {
 	}
 	topics := map[string]authTopic{
 		"auth whoami": {
-			summary:  "Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.",
+			summary:  "Show the enrolled host, derived agent and identity resolution source.",
 			usage:    "anx auth whoami",
 			examples: []string{"anx auth whoami", "anx --json auth whoami"},
 		},
-		"auth list": {
-			summary:  "List local CLI profiles and identify the active one.",
-			usage:    "anx auth list",
-			examples: []string{"anx auth list", "anx --json auth list"},
-		},
-		"auth default": {
-			summary:  "Persist the default profile used when no explicit agent is selected.",
-			usage:    "anx auth default <profile>",
-			examples: []string{"anx auth default agent-a", "anx --json auth default agent-a"},
-		},
+
 		"auth invites": {
 			summary:  "Manage invite tokens and invite-backed registration for later principals.",
 			usage:    "anx auth invites",
@@ -2174,26 +2148,6 @@ func authLocalHelpText(topic string) (string, bool) {
 			summary:  "Inspect whether bootstrap registration is still available for the first principal.",
 			usage:    "anx auth bootstrap status",
 			examples: []string{"anx auth bootstrap status", "anx --json auth bootstrap status"},
-		},
-		"auth update-username": {
-			summary:  "Update the authenticated agent username and sync the local profile copy.",
-			usage:    "anx auth update-username --username <username>",
-			examples: []string{"anx auth update-username --username renamed_agent"},
-		},
-		"auth rotate": {
-			summary:  "Rotate the active agent key and refresh stored credentials.",
-			usage:    "anx auth rotate",
-			examples: []string{"anx auth rotate", "anx --json auth rotate"},
-		},
-		"auth revoke": {
-			summary:  "Revoke the active agent and mark the local profile revoked.",
-			usage:    "anx auth revoke",
-			examples: []string{"anx auth revoke", "anx --json auth revoke"},
-		},
-		"auth token-status": {
-			summary:  "Inspect whether the local profile still has refreshable token material.",
-			usage:    "anx auth token-status",
-			examples: []string{"anx auth token-status", "anx --json auth token-status"},
 		},
 	}
 	entry, ok := topics[strings.Join(strings.Fields(strings.TrimSpace(topic)), " ")]

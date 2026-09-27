@@ -12,7 +12,7 @@ import (
 func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
@@ -63,12 +63,20 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	}
 
 	itemID := asString(item["id"])
-	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", `{
-		"actor_id":"actor-1",
+	for _, bad := range []string{
+		`{"actor_id":"human-purge-principal-actor","response_text":"Approved.","notify_mode":"none"}`,
+		`{"actor_id":"human-purge-principal-actor","response_text":"Approved.","outcome":"maybe","notify_mode":"none"}`,
+	} {
+		invalid := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", json.RawMessage(bad), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusBadRequest)
+		assertErrorCode(t, invalid, "invalid_request")
+	}
+	resp := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(itemID)+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Ship Friday with a rollback plan.",
+		"outcome":"answered",
 		"notify_mode":"none",
 		"related_refs":["artifact:decision_note"]
-	}`, http.StatusCreated)
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated)
 	defer resp.Body.Close()
 
 	var response struct {
@@ -85,6 +93,16 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 	if got := asString(payload["response_text"]); got != "Ship Friday with a rollback plan." {
 		t.Fatalf("expected response_text payload, got %#v", payload)
 	}
+	if got := asString(payload["outcome"]); got != "answered" {
+		t.Fatalf("expected answered outcome payload, got %#v", payload)
+	}
+	completed := getInboxPayload(t, h.baseURL+"/inbox?status=completed")
+	row, found := findInboxItem(completed.Items, func(candidate map[string]any) bool {
+		return asString(candidate["response_event_ref"]) == "event:"+asString(response.Event["id"])
+	})
+	if !found || asString(row["outcome"]) != "answered" {
+		t.Fatalf("completed inbox item lost outcome: %#v", completed.Items)
+	}
 	if got := asString(response.Notify["mode"]); got != "none" {
 		t.Fatalf("expected no notification target metadata, got %#v", response.Notify)
 	}
@@ -100,7 +118,7 @@ func TestHumanAttentionDerivationAndResponseSuppressesItem(t *testing.T) {
 func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
 		"title":           "Human attention kinds",
@@ -131,11 +149,12 @@ func TestHumanAttentionSupportsReviewAndEscalateKinds(t *testing.T) {
 		t.Fatalf("expected escalation inbox item, got %#v", items)
 	}
 
-	postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(escalation["id"]))+"/respond", `{
-		"actor_id":"actor-1",
+	postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(escalation["id"]))+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Investigating now.",
+		"outcome":"answered",
 		"notify_mode":"none"
-	}`, http.StatusCreated).Body.Close()
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusCreated).Body.Close()
 }
 
 func TestInboxReadsMaterializedProjectionWithFreshness(t *testing.T) {
@@ -218,7 +237,7 @@ func TestInboxReadDoesNotRecomputePendingProjection(t *testing.T) {
 func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing.T) {
 	t.Parallel()
 
-	h := newPrimitivesTestServer(t)
+	h := newPrimitivesTestServerWithHumanPrincipal(t)
 	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"actor-1","display_name":"Actor One","created_at":"2026-03-04T10:00:00Z"}}`, http.StatusCreated)
 	threadID := integrationSeedThread(t, h, "actor-1", map[string]any{
 		"title":           "Notification target thread",
@@ -245,10 +264,11 @@ func TestHumanAttentionResponseRequiresResolvableTargetOrExplicitNone(t *testing
 		t.Fatalf("expected human ask item, got %#v", items)
 	}
 
-	resp := postJSONExpectStatus(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", `{
-		"actor_id":"actor-1",
+	resp := postJSONExpectStatusWithHeaders(t, h.baseURL+"/inbox/"+url.PathEscape(asString(item["id"]))+"/respond", json.RawMessage(`{
+		"actor_id":"human-purge-principal-actor",
 		"response_text":"Answer text"
-	}`, http.StatusConflict)
+		,"outcome":"answered"
+	}`), map[string]string{"Authorization": "Bearer " + h.humanAccessToken}, http.StatusConflict)
 	defer resp.Body.Close()
 	assertErrorCode(t, resp, "notification_target_required")
 }

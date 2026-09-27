@@ -19,7 +19,7 @@ Canonical runtime config is `ANX_WORKSPACES`.
 - Optional fields: `label`, `description`, `publicOrigin`/`public_origin`.
 - Set `publicOrigin` to the externally reachable workspace URL when the UI is
   reverse-proxied, mounted under a base path, or otherwise sees loopback
-  origins internally. Access-page copy and registration snippets use it as the
+  origins internally. The `anx host enroll` commands Access shows use it as the
   fallback public URL.
 - This is the authoritative routing source for self-host and local/dev.
 

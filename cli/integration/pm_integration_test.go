@@ -14,18 +14,18 @@ import (
 
 func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "worker", "worker."+runToken())
+	h.enrollHost(t, "worker")
 	h.selectPMAgent(t, "worker")
-	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createInviteTokenKind(t, "worker", "human"))
+	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createHumanInviteToken(t))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Synthetic PM approval test", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
-	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "data.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
-	ref := mustStringPath(t, work.Payload, "data.work.ref")
+	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
+	ref := mustStringPath(t, work.Payload, "result.work.ref")
 	h.runCLIExpectOK(t, "maya", nil, "pm", "context", "--work-ref", ref, "--limit", "1")
-	input := map[string]any{"request_key": "synthetic-instruction", "work_ref": ref, "instruction": `{"next_action":"Review synthetic evidence"}`, "scope": "work.annotate", "target_revision": fmt.Sprint(mustIntPath(t, work.Payload, "data.work.version"))}
+	input := map[string]any{"request_key": "synthetic-instruction", "work_ref": ref, "instruction": `{"next_action":"Review synthetic evidence"}`, "scope": "work.annotate", "target_revision": fmt.Sprint(mustIntPath(t, work.Payload, "result.work.version"))}
 	proposal := h.runCLIExpectOK(t, "maya", input, "pm", "decisions", "create", "--from-file", "-")
-	decisionID := mustStringPath(t, proposal.Payload, "data.id")
+	decisionID := mustStringPath(t, proposal.Payload, "result.id")
 	replay := h.runCLIExpectOK(t, "maya", input, "pm", "decisions", "create", "--from-file", "-")
-	if mustStringPath(t, replay.Payload, "data.id") != decisionID {
+	if mustStringPath(t, replay.Payload, "result.id") != decisionID {
 		t.Fatal("instruction replay duplicated intent")
 	}
 	denied := h.runCLI(t, "worker", map[string]any{"revision": 1, "approve": true, "text": "Attempt agent approval"}, "pm", "decisions", "answer", decisionID, "--from-file", "-")
@@ -39,21 +39,21 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	// A hard restart cannot erase a pending instruction or invent an action receipt.
 	restartCoreForWorkTest(t, h)
 	loaded := h.runCLIExpectOK(t, "worker", nil, "pm", "decisions", "get", decisionID)
-	if mustStringPath(t, loaded.Payload, "data.status") != "awaiting_answer" {
+	if mustStringPath(t, loaded.Payload, "result.status") != "awaiting_answer" {
 		t.Fatalf("restart lost pending decision: %s", loaded.Stdout)
 	}
 	actions := h.runCLIExpectOK(t, "worker", nil, "pm", "actions", "list", "--limit", "1")
-	items, _ := getPathValue(actions.Payload, "data.items")
+	items, _ := getPathValue(actions.Payload, "result.items")
 	if rows, ok := items.([]any); !ok || len(rows) != 0 {
 		t.Fatalf("unapproved decision generated actions: %s", actions.Stdout)
 	}
 	conversation := h.runCLIExpectOK(t, "worker", map[string]any{"request_key": "synthetic-conversation", "title": "Synthetic PM", "work_ref": ref}, "pm", "conversations", "create", "--from-file", "-")
-	conversationID := mustStringPath(t, conversation.Payload, "data.id")
+	conversationID := mustStringPath(t, conversation.Payload, "result.id")
 	response := h.runCLI(t, "worker", map[string]any{"request_key": "queued-runner", "text": "Review this synthetic commitment"}, "pm", "conversations", "message", conversationID, "--from-file", "-")
 	if response.ExitCode != 0 {
 		t.Fatalf("queued turn without bridge must be accepted: %s", response.Stdout)
 	}
-	if mustStringPath(t, response.Payload, "data.status") != "sending" {
+	if mustStringPath(t, response.Payload, "result.status") != "sending" {
 		t.Fatalf("queued turn status: %s", response.Stdout)
 	}
 	h.runCLIExpectOK(t, "worker", nil, "pm", "conversations", "get", conversationID)
@@ -61,10 +61,8 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 
 func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.enrollHost(t, "pm")
 	h.selectPMAgent(t, "pm")
-	invite := h.createInviteToken(t, "pm")
-	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
 	script := filepath.Join(t.TempDir(), "fake-harness.sh")
 	body := "#!/bin/sh\n" +
@@ -83,7 +81,7 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	serveCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"--json", "--base-url", h.baseURL, "--as", "pm",
 		"pm", "serve",
 		"--work-dir", workDir,
 		"--poll-interval", "200ms",
@@ -110,18 +108,18 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 	}()
 
 	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
-	status := mustStringPath(t, asked.Payload, "data.turn.status")
+	status := mustStringPath(t, asked.Payload, "result.turn.status")
 	if status != "delivered" {
 		t.Fatalf("fake harness turn status %s stdout=%s stderr=%s serve=%s", status, asked.Stdout, asked.Stderr, readFileOrEmpty(serveLog))
 	}
-	response := mustStringPath(t, asked.Payload, "data.turn.response")
+	response := mustStringPath(t, asked.Payload, "result.turn.response")
 	if !strings.Contains(response, "card:fixture-card") {
 		t.Fatalf("response %q", response)
 	}
 	if strings.Contains(response, "---evidence---") {
 		t.Fatalf("evidence trailer leaked into stored reply: %q", response)
 	}
-	refs, _ := getPathValue(asked.Payload, "data.turn.evidence_refs")
+	refs, _ := getPathValue(asked.Payload, "result.turn.evidence_refs")
 	joined := fmt.Sprint(refs)
 	if strings.Contains(joined, "card:fixture-card") {
 		t.Fatalf("prose mention attached as evidence: %v", refs)
@@ -137,10 +135,8 @@ func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
 
 func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "pm", "pm."+runToken())
+	h.enrollHost(t, "pm")
 	h.selectPMAgent(t, "pm")
-	invite := h.createInviteToken(t, "pm")
-	h.registerAgentInvite(t, "maya", "maya."+runToken(), invite)
 
 	script := filepath.Join(t.TempDir(), "fail-harness.sh")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho harness exploded >&2\nexit 1\n"), 0o755); err != nil {
@@ -153,7 +149,7 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	serveCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--agent", "pm",
+		"--json", "--base-url", h.baseURL, "--as", "pm",
 		"pm", "serve",
 		"--work-dir", workDir,
 		"--poll-interval", "200ms",
@@ -172,11 +168,11 @@ func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
 	}()
 
 	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
-	status := mustStringPath(t, asked.Payload, "data.turn.status")
+	status := mustStringPath(t, asked.Payload, "result.turn.status")
 	if status != "failed" {
 		t.Fatalf("expected failed, got %s stdout=%s", status, asked.Stdout)
 	}
-	failure := mustStringPath(t, asked.Payload, "data.turn.failure")
+	failure := mustStringPath(t, asked.Payload, "result.turn.failure")
 	if !strings.Contains(failure, "did not produce a reply") || !strings.Contains(failure, "status 1") {
 		t.Fatalf("failure %q", failure)
 	}
@@ -192,19 +188,19 @@ func readFileOrEmpty(path string) string {
 
 func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	h := newLiveCoreHarness(t)
-	h.registerAgentBootstrap(t, "reader", "reader."+runToken())
+	h.enrollHost(t, "reader")
 	for i := 0; i < 3; i++ {
 		h.runCLIExpectOK(t, "reader", map[string]any{"request_key": fmt.Sprint("conversation-", i), "title": fmt.Sprint("Synthetic conversation ", i)}, "pm", "conversations", "create", "--from-file", "-")
 	}
 	first := h.runCLIExpectOK(t, "reader", nil, "pm", "conversations", "list", "--limit", "1")
-	raw, _ := getPathValue(first.Payload, "data.items")
+	raw, _ := getPathValue(first.Payload, "result.items")
 	if rows, ok := raw.([]any); !ok || len(rows) != 1 {
 		t.Fatalf("limit not honored: %s", first.Stdout)
 	}
-	cursor := mustStringPath(t, first.Payload, "data.next_cursor")
+	cursor := mustStringPath(t, first.Payload, "result.next_cursor")
 	restartCoreForWorkTest(t, h)
 	second := h.runCLIExpectOK(t, "reader", nil, "pm", "conversations", "list", "--limit", "1", "--cursor", cursor)
-	next, _ := getPathValue(second.Payload, "data.items")
+	next, _ := getPathValue(second.Payload, "result.items")
 	if fmt.Sprint(raw) == fmt.Sprint(next) {
 		t.Fatalf("cursor replayed first page: %s", second.Stdout)
 	}
@@ -212,8 +208,6 @@ func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
 	if wrongKind.ExitCode == 0 {
 		t.Fatalf("conversation cursor accepted for decisions: %s", wrongKind.Stdout)
 	}
-	invite := h.createInviteToken(t, "reader")
-	h.registerAgentInvite(t, "other", "other."+runToken(), invite)
 	wrongPrincipal := h.runCLI(t, "other", nil, "pm", "conversations", "list", "--limit", "1", "--cursor", cursor)
 	if wrongPrincipal.ExitCode == 0 {
 		t.Fatalf("cursor crossed principal boundary: %s", wrongPrincipal.Stdout)

@@ -20,7 +20,7 @@ func TestDraftCreateAggregatesEventValidationErrors(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"thread_id":"thread_1","actor_id":"actor_1","type":"message_posted"}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "events.create",
 	})
@@ -84,7 +84,7 @@ func TestDraftCreateInterventionNeededRequiresThreadRefInRefs(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"event":{"type":"human_attention_requested","summary":"unblock me","refs":["topic:top_1"],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "events.create",
 	})
@@ -112,12 +112,12 @@ func TestDraftCreateAllowsDerivedRebuildWithoutActorID(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "derived.rebuild",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["command_id"])) != "derived.rebuild" {
 		t.Fatalf("unexpected command payload: %#v", payload)
 	}
@@ -130,7 +130,7 @@ func TestDraftCreateDerivedRebuildRejectsEmptyActorIDWhenProvided(t *testing.T) 
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"actor_id":"   "}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "derived.rebuild",
 	})
@@ -148,12 +148,12 @@ func TestDraftCreateResolvesCLITokensToCommandID(t *testing.T) {
 	env := map[string]string{}
 	raw := runCLIForTest(t, home, env, strings.NewReader(`{"topic":{"title":"Alpha","summary":"seed","owner_refs":["thread:thread_1"],"document_refs":[],"board_refs":[],"related_refs":[],"provenance":{"sources":["event:event_seed"]}}}`), []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "topics create",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["command_id"])) != "topics.create" {
 		t.Fatalf("unexpected command resolution payload: %#v", payload)
 	}
@@ -207,14 +207,14 @@ func TestDraftCreateTreatsHelpAsFlagValue(t *testing.T) {
 
 	raw := runCLIForTest(t, home, env, nil, []string{
 		"--json",
-		"--agent", "agent-a",
+		"--as", "agent-a",
 		"draft", "create",
 		"--command", "topics.create",
 		"--from-file", fromFile,
 		"--draft-id", "help",
 	})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	if strings.TrimSpace(anyStringValue(data["draft_id"])) != "help" {
 		t.Fatalf("expected draft id=help payload=%#v", payload)
 	}
@@ -227,9 +227,18 @@ func TestValidateDraftBodySupportsInboxRespond(t *testing.T) {
 		"actor_id":      "actor_1",
 		"inbox_item_id": "inbox:ask:thread_1:none:event_1",
 		"response_text": "Approved.",
+		"outcome":       "approved",
 	})
 	if len(errors) != 0 {
 		t.Fatalf("expected inbox.respond draft validation to pass, got %#v", errors)
+	}
+	invalid := validateDraftBody("inbox.respond", map[string]any{
+		"inbox_item_id": "inbox:ask:thread_1:none:event_1",
+		"response_text": "Approved.",
+		"outcome":       "maybe",
+	})
+	if len(invalid) != 1 || !strings.Contains(invalid[0], "outcome must be") {
+		t.Fatalf("expected invalid outcome, got %#v", invalid)
 	}
 }
 
@@ -265,9 +274,9 @@ func TestDraftListStableJSON(t *testing.T) {
 	}
 
 	env := map[string]string{}
-	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--agent", "agent-a", "draft", "list"})
+	raw := runCLIForTest(t, home, env, nil, []string{"--json", "--as", "agent-a", "draft", "list"})
 	payload := assertEnvelopeOK(t, raw)
-	data, _ := payload["data"].(map[string]any)
+	data, _ := payload["result"].(map[string]any)
 	drafts, _ := data["drafts"].([]any)
 	if len(drafts) != 1 {
 		t.Fatalf("unexpected drafts payload: %#v", payload)

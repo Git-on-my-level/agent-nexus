@@ -25,7 +25,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check cli-build cli-integration-test scenario-validate dev-profile-homes pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-setup bridge-doctor bridge-test release-check release-patch platform-constraints core-% bridge-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,6 +53,7 @@ check: ## Run repo, core, cli, and web-ui checks
 	$(MAKE) workflow-check
 	$(MAKE) -C $(CORE_DIR) check
 	$(MAKE) cli-check
+	$(MAKE) mcp-check
 	$(MAKE) http-record-test
 	$(MAKE) -C $(WEB_UI_DIR) check
 
@@ -93,6 +94,10 @@ version-check: ## Verify version-derived source files are current
 docs-ref-audit: ## Audit agent-facing docs for broken local path references
 	./scripts/docs-ref-audit
 
+mcp-check: ## Run MCP tool policy coverage and MCP tests
+	node mcp/scripts/check-tool-policy.mjs
+	cd mcp && go test ./...
+
 cli-check: ## Run CLI checks
 	$(MAKE) version-check
 	cd $(CLI_DIR) && go test ./...
@@ -108,15 +113,11 @@ cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 scenario-validate: ## Validate seeded scenario counts against a running core
 	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ANX_DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" ./scripts/anx-scenario-validate
 
-dev-profile-homes: ## Materialize local CLI HOME dirs for seeded dev personas
-	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ./scripts/anx-dev-profile-homes
-
-PM_HOME ?= $(CURDIR)/.tmp/anx-dev-profile-homes/pm
 PM_WORK_DIR ?= $(CURDIR)/.tmp/pm-runner
 PM_RUNNER ?= omp -p --mode json --model zai/glm-5.3 --auto-approve
 
-pm-serve: cli-build ## Run anx pm serve against the local seeded PM persona (requires make serve)
-	HOME="$(PM_HOME)" $(CURDIR)/$(CLI_DIR)/anx --agent pm pm serve --work-dir "$(PM_WORK_DIR)" --runner '$(PM_RUNNER)'
+pm-serve: cli-build ## Run anx pm serve as the derived PM agent (requires an enrolled host)
+	$(CURDIR)/$(CLI_DIR)/anx --base-url "$(CORE_BASE_URL)" --as pm pm serve --work-dir "$(PM_WORK_DIR)" --runner '$(PM_RUNNER)'
 
 http-record-test: ## Run tests for the local HTTP recording proxy
 	cd $(HTTP_RECORD_DIR) && go test ./...
@@ -144,6 +145,7 @@ e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 
 platform-constraints: ## Check for Unix-only syscalls without build constraints
 	./scripts/check-platform-constraints.sh
+	./scripts/test-platform-constraints.sh
 
 release-check: ## Validate release readiness (check + e2e + cross-platform build)
 	$(MAKE) check

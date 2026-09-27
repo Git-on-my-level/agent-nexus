@@ -1,11 +1,14 @@
+import { updateDigest } from "./inboxDigest.js";
 import {
   enrichInboxItem,
-  getInboxSubjectLabel,
   getInboxSubjectRef,
   inboxItemMailboxId,
+  inboxSubjectNoun,
+  splitTypedRef,
 } from "./inboxUtils.js";
 import {
   decisionSummary,
+  label as phaseLabel,
   receiptSignal,
   sourceLabel,
   workFreshness,
@@ -218,9 +221,9 @@ export function inboxRowBadge(row, now = Date.now()) {
       return { label: "Task no longer exists", tone: "neutral" };
     return receiptSignal(row.status);
   }
-  if (row.kind === "update") {
-    return row.count > 1 ? { label: String(row.count), tone: "neutral" } : null;
-  }
+  // An update row carries its digest in the second line; a bare count said
+  // nothing about what changed.
+  if (row.kind === "update") return null;
   if (row.kind === "inbox") {
     return (
       LOUD_SEVERITIES.get(String(row.severity ?? "").toLowerCase()) ?? null
@@ -229,6 +232,147 @@ export function inboxRowBadge(row, now = Date.now()) {
   return null;
 }
 
+const SEVERITY_RANK = { critical: 3, high: 2, medium: 1, normal: 1, low: 0 };
+const KIND_RANK = { escalate: 3, ask: 2, review: 1 };
+
+/**
+ * A short, readable stand-in for an identifier that resolved to no name:
+ * `agent_6400c2d2-…` reads as "agent 6400c2d2". The full id stays available
+ * behind a copy affordance; it is never the label.
+ */
+export function shortIdLabel(value) {
+  const raw = String(value ?? "")
+    .trim()
+    .replace(/^actor:/, "");
+  if (!raw) return "";
+  const match = raw.match(
+    /^([a-z]+)[_-]?([0-9a-f]{8})(?:-?[0-9a-f]{4}){3}-?[0-9a-f]{12}$/i,
+  );
+  if (match) return `${match[1].toLowerCase()} ${match[2].toLowerCase()}`;
+  const hex = raw.match(/^([0-9a-f]{8})(?:-?[0-9a-f]{4}){3}-?[0-9a-f]{12}$/i);
+  if (hex) return `id ${hex[1].toLowerCase()}`;
+  return raw.length > 28 ? `${raw.slice(0, 24)}…` : raw;
+}
+
+/**
+ * How long something has waited on the reader, in the units an operator
+ * reads at a glance: "41m", "3h 12m", "2d 4h".
+ */
+export function formatWait(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return "";
+  const minutes = Math.floor(value / 60_000);
+  if (minutes < 1) return "<1m";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours ? `${days}d ${restHours}h` : `${days}d`;
+}
+
+/** Milliseconds a row has been waiting on the reader, or NaN. */
+export function rowWaitMs(row, now = Date.now()) {
+  const since = Date.parse(row?.waitingSince ?? "");
+  return Number.isFinite(since) ? Math.max(0, now - since) : Number.NaN;
+}
+
+function humanizeSlug(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const words = raw.replace(/[-_]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * What an inbox item is about, in operator terms. A task wins: an ask filed
+ * on a project that names one task is blocking that task, and that is what
+ * the reader needs to see. Titles come from data already loaded; a slug is
+ * humanized only as a last resort.
+ */
+export function inboxItemSubject(
+  item,
+  { titleFor = () => "", work = [] } = {},
+) {
+  const explicit = String(getInboxSubjectRef(item) ?? "").trim();
+  const related = (Array.isArray(item?.related_refs) ? item.related_refs : [])
+    .map((ref) => String(ref ?? "").trim())
+    .filter(Boolean);
+  const explicitPrefix = splitTypedRef(explicit).prefix;
+  const ref =
+    explicitPrefix === "card" || explicitPrefix === "document"
+      ? explicit
+      : related.find((candidate) => candidate.startsWith("card:")) ||
+        explicit ||
+        related.find((candidate) => candidate.startsWith("document:")) ||
+        "";
+  if (!ref) return null;
+  const { prefix, id } = splitTypedRef(ref);
+  const task =
+    prefix === "card"
+      ? work.find(
+          (entry) =>
+            workKey(entry) === ref || entry?.handle === id || entry?.id === id,
+        ) || null
+      : null;
+  const title =
+    String(task?.title ?? "").trim() ||
+    titleFor(ref) ||
+    (ref === explicit ? String(item?.subject_title ?? "").trim() : "") ||
+    humanizeSlug(id);
+  return {
+    ref,
+    kind: prefix,
+    noun: inboxSubjectNoun(prefix),
+    title,
+    phase: task?.phase || "",
+    phaseLabel: task?.phase ? phaseLabel(task.phase) : "",
+    work: task,
+  };
+}
+
+function severityRank(row) {
+  return SEVERITY_RANK[String(row?.severity ?? "").toLowerCase()] ?? 0;
+}
+
+function waitStartMinute(row) {
+  const since = Date.parse(row?.waitingSince ?? "");
+  return Number.isFinite(since) ? Math.floor(since / 60_000) : Number.NaN;
+}
+
+/**
+ * Needs you order: whoever has been blocked longest first, then the louder
+ * severity. Start times compare at minute resolution (on the clock, so the
+ * order does not flip as time passes) and two asks raised in the same minute
+ * fall back to severity rather than to milliseconds.
+ */
+export function compareNeedsYou(a, b) {
+  const startA = waitStartMinute(a);
+  const startB = waitStartMinute(b);
+  const hasA = Number.isFinite(startA);
+  const hasB = Number.isFinite(startB);
+  if (hasA !== hasB) return hasA ? -1 : 1;
+  if (hasA && startA !== startB) return startA - startB;
+  const severity = severityRank(b) - severityRank(a);
+  if (severity) return severity;
+  const kind =
+    (KIND_RANK[String(b?.category ?? "")] ?? 0) -
+    (KIND_RANK[String(a?.category ?? "")] ?? 0);
+  if (kind) return kind;
+  return String(a?.title ?? "").localeCompare(String(b?.title ?? ""));
+}
+
+/**
+ * @param {object} input
+ * @param {(id: string) => string} [input.agentName] host-derived agent
+ *   name ("codex on m5-mbp") for an actor id, or "" for anyone else. It
+ *   outranks the requester label core stored with the ask.
+ * @param {(id: string) => string} [input.actorName] display name for an
+ *   actor id, or "" when the id resolves to no one.
+ */
 export function buildInboxRows({
   decisions = [],
   actions = [],
@@ -238,21 +382,41 @@ export function buildInboxRows({
   updates = [],
   now = Date.now(),
   currentActorId = "",
+  actorName = () => "",
+  agentName = () => "",
 } = {}) {
   const rows = [];
-  const taskTitles = new Map();
+  const titles = new Map();
   const workByRef = new Map();
   for (const item of work) {
-    if (item && workKey(item)) workByRef.set(workKey(item), item);
     if (!item || !workKey(item)) continue;
+    workByRef.set(workKey(item), item);
     const title = String(item.title || "").trim();
-    taskTitles.set(workKey(item), title);
+    titles.set(workKey(item), title);
     // Inbox items may name a card by id rather than public ref.
-    if (item.id) taskTitles.set(`card:${item.id}`, title);
-    if (item.handle) taskTitles.set(`card:${item.handle}`, title);
+    if (item.id) titles.set(`card:${item.id}`, title);
+    if (item.handle) titles.set(`card:${item.handle}`, title);
   }
+  for (const group of updates) {
+    const ref = String(group?.group_ref ?? "").trim();
+    const name = String(group?.display_name ?? "").trim();
+    if (ref && name && !titles.has(ref)) titles.set(ref, name);
+    for (const event of Array.isArray(group?.events) ? group.events : []) {
+      const docRef = (Array.isArray(event?.refs) ? event.refs : []).find(
+        (value) => String(value).startsWith("document:"),
+      );
+      const docTitle = String(event?.payload?.subject_title ?? "").trim();
+      if (docRef && docTitle && !titles.has(docRef))
+        titles.set(docRef, docTitle);
+    }
+  }
+  const titleFor = (ref) => titles.get(String(ref ?? "").trim()) || "";
+  const nameFor = (id) => {
+    const raw = String(id ?? "").trim();
+    return raw ? String(actorName(raw) ?? "").trim() : "";
+  };
   for (const item of decisions) {
-    const summary = decisionSummary(item, taskTitles.get(item.work_ref) || "");
+    const summary = decisionSummary(item, titles.get(item.work_ref) || "");
     rows.push({
       id: `decision:${item.id}`,
       kind: "decision",
@@ -262,11 +426,12 @@ export function buildInboxRows({
       // A trashed task has no title to lead with; the ask leads and the
       // second line says why the subject is gone.
       source:
-        item.work_missing === true && !taskTitles.get(item.work_ref)
+        item.work_missing === true && !titles.get(item.work_ref)
           ? "Task no longer exists"
           : summary.ask || "Decision",
       ref: item.work_ref || "",
       time: item.updated_at || item.created_at,
+      waitingSince: item.created_at || item.updated_at || "",
       status: decisionRowStatus(item, actions, {
         receiptsUnavailable,
         work: workByRef.get(item.work_ref) || null,
@@ -277,13 +442,25 @@ export function buildInboxRows({
     });
   }
   for (const item of work) {
+    // A native task has no source worth naming; who owns it is the signal.
+    const ownerId = String(item.owner ?? "").replace(/^actor:/, "");
+    const owner =
+      ownerId && ownerId === currentActorId ? "you" : nameFor(ownerId);
     rows.push({
       id: `task:${workKey(item)}`,
       kind: "task",
       title: item.title || "Untitled task",
-      source: sourceLabel(item.source),
+      source:
+        String(item.source?.authority ?? "").toLowerCase() === "nexus"
+          ? owner
+            ? `Owned by ${owner}`
+            : "Task"
+          : sourceLabel(item.source),
       ref: item.ref || workKey(item),
       time: item.freshness?.last_observed_at || item.updated_at,
+      // Core does not record when a task entered Blocked; its last change
+      // is the closest honest bound.
+      waitingSince: item.updated_at || "",
       status: item.phase,
       phase: item.phase,
       item,
@@ -291,25 +468,39 @@ export function buildInboxRows({
   }
   for (const raw of inboxItems) {
     const item = enrichInboxItem(raw);
-    const subjectRef = String(getInboxSubjectRef(item) ?? "").trim();
-    const subjectTitle = taskTitles.get(subjectRef);
+    const subject = inboxItemSubject(item, { titleFor, work });
+    const requesterId =
+      String(item.requester_actor_id ?? "").trim() ||
+      String(item.requester_agent_id ?? "").trim();
+    const requesterName =
+      String(agentName(requesterId) ?? "").trim() ||
+      String(item.requester_label ?? "").trim() ||
+      nameFor(requesterId);
+    const responderId = String(item.responding_actor_id ?? "").trim();
     rows.push({
       id: inboxItemMailboxId(item),
       kind: "inbox",
-      title: item.title || item.summary || "Inbox item",
+      // Core titles a completed row "Human response recorded: <ask>"; the
+      // Handled mailbox already says it was answered.
+      title:
+        String(item.title || item.summary || "")
+          .replace(/^Human response recorded:?\s*/i, "")
+          .trim() || "Inbox item",
       // Name the subject when we know it; a raw ref is a last resort.
-      source: subjectTitle
-        ? `Task: ${subjectTitle}`
-        : getInboxSubjectLabel(item) || "",
+      source: subject ? `${subject.noun}: ${subject.title}` : "",
+      subject,
       ref: item.subject_ref || "",
       time: item.source_event_time || item.created_at || item.responded_at,
+      waitingSince:
+        item.source_event_time || item.trigger_at || item.created_at || "",
       status: item.status || (item.responded_at ? "completed" : "open"),
       category: String(item.kind ?? item.category ?? "").trim(),
       severity: item.severity || "",
-      requesterLabel:
-        String(item.requester_label ?? "").trim() ||
-        String(item.requester_agent_id ?? "").trim() ||
-        String(item.requester_actor_id ?? "").trim(),
+      requester: { name: requesterName, id: requesterId },
+      requesterLabel: requesterName || shortIdLabel(requesterId),
+      responder: responderId
+        ? { name: nameFor(responderId), id: responderId }
+        : null,
       body: item.body || "",
       responseProposals: Array.isArray(item.response_proposals)
         ? item.response_proposals
@@ -320,11 +511,17 @@ export function buildInboxRows({
     });
   }
   for (const group of updates) {
+    const digest = updateDigest(group.events, {
+      actorName: (id) => nameFor(id) || shortIdLabel(id),
+      titleFor,
+      unreadCount: Number(group.unread_count) || 0,
+      selfId: currentActorId,
+    });
     rows.push({
       id: `update:${group.group_ref || group.display_name}`,
       kind: "update",
       title: group.display_name || group.group_ref || "Update",
-      source: updateGroupSource(group.group_type),
+      source: digest || "New activity",
       ref: group.group_ref || "",
       time: group.newest_event?.ts,
       status: "update",
@@ -333,10 +530,17 @@ export function buildInboxRows({
       item: group,
     });
   }
-  return rows
+  const classified = rows
     .map((row) => ({ ...row, mailbox: classifyInboxRow(row, now) }))
     .filter((row) => row.mailbox !== null)
     .sort((a, b) => rowTime(b) - rowTime(a));
+  const needsYou = classified
+    .filter((row) => row.mailbox === "needs-you")
+    .sort(compareNeedsYou);
+  return [
+    ...needsYou,
+    ...classified.filter((row) => row.mailbox !== "needs-you"),
+  ];
 }
 
 // Newest first across kinds; a row without a time sorts last, in input order.
@@ -345,17 +549,24 @@ function rowTime(row) {
   return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
 }
 
-const UPDATE_GROUP_SOURCES = {
-  board: "Board updates",
-  topic: "Project updates",
-  thread: "Thread updates",
-  workspace: "Workspace updates",
-};
-function updateGroupSource(type) {
-  const key = String(type ?? "").toLowerCase();
-  return UPDATE_GROUP_SOURCES[key] || (key ? `${key} updates` : "Updates");
-}
-
 export function filterMailbox(rows, mailbox) {
   return rows.filter((row) => row.mailbox === mailbox);
+}
+
+/**
+ * Rows about one task, for `?work_ref=` links ("Inbox for this task"). An
+ * inbox item matches when the task is its subject or one of its refs.
+ */
+export function rowMatchesWorkRef(row, workRef) {
+  const ref = String(workRef ?? "").trim();
+  if (!ref) return true;
+  if (row?.ref === ref || row?.subject?.ref === ref) return true;
+  if (row?.kind === "decision") return row.item?.work_ref === ref;
+  if (row?.kind === "inbox") {
+    const related = Array.isArray(row.item?.related_refs)
+      ? row.item.related_refs
+      : [];
+    return related.some((value) => String(value).trim() === ref);
+  }
+  return false;
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -2375,6 +2376,19 @@ func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent,
 }
 
 func insertPreparedEvent(ctx context.Context, exec eventExec, prepared preparedEvent) error {
+	if attribution, ok := commandcenter.AttributionFrom(ctx); ok {
+		prepared.Body["run_attribution"] = attribution
+		var wrapper map[string]any
+		if err := json.Unmarshal([]byte(prepared.PayloadJSON), &wrapper); err != nil {
+			return fmt.Errorf("decode event payload for attribution: %w", err)
+		}
+		wrapper["run_attribution"] = attribution
+		encoded, err := json.Marshal(wrapper)
+		if err != nil {
+			return fmt.Errorf("encode event attribution: %w", err)
+		}
+		prepared.PayloadJSON = string(encoded)
+	}
 	eventID := anyStringValue(prepared.Body["id"])
 	handle, err := uniqueHandleTx(ctx, exec, "event", prepared.Type, "event-"+eventID)
 	if err != nil {

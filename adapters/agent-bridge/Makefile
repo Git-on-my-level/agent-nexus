@@ -4,7 +4,7 @@ PYTHON ?= python3.11
 VENV ?= .venv
 PYTHON_BIN := $(VENV)/bin/python
 BRIDGE_BIN := $(VENV)/bin/anx-agent-bridge
-CONFIG ?= examples/subprocess.toml
+CONFIG ?= bridge.toml
 
 .DEFAULT_GOAL := help
 
@@ -27,7 +27,7 @@ test: ## Run bridge unit tests
 
 smoke: doctor ## Run a cheap bridge smoke check
 	$(BRIDGE_BIN) --help >/dev/null
-	$(BRIDGE_BIN) registration status --config $(CONFIG) || true
+	$(BRIDGE_BIN) doctor --config $(CONFIG)
 
 bridge-run: ## Run the agent bridge with CONFIG=<path>
-	$(BRIDGE_BIN) bridge run --config $(CONFIG)
+	$(BRIDGE_BIN) run --config $(CONFIG)

@@ -23,6 +23,9 @@ import {
   QA_HOSTED_ACCOUNT,
   QA_HOSTED_BILLING_SUMMARY,
   QA_INVITES,
+  QA_AGENTS,
+  QA_HOSTS,
+  QA_HOST_ENROLLMENTS,
   QA_HOSTED_ORGS,
   QA_HOSTED_WORKSPACES,
   QA_INBOX_POPULATED,
@@ -305,7 +308,17 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     thresholdRatio: 0.035,
     waitFor: async (page) => {
-      await page.waitForSelector("text=Create invite");
+      await page.waitForSelector("text=Waiting for approval");
+      await page.waitForSelector("text=reviewer");
+    },
+  },
+  {
+    name: "workspace-agents",
+    path: "/o/local/w/local/agents",
+    workspaceMode: "workspace-default",
+    waitFor: async (page) => {
+      await page.waitForSelector("text=Waiting on you");
+      await page.waitForSelector("text=Never checked in");
     },
   },
   {
@@ -1176,6 +1189,34 @@ async function handleWorkspaceApiRoute(
         next_cursor: "",
       }),
     );
+    return;
+  }
+
+  if (pathname === "/agents" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { agents: QA_AGENTS }));
+    return;
+  }
+
+  if (pathname === "/hosts" && request.method() === "GET") {
+    await route.fulfill(jsonResponse(200, { hosts: QA_HOSTS }));
+    return;
+  }
+
+  if (
+    pathname === "/auth/hosts/enrollments/pending" &&
+    request.method() === "GET"
+  ) {
+    await route.fulfill(
+      jsonResponse(200, { enrollments: QA_HOST_ENROLLMENTS }),
+    );
+    return;
+  }
+
+  if (
+    pathname === "/auth/hosts/enrollment-tokens" &&
+    request.method() === "GET"
+  ) {
+    await route.fulfill(jsonResponse(200, { enrollment_tokens: [] }));
     return;
   }
 

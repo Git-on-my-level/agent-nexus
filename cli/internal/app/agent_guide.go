@@ -9,7 +9,7 @@ import (
 
 const agentGuideSkillName = "anx-opinionated-onboarding"
 
-const agentGuideSkillDescription = "Use Agent Nexus as the default durable knowledge and coordination tracker: orient with `anx`, choose topics/cards/docs/boards correctly, collaborate through domain messages and asks, and keep workspace state current while doing work."
+const agentGuideSkillDescription = "Use the Agent Nexus daily loop to orient, start work, report progress, ask an operator, await an answer, and finish with evidence."
 
 type guideSection struct {
 	Title string
@@ -17,172 +17,28 @@ type guideSection struct {
 }
 
 func agentGuideIntro() string {
-	return "Use this guide when Agent Nexus (`anx`) is available. Treat ANX as the default durable tracker for work, knowledge, asks, and collaboration."
+	return "Use Agent Nexus (`anx`) to keep your current task and its evidence visible to the workspace."
 }
 
 func agentGuideSections() []guideSection {
 	return []guideSection{
-		{
-			Title: "Operating posture",
-			Lines: []string{
-				"- Treat `anx` as the contract-aligned interface to an ANX core API and as the default durable workspace memory.",
-				"- Proactively look for useful tracking opportunities: create or update Topics for work subjects, Cards for concrete tasks, Docs for durable knowledge, and domain messages for collaboration updates.",
-				"- Prefer updating existing objects over creating duplicates. Search/list first, then create only when the current workspace does not already have the right Topic, Card, Doc, or Board.",
-				"- Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.",
-				"- Prefer **default (non-JSON) output** for normal agent readbacks and orientation: concise text for direct consumption, usually fewer tokens than JSON envelopes.",
-				"- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, `jq`, or anything that parses the stable JSON envelope (including rich `error.details`).",
-				"- Prefer profiles and env vars over repeated flags.",
-				"- Prefer discovery from the CLI itself over memorizing exact subcommands.",
-			},
-		},
-		{
-			Title: "Default tracking loop",
-			Lines: []string{
-				"1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, and `anx notifications`. Inbox is the operator human-attention queue; agents do not read or manage it.",
-				"2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.",
-				"3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.",
-				"4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.",
-				"5. Collaborate through `topics message/reply`, `docs message/reply`, and `cards message/reply` instead of raw `events create` for ordinary conversation.",
-				"6. Surface human attention with `anx human ask|review|escalate` when blocked, high consequence, or low confidence.",
-				"7. Close the loop by moving/resolving Cards and leaving evidence on the Topic/Card/Doc where future agents and humans will look.",
-			},
-		},
-		{
-			Title: "Core model",
-			Lines: []string{
-				"- `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.",
-				"- `topics`: agent-facing discussion and context primitives. Use them as the organizational root for initiatives, incidents, cases, processes, relationships, and similar work. The operator work projection is `anx work list` / `anx work get`.",
-				"- `cards`: the canonical store API over card rows. Use `anx cards ...` for create, list/get, messages, assignment, `cards.move`, revisions, resolve/reopen, and lifecycle.",
-				"- `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.",
-				"- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`. Do not model operator requests as PM decision lifecycle events.",
-				"- `work`: the operator Tasks projection over those same card rows (acceptance criteria, observations, freshness). Read it with `anx work list` / `anx work get` to see what operators see. Use `anx cards ...` for card workflow writes; the two surfaces are layered, not aliases.",
-				"- `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.",
-				"- `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.",
-				"- `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.",
-				"- `auth` and profiles: identity plus reusable config.",
-				"- `meta` and help: runtime discovery for commands, concepts, and bundled docs.",
-				"",
-				"Heuristic:",
-				"- Use `events` for facts.",
-				"- Use `topics` for ongoing work conversation, ownership, and agent-facing context. Do not treat Topics as the operator Tasks surface.",
-				"- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence — the canonical store over card rows.",
-				"- Use `work` (`anx work list` / `anx work get`) when you need the operator Tasks view of those rows. Do not treat `work.*` as a second card API.",
-				"- Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.",
-				"- Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.",
-				"- Use `threads` only for backing-timeline diagnostics, tooling-specific inspection, or bridge/wake routing when no typed subject exists. A message posted to a bare thread lands where no operator is looking.",
-				"- Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.",
-				"",
-				"If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.",
-			},
-		},
-		{
-			Title: "Higher-level concepts",
-			Lines: []string{
-				"- `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.",
-				"- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.",
-				"- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.",
-				"- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages doc:<handle>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).",
-			},
-		},
-		{
-			Title: "Asks and collaboration",
-			Lines: []string{
-				"- Ask a human with `anx human ask` when you need a decision, approval, missing context, credential, policy call, or product judgment before continuing.",
-				"- Use `anx human review` when the human should inspect a proposed change, document, plan, or result before it becomes authoritative.",
-				"- Use `anx human escalate` for high-risk, time-sensitive, security, data-loss, privacy, billing, or irreversible-impact situations.",
-				"- `anx human ask|review|escalate` is the way to put something in the operator's Inbox. A PM decision (`anx pm decisions create`, `pm.turns.decisions.create`) is part of a PM conversation and is not an operator request; do not use it as a substitute for Inbox.",
-				"- Include a recommended response and useful alternatives. The first response proposal should be the action you recommend.",
-				"- Ask another agent by posting a Topic/Card/Doc message that mentions `@handle` when the target is taggable. Use Cards when the ask is a trackable task, Docs when the ask is about durable knowledge, and Topics when the ask belongs to the broader work conversation.",
-				"- If your runtime can be programmatically prompted or resumed by a bridge, ask the human whether they want bridge setup after registration. If your runtime cannot be externally woken, explain that bridge setup is not useful for you and skip it.",
-			},
-		},
-		{
-			Title: "Standard workflow",
-			Lines: []string{
-				"1. Confirm environment and identity.",
-				"2. Discover current state with list/get/context commands; in a new workspace, start with `anx workspace summary`.",
-				"3. Decide which primitive matches the task.",
-				"4. Make the smallest valid mutation.",
-				"5. Verify via read commands, timeline, stream, or resulting state.",
-				"",
-				"For interrupt-driven work, a common loop is: `anx notifications` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.",
-			},
-		},
-		{
-			Title: "Configuration",
-			Lines: []string{
-				"- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).",
-				"- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.",
-				"- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.",
-				"- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx meta doc profiles` and `anx meta doc env` for details.",
-				"- If available, run `anx doctor` when config or connectivity is unclear.",
-				"- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.",
-			},
-		},
-		{
-			Title: "Discovery first",
-			Lines: []string{
-				"Do not overfit to examples in this guide. Ask the CLI what exists now:",
-				"",
-				"  anx help",
-				"  anx help <group>",
-				"  anx help <group> <command>",
-				"  anx meta docs",
-				"  anx meta doc <topic>",
-				"  anx meta doc wake-routing",
-				"",
-				"Use help output as the source of truth for exact flags, request shapes, enums, and newly added primitives.",
-			},
-		},
-		{
-			Title: "Command habits",
-			Lines: []string{
-				"- Use list/get/context/workspace commands to orient before editing.",
-				"- Default text and JSON list payloads lead with public typed refs and handles, for example `card:<handle>`. The CLI passes typed refs and bare handles through to core for resolution.",
-				"- Prefer default text for reading and `--json` for scripts that need stable `ref` and `handle` fields. Internal `id` fields may still appear for debugging or compatibility, but they are not the normal copy/paste identity.",
-				"- Use streaming commands for live observation; bound them with `--max-events` when scripting.",
-				"- Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability; prefer direct domain verbs for small, already-verified writes.",
-				"- Prefer narrow filters over broad listings when triaging large state.",
-			},
-		},
-		{
-			Title: "Programmatic output (`--json`)",
-			Lines: []string{
-				"- Use `--json` or `ANX_JSON=true` when you are parsing output in code, scripts, CI, or `jq` (not for default agent readbacks).",
-				"- Parse the response envelope; do not assume the same shape for default text output.",
-				"- Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.",
-				"- Keep scripts idempotent where possible: read state, compare, then write only when needed.",
-			},
-		},
-		{
-			Title: "Onboarding and recovery",
-			Lines: []string{
-				"When starting in a new environment:",
-				"",
-				"1. Set base URL.",
-				"2. Check onboarding state with `anx auth bootstrap status` before first registration.",
-				"3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>`. For later principals, obtain an invite with `anx auth invites create --kind agent`, then register with `anx auth register --username <username> --invite-token <token>`.",
-				"4. Confirm identity.",
-				"5. Run a cheap read command.",
-				"6. Install this opinionated skill into your agent environment with `anx install skill --path <path>` when the environment supports local agent instructions.",
-				"7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic lifecycle.",
-				"",
-				"When stuck:",
-				"",
-				"- Re-run with `--json` when structured failure fields (`error.details`, etc.) would help.",
-				"- Check help for the exact command path you are using.",
-				"- Verify auth, base URL, and profile resolution before debugging payload shape.",
-			},
-		},
-		{
-			Title: "Maintenance rule",
-			Lines: []string{
-				"- Keep this guide focused on durable usage patterns.",
-				"- Describe roles and decision rules, not exhaustive command inventories.",
-				"- Prefer `anx help` and `anx meta docs` over embedding fragile schemas.",
-				"- Mention examples of primitives and abstractions, but avoid implying the list is closed.",
-			},
-		},
+		{Title: "Setup and identity", Lines: []string{
+			"- Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.",
+			"- Inside `agentctl run`, ANX uses the adapter context. Otherwise set `ANX_AS=<name>` or pass `--as <name>`; check the resolved handle and host in `anx orient`.",
+		}},
+		{Title: "Daily loop", Lines: []string{
+			"1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.",
+			"2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.",
+			"3. Run `anx work note \"What changed\"` after meaningful progress.",
+			"4. When blocked, run `anx work block \"Why\" --ask --recommend \"Preferred answer\"` or `anx ask \"Question\" --recommend \"Preferred answer\" [--alt \"Alternative\"]`. Use `anx review` for review and `anx escalate` for urgent intervention.",
+			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.",
+			"6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.",
+		}},
+		{Title: "Runs and output", Lines: []string{
+			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",
+			"- Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.",
+			"- Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.",
+		}},
 	}
 }
 

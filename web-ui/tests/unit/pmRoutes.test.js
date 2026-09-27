@@ -56,6 +56,8 @@ const client = vi.hoisted(() =>
       "getHomeUnread",
       "respondInboxItem",
       "markHomeRead",
+      "streamEvents",
+      "listEvents",
     ].map((key) => [key, vi.fn()]),
   ),
 );
@@ -76,6 +78,10 @@ import WorkPage from "../../src/routes/o/[organization]/w/[workspace]/tasks/+pag
 import WorkDetail from "../../src/routes/o/[organization]/w/[workspace]/tasks/[workId]/+page.svelte";
 import PMPage from "../../src/routes/o/[organization]/w/[workspace]/pm/+page.svelte";
 import InboxPage from "../../src/routes/o/[organization]/w/[workspace]/inbox/+page.svelte";
+import {
+  flushInboxResponse,
+  resetInboxResponseQueue,
+} from "../../src/lib/inboxResponseQueue.js";
 import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
 
 const work = (ref, title) => ({
@@ -103,8 +109,17 @@ beforeEach(() => {
   client.listPmDecisions.mockResolvedValue({ items: [] });
   client.listInboxItems.mockResolvedValue({ items: [] });
   client.getHomeUnread.mockResolvedValue({ groups: [] });
+  client.listEvents.mockResolvedValue({ events: [] });
+  // An idle stream: open until the page unsubscribes.
+  client.streamEvents.mockImplementation(
+    ({ signal }) =>
+      new Promise((resolve) => signal?.addEventListener("abort", resolve)),
+  );
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  resetInboxResponseQueue();
+});
 
 describe("PM operator interactions", () => {
   it("keeps board and table records identical including an unfamiliar phase", async () => {
@@ -146,7 +161,15 @@ describe("PM operator interactions", () => {
     expect(screen.queryByText("Old work")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
   });
-  it("retains a failed reload with an explicit outdated-data warning", async () => {
+  it("re-reads on a live task event and keeps rows when that read fails", async () => {
+    let emit;
+    client.streamEvents.mockImplementation(
+      ({ onEvent, signal }) =>
+        new Promise((resolve) => {
+          emit = onEvent;
+          signal?.addEventListener("abort", resolve);
+        }),
+    );
     client.listWork
       .mockResolvedValueOnce({
         work: [work("card:one", "Loaded work")],
@@ -155,10 +178,24 @@ describe("PM operator interactions", () => {
       .mockRejectedValueOnce(new Error("Temporary outage"));
     render(WorkPage);
     await screen.findByText("Loaded work");
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Reload", exact: true }),
-    );
-    await screen.findByText("Temporary outage");
+    // No Reload button: the list follows the event stream.
+    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    await waitFor(() => expect(emit).toBeTypeOf("function"));
+    // The workspace stream is shared; the page filters card events itself.
+    expect(client.streamEvents).toHaveBeenCalledTimes(1);
+    emit({
+      id: "evt-1",
+      event: "event",
+      data: {
+        event: {
+          id: "evt-1",
+          type: "card_moved",
+          ts: new Date().toISOString(),
+          refs: ["card:one"],
+        },
+      },
+    });
+    await screen.findByText("Temporary outage", {}, { timeout: 3000 });
     expect(screen.getByText("Loaded work")).toBeTruthy();
     expect(
       screen.getByText(/Showing the previously loaded records/),
@@ -184,7 +221,7 @@ describe("PM operator interactions", () => {
       refresh: { state: "queued" },
     });
     render(WorkDetail);
-    await screen.findByText("Reported claim");
+    await screen.findAllByText("Reported claim");
     expect(screen.queryByText("Verified evidence")).toBeNull();
     await fireEvent.click(
       screen.getByRole("button", { name: "Check GitHub now" }),
@@ -415,7 +452,7 @@ describe("PM operator interactions", () => {
     ).toBeGreaterThan(0);
     expect(client.getPmAction).toHaveBeenCalledWith("older-action");
   });
-  it("places awaiting decisions in Needs you", async () => {
+  it("places awaiting decisions in Needs you and selects the first row", async () => {
     state.route("/inbox");
     client.listPmDecisions.mockResolvedValue({
       items: [
@@ -427,15 +464,60 @@ describe("PM operator interactions", () => {
         },
       ],
     });
-    render(InboxPage);
-    await screen.findByRole("link", { name: /Later sample instruction/ });
+    const { container } = render(InboxPage);
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-inbox-row="decision:later"]'),
+      ).toBeTruthy(),
+    );
+    // The first row of the mailbox is selected without a click; the pane is
+    // never an empty "choose an item" placeholder while rows exist.
     expect(
-      screen.queryByRole("heading", { name: "Later sample instruction" }),
-    ).toBeNull();
-    expect(screen.getByText("Choose an item.")).toBeTruthy();
+      await screen.findByRole("heading", { name: "Later sample instruction" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Choose an item.")).toBeNull();
     expect(
       screen.getAllByRole("link", { name: /Needs you/ }).length,
     ).toBeGreaterThan(0);
+  });
+  it("sends a suggested response behind an undo toast, never at once", async () => {
+    state.route("/inbox");
+    const askedAt = new Date(
+      Date.now() - (3 * 60 + 12) * 60_000 - 20_000,
+    ).toISOString();
+    client.listInboxItems.mockImplementation(async ({ status }) => ({
+      items:
+        status === "open"
+          ? [
+              {
+                id: "inbox:ask-one",
+                kind: "ask",
+                title: "Pick the default path",
+                requester_label: "Omar Reed",
+                source_event_time: askedAt,
+                response_proposals: ["Combat first", "Hub first"],
+              },
+            ]
+          : [],
+    }));
+    client.respondInboxItem.mockResolvedValue({ event: { id: "e1" } });
+    const { container } = render(InboxPage);
+    // Auto-selected, with the wait spelled out and the recommendation marked.
+    await screen.findByRole("heading", { name: "Pick the default path" });
+    expect(screen.getByText(/has been blocked for/)).toBeTruthy();
+    expect(
+      container.querySelector("[data-inbox-blocked-for]")?.textContent,
+    ).toBe("3h 12m");
+    expect(screen.getByText("Recommended")).toBeTruthy();
+
+    await fireEvent.keyDown(window, { key: "2" });
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(await screen.findByText("Sent to Omar Reed")).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await flushInboxResponse();
+    expect(client.respondInboxItem).not.toHaveBeenCalled();
+    expect(screen.queryByText("Sent to Omar Reed")).toBeNull();
   });
   it("loads older PM turns without losing the latest reply", async () => {
     state.route("/pm?conversation=conversation-one");
@@ -515,5 +597,109 @@ describe("PM operator interactions", () => {
     navigation.guards[0]({ cancel });
     expect(cancel).toHaveBeenCalledTimes(1);
     pending.resolve({ id: "turn-one" });
+  });
+
+  it("orders the table by attention and folds closed work behind a toggle", async () => {
+    const native = (ref, title, phase, board = "board:one") => ({
+      ref,
+      title,
+      phase,
+      board_ref: board,
+      source: { authority: "nexus" },
+      freshness: {},
+    });
+    const rows = [
+      native("card:done", "Finished thing", "done"),
+      native("card:backlog", "Someday thing", "backlog"),
+      native("card:blocked", "Stuck thing", "blocked"),
+      native("card:progress", "Moving thing", "in_progress"),
+    ];
+    const result = render(WorkViews, {
+      records: rows,
+      workspaceHref: (path) => path,
+      closedHref: "/tasks?closed=1",
+    });
+    const titles = () =>
+      [...result.container.querySelectorAll("tbody tr a")].map(
+        (node) => node.textContent,
+      );
+    expect(titles()).toEqual(["Stuck thing", "Moving thing", "Someday thing"]);
+    // One board and no source-backed task: neither column earns its place.
+    const headings = [...result.container.querySelectorAll("thead th")].map(
+      (node) => node.textContent.trim(),
+    );
+    expect(headings).toEqual(["Task", "Status", "Owner"]);
+    expect(screen.queryByText("created here")).toBeNull();
+    const toggle = result.container.querySelector("[data-work-closed-toggle]");
+    expect(toggle.textContent).toContain("1 done");
+    expect(toggle.getAttribute("href")).toBe("/tasks?closed=1");
+    await result.rerender({
+      records: [
+        ...rows,
+        {
+          ...native("card:gh", "Mirrored issue", "ready", "board:two"),
+          source: { authority: "github", native_id: "o/r#1" },
+          freshness: { last_observed_at: new Date().toISOString() },
+        },
+      ],
+      workspaceHref: (path) => path,
+      showClosed: true,
+      closedHref: "/tasks",
+    });
+    expect(titles()).toEqual([
+      "Stuck thing",
+      "Moving thing",
+      "Mirrored issue",
+      "Someday thing",
+      "Finished thing",
+    ]);
+    const wide = [...result.container.querySelectorAll("thead th")].map(
+      (node) => node.textContent.trim(),
+    );
+    expect(wide).toEqual(["Task", "Board", "Status", "Owner", "Last checked"]);
+  });
+  it("shows task evidence as one source line with each link once", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: {
+        ...work("card:one", "Issue work"),
+        source: { authority: "github", native_id: "org/repo#208" },
+      },
+    });
+    const issue = "https://github.com/org/repo/issues/208";
+    client.listWorkObservations.mockResolvedValue({
+      observations: [1, 2, 3, 4].map((n) => ({
+        id: `o${n}`,
+        status: "reported",
+        observed_at: `2026-09-01T12:0${n}:00Z`,
+        evidence: [
+          { url: issue, kind: "issue" },
+          ...[1, 2, 3, 4].map((c) => ({
+            url: `${issue}#issuecomment-${c}`,
+            kind: "comment",
+          })),
+        ],
+      })),
+    });
+    client.listWork.mockResolvedValue({ work: [] });
+    render(WorkDetail);
+    const line = await waitFor(() => {
+      const node = document.querySelector("[data-evidence-source]");
+      if (!node) throw new Error("no source line yet");
+      return node;
+    });
+    expect(line.textContent.replace(/\s+/g, " ")).toContain(
+      "GitHub #208 · 4 observations",
+    );
+    const links = screen.getByRole("list", { name: "Evidence links" });
+    expect(
+      [...links.querySelectorAll("a")].map((a) => a.textContent.trim()),
+    ).toEqual([
+      "Issue #208 ↗",
+      "Comment 1 ↗",
+      "Comment 2 ↗",
+      "Comment 3 ↗",
+      "Comment 4 ↗",
+    ]);
   });
 });

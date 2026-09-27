@@ -1,8 +1,8 @@
 {
   "ok": true,
-  "command": "events list",
-  "command_id": "events.list",
-  "data": {
+  "schema_version": 2,
+  "command": "debug events list",
+  "result": {
     "artifacts": {},
     "events": [
       {
@@ -26,5 +26,7 @@
     "types": [
       "message_posted"
     ]
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

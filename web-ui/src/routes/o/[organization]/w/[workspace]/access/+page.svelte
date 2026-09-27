@@ -1,425 +1,134 @@
 <script>
-  import { tick } from "svelte";
-  import { goto } from "$app/navigation";
-  import { get } from "svelte/store";
+  import { onMount, tick } from "svelte";
   import { page } from "$app/stores";
 
+  import {
+    actorDisplayLabel,
+    actorRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
+  import { refreshAgentRoster } from "$lib/agentRoster.js";
+  import { liveAgentChanges } from "$lib/liveWorkspaceEvents.js";
+  import { formatAge } from "$lib/agentPresence.js";
+  import { describeAuthAuditEvent } from "$lib/authAuditModel.js";
   import { authenticatedAgent } from "$lib/authSession";
-  import ActorAvatar from "$lib/components/ActorAvatar.svelte";
-  import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
-  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
-  import Button from "$lib/components/Button.svelte";
-  import SelectableId from "$lib/components/SelectableId.svelte";
-  import { selectNodeText } from "$lib/dom/selectNodeText.js";
   import { coreClient } from "$lib/coreClient";
-  import { formatAbsoluteDateTime, formatTimestamp } from "$lib/formatDate";
-  import { suggestAgentUsername } from "$lib/agentInviteIdentity.js";
-  import { buildRegistrationMessage } from "$lib/inviteRegistrationMessage";
-  import { buildWakeRegistrationMessage } from "$lib/wakeRegistrationMessage.js";
-  import { enrichPrincipalsWithWakeRouting as loadPrincipalsWithWakeRouting } from "$lib/principalWakeRouting.js";
+  import { formatAbsoluteDateTime } from "$lib/formatDate";
   import {
     isWorkspaceTourArrived,
     markWorkspaceTourArrived,
   } from "$lib/tourState";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import ActorAvatar from "$lib/components/ActorAvatar.svelte";
+  import Button from "$lib/components/Button.svelte";
+  import ConfirmModal from "$lib/components/ConfirmModal.svelte";
+  import CopyableId from "$lib/components/CopyableId.svelte";
+  import CopyButton from "$lib/components/CopyButton.svelte";
+  import HostCard from "$lib/components/access/HostCard.svelte";
+  import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
+  import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
 
   let { data } = $props();
 
-  let loading = $state(true);
-  let pageError = $state("");
+  const PENDING_POLL_MS = 5_000;
+  const AUDIT_PREVIEW = 8;
+
   let organizationSlug = $derived($page.params.organization);
   let workspaceSlug = $derived($page.params.workspace);
-
-  let principals = $state([]);
-  let activeHumanPrincipalCount = $state(0);
-  let invites = $state([]);
-  let auditEvents = $state([]);
-
-  let principalsCursor = $state("");
-  let principalsHasMore = $state(false);
-  let loadingMorePrincipals = $state(false);
-
-  let auditCursor = $state("");
-  let auditHasMore = $state(false);
-  let loadingMoreAudit = $state(false);
-
-  let creatingInvite = $state(false);
-  let inviteError = $state("");
-  let newInviteKind = $state("agent");
-  let newInviteAgentName = $state("");
-  let newInviteUsername = $state("");
-  let newInviteUsernameManuallyEdited = $state(false);
-
-  let createdToken = $state("");
-  let createdInviteKind = $state("");
-  let createdInviteAgentName = $state("");
-  let createdInviteUsername = $state("");
-  let messageCopied = $state(false);
-  let tokenCopied = $state(false);
-  let tokenDismissed = $state(false);
-  let tokenBannerEl = $state(null);
-  let createdInviteCommandHasPlaceholders = $derived(!createdInviteUsername);
-
-  let revokingInviteId = $state("");
-  let revokeInviteConfirm = $state({ open: false, id: "" });
-  let revokeError = $state("");
-  let showResolvedInvites = $state(false);
-  let agentInviteHighlight = $state(false);
-  let agentInviteParamHandled = $state(false);
-  let tourArrived = $state(false);
-
-  let principalRevokeTarget = $state(null);
-  let principalRevokeConfirming = $state(false);
-  let principalRevokeForcing = $state(false);
-  let principalRevokeError = $state("");
-  let principalRevokeHumanLockoutReason = $state("");
-  let principalRevokeRequiresHumanLockout = $state(false);
-
-  const SECTION_IDLE = "idle";
-  const SECTION_READY = "ready";
-  const SECTION_ERROR = "error";
-
-  let principalsState = $state({ status: SECTION_IDLE, error: "" });
-  let invitesState = $state({ status: SECTION_IDLE, error: "" });
-  let auditState = $state({ status: SECTION_IDLE, error: "" });
-
-  // Only the first load replaces content with a loading row; refreshes keep
-  // the current sections in place so the page does not jump.
-  let initialLoading = $derived(
-    loading &&
-      principalsState.status === SECTION_IDLE &&
-      invitesState.status === SECTION_IDLE &&
-      auditState.status === SECTION_IDLE,
+  let workspaceHref = $derived(
+    bindWorkspaceHref(organizationSlug, workspaceSlug),
   );
-
   let canManageAccess = $derived(Boolean($authenticatedAgent));
   let authenticatedAgentId = $derived($authenticatedAgent?.agent_id ?? "");
   let hostedMode = $derived(
     data?.outOfWorkspaceMode === "hosted" ||
       $page.data?.shellCapabilities?.mode === "hosted",
   );
+  let cliBaseUrl = $derived(data?.cliBaseUrl ?? "");
+  let enrollCommand = $derived(
+    `anx ${cliBaseUrl ? `--base-url ${cliBaseUrl} ` : ""}host enroll`,
+  );
 
+  let now = $state(Date.now());
+  let loaded = $state(false);
+  let pageError = $state("");
+
+  /** Section state: each section loads and fails on its own. */
+  let sections = $state({
+    hosts: { status: "idle", error: "" },
+    pending: { status: "idle", error: "" },
+    tokens: { status: "idle", error: "" },
+    principals: { status: "idle", error: "" },
+    invites: { status: "idle", error: "" },
+    audit: { status: "idle", error: "" },
+  });
+
+  let hosts = $state([]);
+  let pending = $state([]);
+  let tokens = $state([]);
+  let principals = $state([]);
+  let activeHumanPrincipalCount = $state(0);
+  let invites = $state([]);
+  let auditEvents = $state([]);
+  let auditCursor = $state("");
+  let loadingMoreAudit = $state(false);
+  let showAllAudit = $state(false);
+
+  let enrollOpen = $state(false);
+  let showRevokedHosts = $state(false);
+  let enrollmentBusy = $state({ id: "", action: "" });
+  let enrollmentErrors = $state({});
+  let enrollmentNotice = $state("");
+
+  let creatingInvite = $state(false);
+  let inviteError = $state("");
+  let createdInviteToken = $state("");
+  let revokingInviteId = $state("");
+  let revokeInviteConfirm = $state({ open: false, id: "" });
+
+  let principalRevokeTarget = $state(null);
+  let principalRevokeBusy = $state(false);
+  let principalRevokeError = $state("");
+  let principalRevokeLockout = $state(false);
+  let principalRevokeReason = $state("");
+
+  let tourArrived = $state(false);
+  let hostsSectionEl = $state(null);
+
+  let activeHosts = $derived(hosts.filter((host) => !host.revoked_at));
+  let revokedHosts = $derived(hosts.filter((host) => host.revoked_at));
+  let hostById = $derived(new Map(hosts.map((host) => [host.id, host])));
+  let hostAgentIds = $derived(
+    new Set(hosts.flatMap((host) => (host.agents ?? []).map((a) => a.id))),
+  );
+
+  let humans = $derived(
+    principals.filter((principal) => principal.principal_kind === "human"),
+  );
+  // Agents enrolled before hosts that were not adopted keep working until
+  // revoked; they are the only agents listed outside a host.
+  let standaloneAgents = $derived(
+    principals.filter(
+      (principal) =>
+        principal.principal_kind === "agent" &&
+        !principal.revoked &&
+        !hostAgentIds.has(principal.agent_id),
+    ),
+  );
   let pendingInvites = $derived(
-    invites.filter((i) => !i.revoked_at && !i.consumed_at),
+    invites.filter((invite) => !invite.revoked_at && !invite.consumed_at),
   );
-  let resolvedInvites = $derived(
-    invites.filter((i) => i.revoked_at || i.consumed_at),
+  let visibleAudit = $derived(
+    showAllAudit ? auditEvents : auditEvents.slice(0, AUDIT_PREVIEW),
   );
-  let visibleInvites = $derived(showResolvedInvites ? invites : pendingInvites);
-
-  // Banner shows from tour arrival until the workspace owner creates their
-  // first invite (any state — pending, consumed, or revoked counts as the
-  // activation milestone). We hold off until invites finish loading so the
-  // banner doesn't flash for users who already have invites on disk.
   let showTourBanner = $derived(
     tourArrived &&
       canManageAccess &&
-      invitesState.status === SECTION_READY &&
-      invites.length === 0 &&
-      !createdToken,
+      sections.hosts.status === "ready" &&
+      activeHosts.length === 0,
   );
 
-  let wakePopoverTarget = $state(null);
-  let wakeRegistrationMessageCopiedFor = $state("");
-
-  $effect(() => {
-    if (!canManageAccess) return;
-    loadAccessData();
-  });
-
-  // Hydrate the persisted tour-arrival flag once the workspace slug is known.
-  $effect(() => {
-    if (!workspaceSlug) return;
-    if (isWorkspaceTourArrived(workspaceSlug)) {
-      tourArrived = true;
-    }
-  });
-
-  async function loadAccessData() {
-    loading = true;
-    pageError = "";
-
-    const [principalsResult, invitesResult, auditResult] =
-      await Promise.allSettled([
-        coreClient.listPrincipals({ limit: 50 }),
-        coreClient.listInvites(),
-        coreClient.listAuthAudit({ limit: 50 }),
-      ]);
-
-    if (principalsResult.status === "fulfilled") {
-      const data = principalsResult.value;
-      principals = await enrichPrincipalsWithWakeRouting(
-        data?.principals ?? [],
-      );
-      activeHumanPrincipalCount = data?.active_human_principal_count ?? 0;
-      principalsCursor = data?.next_cursor ?? "";
-      principalsHasMore = Boolean(data?.next_cursor);
-      principalsState = { status: SECTION_READY, error: "" };
-    } else {
-      principalsState = {
-        status: SECTION_ERROR,
-        error: extractErrorMessage(
-          principalsResult.reason,
-          "Failed to load principals",
-        ),
-      };
-    }
-
-    if (invitesResult.status === "fulfilled") {
-      invites = invitesResult.value?.invites ?? [];
-      invitesState = { status: SECTION_READY, error: "" };
-    } else {
-      invitesState = {
-        status: SECTION_ERROR,
-        error: extractErrorMessage(
-          invitesResult.reason,
-          "Failed to load invites",
-        ),
-      };
-    }
-
-    if (auditResult.status === "fulfilled") {
-      const data = auditResult.value;
-      auditEvents = data?.events ?? [];
-      auditCursor = data?.next_cursor ?? "";
-      auditHasMore = Boolean(data?.next_cursor);
-      auditState = { status: SECTION_READY, error: "" };
-    } else {
-      auditState = {
-        status: SECTION_ERROR,
-        error: extractErrorMessage(
-          auditResult.reason,
-          "Failed to load audit events",
-        ),
-      };
-    }
-
-    loading = false;
-  }
-
-  async function loadMorePrincipals() {
-    if (loadingMorePrincipals || !principalsCursor) return;
-    loadingMorePrincipals = true;
-
-    try {
-      const result = await coreClient.listPrincipals({
-        limit: 50,
-        cursor: principalsCursor,
-      });
-      const newPrincipals = await enrichPrincipalsWithWakeRouting(
-        result?.principals ?? [],
-      );
-      principals = [...principals, ...newPrincipals];
-      activeHumanPrincipalCount =
-        result?.active_human_principal_count ?? activeHumanPrincipalCount;
-      principalsCursor = result?.next_cursor ?? "";
-      principalsHasMore = Boolean(result?.next_cursor);
-    } catch (error) {
-      pageError = extractErrorMessage(error, "Failed to load more principals");
-    } finally {
-      loadingMorePrincipals = false;
-    }
-  }
-
-  async function loadMoreAudit() {
-    if (loadingMoreAudit || !auditCursor) return;
-    loadingMoreAudit = true;
-
-    try {
-      const result = await coreClient.listAuthAudit({
-        limit: 50,
-        cursor: auditCursor,
-      });
-      const newEvents = result?.events ?? [];
-      auditEvents = [...auditEvents, ...newEvents];
-      auditCursor = result?.next_cursor ?? "";
-      auditHasMore = Boolean(result?.next_cursor);
-    } catch (error) {
-      pageError = extractErrorMessage(
-        error,
-        "Failed to load more audit events",
-      );
-    } finally {
-      loadingMoreAudit = false;
-    }
-  }
-
-  async function handleCreateInvite() {
-    creatingInvite = true;
-    inviteError = "";
-    createdToken = "";
-    createdInviteKind = "";
-    messageCopied = false;
-    tokenCopied = false;
-    tokenDismissed = false;
-
-    try {
-      if (
-        hostedMode &&
-        (newInviteKind === "agent" || newInviteKind === "any") &&
-        !newInviteUsername.trim()
-      ) {
-        inviteError = "Agent username is required for hosted agent invites.";
-        return;
-      }
-      const payload = {
-        kind: newInviteKind,
-      };
-      const result = await coreClient.createInvite(payload);
-      createdToken = result.token ?? "";
-      createdInviteKind = newInviteKind;
-      createdInviteAgentName = hostedMode ? "" : newInviteAgentName.trim();
-      createdInviteUsername = newInviteUsername.trim();
-      newInviteAgentName = "";
-      newInviteUsername = "";
-      newInviteUsernameManuallyEdited = false;
-      void revealTokenBanner();
-      await loadAccessData();
-    } catch (error) {
-      inviteError = extractErrorMessage(error, "Failed to create invite");
-    } finally {
-      creatingInvite = false;
-    }
-  }
-
-  // The token is shown once, so make sure it is on screen (the form's submit
-  // button can be below the banner on small viewports).
-  async function revealTokenBanner() {
-    await tick();
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    tokenBannerEl?.scrollIntoView?.({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "nearest",
-    });
-  }
-
-  async function handleRevokeInvite(inviteId) {
-    if (!inviteId) return;
-    revokingInviteId = inviteId;
-    revokeError = "";
-
-    try {
-      await coreClient.revokeInvite(inviteId);
-      await loadAccessData();
-    } catch (error) {
-      revokeError = extractErrorMessage(error, "Failed to revoke invite");
-    } finally {
-      revokingInviteId = "";
-    }
-  }
-
-  function startPrincipalRevoke(principal) {
-    if (!principal?.agent_id || principal.agent_id === authenticatedAgentId) {
-      return;
-    }
-    principalRevokeTarget = principal;
-    principalRevokeConfirming = false;
-    principalRevokeForcing = false;
-    principalRevokeError = "";
-    principalRevokeHumanLockoutReason = "";
-    principalRevokeRequiresHumanLockout = isLastActiveHumanPrincipal(principal);
-  }
-
-  function cancelPrincipalRevoke() {
-    principalRevokeTarget = null;
-    principalRevokeConfirming = false;
-    principalRevokeForcing = false;
-    principalRevokeError = "";
-    principalRevokeHumanLockoutReason = "";
-    principalRevokeRequiresHumanLockout = false;
-  }
-
-  async function confirmPrincipalRevoke() {
-    if (!principalRevokeTarget || principalRevokeRequiresHumanLockout) return;
-
-    const agentId = principalRevokeTarget.agent_id;
-    principalRevokeConfirming = true;
-    principalRevokeError = "";
-
-    try {
-      await coreClient.revokePrincipal(agentId, {});
-      cancelPrincipalRevoke();
-      await loadAccessData();
-    } catch (error) {
-      const details = error?.details ?? "";
-      if (details.includes("last_active_principal") || error?.status === 409) {
-        principalRevokeRequiresHumanLockout = true;
-        principalRevokeConfirming = false;
-      } else {
-        principalRevokeError = extractErrorMessage(
-          error,
-          "Failed to revoke principal",
-        );
-        principalRevokeConfirming = false;
-      }
-    }
-  }
-
-  async function forcePrincipalRevoke() {
-    if (!principalRevokeTarget || !principalRevokeRequiresHumanLockout) return;
-    if (principalRevokeHumanLockoutReason.trim() === "") {
-      principalRevokeError =
-        "Provide a human-lockout reason before using break-glass revoke.";
-      return;
-    }
-
-    principalRevokeForcing = true;
-    principalRevokeError = "";
-
-    try {
-      await coreClient.revokePrincipal(principalRevokeTarget.agent_id, {
-        allow_human_lockout: true,
-        human_lockout_reason: principalRevokeHumanLockoutReason.trim(),
-      });
-      cancelPrincipalRevoke();
-      await loadAccessData();
-    } catch (error) {
-      principalRevokeError = extractErrorMessage(
-        error,
-        "Failed to revoke principal",
-      );
-      principalRevokeForcing = false;
-    }
-  }
-
-  async function copyInviteToken() {
-    if (!createdToken) return;
-    try {
-      await navigator.clipboard.writeText(createdToken);
-      tokenCopied = true;
-    } catch {
-      tokenCopied = false;
-    }
-  }
-
-  async function copyRegistrationInstructions() {
-    if (!createdToken) return;
-    try {
-      await navigator.clipboard.writeText(
-        buildRegistrationMessage(
-          createdToken,
-          data.registrationBaseUrl,
-          createdInviteAgentName,
-          createdInviteUsername,
-        ),
-      );
-      messageCopied = true;
-    } catch {
-      messageCopied = false;
-    }
-  }
-
-  function dismissToken() {
-    tokenDismissed = true;
-    createdToken = "";
-    createdInviteKind = "";
-    createdInviteAgentName = "";
-    createdInviteUsername = "";
-  }
-
-  function extractErrorMessage(error, fallback) {
+  function message(error, fallback) {
     if (!error) return fallback;
     if (typeof error === "string") return error || fallback;
     // Core's reason reads better than the transport-level message around it.
@@ -430,264 +139,293 @@
     return fallback;
   }
 
-  async function enrichPrincipalsWithWakeRouting(principalList) {
-    return loadPrincipalsWithWakeRouting(principalList, {
-      workspaceBindingTarget: data?.workspaceId ?? "",
-      client: coreClient,
+  function nameFor(id) {
+    const raw = String(id ?? "").trim();
+    if (!raw) return "";
+    const label = actorDisplayLabel(raw, $actorRegistry, $principalRegistry);
+    return label && label !== raw ? label : "";
+  }
+
+  function principalName(principal) {
+    return (
+      nameFor(principal?.actor_id) ||
+      nameFor(principal?.agent_id) ||
+      principal?.username ||
+      "Unnamed"
+    );
+  }
+
+  function settle(key, result, apply) {
+    if (result.status === "fulfilled") {
+      apply(result.value);
+      sections[key] = { status: "ready", error: "" };
+    } else {
+      sections[key] = {
+        status: "error",
+        error: message(result.reason, "This did not load."),
+      };
+    }
+  }
+
+  async function loadHosts() {
+    const [hostsResult, pendingResult, tokensResult] = await Promise.allSettled(
+      [
+        coreClient.listHosts(),
+        coreClient.listPendingHostEnrollments(),
+        coreClient.listHostEnrollmentTokens(),
+      ],
+    );
+    settle("hosts", hostsResult, (value) => {
+      hosts = value?.hosts ?? [];
+    });
+    settle("pending", pendingResult, (value) => {
+      pending = value?.enrollments ?? [];
+    });
+    settle("tokens", tokensResult, (value) => {
+      tokens = value?.enrollment_tokens ?? [];
     });
   }
 
-  async function copyWakeRegistrationMessage(principal) {
-    const handle = String(
-      principal?.wakeRouting?.handle ?? principal?.username ?? "",
-    ).trim();
-    if (!handle) return;
+  async function loadPeople() {
+    const [principalsResult, invitesResult, auditResult] =
+      await Promise.allSettled([
+        coreClient.listPrincipals({ limit: 200 }),
+        coreClient.listInvites(),
+        coreClient.listAuthAudit({ limit: 50 }),
+      ]);
+    settle("principals", principalsResult, (value) => {
+      principals = value?.principals ?? [];
+      activeHumanPrincipalCount = value?.active_human_principal_count ?? 0;
+    });
+    settle("invites", invitesResult, (value) => {
+      invites = value?.invites ?? [];
+    });
+    settle("audit", auditResult, (value) => {
+      auditEvents = value?.events ?? [];
+      auditCursor = value?.next_cursor ?? "";
+    });
+  }
+
+  async function loadAll() {
+    await Promise.all([loadHosts(), loadPeople()]);
+    loaded = true;
+  }
+
+  // An enrolling machine polls every few seconds; so does this list, so the
+  // request shows up while the operator is looking at the page.
+  async function pollPending() {
     try {
-      await navigator.clipboard.writeText(
-        buildWakeRegistrationMessage(
-          data?.registrationBaseUrl,
-          data?.workspaceId,
-          handle,
-        ),
-      );
-      wakeRegistrationMessageCopiedFor = principal?.agent_id ?? "";
-    } catch {
-      wakeRegistrationMessageCopiedFor = "";
-    }
-  }
-
-  let workspaceHref = $derived(
-    bindWorkspaceHref(organizationSlug, workspaceSlug),
-  );
-
-  function principalBadge(principal) {
-    if (principal?.revoked) {
-      return { label: "Revoked", class: "bg-danger-soft text-danger-text" };
-    }
-    return null;
-  }
-
-  function inviteBadge(invite) {
-    if (invite?.revoked_at) {
-      return { label: "Revoked", class: "bg-danger-soft text-danger-text" };
-    }
-    if (invite?.consumed_at) {
-      return { label: "Consumed", class: "bg-blue-500/10 text-blue-400" };
-    }
-    return null;
-  }
-
-  function principalLabel(principal) {
-    const kind = principal?.principal_kind ?? "principal";
-    const method = principal?.auth_method ?? "auth";
-    return `${kind} via ${method}`;
-  }
-
-  let principalRevokeTargetLabel = $derived(
-    principalRevokeTarget?.username || principalRevokeTarget?.agent_id || "",
-  );
-
-  function isLastActiveHumanPrincipal(principal) {
-    return Boolean(
-      principal?.principal_kind === "human" &&
-      !principal?.revoked &&
-      activeHumanPrincipalCount === 1,
-    );
-  }
-
-  function auditActorLabel(event) {
-    const username = event?.actor_username;
-    const agentId = event?.actor_agent_id;
-    const actorId = event?.actor_actor_id;
-    if (username) {
-      return { primary: username, secondary: agentId ?? actorId };
-    }
-    const id = agentId ?? actorId ?? "unknown";
-    return { primary: id, secondary: null };
-  }
-
-  function auditSubjectLabel(event) {
-    const username = event?.subject_username;
-    const agentId = event?.subject_agent_id;
-    const actorId = event?.subject_actor_id;
-    if (username) {
-      return { primary: username, secondary: agentId ?? actorId };
-    }
-    const id = agentId ?? actorId;
-    return { primary: id ?? null, secondary: null };
-  }
-
-  /**
-   * @returns {Array<{ type: "text" | "id"; value: string }>}
-   */
-  function auditEventFirstLineSegments(event) {
-    const kind = event?.event_type ?? "";
-    const actor = auditActorLabel(event);
-    const subject = auditSubjectLabel(event);
-    const inviteId = event?.invite_id;
-    const actorDisplay = actor.primary;
-    const subjectDisplay = subject.primary ?? actor.primary;
-
-    /** @type {Array<{ type: "text" | "id"; value: string }>} */
-    const out = [];
-    const pushText = (s) => {
-      if (!s) return;
-      const last = out[out.length - 1];
-      if (last?.type === "text") {
-        last.value += s;
-      } else {
-        out.push({ type: "text", value: s });
+      const result = await coreClient.listPendingHostEnrollments();
+      const next = result?.enrollments ?? [];
+      const changed =
+        next.length !== pending.length ||
+        next.some((entry, index) => entry.id !== pending[index]?.id);
+      pending = next;
+      sections.pending = { status: "ready", error: "" };
+      if (changed) {
+        void loadHosts();
+        void refreshAgentRoster();
       }
-    };
-    const pushId = (id) => {
-      if (id) out.push({ type: "id", value: id });
-    };
-
-    switch (kind) {
-      case "bootstrap_consumed":
-        pushText(`Bootstrap consumed by ${subjectDisplay}`);
-        break;
-      case "principal_registered":
-        pushText(`Principal ${subjectDisplay} registered`);
-        break;
-      case "invite_created":
-        if (inviteId) {
-          pushId(inviteId);
-          pushText(` created by ${actorDisplay}`);
-        } else {
-          pushText(`invite created by ${actorDisplay}`);
-        }
-        break;
-      case "invite_consumed":
-        if (inviteId) {
-          pushId(inviteId);
-          pushText(` consumed by ${subjectDisplay}`);
-        } else {
-          pushText(`invite consumed by ${subjectDisplay}`);
-        }
-        break;
-      case "invite_revoked":
-        if (inviteId) {
-          pushId(inviteId);
-          pushText(` revoked by ${actorDisplay}`);
-        } else {
-          pushText(`invite revoked by ${actorDisplay}`);
-        }
-        break;
-      case "principal_revoked":
-        pushText(`Principal ${subjectDisplay} revoked by ${actorDisplay}`);
-        break;
-      case "principal_self_revoked":
-        pushText(`Principal ${subjectDisplay} self-revoked`);
-        break;
-      case "principal_human_lockout_revoked":
-        pushText(
-          `Principal ${subjectDisplay} revoked under human lockout by ${actorDisplay}`,
-        );
-        break;
-      default:
-        pushText(`${kind || "unknown"} (${actorDisplay})`);
+    } catch {
+      // The section keeps its last state; the next poll tries again.
     }
-    return out;
   }
 
-  function auditEventSecondary(event) {
-    const actor = auditActorLabel(event);
-    const subject = auditSubjectLabel(event);
-    const parts = [];
-
-    if (actor.secondary) {
-      parts.push(`actor: ${actor.secondary}`);
+  async function decideEnrollment(enrollment, action) {
+    enrollmentBusy = { id: enrollment.id, action };
+    enrollmentErrors = { ...enrollmentErrors, [enrollment.id]: "" };
+    try {
+      if (action === "approve") {
+        await coreClient.approveHostEnrollment(enrollment.id);
+      } else {
+        await coreClient.denyHostEnrollment(enrollment.id);
+      }
+      pending = pending.filter((entry) => entry.id !== enrollment.id);
+      enrollmentNotice =
+        action === "approve"
+          ? `Approved ${enrollment.requested_slug}. It appears under Hosts once the machine finishes enrolling.`
+          : `Denied ${enrollment.requested_slug}.`;
+      await Promise.all([loadHosts(), loadPeople()]);
+    } catch (error) {
+      enrollmentErrors = {
+        ...enrollmentErrors,
+        [enrollment.id]: message(
+          error,
+          action === "approve"
+            ? "The request was not approved."
+            : "The request was not denied.",
+        ),
+      };
+    } finally {
+      enrollmentBusy = { id: "", action: "" };
     }
-    if (subject.secondary && subject.secondary !== actor.secondary) {
-      parts.push(`subject: ${subject.secondary}`);
-    }
-    if (event?.event_id) {
-      parts.push(`id: ${event.event_id}`);
-    }
-
-    return parts.join(" \u2022 ");
   }
 
-  function isCurrentPrincipal(principal) {
-    return (
-      Boolean(principal?.agent_id) &&
-      principal.agent_id === authenticatedAgentId
+  async function saveExclusions(host, names) {
+    const result = await coreClient.patchHost(host.id, {
+      excluded_names: names,
+    });
+    const updated = result?.host;
+    if (updated) {
+      hosts = hosts.map((entry) => (entry.id === updated.id ? updated : entry));
+    }
+    void refreshAgentRoster();
+  }
+
+  async function revokeHost(host) {
+    await coreClient.revokeHost(host.id);
+    await Promise.all([loadHosts(), loadPeople(), refreshAgentRoster()]);
+  }
+
+  async function createToken(payload) {
+    const result = await coreClient.createHostEnrollmentToken(payload);
+    await loadHosts();
+    return result;
+  }
+
+  async function revokeToken(token) {
+    await coreClient.revokeHostEnrollmentToken(token.id);
+    await loadHosts();
+  }
+
+  async function inviteHuman() {
+    creatingInvite = true;
+    inviteError = "";
+    createdInviteToken = "";
+    try {
+      const result = await coreClient.createInvite({ kind: "human" });
+      createdInviteToken = result?.token ?? "";
+      await loadPeople();
+    } catch (error) {
+      inviteError = message(error, "The invite was not created.");
+    } finally {
+      creatingInvite = false;
+    }
+  }
+
+  async function revokeInvite(inviteId) {
+    revokingInviteId = inviteId;
+    try {
+      await coreClient.revokeInvite(inviteId);
+      await loadPeople();
+    } catch (error) {
+      pageError = message(error, "The invite was not revoked.");
+    } finally {
+      revokingInviteId = "";
+    }
+  }
+
+  function startPrincipalRevoke(principal) {
+    principalRevokeTarget = principal;
+    principalRevokeError = "";
+    principalRevokeReason = "";
+    principalRevokeLockout = Boolean(
+      principal?.principal_kind === "human" && activeHumanPrincipalCount === 1,
     );
   }
 
-  function toggleWakePopover(agentId) {
-    wakePopoverTarget = wakePopoverTarget === agentId ? null : agentId;
-    wakeRegistrationMessageCopiedFor = "";
+  function cancelPrincipalRevoke() {
+    principalRevokeTarget = null;
+    principalRevokeBusy = false;
+    principalRevokeError = "";
+    principalRevokeReason = "";
+    principalRevokeLockout = false;
   }
 
-  $effect(() => {
-    if (hostedMode && newInviteKind !== "agent") {
-      newInviteKind = "agent";
+  async function confirmPrincipalRevoke() {
+    if (!principalRevokeTarget) return;
+    if (principalRevokeLockout && !principalRevokeReason.trim()) return;
+    principalRevokeBusy = true;
+    principalRevokeError = "";
+    try {
+      await coreClient.revokePrincipal(
+        principalRevokeTarget.agent_id,
+        principalRevokeLockout
+          ? {
+              allow_human_lockout: true,
+              human_lockout_reason: principalRevokeReason.trim(),
+            }
+          : {},
+      );
+      cancelPrincipalRevoke();
+      await loadPeople();
+    } catch (error) {
+      const details = String(error?.details ?? "");
+      if (
+        !principalRevokeLockout &&
+        (details.includes("last_active_principal") || error?.status === 409)
+      ) {
+        principalRevokeLockout = true;
+        principalRevokeBusy = false;
+        return;
+      }
+      principalRevokeError = message(error, "Access was not revoked.");
+      principalRevokeBusy = false;
     }
-  });
+  }
 
-  $effect(() => {
-    if (newInviteKind !== "agent" && newInviteKind !== "any") {
-      return;
-    }
-    if (newInviteUsernameManuallyEdited) {
-      return;
-    }
-    newInviteUsername = suggestAgentUsername(newInviteAgentName);
-  });
-
-  $effect(() => {
-    if (loading) {
-      return;
-    }
-    if (agentInviteParamHandled) {
-      return;
-    }
-    if (get(page).url.searchParams.get("invite") !== "agent") {
-      return;
-    }
-    const fromTour = get(page).url.searchParams.get("from") === "tour";
-    if (!canManageAccess) {
-      agentInviteParamHandled = true;
-      const u = new URL(get(page).url);
-      u.searchParams.delete("invite");
-      u.searchParams.delete("from");
-      void goto(`${u.pathname}${u.search}${u.hash}`, {
-        replaceState: true,
-        noScroll: true,
-        keepFocus: true,
+  async function loadMoreAudit() {
+    if (loadingMoreAudit || !auditCursor) return;
+    loadingMoreAudit = true;
+    try {
+      const result = await coreClient.listAuthAudit({
+        limit: 50,
+        cursor: auditCursor,
       });
-      return;
+      auditEvents = [...auditEvents, ...(result?.events ?? [])];
+      auditCursor = result?.next_cursor ?? "";
+    } catch (error) {
+      pageError = message(error, "More events did not load.");
+    } finally {
+      loadingMoreAudit = false;
     }
-    agentInviteParamHandled = true;
-    newInviteKind = "agent";
-    if (fromTour && workspaceSlug) {
+  }
+
+  function auditSentence(event) {
+    return describeAuthAuditEvent(event, {
+      nameFor,
+      hostName: (hostId) => hostById.get(hostId)?.slug ?? "",
+    });
+  }
+
+  // `#host-<slug>` and `#host-requests` links (agent pages, the CLI's
+  // verification URL) land on the right card once hosts have loaded.
+  $effect(() => {
+    if (!loaded) return;
+    const hash = $page.url.hash;
+    if (!hash) return;
+    void tick().then(() => {
+      document
+        .getElementById(decodeURIComponent(hash.slice(1)))
+        ?.scrollIntoView({ block: "start" });
+    });
+  });
+
+  $effect(() => {
+    if (!workspaceSlug) return;
+    if ($page.url.searchParams.get("from") === "tour") {
       markWorkspaceTourArrived(workspaceSlug);
-      tourArrived = true;
     }
-    void (async () => {
-      await tick();
-      document
-        .getElementById("access-create-invite")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      await tick();
-      document
-        .querySelector("#access-create-invite button[type='submit']")
-        ?.focus();
-      agentInviteHighlight = true;
-      setTimeout(() => {
-        agentInviteHighlight = false;
-      }, 1500);
-      const u = new URL(get(page).url);
-      u.searchParams.delete("invite");
-      u.searchParams.delete("from");
-      await goto(`${u.pathname}${u.search}${u.hash}`, {
-        replaceState: true,
-        noScroll: true,
-        keepFocus: true,
-      });
-    })();
+    tourArrived = isWorkspaceTourArrived(workspaceSlug);
+  });
+
+  onMount(() => {
+    if (!canManageAccess) return;
+    void loadAll();
+    // Host cards show agent states; core's roster stream says when they move.
+    const stopAgentChanges = liveAgentChanges({
+      client: coreClient,
+      debounceMs: 600,
+      onChange: () => loadHosts(),
+    });
+    const poll = setInterval(() => {
+      now = Date.now();
+      if (!document.hidden) void pollPending();
+    }, PENDING_POLL_MS);
+    return () => {
+      clearInterval(poll);
+      stopAgentChanges();
+    };
   });
 </script>
 
@@ -697,15 +435,12 @@
 
 {#if !canManageAccess}
   <div class="space-y-4">
-    <div class="flex items-baseline justify-between gap-4">
-      <div>
-        <h1 class="text-title text-fg">Access</h1>
-        <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
-          Manage workspace access and invitations
-        </p>
-      </div>
+    <div>
+      <h1 class="text-title text-fg">Access</h1>
+      <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
+        Machines, people and invitations for this workspace
+      </p>
     </div>
-
     <div
       class="rounded-md border border-line bg-bg-soft px-4 py-10 text-center text-meta text-fg-muted"
     >
@@ -721,142 +456,13 @@
     </div>
   </div>
 {:else}
-  <div class="space-y-4 sm:space-y-6">
-    <div
-      class="flex items-center justify-between gap-3 sm:items-baseline sm:gap-4"
-    >
-      <div>
-        <h1 class="text-title text-fg">Access</h1>
-        <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
-          Manage workspace access, principals, and invitations
-        </p>
-      </div>
-      <Button
-        variant="secondary"
-        size="compact"
-        disabled={loading}
-        onclick={loadAccessData}
-      >
-        {loading && !initialLoading ? "Refreshing…" : "Refresh"}
-      </Button>
+  <div class="space-y-6 sm:space-y-8">
+    <div>
+      <h1 class="text-title text-fg">Access</h1>
+      <p class="mt-0.5 hidden text-meta text-fg-muted sm:block">
+        Machines, people and invitations for this workspace
+      </p>
     </div>
-
-    {#if initialLoading}
-      <div class="flex items-center gap-2 py-6 text-meta text-fg-muted">
-        <svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          ></circle>
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          ></path>
-        </svg>
-        Loading...
-      </div>
-    {/if}
-
-    {#if createdToken && !tokenDismissed}
-      <!-- In flow on purpose: a floating layer here covers the invite form. -->
-      <div
-        bind:this={tokenBannerEl}
-        class="scroll-mt-20 rounded-md border border-ok bg-ok-soft px-4 py-3"
-        role="status"
-        data-testid="invite-token-banner"
-      >
-        <div class="flex items-start gap-3">
-          <div class="min-w-0 flex-1">
-            <p class="text-meta font-medium text-ok-text">
-              Invite created successfully
-            </p>
-            <p class="mt-1 text-micro text-fg-muted">
-              This one-time token will not be shown again. Double-click the
-              token to select and copy.
-              {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                {createdInviteCommandHasPlaceholders
-                  ? "The instructions will include a username placeholder."
-                  : "The instructions use the agent username for --username and --agent."}
-              {/if}
-            </p>
-            <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-stretch">
-              <div
-                class="min-w-0 flex-1 rounded bg-bg px-2 py-1.5 font-mono text-micro text-fg"
-              >
-                <span
-                  class="block min-w-0 cursor-text break-all [user-select:text]"
-                  role="button"
-                  tabindex="0"
-                  aria-label="One-time invite token, double-click or press Enter to select for copying"
-                  title="Double-click to select, then copy (⌘C / Ctrl+C)"
-                  ondblclick={(e) => {
-                    e.preventDefault();
-                    selectNodeText(e.currentTarget);
-                  }}
-                  onkeydown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      selectNodeText(e.currentTarget);
-                    }
-                  }}>{createdToken}</span
-                >
-              </div>
-              {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-                <Button
-                  variant="primary"
-                  size="compact"
-                  class="shrink-0 sm:h-auto"
-                  onclick={copyRegistrationInstructions}
-                >
-                  {messageCopied ? "Instructions copied" : "Copy instructions"}
-                </Button>
-              {:else}
-                <Button
-                  variant="primary"
-                  size="compact"
-                  class="shrink-0 sm:h-auto"
-                  onclick={copyInviteToken}
-                >
-                  {tokenCopied ? "Token copied" : "Copy token"}
-                </Button>
-              {/if}
-            </div>
-            {#if createdInviteKind === "agent" || createdInviteKind === "any"}
-              <p class="mt-1.5 text-micro text-fg-muted">
-                {createdInviteCommandHasPlaceholders
-                  ? "Copies setup instructions with a command template for your agent to complete before registering."
-                  : "Copies install, profile, and registration instructions for your agent."}
-              </p>
-            {/if}
-          </div>
-          <button
-            aria-label="Dismiss token banner"
-            class="shrink-0 cursor-pointer text-fg-muted hover:text-fg"
-            onclick={dismissToken}
-            type="button"
-          >
-            <svg
-              class="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    {/if}
 
     {#if pageError}
       <div
@@ -867,583 +473,470 @@
       </div>
     {/if}
 
+    {#if !loaded}
+      <p class="text-meta text-fg-muted">Loading access…</p>
+    {/if}
+
     {#if showTourBanner}
       <aside class="tour-arrival-banner" role="status" aria-live="polite">
-        <div class="tour-arrival-banner__icon" aria-hidden="true">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M5 3v4" />
-            <path d="M19 17v4" />
-            <path d="M3 5h4" />
-            <path d="M17 19h4" />
-            <path
-              d="M14 7l-2 5l-5 2l5 2l2 5l2 -5l5 -2l-5 -2z"
-              fill="currentColor"
-              fill-opacity="0.15"
-            />
-          </svg>
-        </div>
         <div class="tour-arrival-banner__body">
           <p class="tour-arrival-banner__title">
-            Last step: connect your first agent
+            Last step: enroll the machine your agents run on
           </p>
           <p class="tour-arrival-banner__text">
-            Generate a one-time invite token below, then drop it into your agent
-            who will install the anx CLI. From then on, the workspace runs
-            itself.
+            Run <code>{enrollCommand}</code> there, then approve the request that
+            appears below. Every agent on that machine can use the workspace from
+            then on, with no per-agent setup.
           </p>
         </div>
       </aside>
     {/if}
 
-    <section
-      id="access-create-invite"
-      class:access-invite-pulse={agentInviteHighlight}
-    >
-      <h2 class="mb-2 text-meta font-semibold text-fg">Create invite</h2>
-      <div class="rounded-md border border-line bg-bg-soft px-4 py-3">
-        {#if inviteError}
-          <p
-            class="mb-3 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
-            role="alert"
-          >
-            {inviteError}
-          </p>
-        {/if}
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            handleCreateInvite();
-          }}
-          class="space-y-4"
+    {#if enrollmentNotice}
+      <p
+        class="flex items-center gap-3 rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
+        role="status"
+        data-enrollment-notice
+      >
+        <span class="min-w-0 flex-1">{enrollmentNotice}</span>
+        <button
+          class="shrink-0 hover:text-fg"
+          type="button"
+          onclick={() => (enrollmentNotice = "")}>Dismiss</button
         >
-          <div
-            class="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-start"
-          >
-            <div class="flex flex-col">
-              <label
-                class="mb-1 block text-micro font-medium text-fg-muted"
-                for="invite-kind"
-              >
-                Kind
-              </label>
-              <select
-                bind:value={newInviteKind}
-                class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
-                id="invite-kind"
-              >
-                <option value="agent">Agent</option>
-                {#if !hostedMode}
-                  <option value="human">Human</option>
-                  <option value="any">Any</option>
-                {/if}
-              </select>
-              <p class="mt-1 text-micro text-fg-muted">
-                {hostedMode
-                  ? "Workspace invites are for CLI agents. To invite a person, go to your Organizations."
-                  : newInviteKind === "human"
-                    ? "Invites a human to join via passkey."
-                    : newInviteKind === "any"
-                      ? "Recipient chooses agent or human at registration."
-                      : "Invites a CLI agent to register and join wake routing."}
-              </p>
-            </div>
-            {#if (newInviteKind === "agent" || newInviteKind === "any") && !hostedMode}
-              <div class="flex flex-col">
-                <label
-                  class="mb-1 block text-micro font-medium text-fg-muted"
-                  for="invite-agent-name"
-                >
-                  Agent profile name <span class="font-normal opacity-70"
-                    >(optional)</span
-                  >
-                </label>
-                <input
-                  value={newInviteAgentName}
-                  oninput={(event) => {
-                    newInviteAgentName = event.currentTarget.value;
-                  }}
-                  class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
-                  id="invite-agent-name"
-                  placeholder="e.g. Claude Code"
-                  type="text"
-                />
-                <p class="mt-1 text-micro text-fg-muted">
-                  Local CLI profile name for <code>--agent</code>.
-                </p>
-              </div>
-            {/if}
-            {#if newInviteKind === "agent" || newInviteKind === "any"}
-              <div class="flex flex-col">
-                <label
-                  class="mb-1 block text-micro font-medium text-fg-muted"
-                  for="invite-username"
-                >
-                  Agent username
-                  {#if !hostedMode}
-                    <span class="font-normal opacity-70">(optional)</span>
-                  {/if}
-                </label>
-                <input
-                  value={newInviteUsername}
-                  oninput={(event) => {
-                    newInviteUsername = event.currentTarget.value;
-                    newInviteUsernameManuallyEdited = true;
-                  }}
-                  class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
-                  id="invite-username"
-                  placeholder="e.g. claude-code"
-                  required={hostedMode}
-                  type="text"
-                />
-                <p class="mt-1 text-micro text-fg-muted">
-                  Used as this agent's <code>@handle</code> for mentions and wake
-                  routing in this workspace.
-                </p>
-              </div>
-            {/if}
-            <div class="flex items-end md:col-span-2 lg:col-span-1 lg:pt-5">
-              <Button
-                variant="primary"
-                size="compact"
-                disabled={creatingInvite}
-                type="submit"
-                class="w-full lg:w-auto"
-              >
-                {creatingInvite ? "Creating..." : "Create invite"}
-              </Button>
-            </div>
-          </div>
-        </form>
-        {#if hostedMode}
-          <p class="mt-3 border-t border-line pt-3 text-micro text-fg-muted">
-            To invite a person, go to
-            <a
-              class="font-medium text-accent-text hover:text-accent-text"
-              href="/hosted/organizations">your Organizations</a
-            >.
-          </p>
-        {/if}
-      </div>
-    </section>
+      </p>
+    {/if}
 
-    <section>
-      <div class="mb-2 flex items-baseline justify-between gap-2">
-        <h2 class="text-meta font-semibold text-fg">
-          Invites
-          {#if invitesState.status === SECTION_READY && pendingInvites.length > 0}
+    {#if pending.length}
+      <section
+        id="host-requests"
+        class="scroll-mt-20"
+        aria-labelledby="host-requests-title"
+      >
+        <h2
+          id="host-requests-title"
+          class="mb-2 flex items-center gap-2 text-meta font-semibold text-fg"
+        >
+          <span class="h-2 w-2 rounded-full bg-warn" aria-hidden="true"></span>
+          Waiting for approval
+          <span class="font-normal text-fg-muted">{pending.length}</span>
+        </h2>
+        <ul
+          class="divide-y divide-line-subtle overflow-hidden rounded-md border bg-bg-soft"
+          style="border-color: color-mix(in srgb, var(--warn) 40%, var(--line))"
+        >
+          {#each pending as enrollment (enrollment.id)}
+            <HostEnrollmentRequest
+              {enrollment}
+              {now}
+              busy={enrollmentBusy.id === enrollment.id
+                ? enrollmentBusy.action
+                : ""}
+              error={enrollmentErrors[enrollment.id] ?? ""}
+              onapprove={(entry) => decideEnrollment(entry, "approve")}
+              ondeny={(entry) => decideEnrollment(entry, "deny")}
+            />
+          {/each}
+        </ul>
+      </section>
+    {:else if sections.pending.status === "error"}
+      <p
+        class="rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
+      >
+        Pending host requests did not load: {sections.pending.error}
+      </p>
+    {/if}
+
+    <section
+      id="hosts"
+      bind:this={hostsSectionEl}
+      class="scroll-mt-20"
+      aria-labelledby="hosts-title"
+    >
+      <div class="mb-2 flex items-baseline justify-between gap-3">
+        <h2 id="hosts-title" class="text-meta font-semibold text-fg">
+          Hosts
+          {#if activeHosts.length}
             <span class="ml-1 font-normal text-fg-muted"
-              >{pendingInvites.length} pending</span
+              >{activeHosts.length}</span
             >
           {/if}
         </h2>
-        {#if resolvedInvites.length > 0}
+        {#if activeHosts.length}
           <button
-            class="cursor-pointer text-micro font-medium text-accent hover:text-accent-text"
-            onclick={() => (showResolvedInvites = !showResolvedInvites)}
+            class="text-micro font-medium text-accent-text hover:underline"
             type="button"
+            aria-expanded={enrollOpen}
+            onclick={() => (enrollOpen = !enrollOpen)}
+            >{enrollOpen ? "Close" : "Enroll a machine"}</button
           >
-            {showResolvedInvites
-              ? "Hide resolved"
-              : `Show ${resolvedInvites.length} resolved`}
-          </button>
         {/if}
       </div>
-      {#if revokeError}
+
+      {#if enrollOpen || (sections.hosts.status === "ready" && !activeHosts.length)}
+        <div
+          class="mb-3 space-y-4 rounded-md border border-line bg-bg-soft px-4 py-3"
+          data-host-enroll-help
+        >
+          <div class="space-y-1.5">
+            <p class="text-meta text-fg">
+              {activeHosts.length
+                ? "Enroll another machine"
+                : "No machines enrolled yet"}
+            </p>
+            <p class="text-micro text-fg-muted">
+              Run this on the machine your agents use. It prints a code; the
+              request appears above, and you approve it when the codes match.
+              Agents already set up on that machine keep their history.
+            </p>
+            <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
+              <code
+                class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
+                data-host-enroll-command>{enrollCommand}</code
+              >
+              <CopyButton value={enrollCommand} label="Copy command" />
+            </div>
+          </div>
+          <div class="space-y-2 border-t border-line-subtle pt-3">
+            <p class="text-micro text-fg-muted">
+              For CI or cloud machines that cannot wait for approval, create a
+              one-time token instead.
+            </p>
+            {#if sections.tokens.status === "error"}
+              <p class="text-micro text-danger-text">{sections.tokens.error}</p>
+            {/if}
+            <HostEnrollmentTokens
+              {tokens}
+              {cliBaseUrl}
+              {now}
+              oncreate={createToken}
+              onrevoke={revokeToken}
+            />
+          </div>
+        </div>
+      {/if}
+
+      {#if sections.hosts.status === "error"}
         <p
-          class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text [overflow-wrap:anywhere]"
+          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+        >
+          {sections.hosts.error}
+        </p>
+      {:else if activeHosts.length}
+        <div class="space-y-3">
+          {#each activeHosts as host (host.id)}
+            <HostCard
+              {host}
+              agents={host.agents ?? []}
+              canManage={canManageAccess}
+              {workspaceHref}
+              {now}
+              onexclusions={saveExclusions}
+              onrevoke={revokeHost}
+            />
+          {/each}
+        </div>
+      {/if}
+      {#if revokedHosts.length}
+        <button
+          class="mt-2 text-micro text-fg-muted hover:text-fg"
+          type="button"
+          onclick={() => (showRevokedHosts = !showRevokedHosts)}
+          >{showRevokedHosts
+            ? "Hide revoked hosts"
+            : `Show ${revokedHosts.length} revoked ${revokedHosts.length === 1 ? "host" : "hosts"}`}</button
+        >
+        {#if showRevokedHosts}
+          <div class="mt-2 space-y-3">
+            {#each revokedHosts as host (host.id)}
+              <HostCard
+                {host}
+                agents={host.agents ?? []}
+                {workspaceHref}
+                {now}
+              />
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </section>
+
+    <section id="people" class="scroll-mt-20" aria-labelledby="people-title">
+      <div class="mb-2 flex items-baseline justify-between gap-3">
+        <h2 id="people-title" class="text-meta font-semibold text-fg">
+          People
+          {#if humans.length}
+            <span class="ml-1 font-normal text-fg-muted">{humans.length}</span>
+          {/if}
+        </h2>
+        {#if !hostedMode}
+          <Button
+            variant="secondary"
+            size="compact"
+            busy={creatingInvite}
+            onclick={inviteHuman}
+            >{creatingInvite ? "Creating invite…" : "Invite a person"}</Button
+          >
+        {/if}
+      </div>
+
+      {#if hostedMode}
+        <p class="mb-2 text-micro text-fg-muted">
+          To invite a person, go to
+          <a
+            class="font-medium text-accent-text hover:text-accent-text"
+            href="/hosted/organizations">your Organizations</a
+          >.
+        </p>
+      {/if}
+      {#if inviteError}
+        <p
+          class="mb-2 rounded-md bg-danger-soft px-3 py-2 text-micro text-danger-text"
           role="alert"
         >
-          {revokeError}
+          {inviteError}
         </p>
       {/if}
-      {#if invitesState.status === SECTION_ERROR}
-        <p
-          class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
+      {#if createdInviteToken}
+        <div
+          class="mb-2 space-y-2 rounded-md border border-ok bg-ok-soft px-3 py-2.5"
+          role="status"
+          data-invite-token-banner
         >
-          {invitesState.error}
-        </p>
-      {:else if invitesState.status === SECTION_READY}
-        {#if visibleInvites.length === 0}
-          <p
-            class="rounded-md border border-line bg-bg-soft px-3 py-4 text-meta text-fg-muted"
-          >
-            {invites.length === 0
-              ? "No invites yet. Create one above to onboard new principals."
-              : "No pending invites."}
-          </p>
-        {:else}
-          <div
-            class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
-          >
-            {#each visibleInvites as invite, i}
-              {@const badge = inviteBadge(invite)}
-              <div
-                class="flex items-center gap-3 px-3 py-2 {i > 0
-                  ? 'border-t border-line'
-                  : ''} {invite.revoked_at || invite.consumed_at
-                  ? 'opacity-60'
-                  : ''}"
-              >
-                {#if badge}
-                  <span
-                    class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {badge.class}"
-                  >
-                    {badge.label}
-                  </span>
-                {/if}
-                <div class="min-w-0 flex-1">
-                  <div class="flex min-w-0 items-center">
-                    <SelectableId
-                      className="text-micro text-fg"
-                      id={invite.id}
-                    />
-                  </div>
-                  <p class="text-micro text-fg-muted">
-                    {invite.kind}
-                  </p>
-                </div>
-                <span class="hidden text-micro text-fg-muted sm:inline">
-                  {formatTimestamp(invite.created_at)}
-                </span>
-                {#if !invite.revoked_at && !invite.consumed_at}
-                  <Button
-                    variant="destructive"
-                    size="compact"
-                    disabled={revokingInviteId === invite.id}
-                    onclick={() => {
-                      revokeInviteConfirm = { open: true, id: invite.id };
-                    }}
-                  >
-                    {revokingInviteId === invite.id ? "Revoking..." : "Revoke"}
-                  </Button>
-                {/if}
-              </div>
-            {/each}
+          <div class="flex items-start justify-between gap-3">
+            <p class="text-micro text-ok-text">
+              Invite created. Send this one-time token to the person; they paste
+              it under “Join with an invite token” when they sign in. It is not
+              shown again.
+            </p>
+            <button
+              class="shrink-0 text-micro text-fg-muted hover:text-fg"
+              type="button"
+              onclick={() => (createdInviteToken = "")}>Dismiss</button
+            >
           </div>
-        {/if}
-      {/if}
-    </section>
-
-    <section>
-      <h2 class="mb-1 text-meta font-semibold text-fg">
-        Principals
-        {#if principalsState.status === SECTION_READY && principals.length > 0}
-          <span class="ml-1 font-normal text-fg-muted">{principals.length}</span
-          >
-        {/if}
-      </h2>
-      <details class="mb-2 text-micro text-fg-muted">
-        <summary
-          class="cursor-pointer rounded text-fg-muted marker:text-fg-muted hover:text-fg"
-        >
-          Tag agents with
-          <code class="rounded bg-line px-1 py-px">@handle</code>
-          to wake them. How wake routing works
-        </summary>
-        <div class="mt-2 space-y-1.5 pl-4">
-          <p class="flex items-start gap-2">
-            <span
-              class="mt-px shrink-0 rounded bg-ok-soft px-1 py-px text-micro font-medium text-ok-text"
-              >Online</span
+          <div class="flex items-center gap-1 rounded bg-bg px-2 py-1.5">
+            <code class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
+              >{createdInviteToken}</code
             >
-            <span
-              >Fresh bridge check-in — receives and processes tagged messages
-              automatically.</span
-            >
-          </p>
-          <p class="flex items-start gap-2">
-            <span
-              class="mt-px shrink-0 rounded bg-warn-soft px-1 py-px text-micro font-medium text-warn-text"
-              >Offline</span
-            >
-            <span
-              >Still taggable — pending wake notifications are read from the CLI
-              or when the bridge comes back online.</span
-            >
-          </p>
+            <CopyButton value={createdInviteToken} label="Copy token" />
+          </div>
         </div>
-      </details>
-      {#if principalsState.status === SECTION_ERROR}
+      {/if}
+
+      {#if sections.principals.status === "error"}
         <p
           class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         >
-          {principalsState.error}
+          {sections.principals.error}
         </p>
-      {:else if principalsState.status === SECTION_READY}
-        {#if principals.length === 0}
-          <p
-            class="rounded-md border border-line bg-bg-soft px-3 py-4 text-meta text-fg-muted"
-          >
-            No principals found.
-          </p>
-        {:else}
-          <div class="space-y-px rounded-md border border-line bg-bg-soft">
-            {#each principals as principal, i}
-              {@const badge = principalBadge(principal)}
-              {@const isCurrent = isCurrentPrincipal(principal)}
-              {@const rowRound =
-                principals.length === 1
-                  ? "rounded-md"
-                  : i === 0
-                    ? "rounded-t-md"
-                    : i === principals.length - 1
-                      ? "rounded-b-md"
-                      : ""}
-              <div
-                class="group/row relative px-3 py-2.5 transition-colors hover:bg-panel-hover {rowRound} {i >
-                0
-                  ? 'border-t border-line'
-                  : ''} {principal.revoked ? 'opacity-50' : ''}"
-              >
-                <div class="flex items-center gap-2.5 sm:gap-3">
-                  {#if badge}
-                    <span
-                      class="shrink-0 rounded px-1.5 py-0.5 text-micro font-medium {badge.class}"
-                    >
-                      {badge.label}
-                    </span>
-                  {/if}
-                  <div class="min-w-0 flex-1">
-                    <div
-                      class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
-                    >
-                      {#if principal.username}
-                        <ActorAvatar
-                          label={principal.username}
-                          seed={principal.agent_id}
-                          size="xs"
-                        />
-                        <span class="truncate text-meta font-medium text-fg">
-                          {principal.username}
-                        </span>
-                      {:else}
-                        <div class="min-w-0 flex-1">
-                          <SelectableId
-                            className="text-meta font-medium text-fg"
-                            id={principal.agent_id}
-                          />
-                        </div>
-                      {/if}
-                      <span
-                        class="hidden shrink-0 rounded bg-line-subtle px-1.5 py-0.5 text-micro font-medium text-fg-muted sm:inline"
-                      >
-                        {principalLabel(principal)}
-                      </span>
-                      {#if principal.wakeRouting?.applicable && principal.wakeRouting.state !== "revoked"}
-                        <button
-                          class="relative shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-micro font-medium {principal
-                            .wakeRouting
-                            .badgeClass} hover:brightness-125 focus:outline-none"
-                          onclick={() => toggleWakePopover(principal.agent_id)}
-                          type="button"
-                          title={principal.wakeRouting.summary}
-                        >
-                          {principal.wakeRouting.badgeLabel}
-                        </button>
-                        {#if wakePopoverTarget === principal.agent_id}
-                          <div
-                            class="absolute left-12 top-full z-30 mt-1 w-72 rounded-md border border-line bg-panel px-3 py-3 sm:left-24"
-                            style="box-shadow: var(--shadow-modal)"
-                            role="tooltip"
-                            use:dismissOnEscape={{
-                              enabled: true,
-                              onDismiss: () => {
-                                wakePopoverTarget = null;
-                              },
-                            }}
-                          >
-                            <div class="flex items-start justify-between gap-3">
-                              <div class="min-w-0 flex-1">
-                                <p
-                                  class="text-micro font-medium {principal
-                                    .wakeRouting.badgeClass}"
-                                >
-                                  {principal.wakeRouting.badgeLabel}
-                                </p>
-                                <p class="mt-0.5 text-micro text-fg-muted">
-                                  {principal.wakeRouting.summary}
-                                </p>
-                                {#if principal.wakeRouting.state === "unregistered"}
-                                  <p class="mt-2 text-micro text-fg-muted">
-                                    Copy a sendable CLI setup snippet for this
-                                    agent's existing ANX profile.
-                                  </p>
-                                  <button
-                                    class="mt-2 cursor-pointer rounded bg-accent-solid px-2.5 py-1.5 text-micro font-medium text-white hover:bg-accent"
-                                    onclick={() =>
-                                      copyWakeRegistrationMessage(principal)}
-                                    type="button"
-                                  >
-                                    {wakeRegistrationMessageCopiedFor ===
-                                    principal.agent_id
-                                      ? "Copied"
-                                      : "Copy registration steps"}
-                                  </button>
-                                {/if}
-                              </div>
-                              <button
-                                class="shrink-0 cursor-pointer text-fg-muted hover:text-fg"
-                                onclick={() => (wakePopoverTarget = null)}
-                                type="button"
-                                aria-label="Close"
-                              >
-                                <svg
-                                  class="h-3 w-3"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  stroke-width="2"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M6 18L18 6M6 6l12 12"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        {/if}
-                      {/if}
-                    </div>
-                    {#if principal.username}
-                      <div class="mt-0.5 min-w-0 text-micro text-fg-muted">
-                        <SelectableId
-                          className="text-fg-muted"
-                          id={principal.agent_id}
-                        />
-                      </div>
-                    {/if}
-                  </div>
-                  <div
-                    class="hidden shrink-0 text-right text-micro leading-4 text-fg-muted sm:block"
+      {:else if sections.principals.status === "ready"}
+        <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
+          {#each humans as principal (principal.agent_id)}
+            {@const name = principalName(principal)}
+            {@const isYou = principal.agent_id === authenticatedAgentId}
+            <li
+              class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0 {principal.revoked
+                ? 'opacity-50'
+                : ''}"
+              data-principal={principal.agent_id}
+            >
+              <ActorAvatar label={name} seed={principal.agent_id} size="xs" />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-meta text-fg">
+                  {name}
+                  {#if isYou}<span class="ml-1 text-micro text-fg-muted"
+                      >(you)</span
+                    >{/if}
+                  {#if principal.revoked}<span
+                      class="ml-1 rounded bg-danger-soft px-1.5 py-0.5 text-micro text-danger-text"
+                      >Revoked</span
+                    >{/if}
+                </p>
+                <p class="flex items-center gap-1.5 text-micro text-fg-subtle">
+                  <span title={formatAbsoluteDateTime(principal.created_at)}
+                    >joined {formatAge(principal.created_at, now) === "<1m"
+                      ? "just now"
+                      : `${formatAge(principal.created_at, now)} ago`}</span
                   >
-                    <p title={formatAbsoluteDateTime(principal.created_at)}>
-                      Joined {formatTimestamp(principal.created_at) || "\u2014"}
-                    </p>
-                    <p title={formatAbsoluteDateTime(principal.last_seen_at)}>
-                      Last seen {formatTimestamp(principal.last_seen_at) ||
-                        "\u2014"}
-                    </p>
-                  </div>
-                  {#if !principal.revoked && !isCurrent}
-                    {@const lastHuman = isLastActiveHumanPrincipal(principal)}
-                    <Button
-                      variant="destructive"
-                      size="compact"
-                      disabled={principalRevokeConfirming ||
-                        principalRevokeForcing}
-                      onclick={() => startPrincipalRevoke(principal)}
+                  {#if principal.last_seen_at}
+                    <span aria-hidden="true">·</span>
+                    <span title={formatAbsoluteDateTime(principal.last_seen_at)}
+                      >seen {formatAge(principal.last_seen_at, now) === "<1m"
+                        ? "just now"
+                        : `${formatAge(principal.last_seen_at, now)} ago`}</span
                     >
-                      {lastHuman ? "Break glass" : "Revoke"}
-                    </Button>
-                  {:else if !principal.revoked}
-                    <span
-                      class="shrink-0 rounded bg-line-subtle px-1.5 py-0.5 text-micro font-medium text-fg-muted"
-                    >
-                      You
-                    </span>
                   {/if}
-                </div>
+                  <span aria-hidden="true">·</span>
+                  <CopyableId
+                    value={principal.agent_id}
+                    label="Copy principal id"
+                  />
+                </p>
               </div>
-            {/each}
-          </div>
-          {#if principalsHasMore}
-            <div class="mt-2 flex justify-center">
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={loadingMorePrincipals}
-                onclick={loadMorePrincipals}
+              {#if !principal.revoked && !isYou}
+                <button
+                  class="shrink-0 text-micro text-danger-text hover:underline"
+                  type="button"
+                  onclick={() => startPrincipalRevoke(principal)}
+                  >{activeHumanPrincipalCount === 1
+                    ? "Break glass…"
+                    : "Revoke…"}</button
+                >
+              {/if}
+            </li>
+          {:else}
+            <li class="px-4 py-3 text-meta text-fg-muted">No people yet.</li>
+          {/each}
+        </ul>
+
+        {#if pendingInvites.length}
+          <p class="mb-1 mt-3 text-micro font-medium text-fg-muted">
+            Open invites
+          </p>
+          <ul
+            class="overflow-hidden rounded-md border border-line-subtle text-micro"
+          >
+            {#each pendingInvites as invite (invite.id)}
+              <li
+                class="flex items-center gap-3 border-t border-line-subtle px-3 py-1.5 first:border-t-0"
+                data-invite={invite.id}
               >
-                {loadingMorePrincipals ? "Loading..." : "Load more"}
-              </Button>
-            </div>
-          {/if}
+                <span class="text-fg-muted"
+                  >Invite created {formatAge(invite.created_at, now) === "<1m"
+                    ? "just now"
+                    : `${formatAge(invite.created_at, now)} ago`}</span
+                >
+                <CopyableId value={invite.id} label="Copy invite id" />
+                <button
+                  class="ml-auto shrink-0 text-danger-text hover:underline disabled:opacity-50"
+                  type="button"
+                  disabled={revokingInviteId === invite.id}
+                  onclick={() =>
+                    (revokeInviteConfirm = { open: true, id: invite.id })}
+                  >{revokingInviteId === invite.id
+                    ? "Revoking…"
+                    : "Revoke"}</button
+                >
+              </li>
+            {/each}
+          </ul>
         {/if}
       {/if}
     </section>
 
-    <section>
-      <h2 class="mb-2 text-meta font-semibold text-fg">Recent auth events</h2>
-      {#if auditState.status === SECTION_ERROR}
+    {#if standaloneAgents.length}
+      <section aria-labelledby="standalone-title">
+        <h2 id="standalone-title" class="mb-1 text-meta font-semibold text-fg">
+          Standalone agents
+          <span class="ml-1 font-normal text-fg-muted"
+            >{standaloneAgents.length}</span
+          >
+        </h2>
+        <p class="mb-2 text-micro text-fg-muted">
+          Registered before hosts and not adopted by one. They keep working
+          until revoked; enroll their machine to bring them under a host.
+        </p>
+        <ul class="overflow-hidden rounded-md border border-line bg-bg-soft">
+          {#each standaloneAgents as principal (principal.agent_id)}
+            <li
+              class="flex items-center gap-3 border-t border-line-subtle px-4 py-2 first:border-t-0"
+              data-standalone-agent={principal.agent_id}
+            >
+              <div class="min-w-0 flex-1">
+                <a
+                  class="truncate text-meta text-fg hover:underline"
+                  href={workspaceHref(
+                    `/agents/${encodeURIComponent(principal.username || principal.agent_id)}`,
+                  )}>{principalName(principal)}</a
+                >
+                <p class="flex items-center gap-1.5 text-micro text-fg-subtle">
+                  <span>@{principal.username}</span>
+                  <span aria-hidden="true">·</span>
+                  <CopyableId
+                    value={principal.agent_id}
+                    label="Copy agent id"
+                  />
+                </p>
+              </div>
+              <button
+                class="shrink-0 text-micro text-danger-text hover:underline"
+                type="button"
+                onclick={() => startPrincipalRevoke(principal)}>Revoke…</button
+              >
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    <section aria-labelledby="audit-title">
+      <h2 id="audit-title" class="mb-2 text-meta font-semibold text-fg">
+        Recent access events
+      </h2>
+      {#if sections.audit.status === "error"}
         <p
           class="rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         >
-          {auditState.error}
+          {sections.audit.error}
         </p>
-      {:else if auditState.status === SECTION_READY}
-        {#if auditEvents.length === 0}
-          <p
-            class="rounded-md border border-line bg-bg-soft px-3 py-4 text-meta text-fg-muted"
-          >
-            No audit events yet.
-          </p>
-        {:else}
-          <div
-            class="space-y-px rounded-md border border-line bg-bg-soft overflow-hidden"
-          >
-            {#each auditEvents as event, i}
-              <div
-                class="flex items-center gap-3 px-3 py-2.5 {i > 0
-                  ? 'border-t border-line'
-                  : ''}"
+      {:else if sections.audit.status === "ready"}
+        {#if auditEvents.length}
+          <ol class="overflow-hidden rounded-md border border-line bg-bg-soft">
+            {#each visibleAudit as event (event.event_id)}
+              <li
+                class="group/audit flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0"
+                data-audit-event={event.event_type}
               >
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="flex min-w-0 items-baseline gap-x-0.5 text-meta font-medium text-fg"
-                  >
-                    {#each auditEventFirstLineSegments(event) as part, j (j)}
-                      {#if part.type === "id"}
-                        <span
-                          class="min-w-0 max-w-full flex-1 sm:max-w-[16rem]"
-                        >
-                          <SelectableId
-                            className="font-mono text-inherit"
-                            id={part.value}
-                          />
-                        </span>
-                      {:else}
-                        <span class="min-w-0 [overflow-wrap:anywhere]"
-                          >{part.value}</span
-                        >
-                      {/if}
-                    {/each}
-                  </p>
-                  <p class="text-micro text-fg-muted [overflow-wrap:anywhere]">
-                    {auditEventSecondary(event)}
-                  </p>
-                </div>
-                <span
-                  class="shrink-0 whitespace-nowrap text-micro text-fg-muted"
+                <p
+                  class="min-w-0 flex-1 text-meta text-fg [overflow-wrap:anywhere]"
                 >
-                  {formatTimestamp(event.occurred_at)}
-                </span>
-              </div>
+                  {auditSentence(event)}
+                </p>
+                <span
+                  class="shrink-0 text-micro text-fg-subtle"
+                  title={formatAbsoluteDateTime(event.occurred_at)}
+                  >{formatAge(event.occurred_at, now) === "<1m"
+                    ? "just now"
+                    : `${formatAge(event.occurred_at, now)} ago`}</span
+                >
+                <span
+                  class="shrink-0 opacity-0 transition-opacity group-hover/audit:opacity-100 focus-within:opacity-100"
+                  ><CopyButton
+                    value={event.event_id}
+                    label="Copy event id"
+                    iconOnly
+                  /></span
+                >
+              </li>
             {/each}
-          </div>
-          {#if auditHasMore}
-            <div class="mt-2 flex justify-center">
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={loadingMoreAudit}
-                onclick={loadMoreAudit}
-              >
-                {loadingMoreAudit ? "Loading..." : "Load more"}
-              </Button>
+          </ol>
+          {#if auditEvents.length > AUDIT_PREVIEW || auditCursor}
+            <div class="mt-2 flex gap-3">
+              {#if !showAllAudit && auditEvents.length > AUDIT_PREVIEW}
+                <button
+                  class="text-micro text-fg-muted hover:text-fg"
+                  type="button"
+                  onclick={() => (showAllAudit = true)}
+                  >Show {auditEvents.length - AUDIT_PREVIEW} more</button
+                >
+              {:else if auditCursor}
+                <button
+                  class="text-micro text-fg-muted hover:text-fg disabled:opacity-50"
+                  type="button"
+                  disabled={loadingMoreAudit}
+                  onclick={loadMoreAudit}
+                  >{loadingMoreAudit ? "Loading…" : "Load older events"}</button
+                >
+              {/if}
             </div>
           {/if}
+        {:else}
+          <p
+            class="rounded-md border border-line bg-bg-soft px-4 py-3 text-meta text-fg-muted"
+          >
+            No access events yet.
+          </p>
         {/if}
       {/if}
     </section>
@@ -1452,37 +945,31 @@
 
 <ConfirmModal
   open={Boolean(principalRevokeTarget)}
-  title={principalRevokeRequiresHumanLockout
-    ? "Last active human principal"
-    : "Revoke principal"}
-  message={principalRevokeRequiresHumanLockout
-    ? `Revoking ${principalRevokeTargetLabel} will lock every human out of this workspace. Type the agent ID and give a reason to continue. This action is audit-logged.`
-    : `This will revoke access for ${principalRevokeTargetLabel}. This action is audit-logged.`}
-  confirmLabel={principalRevokeRequiresHumanLockout
-    ? "Allow human lockout and revoke"
-    : "Confirm revoke"}
+  title={principalRevokeLockout
+    ? "Last person with access"
+    : `Revoke ${principalRevokeTarget ? principalName(principalRevokeTarget) : ""}`}
+  message={principalRevokeLockout
+    ? `Revoking ${principalRevokeTarget ? principalName(principalRevokeTarget) : ""} locks every person out of this workspace. Type the principal id and give a reason to continue. This is audit-logged.`
+    : "They lose access to this workspace now. Their history stays. This is audit-logged."}
+  confirmLabel={principalRevokeLockout
+    ? "Allow lockout and revoke"
+    : "Revoke access"}
   busyLabel="Revoking…"
   variant="danger"
-  busy={principalRevokeConfirming || principalRevokeForcing}
-  typedConfirmation={principalRevokeRequiresHumanLockout
+  busy={principalRevokeBusy}
+  typedConfirmation={principalRevokeLockout
     ? (principalRevokeTarget?.agent_id ?? "")
     : ""}
-  confirmBlocked={principalRevokeRequiresHumanLockout &&
-    principalRevokeHumanLockoutReason.trim() === ""}
+  confirmBlocked={principalRevokeLockout && principalRevokeReason.trim() === ""}
   error={principalRevokeError}
-  onconfirm={() =>
-    principalRevokeRequiresHumanLockout
-      ? forcePrincipalRevoke()
-      : confirmPrincipalRevoke()}
+  onconfirm={confirmPrincipalRevoke}
   oncancel={cancelPrincipalRevoke}
 >
-  {#if principalRevokeRequiresHumanLockout}
+  {#if principalRevokeLockout}
     <label class="mt-3 block">
-      <span class="mb-1.5 block text-micro text-fg-muted">
-        Human lockout reason
-      </span>
+      <span class="mb-1.5 block text-micro text-fg-muted">Lockout reason</span>
       <input
-        bind:value={principalRevokeHumanLockoutReason}
+        bind:value={principalRevokeReason}
         class="w-full rounded-md border border-line bg-bg px-2.5 py-1.5 text-meta text-fg"
         id="principal-lockout-reason"
         placeholder="Explain the recovery path"
@@ -1496,12 +983,12 @@
 <ConfirmModal
   open={revokeInviteConfirm.open}
   title="Revoke invite"
-  message="This invite will be revoked and can no longer be used to join the workspace."
+  message="This invite stops working and can no longer be used to join the workspace."
   confirmLabel="Revoke"
   variant="danger"
   busy={revokingInviteId === revokeInviteConfirm.id}
   onconfirm={() => {
-    void handleRevokeInvite(revokeInviteConfirm.id);
+    void revokeInvite(revokeInviteConfirm.id);
     revokeInviteConfirm = { open: false, id: "" };
   }}
   oncancel={() => {
@@ -1510,96 +997,27 @@
 />
 
 <style>
-  :global(#access-create-invite.access-invite-pulse) {
-    animation: access-invite-pulse-anim 1.4s ease-out;
-  }
-  @keyframes access-invite-pulse-anim {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent);
-    }
-    35% {
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
-    }
-  }
-
   .tour-arrival-banner {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
     padding: 0.95rem 1rem;
     border-radius: 0.75rem;
     border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-    background:
-      linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--accent) 12%, transparent),
-        color-mix(in srgb, var(--accent) 4%, transparent)
-      ),
-      var(--bg-soft, transparent);
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
-      0 8px 24px -16px color-mix(in srgb, var(--accent) 60%, transparent);
-    animation: tour-arrival-in 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-    position: relative;
-    overflow: hidden;
-  }
-  .tour-arrival-banner::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      120% 80% at 0% 0%,
-      color-mix(in srgb, var(--accent) 18%, transparent),
-      transparent 60%
-    );
-    opacity: 0.6;
-  }
-  .tour-arrival-banner > * {
-    position: relative;
-  }
-  .tour-arrival-banner__icon {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 2.25rem;
-    height: 2.25rem;
-    border-radius: 0.55rem;
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-    color: var(--accent-text, var(--accent));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-  .tour-arrival-banner__body {
-    flex: 1 1 auto;
-    min-width: 0;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-soft));
   }
   .tour-arrival-banner__title {
     margin: 0 0 0.2rem 0;
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--fg);
-    letter-spacing: -0.005em;
   }
   .tour-arrival-banner__text {
     margin: 0;
     font-size: 0.85rem;
     line-height: 1.5;
-    color: var(--fg-subtle, var(--fg-muted));
+    color: var(--fg-muted);
   }
-  @keyframes tour-arrival-in {
-    from {
-      opacity: 0;
-      transform: translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .tour-arrival-banner {
-      animation: none;
-    }
+  .tour-arrival-banner__text code {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--fg);
   }
 </style>

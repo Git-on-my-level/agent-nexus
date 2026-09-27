@@ -107,8 +107,33 @@ func ExitCode(err error) int {
 		return 0
 	}
 	var typed *Error
-	if errors.As(err, &typed) && typed.Kind == KindUsage {
+	if !errors.As(err, &typed) {
+		return 1
+	}
+	if strings.HasSuffix(typed.Code, "_not_found") {
+		return 3
+	}
+	switch typed.Code {
+	case "not_found", "draft_not_found", "profile_not_found":
+		return 3
+	case "conflict", "source_revision_changed", "lease_mismatch", "actor_exists", "username_taken":
+		return 4
+	case "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "wake_proof_required":
+		return 5
+	case "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
+		return 6
+	case "cli_outdated":
+		return 7
+	case "timeout", "timeout_exceeded":
+		return 8
+	case "rejected":
+		return 9
+	}
+	if typed.Kind == KindUsage {
 		return 2
+	}
+	if typed.Kind == KindNetwork {
+		return 6
 	}
 	return 1
 }
@@ -190,12 +215,12 @@ type Metadata struct {
 
 var defaultMetadataByCode = map[string]Metadata{
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
-	"agent_revoked":                 {Recoverable: false, Hint: "Create/register a new agent profile; revoked agents cannot be reactivated."},
-	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx auth register` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
-	"auth_required":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth whoami` to refresh credentials, then retry."},
+	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
+	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
+	"auth_required":                 {Recoverable: true, Hint: "Run `anx --as <name> auth whoami` to verify host credentials, then retry."},
 	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},
-	"cli_outdated":                  {Recoverable: true, Hint: "Upgrade the CLI to the minimum compatible version from `/meta/handshake`."},
-	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, select a profile with --agent or ANX_AGENT (or `anx auth default <name>` when multiple profiles exist), then run `anx doctor` if connectivity is uncertain."},
+	"cli_outdated":                  {Recoverable: true, Hint: "Run `anx update`, then retry."},
+	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, enroll this host, and select an agent with --as or ANX_AS."},
 	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
 	"draft_exists":                  {Recoverable: true, Hint: "Use a different draft id or discard the existing draft first."},
 	"draft_not_found":               {Recoverable: true, Hint: "Run `anx draft list` to discover valid draft ids."},
@@ -205,15 +230,15 @@ var defaultMetadataByCode = map[string]Metadata{
 	"invalid_header":                {Recoverable: true, Hint: "Use `--header key:value` with a non-empty key."},
 	"invalid_json":                  {Recoverable: true, Hint: "Provide valid JSON input and retry."},
 	"invalid_request":               {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
-	"invalid_token":                 {Recoverable: true, Hint: "Run `anx --agent <agent> auth token-status` then `anx --agent <agent> auth rotate` if needed."},
-	"key_mismatch":                  {Recoverable: true, Hint: "Rotate the agent key (`anx --agent <agent> auth rotate`) and retry token minting."},
+	"invalid_token":                 {Recoverable: true, Hint: "Run `anx --as <name> auth whoami`; if host assertion fails, ask a human auth-admin to review enrollment."},
+	"key_mismatch":                  {Recoverable: true, Hint: "Check local host key permissions with `anx doctor`; ask a human auth-admin to re-enroll the host if its key changed."},
 	"lease_mismatch":                {Recoverable: true, Hint: "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN)."},
 	"lease_required":                {Recoverable: true, Hint: "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`)."},
 	"last_active_principal":         {Recoverable: true, Hint: "Retry only with `--allow-human-lockout --human-lockout-reason <why>` for explicit break-glass recovery; it can leave the workspace without any active human principal."},
 	"method_not_allowed":            {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
 	"not_found":                     {Recoverable: true, Hint: "Verify the target id/path exists and retry."},
-	"profile_not_found":             {Recoverable: true, Hint: "Run `anx --agent <agent> auth register --username <username>` to create a profile."},
+	"profile_not_found":             {Recoverable: true, Hint: "Run `anx host enroll` to establish a host identity."},
 	"request_failed":                {Recoverable: true, Hint: "Check connectivity and credentials, then retry."},
 	"stream_connect_failed":         {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
 	"stream_read_failed":            {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},

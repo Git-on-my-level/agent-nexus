@@ -72,7 +72,7 @@ func NormalizePrincipalKind(raw string, allowAny bool) (PrincipalKind, error) {
 			return PrincipalKindAny, nil
 		}
 	}
-	return "", fmt.Errorf("kind must be %s, %s%s", PrincipalKindHuman, PrincipalKindAgent, func() string {
+	return "", fmt.Errorf("kind must be %s%s", PrincipalKindHuman, func() string {
 		if allowAny {
 			return ", or " + string(PrincipalKindAny)
 		}
@@ -150,9 +150,12 @@ func (s *Store) CreateInvite(ctx context.Context, createdBy Principal, input Cre
 		return Invite{}, "", fmt.Errorf("auth store database is not initialized")
 	}
 
-	kind, err := NormalizePrincipalKind(input.Kind, true)
+	kind, err := NormalizePrincipalKind(input.Kind, false)
 	if err != nil {
 		return Invite{}, "", fmt.Errorf("%w: %v", ErrInvalidRequest, err)
+	}
+	if kind != PrincipalKindHuman {
+		return Invite{}, "", fmt.Errorf("%w: only human invites are supported", ErrInvalidRequest)
 	}
 	createdBy.AgentID = strings.TrimSpace(createdBy.AgentID)
 	createdBy.ActorID = strings.TrimSpace(createdBy.ActorID)
@@ -275,6 +278,7 @@ func (s *Store) ListInvites(ctx context.Context) ([]Invite, error) {
 			revoked_by_agent_id,
 			revoked_by_actor_id
 		 FROM auth_invites
+		 WHERE kind='human'
 		 ORDER BY created_at DESC, id DESC`,
 	)
 	if err != nil {
@@ -471,7 +475,7 @@ func (s *Store) resolveInviteClaim(ctx context.Context, inviteToken string, prin
 		}
 	}
 
-	if PrincipalKind(kind) != PrincipalKindAny && PrincipalKind(kind) != principalKind {
+	if PrincipalKind(kind) != PrincipalKindHuman || principalKind != PrincipalKindHuman {
 		return OnboardingClaim{}, ErrInviteKindMismatch
 	}
 

@@ -21,42 +21,41 @@ hosted OAuth, org, billing, provider-connection, or managed-slot logic.
 
 Flags:
 
-- `--profile <name-or-path>`: ANX profile name, or a path to a profile JSON file
-- `--agent <name>`: explicit ANX profile/agent selector
+- `--as <name>`: derived agent name; equivalent to `ANX_AS`
 - `--base-url <url>`: workspace `anx-core` base URL override
+- `--config-dir <absolute-path>`: ANX host config directory passed to the CLI
+- `--anx <path>`: anx CLI executable (defaults to `anx` on `PATH`)
 - `--log-level <debug|info|warn|error>`: diagnostics go to stderr only
 - `--timeout <duration>`: workspace HTTP timeout, default `30s`
 
 Environment overrides:
 
-- `ANX_AGENT`
-- `ANX_PROFILE_PATH`
+- `ANX_AS`
 - `ANX_BASE_URL`
-- `ANX_ACCESS_TOKEN`
+- `ANX_CONFIG_DIR`
 
-The profile reader is a minimal duplicate of the CLI profile resolution rules
-because the CLI packages are under Go `internal/` boundaries. It reads
-`~/.config/anx/default-profile` and `~/.config/anx/profiles/*.json`, auto-selects
-a single local profile, and errors if multiple profiles exist without an
-explicit selector.
+The MCP server gets a short-lived derived-agent token by running
+`anx --json --config-dir <dir> --base-url <url> host token --as <name>`. Host
+key handling stays in the CLI. Enroll the machine once with `anx host enroll`
+before starting the server.
 
 ## MCP Inspector
 
-Example with a named local profile:
+Example with an enrolled host:
 
 ```bash
 npx @modelcontextprotocol/inspector \
   --command "$(pwd)/anx-mcp" \
-  --args "--profile leo --log-level info"
+  --args "--as leo --log-level info"
 ```
 
 Example without a saved profile:
 
 ```bash
-ANX_ACCESS_TOKEN="$TOKEN" \
+ANX_AS=leo ANX_CONFIG_DIR="$HOME/.config/anx" \
   npx @modelcontextprotocol/inspector \
   --command "$(pwd)/anx-mcp" \
-  --args "--base-url http://127.0.0.1:8000 --agent leo"
+  --args "--base-url http://127.0.0.1:8000"
 ```
 
 The stdio transport is newline-delimited JSON-RPC. stdout is reserved for MCP
@@ -65,9 +64,9 @@ messages; logs and startup diagnostics are written to stderr.
 ## Docs as a cross-host knowledge base
 
 Agents on different machines share documents through the same workspace core.
-Configure `anx-mcp` with the same profile (or `ANX_BASE_URL` + `ANX_ACCESS_TOKEN`)
-the `anx` CLI uses; MCP authorization is the workspace bearer token, not a
-separate MCP credential.
+Configure `anx-mcp` with the same enrolled host context as the `anx` CLI. It
+requests a short-lived derived-agent token for `--as` / `ANX_AS` through
+`anx host token`; MCP does not read token or profile files itself.
 
 A **knowledge** doc is a document tagged `knowledge`. Record:
 
@@ -118,5 +117,5 @@ catalog argument names. `docs.search` accepts `host` to filter by `hosts`.
 Run the automated local smoke against an active workspace profile:
 
 ```bash
-ANX_MCP_SMOKE_PROFILE=leo ./scripts/standalone-smoke.mjs
+ANX_MCP_SMOKE_AS=leo ANX_CONFIG_DIR="$HOME/.config/anx" ./scripts/standalone-smoke.mjs
 ```

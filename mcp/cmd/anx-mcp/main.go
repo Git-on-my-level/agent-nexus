@@ -13,7 +13,7 @@ import (
 
 	"github.com/Git-on-my-level/agent-nexus/mcp/catalog"
 	"github.com/Git-on-my-level/agent-nexus/mcp/executor"
-	mcpprofile "github.com/Git-on-my-level/agent-nexus/mcp/internal/profile"
+	"github.com/Git-on-my-level/agent-nexus/mcp/internal/hostidentity"
 	"github.com/Git-on-my-level/agent-nexus/mcp/internal/stdio"
 	"github.com/Git-on-my-level/agent-nexus/mcp/policy"
 	"github.com/Git-on-my-level/agent-nexus/mcp/protocol"
@@ -30,11 +30,12 @@ func run(ctx context.Context, args []string, stdin *os.File, stdout *os.File, st
 	fs := flag.NewFlagSet("anx-mcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		profileName = fs.String("profile", "", "ANX profile name or profile JSON path")
-		agent       = fs.String("agent", "", "ANX profile/agent name")
-		baseURL     = fs.String("base-url", "", "workspace core base URL")
-		logLevel    = fs.String("log-level", "warn", "log level: debug, info, warn, error")
-		timeout     = fs.Duration("timeout", mcpprofile.DefaultTimeout, "workspace request timeout")
+		as        = fs.String("as", "", "derived agent name")
+		baseURL   = fs.String("base-url", "", "workspace core base URL")
+		configDir = fs.String("config-dir", "", "absolute ANX host config directory")
+		anxPath   = fs.String("anx", "", "path to the anx CLI")
+		logLevel  = fs.String("log-level", "warn", "log level: debug, info, warn, error")
+		timeout   = fs.Duration("timeout", hostidentity.DefaultTimeout, "workspace request timeout")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -50,19 +51,17 @@ func run(ctx context.Context, args []string, stdin *os.File, stdout *os.File, st
 		logger = log.New(ioDiscard{}, "", 0)
 	}
 
-	resolved, err := mcpprofile.Resolve(mcpprofile.Options{
-		Profile: *profileName,
-		Agent:   *agent,
-		BaseURL: *baseURL,
-		Timeout: *timeout,
-	}, mcpprofile.Environment{})
+	resolved, err := hostidentity.Resolve(ctx, hostidentity.Options{
+		As:        *as,
+		BaseURL:   *baseURL,
+		ConfigDir: *configDir,
+		AnxPath:   *anxPath,
+		Timeout:   *timeout,
+	}, hostidentity.Environment{})
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(resolved.AccessToken) == "" {
-		logger.Printf("starting without a bearer token; workspace authorization may fail")
-	}
-	logger.Printf("starting stdio server profile=%s base_url=%s", resolved.Agent, resolved.BaseURL)
+	logger.Printf("starting stdio server agent=%s base_url=%s", resolved.Agent, resolved.BaseURL)
 
 	cat, err := defaultCatalog()
 	if err != nil {
@@ -75,9 +74,7 @@ func run(ctx context.Context, args []string, stdin *os.File, stdout *os.File, st
 		},
 		RequestTimeout: resolved.Timeout,
 		AdditionalHeaders: map[string]string{
-			"X-ANX-Agent":       resolved.Agent,
-			"X-ANX-MCP-Client":  "anx-mcp",
-			"X-ANX-MCP-Profile": resolved.Agent,
+			"X-ANX-MCP-Client": "anx-mcp",
 		},
 	})
 	server := protocol.NewServer(cat, exec, protocol.Options{Name: "anx-mcp", Version: "0.1.0"})

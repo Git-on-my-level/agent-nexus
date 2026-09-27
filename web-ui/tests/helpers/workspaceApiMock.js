@@ -230,6 +230,8 @@ export async function installWorkspaceApi(page, overrides = {}) {
       });
     if (path === "/home/read") return reply({ ok: true });
     if (path === "/inbox") return reply({ items: [], total: 0 });
+    if (path === "/agents") return reply({ agents: api.agents ?? [] });
+    if (path === "/hosts") return reply({ hosts: api.hosts ?? [] });
     if (path === "/boards") return reply({ boards: [] });
     if (path === "/topics") return reply({ topics: [] });
     if (path.startsWith("/stream/")) {

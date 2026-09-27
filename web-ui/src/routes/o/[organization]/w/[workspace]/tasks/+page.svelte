@@ -12,6 +12,12 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import WorkViews from "$lib/components/pm/WorkViews.svelte";
   import {
+    liveWorkspaceEvents,
+    TASK_LIST_EVENT_TYPES,
+  } from "$lib/liveWorkspaceEvents.js";
+  import {
+    CLOSED_PHASES,
+    dedupeWorkBySource,
     errorMessage,
     isNexusOwned,
     isSessionExpired,
@@ -22,6 +28,7 @@
     workKey,
   } from "$lib/pm/presentation.js";
   import { navIconPath } from "$lib/icons.js";
+  import { formatShortcut } from "$lib/keyboardHints.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import {
     beforeCardRefForInsert,
@@ -134,15 +141,24 @@
     ),
   );
   let filterKey = $derived(JSON.stringify(filters));
+  // One row per source item: a GitHub issue read through two connections is
+  // one task to the operator. The folded rows stay reachable from the kept
+  // task's page.
+  let visible = $derived(dedupeWorkBySource(records).records);
+  // Done and Cancelled fold under a toggle unless the operator asked for them.
+  let showClosed = $derived(
+    $page.url.searchParams.get("closed") === "1" ||
+      CLOSED_PHASES.has(filters.phase),
+  );
   let activeFilters = $derived(Object.values(filters).some(Boolean));
   let blockedCount = $derived(
-    records.filter((work) => work.phase === "blocked").length,
+    visible.filter((work) => work.phase === "blocked").length,
   );
   // Three separate facts, three separate filters. They used to be blended into
   // one "without fresh evidence" number, which merged "we have never looked"
   // with "the source is down" — two problems with different fixes.
   let neverCheckedCount = $derived(
-    records.filter(
+    visible.filter(
       (work) =>
         !isNexusOwned(work) && workFreshness(work, now).key === "unknown",
     ).length,
@@ -150,7 +166,7 @@
   // A failed read whose last good read is still within its window has not
   // cost the reader anything yet; it is not "failing" from the table's view.
   let unreachableCount = $derived(
-    records.filter((work) => {
+    visible.filter((work) => {
       const read = workFreshness(work, now);
       return read.key === "error" && !read.kept;
     }).length,
@@ -195,14 +211,18 @@
   function setFilter(key, value) {
     void goto(queryHref({ [key]: value }), { keepFocus: true, noScroll: true });
   }
-  async function load(append = false, query = filters) {
+  const PAGE_SIZE = 50;
+  async function load(append = false, query = filters, { live = false } = {}) {
     const id = ++requestId;
     loading = true;
-    error = "";
+    if (!live) error = "";
     try {
       const result = await coreClient.listWork({
         ...query,
-        limit: 50,
+        // A live re-read keeps as many rows as the operator already paged in.
+        limit: live
+          ? Math.min(200, Math.max(PAGE_SIZE, records.length))
+          : PAGE_SIZE,
         cursor: append ? nextCursor : undefined,
       });
       if (id !== requestId) return;
@@ -215,6 +235,7 @@
         ...new Map(rows.map((work) => [workKey(work), work])).values(),
       ];
       nextCursor = result.next_cursor || "";
+      error = "";
       if (!decisionsLoaded) void loadDecisions();
       if (!boardsLoaded) void loadBoards();
     } catch (err) {
@@ -324,7 +345,8 @@
       if (Number.isInteger(index)) {
         beforeCardId = beforeCardRefForInsert(
           work,
-          boardPhasePeers(previous, phase, key),
+          // Drop indexes count the cards the board paints, not folded mirrors.
+          boardPhasePeers(dedupeWorkBySource(previous).records, phase, key),
           index,
         );
       }
@@ -538,10 +560,22 @@
     const timer = setInterval(() => {
       now = Date.now();
     }, 30_000);
+    // Tasks change under the operator (agents move cards, readers report);
+    // the list follows the event stream instead of offering a Reload button.
+    const stopLive = liveWorkspaceEvents({
+      client: coreClient,
+      types: TASK_LIST_EVENT_TYPES,
+      onChange: () => {
+        // A drag or an evidence prompt in progress keeps its rows still.
+        if (!loaded || evidenceFor) return;
+        void load(false, filters, { live: true });
+      },
+    });
     return () => {
       disposed = true;
       requestId++;
       clearInterval(timer);
+      stopLive();
     };
   });
   const SOURCES = [
@@ -558,6 +592,8 @@
     ["Move focused task to the previous or next phase (board)", ["←", "→"]],
     ["Board view", ["B"]],
     ["Table view", ["T"]],
+    ["Go to Inbox, Agents, Tasks or Docs", ["G", "I A T D"]],
+    ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
   ];
@@ -583,9 +619,9 @@
 <WorkspacePageShell>
   <WorkspacePageHeader title="Tasks">
     {#snippet subtitle()}
-      {#if records.length}
+      {#if visible.length}
         <span class="text-fg-muted"
-          >{records.length}{nextCursor ? "+" : ""} tracked</span
+          >{visible.length}{nextCursor ? "+" : ""} tracked</span
         >{#if blockedCount}<span class="mx-1 text-fg-subtle">·</span><a
             class="ui-prose-link text-warn-text"
             href={queryHref({ phase: "blocked" })}
@@ -665,12 +701,6 @@
         aria-current={view === "board" ? "page" : undefined}>Board</a
       >
     </nav>
-    <button
-      class="ui-btn-secondary"
-      onclick={() => load()}
-      disabled={loading}
-      aria-label="Reload">{loading ? "Loading…" : "Reload"}</button
-    >
   </div>
 
   <!--
@@ -893,8 +923,10 @@
     </section>
   {:else if records.length}
     <WorkViews
-      {records}
+      records={visible}
       {view}
+      {showClosed}
+      closedHref={queryHref({ closed: showClosed ? "" : "1" })}
       {workspaceHref}
       {now}
       {requested}

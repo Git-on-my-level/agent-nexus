@@ -15,7 +15,7 @@ Hosted v1 is:
 - One isolated deployment per workspace/customer
 - Operator-driven provisioning and lifecycle
 - No shared control plane
-- Workspace-local auth for both humans and agents
+- Workspace-local human authentication and host-derived agent identity
 - Manual backup scheduling and DR drills
 - No fine-grained RBAC (authenticated principals share authority)
 
@@ -147,41 +147,27 @@ curl -fsS http://127.0.0.1:8001/auth/bootstrap/status
 Before the first principal is created, `bootstrap_registration_available`
 should be `true`.
 
-## Bootstrap onboarding
+## Bootstrap and host enrollment
 
 Hosted v1 is not open registration. The first principal must use the bootstrap
 token configured for that deployment.
 
-For a deterministic operator flow, bootstrap an agent principal first:
+The first principal is always a human. Complete bootstrap through the web UI
+passkey ceremony using the deployment's bootstrap token. Afterward, the human
+auth-admin enrolls machines through Access → Hosts.
 
 ```bash
-export ANX_BOOTSTRAP_TOKEN="$(grep '^ANX_BOOTSTRAP_TOKEN=' /srv/anx/team-alpha/config/env.production | cut -d= -f2-)"
-
-curl -fsS \
-  -H 'content-type: application/json' \
-  -X POST \
-  -d '{
-    "username": "team-alpha.bootstrap",
-    "public_key": "<base64-ed25519-public-key>",
-    "bootstrap_token": "'"${ANX_BOOTSTRAP_TOKEN}"'"
-  }' \
-  http://127.0.0.1:8001/auth/agents/register
+anx --base-url https://team-alpha.anx.example.com host enroll
 ```
 
-That response includes a bearer token and refresh token for the first
-authenticated principal. After bootstrap succeeds, the bootstrap token is no
-longer accepted for future registrations.
+The CLI prints a user code and verification URL. Approve the host request in
+Access → Hosts. For unattended machines, create a one-time host enrollment
+token in the Access page and run `anx host enroll --token <token>` there.
+Agents on the enrolled machine are derived lazily; select each with
+`anx --as <name>`. No agent invites or public-key registration are used.
 
-If your first principal is a human passkey user instead, use the same bootstrap
-token through the web-ui passkey registration flow once the workspace origin is
-live.
-
-## Invite issuance after bootstrap
-
-After the first principal exists, all subsequent principals enter through
-invite-gated onboarding.
-
-Issue an invite with the bearer token from the bootstrap principal:
+Human invites remain available after bootstrap. Create them from Access or the
+authenticated API with the human principal's bearer token:
 
 ```bash
 export ACCESS_TOKEN="<bootstrap-access-token>"
@@ -194,8 +180,8 @@ curl -fsS \
   http://127.0.0.1:8001/auth/invites
 ```
 
-Use `kind:"agent"` for CLI/agent onboarding. Hosted v1 has no fine-grained
-RBAC layer, so any authenticated principal can issue and revoke invites.
+Invites are for additional human principals only. Hosted v1 has no fine-grained
+RBAC layer, so any authenticated principal can issue and revoke human invites.
 
 ## Routine backup
 
@@ -319,4 +305,3 @@ Not automated in hosted v1:
 - independent S3 object snapshotting or bucket/prefix migration
 - invite delivery to end users
 - any self-service tenant control plane
-

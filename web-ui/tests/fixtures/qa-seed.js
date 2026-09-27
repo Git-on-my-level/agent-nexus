@@ -250,16 +250,16 @@ export const QA_PRINCIPALS = [
   {
     agent_id: "principal_zara_agent",
     actor_id: "actor-zara-ops",
-    username: "zara@agents.internal",
+    username: "codex.qa-mbp",
     principal_kind: "agent",
-    auth_method: "agent_key",
+    auth_method: "host_assertion",
   },
 ];
 
 export const QA_INVITES = [
   {
-    id: "oinv_qa_agent_launch",
-    kind: "agent",
+    id: "oinv_qa_docs_open",
+    kind: "human",
     created_at: hoursAgo(2),
     created_by: "actor-jordan-human",
   },
@@ -272,6 +272,105 @@ export const QA_INVITES = [
   },
 ];
 
+function qaAgent(name, state, overrides = {}) {
+  return {
+    id: `principal_${name}_agent`,
+    ref: `actor:actor-${name}`,
+    actor_id: `actor-${name}`,
+    host_id: "host_qa_mbp",
+    host_slug: "qa-mbp",
+    name,
+    handle: `${name}.qa-mbp`,
+    display_name: `${name} on qa-mbp`,
+    identity_kind: "derived",
+    state,
+    bridge_online: false,
+    current_card_ref: null,
+    current_card_title: null,
+    last_progress_note: null,
+    last_progress_at: null,
+    active_run: null,
+    open_asks_count: 0,
+    waiting_ask: null,
+    last_signal_at: hoursAgo(1),
+    revoked_at: null,
+    ...overrides,
+  };
+}
+
+/** Roster in every derived state (`GET /agents`). */
+export const QA_AGENTS = [
+  qaAgent("codex", "working", {
+    id: "principal_zara_agent",
+    actor_id: "actor-zara-ops",
+    ref: "actor:actor-zara-ops",
+    bridge_online: true,
+    current_card_ref: "card:card-launch-checklist",
+    current_card_title: "Finalize launch checklist",
+    last_progress_note: "Smoke matrix green on staging; rollback wording next.",
+    last_progress_at: hoursAgo(0.1),
+    active_run: {
+      run_id: "run_qa_1",
+      adapter: "codex",
+      model: "sol",
+      duration_seconds: 840,
+    },
+    last_signal_at: hoursAgo(0.05),
+  }),
+  qaAgent("claude", "waiting_on_human", {
+    actor_id: "actor-soren-release",
+    ref: "actor:actor-soren-release",
+    open_asks_count: 1,
+    waiting_ask: {
+      id: "evt-qa-ask-release",
+      inbox_item_id: "inbox:ask:thread-qa:evt-qa-ask-release",
+      title: "Approve the rollback wording before the release cut",
+      severity: "high",
+      created_at: hoursAgo(3.2),
+      kind: "ask",
+      subject_ref: "card:card-launch-checklist",
+      subject_title: "Finalize launch checklist",
+      requester_actor_id: "actor-soren-release",
+    },
+  }),
+  qaAgent("reviewer", "idle", { last_signal_at: hoursAgo(3) }),
+  qaAgent("release-bot", "stale", { last_signal_at: null }),
+];
+
+export const QA_HOSTS = [
+  {
+    id: "host_qa_mbp",
+    ref: "host:host_qa_mbp",
+    handle: "qa-mbp",
+    slug: "qa-mbp",
+    display_name: "qa-mbp",
+    os_user: "jordan",
+    hostname: "qa-mbp.local",
+    discovered_adapters: ["claude", "codex", "cursor"],
+    key_id: "hkey_qa_mbp",
+    excluded_names: ["cursor"],
+    agents: QA_AGENTS,
+    created_at: daysAgo(30),
+    revoked_at: null,
+  },
+];
+
+export const QA_HOST_ENROLLMENTS = [
+  {
+    id: "henr_qa_ci",
+    user_code: "J6FA-N4XI",
+    requested_slug: "ci-runner-3",
+    os_user: "runner",
+    hostname: "ip-10-0-3-17",
+    discovered_adapters: ["generic"],
+    adoption_names: [],
+    requesting_ip: "203.0.113.17",
+    status: "pending",
+    expires_at: hoursAgo(-0.1),
+    created_at: hoursAgo(0.05),
+  },
+];
+
 export const QA_AUTH_AUDIT = [
   {
     event_id: "audit_invite_created_qa",
@@ -280,7 +379,7 @@ export const QA_AUTH_AUDIT = [
     actor_username: QA_HOSTED_ACCOUNT.email,
     actor_agent_id: QA_AUTH_AGENT.agent_id,
     actor_actor_id: QA_AUTH_AGENT.actor_id,
-    invite_id: "oinv_qa_agent_launch",
+    invite_id: "oinv_qa_human_onboarding",
   },
   {
     event_id: "audit_invite_consumed_qa",

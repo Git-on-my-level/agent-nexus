@@ -18,9 +18,10 @@ identify the tested source content.
 
 Both workspaces bind only loopback, use temporary SQLite state and synthetic
 principals, disable the execution sidecar, and are removed at exit. Tokens stay
-in memory and child environment. The harness neither registers a profile in the
-operator's home nor alters `HOME`. Core receives an allowlisted environment;
-host credentials, proxy settings and auth bypass flags are not inherited.
+in memory and child environment. The harness enrolls a temporary host in its
+isolated config directory and never reads or writes the operator's host
+configuration. Core receives an allowlisted environment; host credentials,
+proxy settings and auth bypass flags are not inherited.
 Compilation uses a temporary Go cache and the Go installation selected by PATH,
 without inheriting a potentially mismatched GOROOT. All child operations have
 deadlines. Logs and raw responses are not part of the report.

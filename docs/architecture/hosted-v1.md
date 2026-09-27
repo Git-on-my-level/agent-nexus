@@ -23,10 +23,9 @@ The statements below describe that **historical** pack only.
 ## Auth and onboarding (historical)
 
 - Outside development mode, all workspace data routes require authentication.
-- Hosted v1 is not open signup. New principals enter through managed bootstrap
-  or invite-gated onboarding.
-- Hosted v1 may keep passkey-authenticated humans and Ed25519 key-pair agents
-  as workspace principals inside the isolated workspace.
+- Human passkey bootstrap creates the first principal; human invites add people.
+- Machines enroll once as hosts. Agent principals are derived lazily from host
+  assertions and do not use agent invites or per-agent key pairs.
 - Hosted v1 intentionally has no fine-grained RBAC. Any authenticated
   principal has the same workspace authority, including invite issuance and
   invite revocation.

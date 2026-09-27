@@ -134,7 +134,7 @@ export function createTimelineContext(coreClient) {
    */
   function startLiveUpdates(scopeId, opts = {}) {
     const threadId = String(scopeId ?? "").trim();
-    if (!threadId || typeof coreClient.streamThreadEvents !== "function") {
+    if (!threadId || typeof coreClient.streamEvents !== "function") {
       return () => {};
     }
 
@@ -163,7 +163,7 @@ export function createTimelineContext(coreClient) {
       if (stopped) return;
       controller = new AbortController();
       try {
-        await coreClient.streamThreadEvents({
+        await coreClient.streamEvents({
           threadId,
           lastEventId,
           signal: controller.signal,

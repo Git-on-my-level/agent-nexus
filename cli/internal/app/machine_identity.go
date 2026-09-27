@@ -16,9 +16,15 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 	"pm serve":                 {Command: "pm serve", CommandID: "pm.serve"},
 	"pm ask":                   {Command: "pm ask", CommandID: "pm.ask"},
 	"pm channels doctor":       {Command: "pm channels doctor", CommandID: "pm.channels.doctor"},
-	"human ask":                {Command: "human ask", CommandID: "events.create"},
-	"human review":             {Command: "human review", CommandID: "events.create"},
-	"human escalate":           {Command: "human escalate", CommandID: "events.create"},
+	"ask":                      {Command: "ask", CommandID: "events.create"},
+	"review":                   {Command: "review", CommandID: "events.create"},
+	"escalate":                 {Command: "escalate", CommandID: "events.create"},
+	"orient":                   {Command: "orient", CommandID: "orient"},
+	"await":                    {Command: "await", CommandID: "events.stream"},
+	"work start":               {Command: "work start", CommandID: "work.start"},
+	"work note":                {Command: "work note", CommandID: "work.note"},
+	"work block":               {Command: "work block", CommandID: "work.block"},
+	"work done":                {Command: "work done", CommandID: "work.done"},
 	"secret list":              {Command: "secret list", CommandID: "secrets.list"},
 	"secret create":            {Command: "secret create", CommandID: "secrets.create"},
 	"secret get":               {Command: "secret get", CommandID: "secrets.get"},
@@ -98,9 +104,11 @@ func resolveMachineCommandIdentity(command string) machineCommandIdentity {
 	if normalized == "" {
 		return machineCommandIdentity{Command: "root"}
 	}
-	if identity, ok := machineCommandIdentityByPath[normalized]; ok {
+	lookup := strings.TrimPrefix(normalized, "debug ")
+	if identity, ok := machineCommandIdentityByPath[lookup]; ok {
+		identity.Command = normalized
 		return identity
 	}
-	commandID := strings.ReplaceAll(normalized, " ", ".")
+	commandID := strings.ReplaceAll(lookup, " ", ".")
 	return machineCommandIdentity{Command: normalized, CommandID: commandID}
 }

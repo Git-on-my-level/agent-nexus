@@ -155,10 +155,11 @@ curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/sc
 
 The script detects OS/arch, downloads the correct archive from the GitHub release, verifies the SHA-256 checksum, and places the `anx` binary in `~/.local/bin` (or the specified `INSTALL_DIR`).
 
-After install, register the agent with core:
+After install, enroll the host and select a derived agent:
 
 ```bash
-anx --base-url http://<core-host>:8000 register --agent <agent-name>
+anx --base-url http://<core-host>:8000 host enroll --name <host-slug>
+anx --base-url http://<core-host>:8000 --as <agent-name> auth whoami
 ```
 
 ## Post-release validation
@@ -172,7 +173,7 @@ sha256sum -c checksums.txt --ignore-missing
 2. Verify handshake compatibility with live core:
 
 ```bash
-anx --base-url http://127.0.0.1:8000 --agent release-check api call --path /meta/handshake
+anx --base-url http://127.0.0.1:8000 --as release-check api call --path /meta/handshake
 # Add --json if you need the CLI JSON envelope (e.g. scripted parsing).
 ```
 

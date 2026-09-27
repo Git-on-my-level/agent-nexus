@@ -640,19 +640,15 @@ for (const viewport of AUDIT_VIEWPORTS) {
         await expectCleanLayout(page, `mailbox ${mailbox}`, bothEnds);
       }
 
-      // Refresh over populated data: the list must not jump or overlap.
-      api.hold.inboxOpen = deferred();
-      await page.getByRole("button", { name: "Reload" }).click();
-      await expectCleanLayout(page, "inbox reloading over data");
-      api.hold.inboxOpen.resolve();
-      api.hold = {};
-      await expect(page.getByRole("button", { name: "Reload" })).toBeEnabled();
+      // There is no Reload button: the list follows the event stream. A
+      // fresh load stands in for the next live refresh here.
+      await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
 
       api.fail = {
         decisions: { message: LONG_ERROR.repeat(2) },
         inboxOpen: { message: "inbox projection unavailable" },
       };
-      await page.getByRole("button", { name: "Reload" }).click();
+      await gotoInbox(page);
       await expect(page.getByRole("alert").first()).toBeVisible();
       await expectCleanLayout(page, "inbox sections failed", bothEnds);
 
@@ -663,7 +659,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.inboxOpen = [];
       api.inboxCompleted = [];
       api.updates = [];
-      await page.getByRole("button", { name: "Reload" }).click();
+      await page.getByRole("button", { name: "Retry" }).first().click();
       await expect(page.getByText("You're clear.")).toBeVisible();
       await expectCleanLayout(page, "inbox empty", bothEnds);
       await page.getByRole("link", { name: "Watching" }).first().click();
@@ -685,7 +681,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await page.getByLabel("Reply").fill(LONG_HASH.repeat(2));
       await expectCleanLayout(page, "inbox reply drafted", bothEnds);
       await page.getByRole("button", { name: "Send reply" }).click();
-      await expect(page.getByText("Response sent.")).toBeVisible();
+      // Sending waits behind an undo toast; the pane moves to the next row.
+      await expect(page.locator('[data-inbox-toast="pending"]')).toBeVisible();
       await expectCleanLayout(page, "inbox reply sent", bothEnds);
 
       // Below lg the pane replaces the list; go back before picking another.
@@ -818,7 +815,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.hold.documents = deferred();
       api.hold.work = deferred();
       await page.getByRole("combobox").fill(LONG_HASH);
-      await expect(page.getByText("Searching...")).toBeVisible();
+      await expect(page.getByText("Searching…")).toBeVisible();
       await expectCleanLayout(page, "palette searching");
       api.hold.documents.resolve();
       api.hold.work.resolve();
@@ -900,7 +897,7 @@ for (const viewport of AUDIT_VIEWPORTS) {
       api.documents = [];
       api.work = [];
       await page.getByRole("combobox").fill("zzz-nothing-matches");
-      await expect(page.getByText("No results found")).toBeVisible();
+      await expect(page.getByText("No matches")).toBeVisible();
       await expectCleanLayout(page, "palette empty results");
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
@@ -929,13 +926,20 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(tour).toBeVisible(FIRST_PAINT);
       await expectCleanLayout(page, "tour step 1 welcome");
 
-      for (const step of ["1 of 5", "2 of 5", "3 of 5", "4 of 5", "5 of 5"]) {
+      for (const step of [
+        "1 of 6",
+        "2 of 6",
+        "3 of 6",
+        "4 of 6",
+        "5 of 6",
+        "6 of 6",
+      ]) {
         await page
           .getByRole("button", { name: /Take the tour|^Next$/ })
           .first()
           .click();
         await expect(tour.getByText(step, { exact: false })).toBeVisible();
-        if (step === "2 of 5") {
+        if (step === "3 of 6") {
           await expect(
             tour.getByText("Drag a task created here to change phase"),
           ).toBeVisible();
@@ -1024,11 +1028,8 @@ for (const viewport of AUDIT_VIEWPORTS) {
       ).toBeVisible(FIRST_PAINT);
       await expectCleanLayout(page, "item route review", bothEnds);
 
-      await page
-        .getByRole("button", { name: /Request revisions|Approved\./ })
-        .first()
-        .click();
-      await expectCleanLayout(page, "item route proposal applied", bothEnds);
+      await page.getByLabel("Your response").fill(LONG_HASH.repeat(2));
+      await expectCleanLayout(page, "item route response drafted", bothEnds);
 
       await page.getByRole("button", { name: "Someone else" }).click();
       await expectCleanLayout(page, "item route notify target", bothEnds);
@@ -1049,9 +1050,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await options.first().click();
       await expectCleanLayout(page, "item route actor chosen", bothEnds);
 
+      // Sending returns to the Inbox behind the undo toast; a refused
+      // response surfaces there once the window closes.
       api.fail.respond = { message: LONG_ERROR };
       await page.getByRole("button", { name: "Send response" }).click();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page).toHaveURL(/\/inbox$/);
+      await expect(page.locator('[data-inbox-toast="failed"]')).toBeVisible({
+        timeout: 15_000,
+      });
       await expectCleanLayout(page, "item route submit failed", bothEnds);
     });
 
@@ -1070,15 +1076,12 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expectCleanLayout(page, "item route long title", bothEnds);
 
       // The proposal buttons carry the same unbroken hash.
-      await page
-        .getByRole("button", { name: new RegExp(LONG_HASH.slice(0, 24)) })
-        .first()
-        .click();
-      await expectCleanLayout(
-        page,
-        "item route long proposal applied",
-        bothEnds,
-      );
+      await expect(
+        page
+          .getByRole("button", { name: new RegExp(LONG_HASH.slice(0, 24)) })
+          .first(),
+      ).toBeVisible();
+      await expectCleanLayout(page, "item route long proposals", bothEnds);
     });
 
     test("standalone inbox item: completed and not found", async ({ page }) => {
@@ -1088,6 +1091,13 @@ for (const viewport of AUDIT_VIEWPORTS) {
         FIRST_PAINT,
       );
       await expectCleanLayout(page, "item route completed", bothEnds);
+      // Links back into the Inbox use its real parameters, not ?status=.
+      await expect(
+        page.getByRole("link", { name: "← Back to inbox" }),
+      ).toHaveAttribute("href", /\/inbox\?mailbox=handled&item=/);
+      await expect(
+        page.locator("a", { hasText: "View Handled" }),
+      ).toHaveAttribute("href", /\/inbox\?mailbox=handled$/);
 
       api.fail.inboxItem = {
         status: 404,
@@ -1161,14 +1171,14 @@ for (const viewport of AUDIT_VIEWPORTS) {
       await expect(page.getByRole("alert").first()).toBeVisible();
       await expectCleanLayout(page, "superseded on answer", bothEnds);
 
-      // Acknowledging an inbox item leaves a notice above the panes.
+      // Acknowledging an inbox item waits behind the undo toast.
       api.fail = {};
       await page.goto(INBOX_PATH);
       await page.getByTestId("inbox-row-inbox-plain").click(FIRST_PAINT);
       await page.getByRole("button", { name: "Acknowledge" }).click();
-      await expect(
-        page.getByText("Acknowledged. Removed from your inbox only."),
-      ).toBeVisible();
+      await expect(page.locator('[data-inbox-toast="pending"]')).toContainText(
+        "Acknowledged",
+      );
       await expectCleanLayout(page, "dismissed notice", bothEnds);
     });
 

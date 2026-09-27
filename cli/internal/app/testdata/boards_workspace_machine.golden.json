@@ -1,8 +1,8 @@
 {
   "ok": true,
+  "schema_version": 2,
   "command": "boards workspace",
-  "command_id": "boards.workspace",
-  "data": {
+  "result": {
     "board": {
       "handle": "machine-board",
       "id": "board_1234567890abcdef",
@@ -102,5 +102,7 @@
       "count": 0,
       "items": []
     }
-  }
+  },
+  "warnings": [],
+  "next_actions": []
 }

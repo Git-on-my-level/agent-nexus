@@ -37,6 +37,7 @@
     getShellContentConfig,
     isMoreHubActivePath,
     navigationItems,
+    settingsNavGroups,
     settingsNavItems,
   } from "$lib/navigation";
   import {
@@ -47,6 +48,8 @@
     devActorModeReady,
   } from "$lib/workspaceContext";
   import WorkspaceTour from "$lib/components/onboarding/WorkspaceTour.svelte";
+  import InboxNavCount from "$lib/components/inbox/InboxNavCount.svelte";
+  import AgentsNavCount from "$lib/components/agents/AgentsNavCount.svelte";
   import {
     handleEscapeTextBlurCommit,
     handleModEnterBlurCommit,
@@ -583,6 +586,8 @@
     switch (String(href)) {
       case "/inbox":
         return "inbox";
+      case "/agents":
+        return "agents";
       case "/tasks":
         return "tasks";
       case "/docs":
@@ -990,6 +995,18 @@
                     <span class="shell-nav-hint">{item.hint}</span>
                   {/if}
                 </span>
+                {#if item.count === "inbox-needs-you"}
+                  <InboxNavCount
+                    workspace={activeWorkspaceSlug}
+                    enabled={identityReady}
+                  />
+                {/if}
+                {#if item.count === "agents-working"}
+                  <AgentsNavCount
+                    workspace={activeWorkspaceSlug}
+                    enabled={identityReady}
+                  />
+                {/if}
               </a>
             {/each}
           </nav>
@@ -1023,33 +1040,52 @@
                   {/if}
                 </div>
 
-                <div class="shell-account-menu-section">
-                  {#each settingsNavItems as item}
-                    {@const active = isActive(item.href)}
-                    {@const tour = dataTourForNav(item.href)}
-                    <a
-                      class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
-                      href={workspaceHref(item.href)}
-                      role="menuitem"
-                      data-tour={tour}
-                      onclick={closeAccountMenu}
+                <!-- Settings, then Diagnostics, each under its own label;
+                     Sign out stays last. -->
+                {#each settingsNavGroups as group, groupIndex (group.label)}
+                  {#if groupIndex > 0}
+                    <div class="shell-account-menu-divider"></div>
+                  {/if}
+                  <div
+                    class="shell-account-menu-section"
+                    role="group"
+                    aria-labelledby={`shell-account-group-${groupIndex}`}
+                  >
+                    <p
+                      class="shell-account-menu-group-label"
+                      id={`shell-account-group-${groupIndex}`}
                     >
-                      <svg
-                        class="shell-settings-icon"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
+                      {group.label}
+                    </p>
+                    {#each group.items as item}
+                      {@const active = isActive(item.href)}
+                      {@const tour = dataTourForNav(item.href)}
+                      <a
+                        class={`shell-settings-link ${active ? "shell-settings-link--active" : ""}`}
+                        href={workspaceHref(item.href)}
+                        role="menuitem"
+                        data-tour={tour}
+                        onclick={closeAccountMenu}
                       >
-                        <path d={navIconPath(item.icon)} />
-                      </svg>
-                      <span class="shell-settings-link-text">{item.label}</span>
-                    </a>
-                  {/each}
-                </div>
+                        <svg
+                          class="shell-settings-icon"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d={navIconPath(item.icon)} />
+                        </svg>
+                        <span class="shell-settings-link-text"
+                          >{item.label}</span
+                        >
+                      </a>
+                    {/each}
+                  </div>
+                {/each}
 
                 {#if $devActorMode && devFixturePersonas.length > 0}
                   <div class="shell-account-menu-divider"></div>
@@ -1211,7 +1247,7 @@
         {@const active = isActive(item.href)}
         {@const tour = dataTourForNav(item.href)}
         <a
-          class="shell-bottom-nav-item {active
+          class="shell-bottom-nav-item relative {active
             ? 'shell-bottom-nav-item--active'
             : ''}"
           href={workspaceHref(item.href)}
@@ -1230,6 +1266,20 @@
             <path d={navIconPath(item.icon)} />
           </svg>
           <span>{item.label}</span>
+          {#if item.count === "inbox-needs-you"}
+            <InboxNavCount
+              workspace={activeWorkspaceSlug}
+              enabled={identityReady}
+              variant="bottom"
+            />
+          {/if}
+          {#if item.count === "agents-working"}
+            <AgentsNavCount
+              workspace={activeWorkspaceSlug}
+              enabled={identityReady}
+              variant="bottom"
+            />
+          {/if}
         </a>
       {/each}
       <a

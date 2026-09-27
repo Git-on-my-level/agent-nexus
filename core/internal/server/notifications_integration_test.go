@@ -1,12 +1,18 @@
 package server
 
 import (
+	"agent-nexus-core/internal/auth"
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,9 +26,8 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 		bootstrapToken: testBootstrapToken,
 	})
 
-	sender := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "sender.agent")
-	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
-	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "target.agent", targetInviteToken)
+	sender := seedNotificationTestAgent(t, env, "sender.agent")
+	target := seedNotificationTestAgent(t, env, "target.agent")
 
 	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
 		"title":            "Notification thread",
@@ -118,10 +123,12 @@ func TestNotificationsListReadAndDismissAreTargetScoped(t *testing.T) {
 		t.Fatalf("expected unread notification receipt, got %#v", receipts[0])
 	}
 
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+	denied := postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{"wakeup_id": wakeupID, "bridge_instance_id": "bridge-test-1"}, target.AccessToken, http.StatusUnauthorized)
+	denied.Body.Close()
+	postNotificationWakeup(t, env.server.URL, "claim", map[string]any{
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-test-1",
-	}, target.AccessToken, http.StatusOK).Body.Close()
+	}, target).Body.Close()
 
 	claimedTimelineResp := getJSONExpectStatusWithAuth(t, env.server.URL+"/threads/"+threadID+"/timeline", sender.AccessToken, http.StatusOK)
 	if err := json.NewDecoder(claimedTimelineResp.Body).Decode(&timelinePayload); err != nil {
@@ -211,9 +218,8 @@ func TestAgentWakeupRefsCorruptionFailsNotificationReads(t *testing.T) {
 		bootstrapToken: testBootstrapToken,
 	})
 
-	sender := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "corrupt.sender")
-	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
-	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "corrupt.target", targetInviteToken)
+	sender := seedNotificationTestAgent(t, env, "corrupt.sender")
+	target := seedNotificationTestAgent(t, env, "corrupt.target")
 
 	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
 		"title":            "Corrupt notification refs thread",
@@ -263,9 +269,8 @@ func TestCardAssignmentEnqueuesAgentWakeupNotification(t *testing.T) {
 		allowUnauthenticatedWrites: true,
 	})
 
-	assignor := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "assignor.agent")
-	targetInviteToken := createNotificationTestInvite(t, env.server.URL, assignor.AccessToken)
-	assignee := registerNotificationTestAgentWithInvite(t, env.server.URL, "assignee.agent", targetInviteToken)
+	assignor := seedNotificationTestAgent(t, env, "assignor.agent")
+	assignee := seedNotificationTestAgent(t, env, "assignee.agent")
 
 	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, assignor.ActorID, map[string]any{
 		"title":            "Board thread",
@@ -385,9 +390,8 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		bootstrapToken: testBootstrapToken,
 	})
 
-	sender := registerNotificationTestAgentWithBootstrap(t, env.server.URL, "receipt.sender")
-	targetInviteToken := createNotificationTestInvite(t, env.server.URL, sender.AccessToken)
-	target := registerNotificationTestAgentWithInvite(t, env.server.URL, "receipt.target", targetInviteToken)
+	sender := seedNotificationTestAgent(t, env, "receipt.sender")
+	target := seedNotificationTestAgent(t, env, "receipt.target")
 
 	threadID := integrationSeedThreadWithStore(t, env.primitiveStore, nil, sender.ActorID, map[string]any{
 		"title":            "Receipt stream thread",
@@ -473,10 +477,10 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		t.Fatalf("expected requested receipt, got %#v", initial.Receipt)
 	}
 
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+	postNotificationWakeup(t, env.server.URL, "claim", map[string]any{
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
-	}, target.AccessToken, http.StatusOK).Body.Close()
+	}, target).Body.Close()
 	claimed := readNotificationReceiptSSE(t, reader)
 	if got := asString(claimed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusClaimed {
 		t.Fatalf("expected claimed receipt, got %#v", claimed.Receipt)
@@ -488,10 +492,10 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 		t.Fatalf("expected claimed_at receipt timestamp, got %#v", claimed.Receipt)
 	}
 
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/complete", map[string]any{
+	postNotificationWakeup(t, env.server.URL, "complete", map[string]any{
 		"wakeup_id":          wakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
-	}, target.AccessToken, http.StatusOK).Body.Close()
+	}, target).Body.Close()
 	completed := readNotificationReceiptSSE(t, reader)
 	if got := asString(completed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusCompleted {
 		t.Fatalf("expected completed receipt, got %#v", completed.Receipt)
@@ -514,16 +518,16 @@ func TestAgentNotificationReceiptsStreamTracksWakeupStatus(t *testing.T) {
 	if added.Receipt["wakeup_id"] != failedWakeupID {
 		t.Fatalf("expected newly added failed wakeup receipt, got %#v", added.Receipt)
 	}
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/claim", map[string]any{
+	postNotificationWakeup(t, env.server.URL, "claim", map[string]any{
 		"wakeup_id":          failedWakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
-	}, target.AccessToken, http.StatusOK).Body.Close()
+	}, target).Body.Close()
 	readNotificationReceiptSSE(t, reader)
-	postJSONExpectStatusWithAuth(t, env.server.URL+"/agent-wakeups/fail", map[string]any{
+	postNotificationWakeup(t, env.server.URL, "fail", map[string]any{
 		"wakeup_id":          failedWakeupID,
 		"bridge_instance_id": "bridge-receipt-stream",
 		"error":              "bridge failed",
-	}, target.AccessToken, http.StatusOK).Body.Close()
+	}, target).Body.Close()
 	failed := readNotificationReceiptSSE(t, reader)
 	if got := asString(failed.Receipt["delivery_status"]); got != primitives.AgentWakeupStatusFailed {
 		t.Fatalf("expected failed receipt, got %#v", failed.Receipt)
@@ -552,80 +556,87 @@ type notificationTestAgent struct {
 	AccessToken string
 	ActorID     string
 	Username    string
+	Host        notificationHostKey
 }
 
-func registerNotificationTestAgentWithBootstrap(t *testing.T, serverURL string, username string) notificationTestAgent {
-	t.Helper()
-	publicKey, _ := generateKeyPair(t)
-	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
-		"username":        username,
-		"public_key":      publicKey,
-		"bootstrap_token": testBootstrapToken,
-	}, "", http.StatusCreated)
-	defer resp.Body.Close()
-	var payload struct {
-		Agent struct {
-			ActorID  string `json:"actor_id"`
-			Username string `json:"username"`
-		} `json:"agent"`
-		Tokens struct {
-			AccessToken string `json:"access_token"`
-		} `json:"tokens"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode register response: %v", err)
-	}
-	return notificationTestAgent{
-		AccessToken: payload.Tokens.AccessToken,
-		ActorID:     payload.Agent.ActorID,
-		Username:    payload.Agent.Username,
-	}
+var notificationHosts sync.Map
+
+type notificationHostKey struct {
+	ID      string
+	KeyID   string
+	Private ed25519.PrivateKey
 }
 
-func registerNotificationTestAgentWithInvite(t *testing.T, serverURL string, username string, inviteToken string) notificationTestAgent {
+func seedNotificationTestAgent(t *testing.T, env authIntegrationEnv, username string) notificationTestAgent {
 	t.Helper()
-	publicKey, _ := generateKeyPair(t)
-	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/agents/register", map[string]any{
-		"username":     username,
-		"public_key":   publicKey,
-		"invite_token": inviteToken,
-	}, "", http.StatusCreated)
-	defer resp.Body.Close()
-	var payload struct {
-		Agent struct {
-			ActorID  string `json:"actor_id"`
-			Username string `json:"username"`
-		} `json:"agent"`
-		Tokens struct {
-			AccessToken string `json:"access_token"`
-		} `json:"tokens"`
+	parts := strings.Split(username, ".")
+	if len(parts) != 2 {
+		t.Fatalf("test handle must be name.host: %s", username)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode register response: %v", err)
+	name, slug := parts[0], parts[1]
+	lookup := env.server.URL + "/" + slug
+	value, ok := notificationHosts.Load(lookup)
+	var host notificationHostKey
+	if ok {
+		host = value.(notificationHostKey)
+	} else {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token, secret, err := env.authStore.CreateHostEnrollmentToken(context.Background(), "notification test", time.Now().Add(20*time.Minute), auth.Principal{AgentID: "test-admin"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = token
+		nonce := base64.RawURLEncoding.EncodeToString(pub[:16])
+		public := base64.StdEncoding.EncodeToString(pub)
+		msg := "anx-host-headless-enroll|" + nonce + "|" + slug + "|" + public
+		enrolled, err := env.authStore.CompleteHeadlessHostEnrollment(context.Background(), auth.HostEnrollmentInput{PublicKey: public, RequestedSlug: slug, OSUser: "test", Hostname: slug, DiscoveredAdapters: []string{}, RequestNonce: nonce, Adoptions: []auth.AdoptionProof{}, EnrollmentToken: secret, Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, []byte(msg)))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		host = notificationHostKey{ID: enrolled.ID, KeyID: enrolled.KeyID, Private: priv}
+		notificationHosts.Store(lookup, host)
 	}
-	return notificationTestAgent{
-		AccessToken: payload.Tokens.AccessToken,
-		ActorID:     payload.Agent.ActorID,
-		Username:    payload.Agent.Username,
+	signed := time.Now().UTC().Format(time.RFC3339)
+	message := "anx-host-agent-token|" + host.ID + "|" + host.KeyID + "|" + name + "|" + signed
+	agent, tokens, err := env.authStore.IssueHostAgentToken(context.Background(), host.ID, host.KeyID, name, signed, base64.StdEncoding.EncodeToString(ed25519.Sign(host.Private, []byte(message))))
+	if err != nil {
+		t.Fatal(err)
 	}
+	return notificationTestAgent{AccessToken: tokens.AccessToken, ActorID: agent.ActorID, Username: agent.Handle, Host: host}
 }
 
-func createNotificationTestInvite(t *testing.T, serverURL string, accessToken string) string {
+func postNotificationWakeup(t *testing.T, baseURL, kind string, payload map[string]any, target notificationTestAgent) *http.Response {
 	t.Helper()
-	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", map[string]any{
-		"kind": "agent",
-	}, accessToken, http.StatusCreated)
-	defer resp.Body.Close()
-	var payload struct {
-		Token string `json:"token"`
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode invite response: %v", err)
+	digest := sha256.Sum256(raw)
+	signed := time.Now().UTC().Format(time.RFC3339Nano)
+	message := "anx-host-wakeup-" + kind + "|" + target.Host.ID + "|" + signed + "|" + base64.RawURLEncoding.EncodeToString(digest[:])
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/agent-wakeups/"+kind, strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if payload.Token == "" {
-		t.Fatal("expected invite token")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-ANX-Host-Id", target.Host.ID)
+	req.Header.Set("X-ANX-Host-Key-Id", target.Host.KeyID)
+	req.Header.Set("X-ANX-Host-Signed-At", signed)
+	req.Header.Set("X-ANX-Host-Signature", base64.StdEncoding.EncodeToString(ed25519.Sign(target.Host.Private, []byte(message))))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return payload.Token
+	if resp.StatusCode != http.StatusOK {
+		var v map[string]any
+		json.NewDecoder(resp.Body).Decode(&v)
+		resp.Body.Close()
+		t.Fatalf("wakeup %s status %d: %#v", kind, resp.StatusCode, v)
+	}
+	return resp
 }
 
 func seedReceiptStreamMessageEvent(t *testing.T, serverURL string, accessToken string, threadID string, text string) string {

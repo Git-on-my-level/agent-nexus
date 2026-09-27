@@ -1,251 +1,101 @@
+"""One runtime configuration per enrolled host. No credentials live in this file."""
 from __future__ import annotations
 
+import math
 import os
+import re
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from .util import parse_bool
-
-
-@dataclass(slots=True)
-class ANXConfig:
-    base_url: str
-    workspace_id: str
-    workspace_name: str
-    workspace_url: str | None = None
-    verify_ssl: bool = True
+NAME = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
 
-@dataclass(slots=True)
-class AgentConfig:
-    handle: str
-    driver_kind: str
-    adapter_kind: str
-    state_dir: Path
-    workspace_bindings: list[str] = field(default_factory=list)
-    resume_policy: str = "resume_or_create"
-    status: str = "pending"
-    checkin_interval_seconds: int = 60
-    checkin_ttl_seconds: int = 300
-
-
-@dataclass(slots=True)
-class WorkspaceConfig:
-    id: str
+@dataclass(frozen=True)
+class Runtime:
     name: str
+    adapter: str
+    command: tuple[str, ...]
+    cwd: Path
+    env: dict[str, str]
+
+
+@dataclass(frozen=True)
+class Config:
+    path: Path
+    config_dir: Path
     base_url: str
-    enabled: bool = True
-    url: str | None = None
+    host_id: str
+    host_slug: str
+    anx: str
+    agentctl: str
+    poll_seconds: float
+    checkin_seconds: float
+    runtimes: dict[str, Runtime]
 
 
-@dataclass(slots=True)
-class AdapterConfig:
-    raw: dict[str, Any]
-
-    def require_str(self, key: str) -> str:
-        value = self.raw.get(key)
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"adapter.{key} is required")
-        return value.strip()
-
-    def get_str(self, key: str, default: str = "") -> str:
-        value = self.raw.get(key, default)
-        return str(value).strip()
-
-    def get_bool(self, key: str, default: bool = False) -> bool:
-        return parse_bool(self.raw.get(key, default), default=default)
-
-    def get_int(self, key: str, default: int = 0) -> int:
-        value = self.raw.get(key, default)
-        return int(value)
-
-    def get_list(self, key: str) -> list[str]:
-        value = self.raw.get(key, [])
-        if isinstance(value, list):
-            return [str(item) for item in value]
-        return []
-
-    def get_table(self, key: str) -> dict[str, str]:
-        value = self.raw.get(key, {})
-        if not isinstance(value, dict):
-            return {}
-        return {str(k): str(v) for k, v in value.items()}
-
-
-@dataclass(slots=True)
-class LoadedConfig:
-    anx: ANXConfig
-    agent: AgentConfig | None
-    adapter: AdapterConfig
-    auth_state_path: Path
-    config_path: Path = field(default_factory=lambda: Path("bridge.toml"))
-    config_dir: Path = field(default_factory=lambda: Path("."))
-    agent_home: Path = field(default_factory=lambda: Path("."))
-    agent_manifest_path: Path = field(default_factory=lambda: Path("agent.toml"))
-    wake_config_path: Path = field(default_factory=lambda: Path("wake.toml"))
-    expected_agent_id: str = ""
-    expected_actor_id: str = ""
-    expected_key_id: str = ""
-    expected_public_key_fingerprint: str = ""
-    workspaces: list[WorkspaceConfig] = field(default_factory=list)
-
-    @property
-    def workspace_ids(self) -> list[str]:
-        ids = [workspace.id for workspace in self.workspaces if workspace.enabled and workspace.id]
-        if ids:
-            return ids
-        if self.agent is not None and self.agent.workspace_bindings:
-            return [item for item in self.agent.workspace_bindings if item]
-        return [self.anx.workspace_id] if self.anx.workspace_id else []
-
-
-def _expand_path(base_dir: Path, value: str | None, default: str) -> Path:
-    raw = value or default
-    expanded = os.path.expandvars(os.path.expanduser(raw))
-    path = Path(expanded)
-    if not path.is_absolute():
-        path = (base_dir / path).resolve()
-    return path
-
-
-def _read_toml(path: Path) -> dict[str, Any]:
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)
-    if not isinstance(data, dict):
-        return {}
-    return data
-
-
-def _config_string(table: dict[str, Any], key: str, default: str = "") -> str:
-    return str(table.get(key, default)).strip()
-
-
-def _resolve_agent_home(config_dir: Path, raw: str) -> Path:
-    value = raw.strip()
-    if not value:
-        raise ValueError("bridge config requires top-level agent_home")
-    return _expand_path(config_dir, value, ".anx")
-
-
-def _load_workspaces(path: Path, default_base_url: str) -> list[WorkspaceConfig]:
-    data = _read_toml(path)
-    items = data.get("workspaces") or []
-    workspaces: list[WorkspaceConfig] = []
-    if not isinstance(items, list):
-        raise ValueError("wake config requires [[workspaces]] entries")
-    for item in items:
-        if not isinstance(item, dict):
+def load_config(path: str | Path) -> Config:
+    path = Path(path).expanduser().resolve()
+    with path.open("rb") as stream:
+        data = tomllib.load(stream)
+    if any(key in data for key in ("agent_home", "wake_config", "adapter", "auth")):
+        raise ValueError("obsolete per-agent bridge configuration")
+    unexpected = set(data) - {"host", "agents"}
+    if unexpected:
+        raise ValueError(f"unknown bridge config sections: {sorted(unexpected)}")
+    host = data.get("host", {})
+    if not isinstance(host, dict):
+        raise ValueError("[host] is required")
+    unexpected = set(host) - {"base_url", "id", "slug", "anx", "agentctl", "poll_seconds", "checkin_seconds", "config_dir"}
+    if unexpected:
+        raise ValueError(f"unknown [host] keys: {sorted(unexpected)}")
+    base_url = str(host.get("base_url", "")).rstrip("/")
+    host_id = str(host.get("id", "")).strip()
+    host_slug = str(host.get("slug", "")).strip()
+    if not base_url.startswith(("http://", "https://")) or not host_id or not host_slug:
+        raise ValueError("[host] requires base_url, id, and slug from `anx host enroll`")
+    if not re.fullmatch(r"[a-z0-9-]+", host_slug):
+        raise ValueError("host.slug must be a lowercase host slug")
+    runtime_data = data.get("agents", {})
+    if not isinstance(runtime_data, dict) or not runtime_data:
+        raise ValueError("at least one [agents.<name>] runtime is required")
+    runtimes = {}
+    for name, entry in runtime_data.items():
+        if not NAME.fullmatch(name) or not isinstance(entry, dict):
+            raise ValueError(f"invalid runtime name: {name!r}")
+        unexpected = set(entry) - {"command", "adapter", "cwd", "env", "enabled"}
+        if unexpected:
+            raise ValueError(f"unknown [agents.{name}] keys: {sorted(unexpected)}")
+        if not entry.get("enabled", True):
             continue
-        workspace_id = _config_string(item, "id")
-        if not workspace_id:
-            continue
-        workspaces.append(
-            WorkspaceConfig(
-                id=workspace_id,
-                name=_config_string(item, "name", workspace_id) or workspace_id,
-                base_url=_config_string(item, "base_url", default_base_url).rstrip("/"),
-                enabled=parse_bool(item.get("enabled", True), default=True),
-                url=_config_string(item, "url") or None,
-            )
-        )
-    if not any(workspace.enabled for workspace in workspaces):
-        raise ValueError("wake config requires at least one enabled workspace")
-    return workspaces
-
-
-def _validate_single_core_workspaces(workspaces: list[WorkspaceConfig]) -> None:
-    enabled_base_urls = {workspace.base_url for workspace in workspaces if workspace.enabled}
-    if len(enabled_base_urls) <= 1:
-        return
-    details = ", ".join(
-        f"{workspace.id}={workspace.base_url}"
-        for workspace in workspaces
-        if workspace.enabled
-    )
-    raise ValueError(
-        "wake config enables workspaces on multiple Agent Nexus base_url values, "
-        f"but this bridge runtime polls one core only: {details}"
-    )
-
-
-def load_config(path: str | os.PathLike[str]) -> LoadedConfig:
-    config_path = Path(path).resolve()
-    config_dir = config_path.parent
-    data = _read_toml(config_path)
-
-    agent_home = _resolve_agent_home(config_dir, _config_string(data, "agent_home"))
-    agent_manifest_path = agent_home / "agent.toml"
-    if not agent_manifest_path.exists():
-        raise ValueError(f"agent home is missing agent.toml: {agent_manifest_path}")
-    manifest = _read_toml(agent_manifest_path)
-    identity_table = manifest.get("identity") or {}
-    if not isinstance(identity_table, dict):
-        identity_table = {}
-    auth_table = manifest.get("auth") or {}
-    if not isinstance(auth_table, dict):
-        auth_table = {}
-    bridge_table = data.get("bridge") or {}
-    if not isinstance(bridge_table, dict):
-        bridge_table = {}
-    runtime_table = data.get("runtime") or {}
-    if not isinstance(runtime_table, dict):
-        runtime_table = {}
-
-    base_url = _config_string(identity_table, "base_url").rstrip("/")
-    handle = _config_string(identity_table, "handle")
-    if not base_url or not handle:
-        raise ValueError("agent.toml requires identity.base_url and identity.handle")
-
-    wake_table = manifest.get("wake") or {}
-    if not isinstance(wake_table, dict):
-        wake_table = {}
-    wake_config_path = _expand_path(
-        agent_home,
-        _config_string(data, "wake_config", _config_string(wake_table, "config_path", "wake.toml")),
-        "wake.toml",
-    )
-    workspaces = _load_workspaces(wake_config_path, base_url)
-    _validate_single_core_workspaces(workspaces)
-    primary = next(workspace for workspace in workspaces if workspace.enabled)
-    anx_cfg = ANXConfig(
-        base_url=primary.base_url,
-        workspace_id=primary.id,
-        workspace_name=primary.name,
-        workspace_url=primary.url,
-        verify_ssl=parse_bool(identity_table.get("verify_ssl", True), default=True),
-    )
-    auth_state_path = _expand_path(agent_home, _config_string(auth_table, "state_path", "profiles/default.json"), "profiles/default.json")
-
-    state_dir = _expand_path(agent_home, _config_string(runtime_table, "state_dir", "run/default"), "run/default")
-    agent_cfg = AgentConfig(
-        handle=handle,
-        driver_kind=_config_string(bridge_table, "driver_kind", "custom") or "custom",
-        adapter_kind=_config_string(bridge_table, "adapter_kind", _config_string((data.get("adapter") or {}), "kind", "custom")) or "custom",
-        state_dir=state_dir,
-        workspace_bindings=[workspace.id for workspace in workspaces if workspace.enabled],
-        resume_policy=_config_string(bridge_table, "resume_policy", "resume_or_create") or "resume_or_create",
-        status=_config_string(bridge_table, "status", "pending") or "pending",
-        checkin_interval_seconds=max(5, int(bridge_table.get("checkin_interval_seconds", 60))),
-        checkin_ttl_seconds=max(30, int(bridge_table.get("checkin_ttl_seconds", 300))),
-    )
-
-    adapter = AdapterConfig(raw=data.get("adapter") or {})
-
-    return LoadedConfig(
-        anx=anx_cfg,
-        agent=agent_cfg,
-        adapter=adapter,
-        auth_state_path=auth_state_path,
-        config_path=config_path,
-        config_dir=config_dir,
-        agent_home=agent_home,
-        agent_manifest_path=agent_manifest_path,
-        wake_config_path=wake_config_path,
-        expected_agent_id=_config_string(identity_table, "agent_id"),
-        expected_actor_id=_config_string(identity_table, "actor_id"),
-        expected_key_id=_config_string(identity_table, "key_id"),
-        expected_public_key_fingerprint=_config_string(identity_table, "public_key_fingerprint"),
-        workspaces=workspaces,
-    )
+        command = entry.get("command")
+        if not isinstance(command, list) or not command or any(not isinstance(x, str) or not x for x in command):
+            raise ValueError(f"agents.{name}.command must be a nonempty argv array")
+        default_adapter = name if name in ("claude", "codex", "cursor", "omp", "generic") else "generic"
+        adapter = str(entry.get("adapter", default_adapter)).strip()
+        if not NAME.fullmatch(adapter):
+            raise ValueError(f"agents.{name}.adapter is invalid")
+        cwd = Path(os.path.expandvars(str(entry.get("cwd", path.parent)))).expanduser()
+        if not cwd.is_absolute():
+            cwd = path.parent / cwd
+        env = entry.get("env", {})
+        if not isinstance(env, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in env.items()):
+            raise ValueError(f"agents.{name}.env must be a string table")
+        runtimes[name] = Runtime(name, adapter, tuple(command), cwd.resolve(), env)
+    if not runtimes:
+        raise ValueError("at least one enabled runtime is required")
+    poll = float(host.get("poll_seconds", 3))
+    checkin = float(host.get("checkin_seconds", 60))
+    if not math.isfinite(poll) or poll <= 0 or not math.isfinite(checkin) or not 5 <= checkin <= 240:
+        raise ValueError("poll_seconds must be positive; checkin_seconds must be 5..240")
+    config_dir_value = host.get("config_dir") or os.environ.get("ANX_CONFIG_DIR")
+    if not config_dir_value:
+        home = os.environ.get("HOME")
+        if not home:
+            raise ValueError("[host].config_dir or ANX_CONFIG_DIR is required when HOME is absent")
+        config_dir_value = str(Path(home) / ".config" / "anx")
+    config_dir = Path(config_dir_value).expanduser()
+    if not config_dir.is_absolute():
+        raise ValueError("host.config_dir must be absolute")
+    return Config(path, config_dir.resolve(), base_url, host_id, host_slug, str(host.get("anx", "anx")),
+                  str(host.get("agentctl", "agentctl")), poll, checkin, runtimes)

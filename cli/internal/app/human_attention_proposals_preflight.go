@@ -98,11 +98,11 @@ func validatePreflightHumanAttentionResponseProposals(payload map[string]any) er
 }
 
 // buildCLIHumanAttentionResponseProposals builds payload.response_proposals from
-// --recommended-response and repeatable --proposal (alternatives only).
+// --recommend and repeatable --alt (alternatives only).
 func buildCLIHumanAttentionResponseProposals(recommended string, alternatives []string) ([]any, error) {
 	recommended = strings.TrimSpace(recommended)
 	if recommended == "" {
-		return nil, errnorm.Usage("invalid_request", "--recommended-response is required")
+		return nil, errnorm.Usage("invalid_request", "--recommend is required")
 	}
 	raw := []any{recommended}
 	for _, alt := range alternatives {

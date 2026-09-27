@@ -17,6 +17,14 @@ info:
     Tasks projection over those same rows (acceptance criteria, observations,
     freshness). Use `cards.*` for store reads and card workflow writes; use
     `work.*` to see what operators see. They are layered, not duplicates.
+
+    `X-ANX-Run-Id` is optional on every authenticated mutating request. Its value
+    is `agentctl/<external_id>` (not a server run ID). Core resolves the run by
+    the caller's derived host and launcher `agentctl`, creating a provisional
+    unknown-state run if necessary; it records run ID, host ID, agent ID and
+    adapter on the resulting event, message, and audit record. A malformed
+    header or a run belonging to another agent fails with run_attribution_invalid.
+    Absence means no run attribution. This header never grants authority.
 servers:
   - url: http://127.0.0.1:8000
 x-anx-extension-vocabulary:
@@ -4971,11 +4979,11 @@ paths:
       x-anx-surface: projection
       x-anx-command-id: inbox.respond
       x-anx-cli-path: inbox respond
-      x-anx-why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+      x-anx-why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ event, notify }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, notification_target_required, not_found]
+      x-anx-error-codes: [auth_required, human_required, invalid_request, invalid_token, notification_target_required, not_found, conflict, idempotency_conflict]
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       parameters:
@@ -4996,6 +5004,10 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
@@ -5328,36 +5340,451 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
-  /auth/agents/register:
+  /auth/hosts/enrollments:
     post:
-      operationId: registerAgent
-      summary: Register workspace agent principal
-      tags: [auth]
+      operationId: startHostEnrollment
+      summary: Start interactive host enrollment
+      description: Public ceremony. Does not create a principal. The enrollment and user code expire after 10 minutes; core records requesting IP for the approval view. Adoption proofs are checked before approval and frozen with the request.
+      tags: [auth, hosts]
       x-anx-surface: utility
-      x-anx-command-id: auth.agents.register
-      x-anx-cli-path: auth agents register
-      x-anx-why: Bootstrap or invite-gated agent registration with key material.
+      x-anx-command-id: hosts.enroll.start
+      x-anx-cli-path: host enroll start
+      x-anx-why: Obtain a user code for human host approval.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent, tokens, ... }` per core auth handlers."
-      x-anx-error-codes: [invalid_request, invalid_token, auth_required]
-      x-anx-concepts: [auth, agents]
+      x-anx-output-envelope: Returns `HostEnrollmentStartResponse`; poll_token is secret and shown only once.
+      x-anx-error-codes: [invalid_request, host_slug_taken, adoption_proof_invalid, adoption_conflict, enrollment_capacity, rate_limited]
+      x-anx-concepts: [auth, hosts]
       x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JsonObject'
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentStartRequest'}}}}
       responses:
-        '200':
-          description: Registration result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JsonValue'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
+        '201': {description: Enrollment pending, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentStartResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/{enrollment_id}:
+    get:
+      operationId: pollHostEnrollment
+      summary: Poll enrollment status
+      description: Public ceremony authenticated by the high-entropy X-ANX-Enrollment-Token header. Returns pending, approved, denied, expired, or completed; never exposes the approval session or host credentials.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.poll
+      x-anx-cli-path: host enroll poll
+      x-anx-why: Wait for an auth-admin to decide the host request.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `HostEnrollmentStatusResponse`.
+      x-anx-error-codes: [invalid_request, invalid_token, enrollment_expired, not_found]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters:
+        - {name: enrollment_id, in: path, required: true, schema: {type: string}}
+        - {name: X-ANX-Enrollment-Token, in: header, required: true, schema: {type: string}, description: Secret poll token from start response; never log.}
+      responses:
+        '200': {description: Enrollment status, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentStatusResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '410': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/{enrollment_id}/complete:
+    post:
+      operationId: completeHostEnrollment
+      summary: Complete approved host enrollment
+      description: Public ceremony. Requires the poll token and host-key proof; atomically creates the host and adopts the frozen, proved agent set. Single use; a denied or pending request cannot complete. No host bearer or refresh token is issued.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.complete
+      x-anx-cli-path: host enroll complete
+      x-anx-why: Finish an approved host enrollment.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ host }` with adopted agents.
+      x-anx-error-codes: [invalid_request, invalid_token, enrollment_pending, enrollment_denied, enrollment_expired, enrollment_consumed, adoption_conflict, host_slug_taken, not_found]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: enrollment_id, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentCompleteRequest'}}}}
+      responses:
+        '201': {description: Host enrolled, content: {application/json: {schema: {$ref: '#/components/schemas/HostResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '410': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/pending:
+    get:
+      operationId: listPendingHostEnrollments
+      summary: List pending host approvals
+      description: Human auth-admin only. Includes the requested slug, OS user, hostname, discovered adapters, adopted agent names, requesting IP and expiry; never returns poll tokens or proofs.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.pending
+      x-anx-cli-path: host enroll pending
+      x-anx-why: Review host enrollment requests.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ enrollments }`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      responses:
+        '200': {description: Pending requests, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentsResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/{enrollment_id}/approve:
+    post:
+      operationId: approveHostEnrollment
+      summary: Approve host enrollment
+      description: Human auth-admin only. Atomically reserves the host slug for this enrollment; approval does not deliver credentials or perform adoption.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.approve
+      x-anx-cli-path: host enroll approve
+      x-anx-why: Approve a verified machine.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `HostEnrollmentStatusResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found, enrollment_expired, enrollment_consumed, host_slug_taken]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: enrollment_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Approved request, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentStatusResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '410': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/{enrollment_id}/deny:
+    post:
+      operationId: denyHostEnrollment
+      summary: Deny host enrollment
+      description: Human auth-admin only; terminal and audited.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.deny
+      x-anx-cli-path: host enroll deny
+      x-anx-why: Reject an untrusted machine.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `HostEnrollmentStatusResponse`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found, enrollment_expired, enrollment_consumed]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: enrollment_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Denied request, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentStatusResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '410': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollment-tokens:
+    get:
+      operationId: listHostEnrollmentTokens
+      summary: List headless enrollment tokens
+      description: Human auth-admin only. Token secrets are never returned by list.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.tokens.list
+      x-anx-cli-path: host tokens list
+      x-anx-why: Inspect headless host enrollment grants.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ enrollment_tokens }` without secrets.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      responses:
+        '200': {description: Token metadata, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentTokensResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+    post:
+      operationId: createHostEnrollmentToken
+      summary: Create headless enrollment token
+      description: Human auth-admin only. One-time secret shown only in this response; expires within 10 minutes to 24 hours.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.tokens.create
+      x-anx-cli-path: host tokens create
+      x-anx-why: Authorize one headless host enrollment.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ enrollment_token, token }` once.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentTokenCreateRequest'}}}}
+      responses:
+        '201': {description: Token created, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentTokenCreateResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollment-tokens/{token_id}/revoke:
+    post:
+      operationId: revokeHostEnrollmentToken
+      summary: Revoke headless enrollment token
+      description: Human auth-admin only; consumed tokens remain consumed.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.tokens.revoke
+      x-anx-cli-path: host tokens revoke
+      x-anx-why: Invalidate an unused headless grant.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ enrollment_token }` without secret.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: token_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Revoked token, content: {application/json: {schema: {$ref: '#/components/schemas/HostEnrollmentTokenResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+
+  /auth/hosts/enrollments/headless:
+    post:
+      operationId: completeHeadlessHostEnrollment
+      summary: Enroll host using headless token
+      description: Public single-request ceremony. Atomically verifies and consumes the human-created token, verifies the host key and adoption proofs, and creates the host. A failed request does not consume the token.
+      tags: [auth, hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.enroll.headless
+      x-anx-cli-path: host enroll headless
+      x-anx-why: Enroll a CI or cloud host without polling.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ host }`; never issues host bearer credentials.
+      x-anx-error-codes: [invalid_request, invalid_token, host_slug_taken, adoption_proof_invalid, adoption_conflict]
+      x-anx-concepts: [auth, hosts]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HeadlessHostEnrollmentRequest'}}}}
+      responses:
+        '201': {description: Host enrolled, content: {application/json: {schema: {$ref: '#/components/schemas/HostResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /hosts:
+    get:
+      operationId: listHosts
+      summary: List workspace hosts
+      description: Any authenticated workspace principal. Includes revoked hosts for audit, never public keys or secrets beyond the host key ID.
+      tags: [hosts]
+      x-anx-surface: canonical
+      x-anx-command-id: hosts.list
+      x-anx-cli-path: host list
+      x-anx-why: Inspect enrolled machines.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ hosts }`.
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [hosts, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      responses:
+        '200': {description: Hosts, content: {application/json: {schema: {$ref: '#/components/schemas/HostsResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+
+  /hosts/{host_id}:
+    get:
+      operationId: getHost
+      summary: Get host and derived agents
+      description: Any authenticated workspace principal. Returns excluded names and derived agents, including adopted principals, even when revoked.
+      tags: [hosts]
+      x-anx-surface: canonical
+      x-anx-command-id: hosts.get
+      x-anx-cli-path: host get
+      x-anx-why: Inspect one machine and its agents.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ host }`.
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [hosts, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: host_id, in: path, required: true, schema: {type: string}, description: Host ID or slug.}]
+      responses:
+        '200': {description: Host, content: {application/json: {schema: {$ref: '#/components/schemas/HostResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+    patch:
+      operationId: patchHost
+      summary: Update host display name or exclusions
+      description: Human auth-admin bearer or this host via the three host proof headers; derived-agent bearer tokens cannot edit the host. Omitted fields remain unchanged. Replacing excluded_names invalidates outstanding sessions for newly excluded agents while preserving their actor/history.
+      tags: [hosts]
+      x-anx-surface: canonical
+      x-anx-command-id: hosts.patch
+      x-anx-cli-path: host patch
+      x-anx-why: Name a host or block agent names on it.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ host }`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, key_mismatch, host_revoked, not_found]
+      x-anx-concepts: [hosts, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters:
+        - {name: host_id, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/HostKeyID'}
+        - {$ref: '#/components/parameters/HostSignedAt'}
+        - {$ref: '#/components/parameters/HostSignature'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostPatchRequest'}}}}
+      responses:
+        '200': {description: Updated host, content: {application/json: {schema: {$ref: '#/components/schemas/HostResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+    delete:
+      operationId: revokeHost
+      summary: Revoke host and all derived agents
+      description: Human auth-admin only. In one transaction revoke host, every child principal/key/session/token, and record one audit event. Idempotent; retained records remain visible to reads.
+      tags: [hosts]
+      x-anx-surface: canonical
+      x-anx-command-id: hosts.revoke
+      x-anx-cli-path: host revoke
+      x-anx-why: Cut off a compromised machine.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ host }`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found]
+      x-anx-concepts: [hosts, auth]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: host_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Revoked host, content: {application/json: {schema: {$ref: '#/components/schemas/HostResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+
+  /hosts/{host_id}/bridge/check-in:
+    post:
+      operationId: checkInHostBridge
+      summary: Check in host bridge
+      description: Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance checks in for all enabled derived agents on the host; no per-agent bridge identity or key is accepted.
+      tags: [hosts]
+      x-anx-surface: utility
+      x-anx-command-id: hosts.bridge.check_in
+      x-anx-cli-path: host bridge check-in
+      x-anx-why: Record a host bridge heartbeat for wake routing.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ bridge }`.
+      x-anx-error-codes: [auth_required, invalid_request, key_mismatch, host_revoked, not_found]
+      x-anx-concepts: [hosts, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Host proof is required; no agent bearer or per-agent bridge proof is accepted.
+      parameters:
+        - {name: host_id, in: path, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/HostKeyID'}
+        - {$ref: '#/components/parameters/HostSignedAt'}
+        - {$ref: '#/components/parameters/HostSignature'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/HostBridgeCheckInRequest'}}}}
+      responses:
+        '200': {description: Bridge presence, content: {application/json: {schema: {$ref: '#/components/schemas/HostBridgeResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+
+  /runs:
+    get:
+      operationId: listRuns
+      summary: List launcher runs
+      description: Any authenticated workspace principal. Newest started_at first, then ID; cursor is opaque. `active=true` means nonterminal state and alive liveness.
+      tags: [runs]
+      x-anx-surface: canonical
+      x-anx-command-id: runs.list
+      x-anx-cli-path: runs list
+      x-anx-why: See current and recent agent executions.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ runs, next_cursor? }`.
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request]
+      x-anx-concepts: [runs, agents, cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters:
+        - {name: card_ref, in: query, schema: {type: string}}
+        - {name: agent_id, in: query, schema: {type: string}}
+        - {name: host_id, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {$ref: '#/components/schemas/RunState'}}
+        - {name: active, in: query, schema: {type: boolean}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/RunsResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+    post:
+      operationId: upsertRun
+      summary: Idempotently ingest a launcher run
+      description: Derived-agent bearer only. Authenticated agent must equal agent_id and belong to host_id. Composite key `(launcher, host_id, external_id)` is immutable; a conflicting agent or immutable field returns run_identity_conflict. State and observation timestamps cannot regress. Terminal states are absorbing except an identical replay; unknown is provisional and may advance to any observed state. A terminal run never changes a card.
+      tags: [runs]
+      x-anx-surface: canonical
+      x-anx-command-id: runs.upsert
+      x-anx-cli-path: runs ingest
+      x-anx-why: Map one agentctl execution envelope to a durable run.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ run, created, replayed }`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, host_revoked, run_identity_conflict, run_state_regression]
+      x-anx-concepts: [runs, agents, cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RunUpsertRequest'}}}}
+      responses:
+        '200': {description: Updated or replayed run, content: {application/json: {schema: {$ref: '#/components/schemas/RunUpsertResponse'}}}}
+        '201': {description: Created run, content: {application/json: {schema: {$ref: '#/components/schemas/RunUpsertResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /runs/{run_id}:
+    get:
+      operationId: getRun
+      summary: Get one run
+      description: Any authenticated workspace principal.
+      tags: [runs]
+      x-anx-surface: canonical
+      x-anx-command-id: runs.get
+      x-anx-cli-path: runs get
+      x-anx-why: Inspect execution attribution and outcome.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ run }`.
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [runs, agents]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Run, content: {application/json: {schema: {$ref: '#/components/schemas/RunResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
 
   /auth/bootstrap/status:
     get:
@@ -5367,7 +5794,7 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: auth.bootstrap.status
       x-anx-cli-path: auth bootstrap status
-      x-anx-why: Report whether first-principal bootstrap registration is still available.
+      x-anx-why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability."
@@ -5413,11 +5840,11 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: auth.invites.create
       x-anx-cli-path: auth invites create
-      x-anx-why: Issue a one-time invite for human or agent principals.
+      x-anx-why: Issue a one-time invite for a human principal; kind must be human.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ invite, token }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       requestBody:
@@ -5425,7 +5852,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/JsonObject'
+              $ref: '#/components/schemas/HumanInviteCreateRequest'
       responses:
         '200':
           description: Invite created
@@ -5481,7 +5908,8 @@ paths:
   /auth/token:
     post:
       operationId: issueAuthToken
-      summary: Issue or refresh auth tokens
+      summary: Exchange host assertion or refresh auth tokens
+      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.'
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: auth.token
@@ -5489,8 +5917,8 @@ paths:
       x-anx-why: Assertion or refresh-token exchange for bearer access.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ tokens }` envelope."
-      x-anx-error-codes: [invalid_request, invalid_token]
+      x-anx-output-envelope: "Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope."
+      x-anx-error-codes: [invalid_request, invalid_token, key_mismatch, host_revoked, agent_excluded, agent_handle_taken, agent_revoked]
       x-anx-concepts: [auth]
       x-anx-stability: beta
       requestBody:
@@ -5498,17 +5926,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/JsonObject'
+              $ref: '#/components/schemas/AuthTokenRequest'
       responses:
         '200':
           description: Token bundle
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JsonValue'
+                $ref: '#/components/schemas/AuthTokenResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
           $ref: '#/components/responses/ErrorResponse'
 
   /auth/passkey/register/options:
@@ -5519,7 +5951,7 @@ paths:
       x-anx-surface: utility
       x-anx-command-id: auth.passkey.register.options
       x-anx-cli-path: auth passkey register options
-      x-anx-why: WebAuthn registration challenge for workspace agents.
+      x-anx-why: WebAuthn registration challenge for workspace humans.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ session_id, options }`."
@@ -5553,7 +5985,7 @@ paths:
       x-anx-why: Verify WebAuthn attestation and issue tokens.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent, tokens }`."
+      x-anx-output-envelope: "Returns `{ agent, tokens }` for a human passkey principal."
       x-anx-error-codes: [invalid_request, invalid_token]
       x-anx-concepts: [auth, passkeys]
       x-anx-stability: beta
@@ -5795,130 +6227,100 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /agents:
+    get:
+      operationId: listAgents
+      summary: List agent roster
+      description: Any authenticated workspace principal. Includes derived and adopted agents; a legacy excluded standalone principal is marked standalone until revoked. State precedence is waiting_on_human, working, idle, stale. Waiting means an open ask/review/escalation requested by this agent. Working means an alive nonterminal run or presence refreshed within 30 minutes. Stale means no run, presence, write, or bridge signal within 24 hours. Bridge online is separate from state.
+      tags: [agents]
+      x-anx-surface: projection
+      x-anx-command-id: agents.list
+      x-anx-cli-path: agents list
+      x-anx-why: See who is working or waiting.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ agents }`.
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [agents, runs, inbox]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      responses:
+        '200': {description: Agent roster, content: {application/json: {schema: {$ref: '#/components/schemas/AgentsResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+
+  /agents/{agent_id}:
+    get:
+      operationId: getAgent
+      summary: Get agent state and recent work
+      description: Any authenticated workspace principal. Agent ID or handle; includes current/recent cards, recent runs, open asks and progress notes.
+      tags: [agents]
+      x-anx-surface: projection
+      x-anx-command-id: agents.get
+      x-anx-cli-path: agents get
+      x-anx-why: Inspect one agent's state and recent activity.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ agent, recent_cards, recent_runs, open_asks, recent_notes }`.
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-concepts: [agents, runs, cards, inbox]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{name: agent_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Agent detail, content: {application/json: {schema: {$ref: '#/components/schemas/AgentDetailResponse'}}}}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+
+  /agents/me/presence:
+    patch:
+      operationId: patchAgentPresence
+      summary: Set current agent presence
+      description: Derived-agent bearer only. Each write refreshes presence time. Explicit null current_card_ref clears the card; omitted field preserves it. Note is an optional short progress line; explicit null clears it. Presence expires from working after 30 minutes but remains last note for roster display.
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agents.me.presence
+      x-anx-cli-path: work presence
+      x-anx-why: Report current card and progress.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `{ presence }`.
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, invalid_request, not_found, run_attribution_invalid]
+      x-anx-concepts: [agents, cards, runs]
+      x-anx-stability: beta
+      x-anx-agent-notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+      parameters: [{$ref: '#/components/parameters/RunAttribution'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PresencePatchRequest'}}}}
+      responses:
+        '200': {description: Updated presence, content: {application/json: {schema: {$ref: '#/components/schemas/PresenceResponse'}}}}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+
   /agents/me:
     get:
       operationId: getCurrentAgent
-      summary: Get current authenticated agent
+      summary: Get current authenticated principal
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: agents.me.get
       x-anx-cli-path: agents me
-      x-anx-why: Resolve bearer principal to agent profile and keys.
+      x-anx-why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent, keys }`."
+      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [auth, agents]
       x-anx-stability: beta
       responses:
         '200':
-          description: Agent profile
+          description: Current principal profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JsonValue'
+                $ref: '#/components/schemas/AgentMeResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
-    patch:
-      operationId: patchCurrentAgent
-      summary: Update current agent profile
-      tags: [auth]
-      x-anx-surface: utility
-      x-anx-command-id: agents.me.patch
-      x-anx-cli-path: agents me patch
-      x-anx-why: Rename or adjust profile fields for the authenticated agent.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
-      x-anx-concepts: [auth, agents]
-      x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JsonObject'
-      responses:
-        '200':
-          description: Updated agent
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JsonValue'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /agents/me/keys/rotate:
-    post:
-      operationId: rotateAgentKeys
-      summary: Rotate agent signing keys
-      tags: [auth]
-      x-anx-surface: utility
-      x-anx-command-id: agents.me.keys.rotate
-      x-anx-cli-path: agents me keys rotate
-      x-anx-why: Add a new Ed25519 key for assertions.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ key }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token]
-      x-anx-concepts: [auth, agents]
-      x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JsonObject'
-      responses:
-        '200':
-          description: Key rotated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JsonValue'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /agents/me/revoke:
-    post:
-      operationId: revokeCurrentAgent
-      summary: Revoke current agent credentials
-      tags: [auth]
-      x-anx-surface: utility
-      x-anx-command-id: agents.me.revoke
-      x-anx-cli-path: agents me revoke
-      x-anx-why: Self-revocation or admin-style revocation flow for the active principal.
-      x-anx-input-mode: json-body
-      x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ ok: true }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, conflict]
-      x-anx-concepts: [auth, agents]
-      x-anx-stability: beta
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JsonObject'
-      responses:
-        '200':
-          description: Revoked
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JsonValue'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-
   /derived/rebuild:
     post:
       operationId: rebuildDerivedProjections
@@ -6079,6 +6481,31 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /stream/agents:
+    get:
+      operationId: streamAgentChanges
+      summary: Stream ephemeral agent roster changes (SSE)
+      description: 'Authenticated workspace principals receive an initial `agents_changed` notification and subsequent notifications after run upserts, presence writes, and host identity or bridge changes. The signal is process-local and not a canonical workspace event: it is not written to the event log, has no replay cursor, and may be coalesced. Reconnect and refetch `GET /agents` after every notification. Keep the existing visibility/focus refresh as a fallback across reconnects or server restarts.'
+      tags: [agents]
+      x-anx-surface: projection
+      x-anx-command-id: agents.stream
+      x-anx-cli-path: agents stream
+      x-anx-why: Prompt clients to refresh the agent roster without writing presence telemetry to workspace events.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: sse }
+      x-anx-output-envelope: 'SSE `agents_changed` messages with JSON `{ "revision": <integer> }`; no agent data or event-log cursor.'
+      x-anx-agent-notes: This is an ephemeral invalidation stream. Refetch the roster on connect, notification, and reconnect; do not treat revisions as durable event IDs.
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Ephemeral roster change SSE stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
 
   /stream/agent-notification-receipts:
     get:
@@ -6498,8 +6925,451 @@ components:
       name: secret_id
       required: true
       schema: { type: string }
+    RunAttribution:
+      in: header
+      name: X-ANX-Run-Id
+      required: false
+      schema: {type: string, pattern: '^agentctl/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+      description: Optional execution attribution on every authenticated write; see top-level contract description.
+    HostKeyID:
+      in: header
+      name: X-ANX-Host-Key-Id
+      required: false
+      schema: {type: string}
+      description: Required with the other host proof headers for host self-access; omitted for human auth-admin bearer.
+    HostSignedAt:
+      in: header
+      name: X-ANX-Host-Signed-At
+      required: false
+      schema: {type: string, format: date-time}
+      description: Required with host key and signature headers for host self-access.
+    HostSignature:
+      in: header
+      name: X-ANX-Host-Signature
+      required: false
+      schema: {type: string}
+      description: Base64 Ed25519 signature required for host self-access.
 
   schemas:
+    HumanInviteCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        kind: {type: string, enum: [human]}
+        expires_at: {type: string, format: date-time}
+      required: [kind]
+    AgentName:
+      type: string
+      pattern: '^[a-z][a-z0-9-]{0,31}$'
+      description: Adapter (claude, codex, cursor, omp, generic) or explicit persona.
+    HostSlug:
+      type: string
+      pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+      maxLength: 63
+    HostAdoptionProof:
+      type: object
+      additionalProperties: false
+      description: 'Proof of possession for an existing active standalone agent key. Sign UTF-8 `anx-host-adopt|<request_nonce>|<host_public_key>|<agent_id>|<agent_name>` with that Ed25519 key; signature is standard base64. request_nonce is client-generated random base64url (at least 128 bits). No agent may be adopted twice or mapped to a duplicate host/name. The server re-parents the same actor ID and history, renames handle, and revokes the old agent key/sessions atomically. An excluded local profile is omitted from this list and remains standalone.'
+      properties:
+        agent_id: {type: string, maxLength: 128}
+        key_id: {type: string, maxLength: 128}
+        agent_name: {$ref: '#/components/schemas/AgentName'}
+        signature: {type: string, contentEncoding: base64, maxLength: 128}
+      required: [agent_id, key_id, agent_name, signature]
+    HostEnrollmentStartRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        public_key: {type: string, contentEncoding: base64, description: Raw 32-byte Ed25519 host public key.}
+        requested_slug: {$ref: '#/components/schemas/HostSlug'}
+        os_user: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, minLength: 1, maxLength: 255}
+        discovered_adapters: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
+        request_nonce: {type: string, minLength: 22, maxLength: 128, description: Random base64url value with at least 128 bits entropy.}
+        adoptions: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
+      required: [public_key, requested_slug, os_user, hostname, discovered_adapters, request_nonce, adoptions]
+    HostEnrollment:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        user_code: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$', description: Included in auth-admin pending list; omitted from poll response.}
+        requested_slug: {$ref: '#/components/schemas/HostSlug'}
+        os_user: {type: string}
+        hostname: {type: string}
+        discovered_adapters: {type: array, items: {$ref: '#/components/schemas/AgentName'}}
+        adoption_names: {type: array, items: {$ref: '#/components/schemas/AgentName'}}
+        requesting_ip: {type: string, description: Admin view only.}
+        status: {type: string, enum: [pending, approved, denied, expired, completed]}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+      required: [id, requested_slug, os_user, hostname, discovered_adapters, adoption_names, status, expires_at, created_at]
+    HostEnrollmentStartResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollment_id: {type: string}
+        user_code: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$', description: Independent 40-bit Crockford-style code shown to the human; excludes ambiguous letters.}
+        verification_url: {type: string, format: uri, description: Absolute workspace-scoped web UI URL for Access → Hosts, present only when the core deployment config supplies the public web UI workspace URL. Clients must not derive this from the core origin.}
+        poll_token: {type: string, description: High-entropy secret shown once.}
+        poll_interval_seconds: {type: integer, minimum: 1}
+        expires_at: {type: string, format: date-time}
+      required: [enrollment_id, user_code, poll_token, poll_interval_seconds, expires_at]
+    HostEnrollmentStatusResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollment: {$ref: '#/components/schemas/HostEnrollment'}
+        poll_interval_seconds: {type: integer, minimum: 1}
+      required: [enrollment, poll_interval_seconds]
+    HostEnrollmentsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollments: {type: array, items: {$ref: '#/components/schemas/HostEnrollment'}}
+      required: [enrollments]
+    HostEnrollmentCompleteRequest:
+      type: object
+      additionalProperties: false
+      description: 'Host signs UTF-8 `anx-host-enroll-complete|<enrollment_id>|<poll_token>` with its submitted key. Completion is one-time and must occur before expiry.'
+      properties:
+        poll_token: {type: string}
+        signature: {type: string, contentEncoding: base64}
+      required: [poll_token, signature]
+    HostEnrollmentToken:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        label: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        consumed_at: {type: string, nullable: true, format: date-time}
+        revoked_at: {type: string, nullable: true, format: date-time}
+      required: [id, label, created_at, expires_at]
+    HostEnrollmentTokenCreateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        label: {type: string, minLength: 1, maxLength: 120}
+        expires_at: {type: string, format: date-time, description: Between 10 minutes and 24 hours from creation.}
+      required: [label, expires_at]
+    HostEnrollmentTokenCreateResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollment_token: {$ref: '#/components/schemas/HostEnrollmentToken'}
+        token: {type: string, description: One-time secret; never returned again.}
+      required: [enrollment_token, token]
+    HostEnrollmentTokenResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollment_token: {$ref: '#/components/schemas/HostEnrollmentToken'}
+      required: [enrollment_token]
+    HostEnrollmentTokensResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        enrollment_tokens: {type: array, items: {$ref: '#/components/schemas/HostEnrollmentToken'}}
+      required: [enrollment_tokens]
+    HeadlessHostEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      description: 'Host signs UTF-8 `anx-host-headless-enroll|<request_nonce>|<requested_slug>|<public_key>` with its submitted key. The token is one-time and expiry-bound; the request nonce is bound into every adoption proof.'
+      properties:
+        public_key: {type: string, contentEncoding: base64}
+        requested_slug: {$ref: '#/components/schemas/HostSlug'}
+        os_user: {type: string, minLength: 1, maxLength: 128}
+        hostname: {type: string, minLength: 1, maxLength: 255}
+        discovered_adapters: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
+        request_nonce: {type: string, minLength: 22, maxLength: 128}
+        adoptions: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/HostAdoptionProof'}}
+        enrollment_token: {type: string}
+        signature: {type: string, contentEncoding: base64}
+      required: [public_key, requested_slug, os_user, hostname, discovered_adapters, request_nonce, adoptions, enrollment_token, signature]
+    Host:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        ref: {type: string, pattern: '^host:.+', description: Public typed host reference.}
+        handle: {$ref: '#/components/schemas/HostSlug'}
+        slug: {$ref: '#/components/schemas/HostSlug'}
+        display_name: {type: string}
+        os_user: {type: string}
+        hostname: {type: string}
+        discovered_adapters: {type: array, items: {$ref: '#/components/schemas/AgentName'}}
+        key_id: {type: string}
+        excluded_names: {type: array, items: {$ref: '#/components/schemas/AgentName'}}
+        agents: {type: array, items: {$ref: '#/components/schemas/AgentSummary'}}
+        created_at: {type: string, format: date-time}
+        revoked_at: {type: string, nullable: true, format: date-time}
+      required: [id, ref, handle, slug, display_name, os_user, hostname, discovered_adapters, key_id, excluded_names, agents, created_at]
+    HostResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        host: {$ref: '#/components/schemas/Host'}
+      required: [host]
+    HostsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        hosts: {type: array, items: {$ref: '#/components/schemas/Host'}}
+      required: [hosts]
+    HostPatchRequest:
+      type: object
+      additionalProperties: false
+      description: 'A human auth-admin sends a bearer token. For host self-access, send X-ANX-Host-Key-Id, X-ANX-Host-Signed-At, X-ANX-Host-Signature. Sign UTF-8 `anx-host-patch|<host_id>|<signed_at>|<base64url(SHA256(raw request body))>` with the host Ed25519 key. Timestamp skew is at most 5 minutes and message/signature replay is rejected.'
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 120}
+        excluded_names: {type: array, uniqueItems: true, items: {$ref: '#/components/schemas/AgentName'}}
+      minProperties: 1
+    HostBridgeCheckInRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        bridge_instance_id: {type: string, minLength: 1}
+        checked_in_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: Must be after checked_in_at and no more than five minutes in the future.}
+      required: [bridge_instance_id, checked_in_at, expires_at]
+    HostBridgeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        bridge:
+          type: object
+          additionalProperties: false
+          properties:
+            host_id: {type: string}
+            bridge_instance_id: {type: string}
+            checked_in_at: {type: string, format: date-time}
+            expires_at: {type: string, format: date-time}
+          required: [host_id, bridge_instance_id, checked_in_at, expires_at]
+      required: [bridge]
+    AuthTokenRequest:
+      type: object
+      description: Existing grant payloads keep their documented fields; host_assertion requires the host fields below.
+      properties:
+        grant_type: {type: string, enum: [host_assertion, refresh_token, assertion, workspace_human_grant, workspace_managed_agent_grant]}
+        host_id: {type: string}
+        key_id: {type: string}
+        agent_name: {$ref: '#/components/schemas/AgentName'}
+        signed_at: {type: string, format: date-time}
+        signature: {type: string, contentEncoding: base64}
+        refresh_token: {type: string}
+        agent_id: {type: string}
+        assertion: {type: string}
+      required: [grant_type]
+    AuthTokenResponse:
+      type: object
+      properties:
+        agent: {$ref: '#/components/schemas/AgentSummary'}
+        tokens:
+          type: object
+          properties:
+            access_token: {type: string}
+            token_type: {type: string, enum: [Bearer]}
+            expires_in: {type: integer, minimum: 1, description: Seconds until access-token expiry.}
+            refresh_token: {type: string, description: Never present for host_assertion.}
+          required: [access_token, token_type, expires_in]
+      required: [tokens]
+    RunState:
+      type: string
+      enum: [starting, running, completed, failed, cancelled, unknown]
+    RunLiveness:
+      type: string
+      enum: [alive, stale, unknown]
+      description: Independent observation of launcher process liveness; terminal runs are never active.
+    Run:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        ref: {type: string, pattern: '^run:.+', description: Public typed run reference.}
+        handle: {type: string}
+        launcher: {type: string, enum: [agentctl]}
+        external_id: {type: string, minLength: 1}
+        host_id: {type: string}
+        agent_id: {type: string}
+        adapter: {$ref: '#/components/schemas/AgentName'}
+        model: {type: string, nullable: true}
+        state: {$ref: '#/components/schemas/RunState'}
+        liveness: {$ref: '#/components/schemas/RunLiveness'}
+        result_collected: {type: boolean}
+        labels: {type: array, items: {type: string}}
+        card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+        repository: {type: string, nullable: true}
+        branch: {type: string, nullable: true}
+        started_at: {type: string, nullable: true, format: date-time}
+        ended_at: {type: string, nullable: true, format: date-time}
+        last_observed_at: {type: string, format: date-time}
+      required: [id, ref, handle, launcher, external_id, host_id, agent_id, adapter, state, liveness, result_collected, labels, last_observed_at]
+    RunUpsertRequest:
+      type: object
+      additionalProperties: false
+      description: 'card_ref may be explicit or derived from exactly one `anx.card.<card-slug>` label (maps to `card:<card-slug>`); explicit value wins when both are present. Times are RFC3339 UTC and cannot be more than two minutes ahead of server time. Preserve earliest started_at, latest last_observed_at and terminal ended_at. A terminal observation closes a nonterminal run despite a modest prior clock skew; terminal states never regress. Active roster runs require an alive observation within five minutes. Duplicate identical requests replay; older nonterminal observations cannot erase newer optional fields.'
+      properties:
+        launcher: {type: string, enum: [agentctl]}
+        external_id: {type: string, minLength: 1}
+        host_id: {type: string}
+        agent_id: {type: string}
+        adapter: {$ref: '#/components/schemas/AgentName'}
+        model: {type: string, nullable: true}
+        state: {$ref: '#/components/schemas/RunState'}
+        liveness: {$ref: '#/components/schemas/RunLiveness'}
+        result_collected: {type: boolean}
+        labels: {type: array, items: {type: string}}
+        card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+        repository: {type: string, nullable: true}
+        branch: {type: string, nullable: true}
+        started_at: {type: string, nullable: true, format: date-time}
+        ended_at: {type: string, nullable: true, format: date-time}
+        last_observed_at: {type: string, format: date-time}
+      required: [launcher, external_id, host_id, agent_id, adapter, state, liveness, result_collected, labels, last_observed_at]
+    RunResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        run: {$ref: '#/components/schemas/Run'}
+      required: [run]
+    RunUpsertResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        run: {$ref: '#/components/schemas/Run'}
+        created: {type: boolean}
+        replayed: {type: boolean}
+      required: [run, created, replayed]
+    RunsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        runs: {type: array, items: {$ref: '#/components/schemas/Run'}}
+        next_cursor: {type: string}
+      required: [runs]
+    AgentSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        ref: {type: string, pattern: '^actor:.+', description: The agent's durable actor reference.}
+        actor_id: {type: string}
+        host_id: {type: string, nullable: true}
+        host_slug: {type: string, nullable: true}
+        name: {type: string, description: Derived agents use AgentName rules; excluded legacy standalone agents retain their previous username.}
+        handle: {type: string, description: Derived agents use `<name>.<host_slug>`.}
+        display_name: {type: string}
+        identity_kind: {type: string, enum: [derived, adopted, standalone]}
+        state: {type: string, enum: [waiting_on_human, working, idle, stale]}
+        bridge_online: {type: boolean}
+        current_card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+        current_card_title: {type: string, nullable: true}
+        last_progress_note: {type: string, nullable: true}
+        last_progress_at: {type: string, nullable: true, format: date-time}
+        active_run: {$ref: '#/components/schemas/AgentActiveRun'}
+        open_asks_count: {type: integer, minimum: 0}
+        waiting_ask: {$ref: '#/components/schemas/AgentOpenAsk', nullable: true, description: Oldest open ask while waiting_on_human; null otherwise.}
+        last_signal_at: {type: string, nullable: true, format: date-time}
+        revoked_at: {type: string, nullable: true, format: date-time}
+      required: [id, ref, actor_id, host_id, host_slug, name, handle, display_name, identity_kind, state, bridge_online, current_card_ref, current_card_title, last_progress_note, last_progress_at, active_run, open_asks_count, waiting_ask, last_signal_at, revoked_at]
+    AgentOpenAsk:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string, description: Immutable request event ID.}
+        inbox_item_id: {type: string, nullable: true, description: Inbox link target; null only while its derived projection is pending.}
+        title: {type: string}
+        severity: {type: string, nullable: true, description: Source-provided severity; null when omitted.}
+        created_at: {type: string, format: date-time, description: Request event time and wait start.}
+        kind: {type: string}
+        subject_ref: {type: string, nullable: true}
+        subject_title: {type: string, description: Human-readable subject when supplied by the request.}
+        requester_actor_id: {type: string}
+        requester_agent_id: {type: string, nullable: true}
+      required: [id, inbox_item_id, title, severity, created_at]
+    AgentActiveRun:
+      type: object
+      nullable: true
+      properties:
+        run_id: {type: string}
+        adapter: {$ref: '#/components/schemas/AgentName'}
+        model: {type: string, nullable: true}
+        duration_seconds: {type: integer, minimum: 0}
+      required: [run_id, adapter, duration_seconds]
+    AgentsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        agents: {type: array, items: {$ref: '#/components/schemas/AgentSummary'}}
+      required: [agents]
+    AgentDetailResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        agent: {$ref: '#/components/schemas/AgentSummary'}
+        recent_cards: {type: array, items: {$ref: '#/components/schemas/Card'}}
+        recent_runs: {type: array, items: {$ref: '#/components/schemas/Run'}}
+        open_asks: {type: array, items: {$ref: '#/components/schemas/AgentOpenAsk'}}
+        recent_notes: {type: array, items: {$ref: '#/components/schemas/AgentProgressNote'}}
+      required: [agent, recent_cards, recent_runs, open_asks, recent_notes]
+    AgentProgressNote:
+      type: object
+      additionalProperties: false
+      properties:
+        text: {type: string}
+        at: {type: string, format: date-time}
+        card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+      required: [text, at]
+    AgentMeResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        agent: {$ref: '#/components/schemas/PrincipalSelf'}
+      required: [agent]
+    PrincipalSelf:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string, description: Principal ID; same value as agent_id for compatibility.}
+        agent_id: {type: string}
+        actor_id: {type: string}
+        ref: {type: string, pattern: '^actor:.+'}
+        username: {type: string}
+        handle: {type: string}
+        display_name: {type: string}
+        principal_kind: {type: string, enum: [human, agent]}
+        auth_method: {type: string}
+        identity_kind: {type: string, enum: [derived, adopted, standalone], description: Present for agent principals only.}
+        host_id: {type: string, description: Present for derived or adopted agents.}
+        host_slug: {type: string, description: Present for derived or adopted agents.}
+        name: {type: string, description: Host agent name or standalone handle. Present for agents only.}
+        adapter: {$ref: '#/components/schemas/AgentName', description: Default adapter for host-derived agents; generic for an explicit persona.}
+        persona: {type: boolean, description: True when the host-derived name is an explicit persona rather than a known adapter.}
+      required: [id, agent_id, actor_id, ref, username, handle, display_name, principal_kind, auth_method]
+    PresencePatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        current_card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+        note: {type: string, nullable: true, maxLength: 500}
+      minProperties: 1
+    Presence:
+      type: object
+      additionalProperties: false
+      properties:
+        agent_id: {type: string}
+        current_card_ref: {type: string, nullable: true, pattern: '^card:.+'}
+        note: {type: string, nullable: true}
+        observed_at: {type: string, format: date-time}
+      required: [agent_id, observed_at]
+    PresenceResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        presence: {$ref: '#/components/schemas/Presence'}
+      required: [presence]
     PMConversation:
       type: object
       additionalProperties: true
@@ -7765,6 +8635,7 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on new responses.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [ref, handle, ts, type, actor_id, refs, summary, provenance]
 
@@ -8426,6 +9297,7 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: For human_attention_responded, see HumanAttentionRespondedPayload; outcome is required on write.
         provenance: { $ref: '#/components/schemas/Provenance' }
       required: [type, actor_id, refs, summary, provenance]
 
@@ -8729,14 +9601,16 @@ components:
     RespondInboxItemRequest:
       type: object
       description: >
-        Records a freeform human response to a human attention inbox item. The response target must be
+        Records a human response to a human attention inbox item. The response target must be
         resolvable unless `notify_mode` is `none` or a replacement target is supplied.
       properties:
+        idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }
         inbox_item_id:
           type: string
           description: Must match path inbox_id when both are provided.
         response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
         related_refs:
           type: array
           items: { $ref: '#/components/schemas/TypedRef' }
@@ -8746,7 +9620,26 @@ components:
           description: Defaults to original requester when resolvable.
         notify_target_actor_id: { type: string }
         notify_target_agent_id: { type: string }
-      required: [response_text]
+      required: [response_text, outcome]
+
+    HumanAttentionResponseOutcome:
+      type: string
+      enum: [answered, approved, rejected, acknowledged]
+      description: >
+        answered means a chosen proposal or free reply; approved and rejected mean the
+        explicit review Approve and Reject actions; acknowledged means the operator
+        closed the item without answering it. The response text remains the audit note.
+
+    HumanAttentionRespondedPayload:
+      type: object
+      description: Payload of a human_attention_responded event.
+      properties:
+        inbox_item_id: { type: string }
+        kind: { type: string }
+        response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
+        responding_actor_id: { type: string }
+      required: [inbox_item_id, kind, response_text, outcome, responding_actor_id]
 
     TopicLifecycleMutationRequest:
       type: object
@@ -9440,6 +10333,7 @@ components:
         request_event_ref: { $ref: '#/components/schemas/TypedRef' }
         response_event_ref: { $ref: '#/components/schemas/TypedRef' }
         response_text: { type: string }
+        outcome: { $ref: '#/components/schemas/HumanAttentionResponseOutcome' }
         response_summary: { type: string }
         responded_at: { type: string }
         responding_actor_id: { type: string }

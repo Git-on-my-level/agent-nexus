@@ -461,20 +461,12 @@ function hydrateContinuationHomes({ previousRunDir, runDir, agents }) {
   return true;
 }
 
-function commandGuide(baseUrl, defaultUsername, { profileReady = false } = {}) {
-  const authLines = profileReady
-    ? [
-        "- Show auth subcommands: `anx auth`",
-        "- Verify the pre-registered default profile: `anx auth whoami`",
-        "- List local profiles if needed: `anx auth list`",
-        "- List taggable teammate handles directly: `anx auth principals list --taggable --handles-only`",
-        "- Inspect linked principals when debugging Access or `@handle` behavior: `anx auth principals list --json`",
-      ]
-    : [
-        "- Show auth subcommands: `anx auth`",
-        `- Register default profile: \`anx auth register --username ${defaultUsername}\``,
-        "- Verify current profile: `anx auth whoami`",
-      ];
+function commandGuide(baseUrl, defaultUsername) {
+  const authLines = [
+    "- The host is enrolled once for this workspace.",
+    `- Select the derived agent with \`anx --as ${defaultUsername} auth whoami\`.`,
+    "- List taggable teammate handles: `anx auth principals list --taggable --handles-only`",
+  ];
   return `# Agent Nexus command guide
 
 Use these exact command shapes. Prefer them over guessing.
@@ -584,56 +576,6 @@ async function apiJSONWithToken(baseUrl, apiPath, { method = "GET", accessToken 
 
 function workspaceID() {
   return String(process.env.ANX_WORKSPACE_ID ?? "ws_main").trim() || "ws_main";
-}
-
-function agentProfilePath(homeDir, agentId) {
-  return path.join(homeDir, ".config", "anx", "profiles", `${agentId}.json`);
-}
-
-function loadAgentProfile(homeDir, agentId) {
-  const profilePath = agentProfilePath(homeDir, agentId);
-  return JSON.parse(fs.readFileSync(profilePath, "utf8"));
-}
-
-async function ensureAgentWakeRegistration(baseUrl, anxBin, agent) {
-  runAnxJSON({
-    cwd: agent.workspaceDir,
-    anxBin,
-    baseUrl,
-    homeDir: agent.homeDir,
-    agentId: agent.agentId,
-    args: ["auth", "whoami"],
-  });
-  const profile = loadAgentProfile(agent.homeDir, agent.agentId);
-  const accessToken = String(profile?.access_token ?? "").trim();
-  const actorID = String(agent.actorId ?? profile?.actor_id ?? "").trim();
-  if (!accessToken || !actorID) {
-    throw new Error(`missing auth state needed to register wake routing for ${agent.agentId}`);
-  }
-  await apiJSONWithToken(baseUrl, "/agents/me", {
-    method: "PATCH",
-    accessToken,
-    body: {
-      registration: {
-        handle: agent.agentUsername,
-        actor_id: actorID,
-        status: "active",
-        workspace_bindings: [
-          {
-            workspace_id: workspaceID(),
-            enabled: true,
-          },
-        ],
-      },
-    },
-    expectedStatuses: [200],
-  });
-}
-
-async function ensureAgentWakeRegistrations(baseUrl, anxBin, agents) {
-  for (const agent of agents) {
-    await ensureAgentWakeRegistration(baseUrl, anxBin, agent);
-  }
 }
 
 async function listEvents(baseUrl, { threadID = "", eventTypes = [] } = {}) {
@@ -1256,6 +1198,7 @@ function anxProcessEnv({ homeDir, anxBin, baseUrl }) {
     ...process.env,
     HOME: homeDir,
     XDG_CONFIG_HOME: path.join(homeDir, ".config"),
+    ANX_CONFIG_DIR: path.join(path.dirname(homeDir), "anx-config"),
     PATH: `${path.dirname(anxBin)}${path.delimiter}${process.env.PATH ?? ""}`,
     ANX_BASE_URL: baseUrl,
   };
@@ -1264,7 +1207,7 @@ function anxProcessEnv({ homeDir, anxBin, baseUrl }) {
 function runAnxJSON({ cwd, anxBin, baseUrl, homeDir, agentId, args }) {
   const result = spawnSync(
     anxBin,
-    ["--json", "--base-url", baseUrl, "--agent", agentId, ...args],
+    ["--json", "--base-url", baseUrl, "--as", agentId, ...args],
     {
       cwd,
       env: anxProcessEnv({ homeDir, anxBin, baseUrl }),
@@ -1301,62 +1244,43 @@ function runAnxJSON({ cwd, anxBin, baseUrl, homeDir, agentId, args }) {
   return payload;
 }
 
-function prepareAgentProfiles({ anxBin, baseUrl, bootstrapToken, agents }) {
-  if (!bootstrapToken) {
-    return false;
+async function prepareHostIdentity({ anxBin, baseUrl, bootstrapToken, agents, runDir, previousRunDir = "" }) {
+  const configDir = path.join(runDir, "anx-config");
+  if (previousRunDir) {
+    const previous = path.join(previousRunDir, "anx-config");
+    if (!fs.existsSync(previous)) throw new Error(`missing prior enrolled host: ${previous}`);
+    copyDirectory(previous, configDir);
+    for (const entry of fs.readdirSync(path.join(configDir, "hosts"))) {
+      const recordPath = path.join(configDir, "hosts", entry, "host.json");
+      if (!fs.existsSync(recordPath)) continue;
+      const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+      record.base_url = baseUrl;
+      record.private_key_path = path.join(configDir, "hosts", entry, "host.ed25519");
+      fs.writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+    }
+  } else {
+    if (!bootstrapToken) throw new Error("host enrollment requires a bootstrap human token or a prior enrolled host");
+    const human = await apiJSONWithToken(baseUrl, "/auth/passkey/dev/register", {
+      method: "POST", body: { display_name: "Pi dogfood operator", bootstrap_token: bootstrapToken }, expectedStatuses: [201],
+    });
+    const bearer = String(human?.tokens?.access_token ?? "");
+    if (!bearer) throw new Error("bootstrap human token missing");
+    const grant = await apiJSONWithToken(baseUrl, "/auth/hosts/enrollment-tokens", {
+      method: "POST", accessToken: bearer,
+      body: { label: "Pi dogfood host", expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString() },
+      expectedStatuses: [201],
+    });
+    ensureDir(configDir);
+    runAnxJSON({ cwd: runDir, anxBin, baseUrl, homeDir: agents[0].homeDir,
+      agentId: agents[0].agentUsername,
+      args: ["host", "enroll", "--name", "pi-host", "--token", String(grant.token)] });
   }
-  if (agents.length === 0) {
-    return true;
-  }
-
   for (const agent of agents) {
     ensureDir(agent.homeDir);
     ensureDir(agent.workspaceDir);
+    runAnxJSON({ cwd: agent.workspaceDir, anxBin, baseUrl, homeDir: agent.homeDir,
+      agentId: agent.agentUsername, args: ["host", "token", "--as", agent.agentUsername] });
   }
-
-  const [issuer, ...invitees] = agents;
-  runAnxJSON({
-    cwd: issuer.workspaceDir,
-    anxBin,
-    baseUrl,
-    homeDir: issuer.homeDir,
-    agentId: issuer.agentId,
-    args: [
-      "auth", "register",
-      "--username", issuer.agentUsername,
-      "--bootstrap-token", bootstrapToken,
-      ...(issuer.actorId ? ["--existing-actor-id", issuer.actorId] : []),
-    ],
-  });
-
-  for (const invitee of invitees) {
-    const invitePayload = runAnxJSON({
-      cwd: issuer.workspaceDir,
-      anxBin,
-      baseUrl,
-      homeDir: issuer.homeDir,
-      agentId: issuer.agentId,
-      args: ["auth", "invites", "create", "--kind", "agent"],
-    });
-    const inviteToken = String(invitePayload?.data?.token ?? "").trim();
-    if (!inviteToken) {
-      throw new Error(`invite creation returned no token for ${invitee.agentId}`);
-    }
-    runAnxJSON({
-      cwd: invitee.workspaceDir,
-      anxBin,
-      baseUrl,
-      homeDir: invitee.homeDir,
-      agentId: invitee.agentId,
-      args: [
-        "auth", "register",
-        "--username", invitee.agentUsername,
-        "--invite-token", inviteToken,
-        ...(invitee.actorId ? ["--existing-actor-id", invitee.actorId] : []),
-      ],
-    });
-  }
-
   return true;
 }
 
@@ -1449,6 +1373,7 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
   const baseUrl = `http://${host}:${port}`;
   const bootstrapToken = continuation ? "" : `pi-bs-${runToken()}`;
   ensureDir(workspaceDir);
+  fs.closeSync(fs.openSync(path.join(workspaceDir, ".anx-dev-insecure-auth"), "a"));
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
 
   const child = spawn(coreBin, [
@@ -1465,6 +1390,9 @@ async function startManagedCore(runDir, coreBin, requestedBaseUrl, scenario, con
     env: {
       ...process.env,
       ANX_DEV_REGISTER_LINKED_ACTORS: "1",
+      ANX_ALLOW_PASSKEY_DEV_BYPASS: "1",
+      ANX_ENABLE_DEV_ACTOR_MODE: "1",
+      ANX_HOSTED_DEV_MODE: "1",
       ...(bootstrapToken ? { ANX_BOOTSTRAP_TOKEN: bootstrapToken } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -1621,7 +1549,7 @@ async function runPiAgent({
   agentCount,
   agentUsername,
   homeDir,
-  profileReady,
+  identityReady,
   scenarioMarkdown,
   chapterID,
   chapterMarkdown = "",
@@ -1635,12 +1563,8 @@ async function runPiAgent({
   const eventsPath = agentEventsPath(runDir, agentCount, agentId);
   const resultPath = agentResultPath(workspaceDir);
   ensureDir(workspaceDir);
-  const authSetupLine = profileReady
-    ? `- The temp workspace already has a local auth profile for username \`${agentUsername}\`. Verify it with \`anx auth whoami\`.`
-    : `- Register with username \`${agentUsername}\` if no local profile exists. Start with \`anx auth whoami\` to inspect the current state.`;
-  const authPromptLine = profileReady
-    ? `A local auth profile for username ${agentUsername} is already registered; verify it with \`anx auth whoami\` instead of creating a new registration.`
-    : `Use \`anx auth whoami\` to inspect auth state first. If no profile exists, register with username ${agentUsername} using the command guidance in COMMANDS.md.`;
+  const authSetupLine = `- The host is enrolled. Use \`anx --as ${agentUsername} auth whoami\` to verify this derived agent.`;
+  const authPromptLine = `Use \`anx --as ${agentUsername} auth whoami\` to inspect the enrolled host identity.`;
   const continuationFiles = [];
   if (chapterMarkdown) {
     continuationFiles.push("- Chapter brief: ./CHAPTER.md");
@@ -1707,7 +1631,7 @@ ${continuationFiles.join("\n")}
   }
   writeFile(
     path.join(workspaceDir, "COMMANDS.md"),
-    commandGuide(coreBaseUrl, agentUsername, { profileReady }),
+    commandGuide(coreBaseUrl, agentUsername, { identityReady }),
   );
   writeFile(path.join(workspaceDir, "TARGETS.md"), targetsGuide(role, targets));
   writeFile(path.join(workspaceDir, "ROLE_CONTEXT.md"), privateContextGuide(role));
@@ -1772,6 +1696,7 @@ ${continuationFiles.join("\n")}
   const env = {
     ...anxProcessEnv({ homeDir, anxBin, baseUrl: coreBaseUrl }),
     PI_CODING_AGENT_DIR: path.join(piHomeDir, agentId),
+    ANX_AS: agentUsername,
   };
   ensureDir(env.PI_CODING_AGENT_DIR);
 
@@ -1898,29 +1823,18 @@ async function main() {
         eventsPath,
         resultPath,
         homeDir,
-        profileReady: false,
+        identityReady: false,
       };
     });
 
-    const profileReady = previousRun
-      ? hydrateContinuationHomes({
-          previousRunDir: previousRun.runDir,
-          runDir,
-          agents: pendingAgents,
-        })
-      : prepareAgentProfiles({
-          anxBin,
-          baseUrl: core.baseUrl,
-          bootstrapToken: core.bootstrapToken,
-          agents: pendingAgents,
-        });
-
-    await ensureAgentWakeRegistrations(core.baseUrl, anxBin, pendingAgents);
+    if (previousRun) hydrateContinuationHomes({ previousRunDir: previousRun.runDir, runDir, agents: pendingAgents });
+    const identityReady = await prepareHostIdentity({ anxBin, baseUrl: core.baseUrl, bootstrapToken: core.bootstrapToken,
+      agents: pendingAgents, runDir, previousRunDir: previousRun?.runDir ?? "" });
 
     const agentPlans = pendingAgents.map((agent) => {
       return {
         ...agent,
-        profileReady,
+        identityReady,
         promise: (async () => {
           const staggerMs =
             options.agentCount > 1
@@ -1943,7 +1857,7 @@ async function main() {
             agentCount: options.agentCount,
             agentUsername: agent.agentUsername,
             homeDir: agent.homeDir,
-            profileReady,
+            identityReady,
             scenarioMarkdown: renderedScenario,
             chapterID: options.chapter,
             chapterMarkdown: scenarioContent.chapterMarkdown,

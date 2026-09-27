@@ -16,14 +16,23 @@ import (
 )
 
 type App struct {
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
-	Getenv      func(string) string
-	UserHomeDir func() (string, error)
-	ReadFile    func(string) ([]byte, error)
-	StdinIsTTY  func() bool
-	pmTurns     *pmTurnMemory
+	Stdin          io.Reader
+	Stdout         io.Writer
+	Stderr         io.Writer
+	Getenv         func(string) string
+	UserHomeDir    func() (string, error)
+	ReadFile       func(string) ([]byte, error)
+	StdinIsTTY     func() bool
+	hasOMPAncestor func() bool
+	now            func() time.Time
+	pmTurns        *pmTurnMemory
+}
+
+func (a *App) clockNow() time.Time {
+	if a != nil && a.now != nil {
+		return a.now()
+	}
+	return time.Now()
 }
 
 func isAPICallHelpOnly(remaining []string) bool {
@@ -40,8 +49,7 @@ func isAPICallHelpOnly(remaining []string) bool {
 
 // isTrailingHelpOnlyInvocation is true when the user only wants subcommand help:
 // a command prefix with no non-help flags, followed by one or more help tokens
-// (for example: inbox respond --help). This avoids requiring a resolvable agent profile
-// on hosts with multiple local profiles.
+// (for example: inbox respond --help). Help must work before host enrollment.
 func isTrailingHelpOnlyInvocation(remaining []string) bool {
 	if len(remaining) == 0 {
 		return false
@@ -63,13 +71,14 @@ func isTrailingHelpOnlyInvocation(remaining []string) bool {
 
 func New() *App {
 	app := &App{
-		Stdin:       os.Stdin,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Getenv:      os.Getenv,
-		UserHomeDir: os.UserHomeDir,
-		ReadFile:    os.ReadFile,
-		pmTurns:     newPMTurnMemory(),
+		Stdin:          os.Stdin,
+		Stdout:         os.Stdout,
+		Stderr:         os.Stderr,
+		Getenv:         os.Getenv,
+		UserHomeDir:    os.UserHomeDir,
+		ReadFile:       os.ReadFile,
+		hasOMPAncestor: ompAncestor,
+		pmTurns:        newPMTurnMemory(),
 	}
 	app.StdinIsTTY = func() bool {
 		file, ok := app.Stdin.(*os.File)
@@ -104,14 +113,7 @@ func (a *App) Run(args []string) int {
 
 	if helpRequested || len(remaining) == 0 {
 		text := a.rootUsageText()
-		if jsonMode {
-			envelope := output.Envelope{OK: true, Command: "help", Data: map[string]any{"help_text": text}}
-			if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
-			}
-		} else {
-			a.writeOutput(a.Stdout, text)
-		}
+		a.renderEnvelope(a.Stdout, jsonMode, output.Envelope{OK: true, Command: "help", Result: map[string]any{"help_text": text}})
 		return 0
 	}
 
@@ -120,12 +122,8 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	authSub := authSubcommandSpec.normalize(subPeek)
-	configSub := configSubcommandSpec.normalize(subPeek)
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
-		(cmdPeek == "auth" && (authSub == "list" || authSub == "default")) ||
-		(cmdPeek == "config" && (configSub == "use" || configSub == "unset")) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
 		isWorkCommandGroup(strings.Join(remaining, " "))
@@ -138,16 +136,12 @@ func (a *App) Run(args []string) int {
 	resolved, err := config.Resolve(overrides, config.Environment{
 		Getenv:      a.Getenv,
 		UserHomeDir: a.UserHomeDir,
-		ReadFile:    a.ReadFile,
 	})
 	if err != nil {
 		if configLenient {
 			resolved = config.Defaults(overrides)
 		} else {
 			details := map[string]any{"cause": err.Error()}
-			if strings.Contains(err.Error(), "multiple local profiles") {
-				details["reason"] = "ambiguous_agent_profile"
-			}
 			wrapped := errnorm.WithDetails(errnorm.Wrap(errnorm.KindLocal, "config_resolution_failed", "failed to resolve cli config", err), details)
 			configErrorCommand := strings.TrimSpace(preflightCommandName)
 			if configErrorCommand == "" {
@@ -156,35 +150,79 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
+	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
+		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
+			if _, hostErr := a.resolvedHost(resolved); hostErr == nil {
+				resolved, err = a.resolveHostAgent(context.Background(), resolved)
+				if err != nil {
+					return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
+				}
+			}
+		}
+	}
 
-	commandName, result, runErr := a.runCommand(context.Background(), remaining, resolved)
+	normalizedArgs, actorErr := normalizeActorArgs(remaining, resolved)
+	if actorErr != nil {
+		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, actorErr)
+	}
+	commandName, result, runErr := a.runCommand(context.Background(), normalizedArgs, resolved)
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
-		if result != nil && strings.TrimSpace(result.Text) != "" && !resolved.JSON {
-			a.writeOutput(a.Stderr, result.Text+"\n")
-		}
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 
 	if result != nil && result.RawWritten {
 		return 0
 	}
-	if resolved.JSON {
-		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: nil}
-		if result != nil {
-			envelope.Data = flattenEnvelopeData(result.Data, resolved.Headers || resolved.Verbose)
-		}
-		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-			a.writeOutput(a.Stderr, "failed to write JSON envelope: "+err.Error()+"\n")
-			return 1
-		}
-		return 0
+	var value any
+	if result != nil {
+		value = sanitizeEnvelopeResult(flattenEnvelopeData(result.Data, resolved.Headers))
 	}
-
-	if result != nil && strings.TrimSpace(result.Text) != "" {
-		a.writeOutput(a.Stdout, result.Text+"\n")
+	if value == nil && result != nil && result.Text != "" {
+		value = map[string]any{"text": result.Text}
+	}
+	if identity.Command == "host token" && !resolved.JSON {
+		if token := anyString(asMap(value)["token"]); token != "" {
+			a.writeOutput(a.Stdout, token+"\n")
+			return 0
+		}
+	}
+	warnings, repairs := resultWarnings(identity.Command, normalizedArgs, value)
+	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}); err != nil {
+		return 1
 	}
 	return 0
+}
+
+func needsAgentIdentity(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if hasHelpToken(args) {
+		return false
+	}
+	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
+		return false
+	}
+	switch args[0] {
+	case "help", "version", "doctor", "config", "update", "install", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
+		return false
+	}
+	return true
+}
+
+func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelope) error {
+	var err error
+	if jsonMode {
+		err = output.WriteEnvelopeJSON(w, envelope)
+	} else {
+		err = output.WriteEnvelopeText(w, envelope)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
+	}
+	return err
 }
 
 type commandResult struct {
@@ -196,27 +234,32 @@ type commandResult struct {
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {
 	normalized := errnorm.Normalize(err)
 	errnorm.EnrichForCommand(normalized, identity.CommandID)
+	details := normalized.Details
+	if strings.TrimSpace(normalized.Hint) != "" {
+		copyDetails, ok := details.(map[string]any)
+		if !ok {
+			copyDetails = map[string]any{}
+		}
+		copyDetails["hint"] = normalized.Hint
+		details = copyDetails
+	}
 	if jsonMode {
 		envelope := output.Envelope{
-			OK:        false,
-			Command:   identity.Command,
-			CommandID: identity.CommandID,
+			OK:      false,
+			Command: identity.Command,
 			Error: &output.ErrorPayload{
 				Code:        normalized.Code,
 				Message:     normalized.Message,
-				Recoverable: errnorm.RecoverableValue(normalized),
-				Hint:        normalized.Hint,
-				Details:     normalized.Details,
+				Retryable:   errnorm.RecoverableValue(normalized),
+				ExitCode:    errnorm.ExitCode(err),
+				Details:     details,
+				NextActions: deriveErrorActions(identity.Command, normalized),
 			},
 		}
-		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: output write failed: %v\n", err)
-		}
+		a.renderEnvelope(a.Stdout, true, envelope)
 	} else {
-		a.writeOutput(a.Stderr, fmt.Sprintf("Error (%s): %s\n", normalized.Code, normalized.Message))
-		if strings.TrimSpace(normalized.Hint) != "" {
-			a.writeOutput(a.Stderr, "Hint: "+strings.TrimSpace(normalized.Hint)+"\n")
-		}
+		envelope := output.Envelope{OK: false, Command: identity.Command, Error: &output.ErrorPayload{Code: normalized.Code, Message: normalized.Message, Retryable: errnorm.RecoverableValue(normalized), ExitCode: errnorm.ExitCode(err), Details: details, NextActions: deriveErrorActions(identity.Command, normalized)}}
+		a.renderEnvelope(a.Stderr, false, envelope)
 	}
 	return errnorm.ExitCode(err)
 }
@@ -224,18 +267,20 @@ func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err er
 func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs := newSilentFlagSet("anx")
 	var (
-		jsonFlag    trackedBool
-		baseURLFlag trackedString
-		agentFlag   trackedString
-		noColorFlag trackedBool
-		verboseFlag trackedBool
-		headersFlag trackedBool
-		timeoutFlag trackedDuration
-		versionFlag trackedBool
+		jsonFlag      trackedBool
+		baseURLFlag   trackedString
+		asFlag        trackedString
+		configDirFlag trackedString
+		noColorFlag   trackedBool
+		verboseFlag   trackedBool
+		headersFlag   trackedBool
+		timeoutFlag   trackedDuration
+		versionFlag   trackedBool
 	)
 	fs.Var(&jsonFlag, "json", "Emit JSON envelope output")
 	fs.Var(&baseURLFlag, "base-url", "Core base URL")
-	fs.Var(&agentFlag, "agent", "Agent profile name")
+	fs.Var(&asFlag, "as", "Derived agent name")
+	fs.Var(&configDirFlag, "config-dir", "Absolute ANX config directory")
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
 	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
 	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
@@ -257,8 +302,11 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	if baseURLFlag.set {
 		overrides.BaseURL = &baseURLFlag.value
 	}
-	if agentFlag.set {
-		overrides.Agent = &agentFlag.value
+	if asFlag.set {
+		overrides.As = &asFlag.value
+	}
+	if configDirFlag.set {
+		overrides.ConfigDir = &configDirFlag.value
 	}
 	if noColorFlag.set {
 		overrides.NoColor = &noColorFlag.value
@@ -317,6 +365,10 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			filtered = append(filtered, token)
 			continue
 		}
+		if name == "timeout" && len(filtered) > 0 && filtered[0] == "await" {
+			filtered = append(filtered, token)
+			continue
+		}
 
 		readValue := func(flagName string) (string, error) {
 			if hasValue {
@@ -351,13 +403,20 @@ func normalizeTrailingGlobalFlags(args []string, overrides *config.Overrides) ([
 			}
 			parsed := strings.TrimSpace(rawValue)
 			overrides.BaseURL = &parsed
-		case "agent":
+		case "as":
 			rawValue, err := readValue(name)
 			if err != nil {
 				return nil, err
 			}
 			parsed := strings.TrimSpace(rawValue)
-			overrides.Agent = &parsed
+			overrides.As = &parsed
+		case "config-dir":
+			rawValue, err := readValue(name)
+			if err != nil {
+				return nil, err
+			}
+			parsed := strings.TrimSpace(rawValue)
+			overrides.ConfigDir = &parsed
 		case "timeout":
 			rawValue, err := readValue(name)
 			if err != nil {

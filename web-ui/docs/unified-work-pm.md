@@ -14,7 +14,9 @@ Source-owned drops file a PM decision; they never silently mutate the source.
 All routes are under `/o/{organization}/w/{workspace}`.
 
 - `/inbox`, `/inbox/{id}`: Needs you / Watching / Handled. Selection is the URL
-  (`?item=`). Decisions awaiting an answer live here, not on a separate page.
+  (`?item=`, defaulting to the first row), `?mailbox=` picks the mailbox and
+  `?work_ref=` narrows it to one task. Decisions awaiting an answer live here,
+  not on a separate page. Keyboard triage, undo and live updates: UI spec §3.1.
 - `/tasks?view=table|board`: commitments, source status, next actor/action,
   evidence freshness. Search and project/source/owner/phase/freshness filters
   call `work.list`.

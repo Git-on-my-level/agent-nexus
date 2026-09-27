@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"agent-nexus-cli/internal/authcli"
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
-	"agent-nexus-cli/internal/profile"
 )
 
 func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -23,30 +21,9 @@ func (a *App) runAuth(ctx context.Context, args []string, cfg config.Resolved) (
 	service := authcli.New(cfg)
 	subcommand := authSubcommandSpec.normalize(args[0])
 	switch subcommand {
-	case "register":
-		result, err := a.runAuthRegister(ctx, service, args[1:])
-		return result, "auth register", err
 	case "whoami":
-		result, err := a.runAuthWhoAmI(ctx, service)
+		result, err := a.runHostWhoAmI(ctx, cfg)
 		return result, "auth whoami", err
-	case "list":
-		result, err := a.runAuthList(cfg)
-		return result, "auth list", err
-	case "default":
-		result, err := a.runAuthDefault(args[1:])
-		return result, "auth default", err
-	case "update-username":
-		result, err := a.runAuthUpdateUsername(ctx, service, args[1:])
-		return result, "auth update-username", err
-	case "rotate":
-		result, err := a.runAuthRotate(ctx, service)
-		return result, "auth rotate", err
-	case "revoke":
-		result, err := a.runAuthRevoke(ctx, service, args[1:])
-		return result, "auth revoke", err
-	case "token-status":
-		result, err := a.runAuthTokenStatus(ctx, service)
-		return result, "auth token-status", err
 	case "invites":
 		result, err := a.runAuthInvites(ctx, service, args[1:])
 		return result, "auth invites", err
@@ -113,7 +90,7 @@ func (a *App) runAuthInvitesList(ctx context.Context, service *authcli.Service) 
 func (a *App) runAuthInvitesCreate(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
 	fs := newSilentFlagSet("auth invites create")
 	var kindFlag trackedString
-	fs.Var(&kindFlag, "kind", "Invite kind (human, agent, or any)")
+	fs.Var(&kindFlag, "kind", "Invite kind (human or any)")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_auth_invites_flags", err.Error())
 	}
@@ -124,8 +101,8 @@ func (a *App) runAuthInvitesCreate(ctx context.Context, service *authcli.Service
 	if kind == "" {
 		return nil, errnorm.Usage("invite_kind_required", "kind is required")
 	}
-	if kind != "human" && kind != "agent" && kind != "any" {
-		return nil, errnorm.Usage("invalid_invite_kind", "kind must be human, agent, or any")
+	if kind != "human" && kind != "any" {
+		return nil, errnorm.Usage("invalid_invite_kind", "kind must be human or any")
 	}
 	result, err := service.CreateInvite(ctx, kind)
 	if err != nil {
@@ -325,38 +302,6 @@ func parseAuthPrincipalListFlags(commandName string, args []string) (int, string
 	return limit, strings.TrimSpace(cursorFlag.value), bool(taggableOnly.value || handlesOnly.value), bool(handlesOnly.value), nil
 }
 
-func (a *App) runAuthRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	opts, err := parseSelfRevokeOptions("auth revoke", args)
-	if err != nil {
-		return nil, err
-	}
-	result, err := service.RevokeCurrentPrincipal(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	cfg := service.Config()
-	prof, ok, err := profile.Load(cfg.ProfilePath)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
-	}
-	if !ok {
-		return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth register` first")
-	}
-	prof.Revoked = true
-	prof.AccessToken = ""
-	prof.RefreshToken = ""
-	prof.AccessTokenExpiresAt = ""
-	if err := profile.Save(cfg.ProfilePath, prof); err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_persist_failed", "failed to persist revoked profile", err)
-	}
-	text := "Revoked agent profile and cleared local tokens."
-	if result.Revocation.AllowHumanLockout {
-		text += " Break-glass human lockout was used."
-	}
-	data := map[string]any{"profile": prof, "revocation": result.Revocation}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
 func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
 	agentID, opts, err := parsePrincipalRevokeOptions("auth principals revoke", args)
 	if err != nil {
@@ -382,32 +327,6 @@ func (a *App) runAuthPrincipalsRevoke(ctx context.Context, service *authcli.Serv
 			"principal":  result.Principal,
 			"revocation": result.Revocation,
 		},
-	}, nil
-}
-
-func parseSelfRevokeOptions(commandName string, args []string) (authcli.RevokeOptions, error) {
-	fs := newSilentFlagSet(commandName)
-	var allowHumanLockoutFlag trackedBool
-	var humanLockoutReasonFlag trackedString
-	fs.Var(&allowHumanLockoutFlag, "allow-human-lockout", "Explicit break-glass override to revoke the last active human principal")
-	fs.Var(&humanLockoutReasonFlag, "human-lockout-reason", "Required reason when using --allow-human-lockout")
-	if err := fs.Parse(args); err != nil {
-		return authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_revoke_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return authcli.RevokeOptions{}, errnorm.Usage("invalid_auth_revoke_args", "unexpected positional arguments")
-	}
-	allowHumanLockout := allowHumanLockoutFlag.value
-	humanLockoutReason := strings.TrimSpace(humanLockoutReasonFlag.value)
-	if allowHumanLockout && humanLockoutReason == "" {
-		return authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_required", "human-lockout-reason is required when allow-human-lockout is set")
-	}
-	if !allowHumanLockout && humanLockoutReason != "" {
-		return authcli.RevokeOptions{}, errnorm.Usage("human_lockout_reason_requires_allow", "human-lockout-reason requires --allow-human-lockout")
-	}
-	return authcli.RevokeOptions{
-		AllowHumanLockout:  allowHumanLockout,
-		HumanLockoutReason: humanLockoutReason,
 	}, nil
 }
 
@@ -530,113 +449,10 @@ func (a *App) runAuthBootstrapStatus(ctx context.Context, service *authcli.Servi
 	text := strings.Join([]string{
 		"Bootstrap registration: " + status,
 		"",
-		"If bootstrap is available, you can register the first principal with:",
-		"  anx auth register --username <name> --bootstrap-token <token>",
+		"Bootstrap the first human through the workspace Access flow, then run `anx host enroll`.",
 	}, "\n")
 	data := map[string]any{"bootstrap_registration_available": result.BootstrapRegistrationAvailable}
 	return &commandResult{Text: text, Data: data}, nil
-}
-
-func (a *App) runAuthRegister(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	fs := newSilentFlagSet("auth register")
-	var usernameFlag trackedString
-	var bootstrapTokenFlag trackedString
-	var inviteTokenFlag trackedString
-	var existingActorIDFlag trackedString
-	fs.Var(&usernameFlag, "username", "Agent username")
-	fs.Var(&bootstrapTokenFlag, "bootstrap-token", "Bootstrap token for first principal registration")
-	fs.Var(&inviteTokenFlag, "invite-token", "Invite token for subsequent principal registration")
-	fs.Var(&existingActorIDFlag, "existing-actor-id", "Link the new principal to an existing seeded actor id (dev/local cores only)")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `anx auth register`")
-	}
-	username := strings.TrimSpace(usernameFlag.value)
-	if username == "" {
-		username = strings.TrimSpace(a.Getenv("ANX_USERNAME"))
-	}
-	if username == "" {
-		return nil, errnorm.Usage("invalid_request", "username is required; use --username or ANX_USERNAME")
-	}
-	bootstrapToken := strings.TrimSpace(bootstrapTokenFlag.value)
-	inviteToken := strings.TrimSpace(inviteTokenFlag.value)
-	existingActorID := strings.TrimSpace(existingActorIDFlag.value)
-	if bootstrapToken != "" && inviteToken != "" {
-		return nil, errnorm.Usage("invalid_request", "cannot specify both --bootstrap-token and --invite-token")
-	}
-	registered, err := service.RegisterWithToken(ctx, username, bootstrapToken, inviteToken, existingActorID)
-	if err != nil {
-		return nil, err
-	}
-	cfg := service.Config()
-	agentName := strings.TrimSpace(registered.Profile.Agent)
-	activeProfileHint := "Active profile (optional, persistent home): anx config use " + agentName
-	activeProfileHint += " (same as: anx auth default " + agentName + ")."
-	activeProfileHint += " Later commands can omit repeated --base-url / --agent; use anx config show to inspect effective settings."
-	text := strings.Join([]string{
-		"Registered agent profile successfully.",
-		"Agent: " + registered.Profile.Agent,
-		"Agent ID: " + registered.Profile.AgentID,
-		"Username: " + registered.Profile.Username,
-		"Profile path: " + cfg.ProfilePath,
-		activeProfileHint,
-		"Opinionated onboarding: read `anx help onboarding`, run `anx workspace summary`, install the agent skill with `anx install skill --path <path>`, then attach work to Topics, Cards, and Docs by default.",
-		"Bridge setup: if this runtime can be programmatically prompted or resumed, ask the human whether to set up `anx bridge`; if yes, read `anx meta doc agent-bridge` and `anx meta doc wake-routing`.",
-		authWakeRoutingHint(registered.Profile.Username),
-	}, "\n")
-	data := map[string]any{
-		"profile":           registered.Profile,
-		"registered":        registered.Agent,
-		"active_key":        registered.Key,
-		"profile_path":      cfg.ProfilePath,
-		"hint_config_use":   fmt.Sprintf("anx config use %s", agentName),
-		"hint_auth_default": fmt.Sprintf("anx auth default %s", agentName),
-	}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
-func (a *App) runAuthWhoAmI(ctx context.Context, service *authcli.Service) (*commandResult, error) {
-	result, err := service.WhoAmI(ctx)
-	if err != nil {
-		return nil, err
-	}
-	serverAgent, _ := result.Server["agent"].(map[string]any)
-	hintHandle := strings.TrimSpace(anyString(serverAgent["username"]))
-	if hintHandle == "" {
-		hintHandle = result.Profile.Username
-	}
-	text := strings.Join([]string{
-		"Local profile: " + result.Profile.Agent,
-		"Local username: " + result.Profile.Username,
-		"Local agent ID: " + result.Profile.AgentID,
-		"Local actor ID: " + result.Profile.ActorID,
-		"Server username: " + anyString(serverAgent["username"]),
-		"Server agent ID: " + anyString(serverAgent["agent_id"]),
-		"Server actor ID: " + anyString(serverAgent["actor_id"]),
-		authWakeRoutingHint(hintHandle),
-	}, "\n")
-	redacted := result.Profile
-	redacted.AccessToken = ""
-	redacted.RefreshToken = ""
-	redacted.PrivateKeyPath = ""
-	data := map[string]any{
-		"profile": redacted,
-		"server":  result.Server,
-	}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
-func authWakeRoutingHint(username string) string {
-	handle := strings.TrimSpace(username)
-	if handle == "" {
-		return "Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing"
-	}
-	return fmt.Sprintf(
-		"Wake registration help: anx help bridge; anx meta doc agent-bridge; anx meta doc wake-routing (principal: @%s)",
-		handle,
-	)
 }
 
 func filterTaggablePrincipals(principals []authcli.Principal) []authcli.Principal {
@@ -696,193 +512,6 @@ func principalWakeState(principal authcli.Principal) string {
 		return "unknown"
 	}
 	return state
-}
-
-func (a *App) runAuthUpdateUsername(ctx context.Context, service *authcli.Service, args []string) (*commandResult, error) {
-	fs := newSilentFlagSet("auth update-username")
-	var usernameFlag trackedString
-	fs.Var(&usernameFlag, "username", "New username")
-	if err := fs.Parse(args); err != nil {
-		return nil, errnorm.Usage("invalid_auth_flags", err.Error())
-	}
-	if len(fs.Args()) > 0 {
-		return nil, errnorm.Usage("invalid_auth_args", "unexpected positional arguments for `anx auth update-username`")
-	}
-	username := strings.TrimSpace(usernameFlag.value)
-	if username == "" {
-		username = strings.TrimSpace(a.Getenv("ANX_USERNAME"))
-	}
-	if username == "" {
-		return nil, errnorm.Usage("invalid_request", "username is required; use --username or ANX_USERNAME")
-	}
-	result, err := service.UpdateUsername(ctx, username)
-	if err != nil {
-		return nil, err
-	}
-	text := "Updated username to " + result.Profile.Username
-	data := map[string]any{"profile": result.Profile, "server": result.Server}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
-func (a *App) runAuthRotate(ctx context.Context, service *authcli.Service) (*commandResult, error) {
-	result, err := service.RotateKey(ctx)
-	if err != nil {
-		return nil, err
-	}
-	text := strings.Join([]string{
-		"Rotated auth key successfully.",
-		"Agent: " + result.Profile.Agent,
-		"Key ID: " + result.Profile.KeyID,
-		"Key path: " + result.Profile.PrivateKeyPath,
-	}, "\n")
-	data := map[string]any{"profile": result.Profile, "server": result.Server}
-	return &commandResult{Text: text, Data: data}, nil
-}
-
-func (a *App) runAuthTokenStatus(ctx context.Context, service *authcli.Service) (*commandResult, error) {
-	status, err := service.TokenStatus(ctx)
-	if err != nil {
-		return nil, err
-	}
-	text := strings.Join([]string{
-		"Agent: " + status.Agent,
-		"Agent ID: " + status.AgentID,
-		"Username: " + status.Username,
-		fmt.Sprintf("Has access token: %t", status.HasAccessToken),
-		fmt.Sprintf("Has refresh token: %t", status.HasRefreshToken),
-		"Access expires at: " + status.AccessExpiresAt,
-		fmt.Sprintf("Needs refresh: %t", status.NeedsRefresh),
-		fmt.Sprintf("Revoked: %t", status.Revoked),
-	}, "\n")
-	return &commandResult{Text: text, Data: status}, nil
-}
-
-func (a *App) runAuthDefault(args []string) (*commandResult, error) {
-	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
-		return nil, errnorm.Usage("profile_required", "usage: anx auth default <profile>")
-	}
-	agentName := strings.TrimSpace(args[0])
-	homeDir, err := a.UserHomeDir()
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "home_dir", "failed to determine home directory", err)
-	}
-	profilePath, err := profile.SetActiveAgent(homeDir, agentName)
-	if err != nil {
-		if errors.Is(err, profile.ErrProfileNotFound) {
-			return nil, errnorm.Local("profile_not_found", "profile not found; run `anx auth list` to inspect available profiles")
-		}
-		if errors.Is(err, profile.ErrPersistDefaultMarker) {
-			return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_persist_failed", "failed to persist default profile selection", err)
-		}
-		return nil, errnorm.Wrap(errnorm.KindLocal, "profile_read_failed", "failed to read profile", err)
-	}
-	return &commandResult{
-		Text: "Default profile: " + agentName,
-		Data: map[string]any{
-			"agent":             agentName,
-			"default_profile":   agentName,
-			"default_file_path": profile.DefaultAgentPath(homeDir),
-			"profile_path":      profilePath,
-		},
-	}, nil
-}
-
-func (a *App) runAuthList(cfg config.Resolved) (*commandResult, error) {
-	homeDir, err := a.UserHomeDir()
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "home_dir", "failed to determine home directory", err)
-	}
-	agents, err := profile.ListAgents(homeDir)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "list_profiles", "failed to list agent profiles", err)
-	}
-	if len(agents) == 0 {
-		return &commandResult{
-			Text: "No agent profiles found.\nRegister with: anx --base-url <url> --agent <name> auth register --username <username>",
-			Data: map[string]any{"profiles": []any{}, "count": 0},
-		}, nil
-	}
-	defaultAgent, hasDefaultAgent, err := profile.LoadDefaultAgent(homeDir)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "default_profile_read_failed", "failed to read default profile selection", err)
-	}
-
-	type profileSummary struct {
-		Agent    string `json:"agent"`
-		BaseURL  string `json:"base_url"`
-		AgentID  string `json:"agent_id,omitempty"`
-		Username string `json:"username,omitempty"`
-		Revoked  bool   `json:"revoked,omitempty"`
-		Active   bool   `json:"active"`
-		Default  bool   `json:"default"`
-		Path     string `json:"path"`
-	}
-
-	summaries := make([]profileSummary, 0, len(agents))
-	var lines []string
-
-	for _, agentName := range agents {
-		path := profile.ProfilePath(homeDir, agentName)
-		prof, ok, loadErr := profile.Load(path)
-		if loadErr != nil || !ok {
-			summaries = append(summaries, profileSummary{
-				Agent:   agentName,
-				Active:  agentName == cfg.Agent,
-				Default: hasDefaultAgent && agentName == defaultAgent,
-				Path:    path,
-			})
-			status := "(unreadable)"
-			if agentName == cfg.Agent {
-				status += " *active*"
-			}
-			if hasDefaultAgent && agentName == defaultAgent {
-				status += " (default)"
-			}
-			lines = append(lines, fmt.Sprintf("  %s  %s", agentName, status))
-			continue
-		}
-
-		active := agentName == cfg.Agent
-		isDefault := hasDefaultAgent && agentName == defaultAgent
-		summaries = append(summaries, profileSummary{
-			Agent:    agentName,
-			BaseURL:  prof.BaseURL,
-			AgentID:  prof.AgentID,
-			Username: prof.Username,
-			Revoked:  prof.Revoked,
-			Active:   active,
-			Default:  isDefault,
-			Path:     path,
-		})
-
-		marker := "  "
-		if active {
-			marker = "* "
-		}
-		status := prof.BaseURL
-		if prof.Revoked {
-			status += " (revoked)"
-		}
-		if prof.Username != "" {
-			status = prof.Username + "  " + status
-		}
-		if isDefault {
-			status += " (default)"
-		}
-		lines = append(lines, fmt.Sprintf("%s%-16s %s", marker, agentName, status))
-	}
-
-	header := fmt.Sprintf("Agent profiles (%d):", len(agents))
-	text := header + "\n" + strings.Join(lines, "\n")
-
-	return &commandResult{
-		Text: text,
-		Data: map[string]any{
-			"profiles":        summaries,
-			"count":           len(summaries),
-			"default_profile": defaultAgent,
-		},
-	}, nil
 }
 
 func anyString(raw any) string {

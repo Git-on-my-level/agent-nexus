@@ -28,6 +28,10 @@ const pageStore = vi.hoisted(() => {
       fn(value);
       return () => subscribers.delete(fn);
     },
+    setMode(mode) {
+      value = { ...value, data: { shellCapabilities: { mode } } };
+      for (const fn of subscribers) fn(value);
+    },
     reset() {
       value = {
         url: new URL("http://localhost/o/acme/w/main/access"),
@@ -51,6 +55,11 @@ const coreClientMock = vi.hoisted(() => ({
   listInvites: vi.fn(),
   listAuthAudit: vi.fn(),
   createInvite: vi.fn(),
+  listHosts: vi.fn(),
+  listPendingHostEnrollments: vi.fn(),
+  listHostEnrollmentTokens: vi.fn(),
+  approveHostEnrollment: vi.fn(),
+  denyHostEnrollment: vi.fn(),
 }));
 
 vi.mock("$app/stores", () => ({
@@ -65,6 +74,20 @@ vi.mock("$lib/coreClient", () => ({
 
 import { authenticatedAgent } from "../../src/lib/authSession.js";
 import AccessPage from "../../src/routes/o/[organization]/w/[workspace]/access/+page.svelte";
+
+const PENDING = {
+  id: "henr_1",
+  user_code: "J6FA-N4XI",
+  requested_slug: "m5-mbp",
+  os_user: "david",
+  hostname: "m5-mbp.local",
+  discovered_adapters: ["claude", "codex"],
+  adoption_names: [],
+  requesting_ip: "203.0.113.17",
+  status: "pending",
+  expires_at: new Date(Date.now() + 8 * 60_000).toISOString(),
+  created_at: new Date().toISOString(),
+};
 
 describe("access page", () => {
   beforeEach(() => {
@@ -82,11 +105,15 @@ describe("access page", () => {
     coreClientMock.listInvites.mockResolvedValue({ invites: [] });
     coreClientMock.listAuthAudit.mockResolvedValue({ events: [] });
     coreClientMock.createInvite.mockResolvedValue({ token: "oinv_123" });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
+    coreClientMock.listHosts.mockResolvedValue({ hosts: [] });
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [PENDING],
+    });
+    coreClientMock.listHostEnrollmentTokens.mockResolvedValue({
+      enrollment_tokens: [],
+    });
+    coreClientMock.approveHostEnrollment.mockResolvedValue({
+      enrollment: { ...PENDING, status: "approved" },
     });
   });
 
@@ -96,28 +123,17 @@ describe("access page", () => {
     vi.clearAllMocks();
   });
 
-  it("hides human and any workspace invite controls in hosted mode", async () => {
+  it("offers no agent invites and sends hosted people to Organizations", async () => {
     render(AccessPage, {
-      props: {
-        data: {
-          outOfWorkspaceMode: "hosted",
-          workspaceId: "ws-main",
-          registrationBaseUrl: "https://agentnexus.test/o/acme/w/main",
-        },
-      },
+      props: { data: { outOfWorkspaceMode: "hosted", cliBaseUrl: "" } },
     });
-
     await waitFor(() => {
       expect(coreClientMock.listInvites).toHaveBeenCalled();
     });
-
-    const kindSelect = screen.getByLabelText("Kind");
-    expect(kindSelect.value).toBe("agent");
-    expect(screen.getByRole("option", { name: "Agent" })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: "Human" })).toBeNull();
-    expect(screen.queryByRole("option", { name: "Any" })).toBeNull();
-    expect(screen.queryByLabelText(/Agent profile name/i)).toBeNull();
-    expect(screen.getByLabelText(/Agent username/i)).toBeTruthy();
+    expect(screen.queryByLabelText("Kind")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Invite a person" }),
+    ).toBeNull();
     const organizationsLink = screen.getByRole("link", {
       name: /your Organizations/i,
     });
@@ -126,82 +142,52 @@ describe("access page", () => {
     );
   });
 
-  it("requires an agent username before creating a hosted invite", async () => {
+  it("invites a person with a human invite", async () => {
+    pageStore.setMode("local");
     render(AccessPage, {
-      props: {
-        data: {
-          outOfWorkspaceMode: "hosted",
-          workspaceId: "ws-main",
-          registrationBaseUrl: "https://core.example.com",
-        },
-      },
+      props: { data: { outOfWorkspaceMode: "local", cliBaseUrl: "" } },
     });
-
+    const invite = await screen.findByRole("button", {
+      name: "Invite a person",
+    });
+    await fireEvent.click(invite);
     await waitFor(() => {
-      expect(coreClientMock.listInvites).toHaveBeenCalled();
+      expect(coreClientMock.createInvite).toHaveBeenCalledWith({
+        kind: "human",
+      });
     });
-
-    const submitButton = screen.getByRole("button", {
-      name: "Create invite",
-    });
-    await fireEvent.submit(submitButton.closest("form"));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "Agent username is required for hosted agent invites.",
-        ),
-      ).toBeTruthy();
-    });
-    expect(coreClientMock.createInvite).not.toHaveBeenCalled();
+    expect(await screen.findByText("oinv_123")).toBeTruthy();
   });
 
-  it("copies hosted invite instructions with the username as the default agent profile", async () => {
+  it("approves a host only after the code is confirmed", async () => {
+    pageStore.setMode("local");
     render(AccessPage, {
       props: {
         data: {
-          outOfWorkspaceMode: "hosted",
-          workspaceId: "ws-main",
-          registrationBaseUrl: "https://core.example.com",
+          outOfWorkspaceMode: "local",
+          cliBaseUrl: "http://127.0.0.1:8081",
         },
       },
     });
-
-    await waitFor(() => {
-      expect(coreClientMock.listInvites).toHaveBeenCalled();
-    });
-
-    await fireEvent.input(screen.getByLabelText(/Agent username/i), {
-      target: { value: "claude-code" },
-    });
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Create invite" }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Invite created successfully")).toBeTruthy();
-    });
-
-    expect(screen.queryByRole("button", { name: "Copy token" })).toBeNull();
+    expect(await screen.findByText("J6FA-N4XI")).toBeTruthy();
+    expect(screen.getByText("203.0.113.17")).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Copy CLI command" }),
-    ).toBeNull();
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Copy instructions" }),
-    );
+      screen.getByText("anx --base-url http://127.0.0.1:8081 host enroll"),
+    ).toBeTruthy();
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "anx --base-url https://core.example.com --agent claude-code auth register --username claude-code --invite-token oinv_123",
-      ),
+    await fireEvent.click(screen.getByRole("button", { name: "Approve…" }));
+    expect(coreClientMock.approveHostEnrollment).not.toHaveBeenCalled();
+    coreClientMock.listPendingHostEnrollments.mockResolvedValue({
+      enrollments: [],
+    });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Codes match, approve" }),
     );
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining("anx --version"),
-    );
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh",
-      ),
-    );
+    await waitFor(() => {
+      expect(coreClientMock.approveHostEnrollment).toHaveBeenCalledWith(
+        "henr_1",
+      );
+    });
+    expect(await screen.findByText(/Approved m5-mbp/)).toBeTruthy();
   });
 });

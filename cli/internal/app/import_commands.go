@@ -79,7 +79,7 @@ func init() {
 			Composition: "Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.",
 			Examples: []string{
 				"anx import apply --plan ./.anx-import/workspace/plan.json",
-				"anx import apply --plan ./.anx-import/workspace/plan.json --execute --agent importer",
+				"anx --as importer import apply --plan ./.anx-import/workspace/plan.json --execute",
 			},
 			Flags: []localHelperFlag{
 				{Name: "--plan <path>", Description: "Plan produced by `anx import plan`. Positional form also supported."},

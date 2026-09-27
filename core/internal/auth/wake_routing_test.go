@@ -70,7 +70,7 @@ func TestDescribeWakeRoutingTreatsStaleHeartbeatAsOffline(t *testing.T) {
 	if status.State != WakeRoutingStateOffline {
 		t.Fatalf("expected offline state, got %#v", status)
 	}
-	if status.Summary != "Offline. The agent is registered for this workspace, but its last bridge heartbeat is stale." {
+	if status.Summary != "Offline. This legacy agent's last bridge heartbeat is stale." {
 		t.Fatalf("unexpected offline summary: %#v", status)
 	}
 }

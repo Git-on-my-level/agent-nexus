@@ -9,9 +9,6 @@ known_missing:
     - agent.notifications.dismiss
     - agent.notifications.read
     - agents.me.get
-    - agents.me.patch
-    - agents.me.keys.rotate
-    - agents.me.revoke
     - artifacts.list
     - artifacts.create
     - artifacts.get
@@ -21,7 +18,6 @@ known_missing:
     - artifacts.restore
     - artifacts.trash
     - artifacts.unarchive
-    - auth.agents.register
     - auth.audit.list
     - auth.bootstrap.status
     - auth.invites.list

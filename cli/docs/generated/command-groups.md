@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `20`
+- Groups: `22`
 
 ## `topics`
 
@@ -50,10 +50,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - Commands: `4`
 - Command IDs:
+  - `agents.get` (`agents get`)
+  - `agents.list` (`agents list`)
   - `agents.me.get` (`agents me`)
-  - `agents.me.keys.rotate` (`agents me keys rotate`)
-  - `agents.me.patch` (`agents me patch`)
-  - `agents.me.revoke` (`agents me revoke`)
+  - `agents.stream` (`agents stream`)
 
 ## `artifacts`
 
@@ -72,9 +72,8 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `15`
+- Commands: `14`
 - Command IDs:
-  - `auth.agents.register` (`auth agents register`)
   - `auth.audit.list` (`auth audit list`)
   - `auth.bootstrap.status` (`auth bootstrap status`)
   - `auth.invites.create` (`auth invites create`)
@@ -169,6 +168,26 @@ Generated from `contracts/anx-openapi.yaml`.
   - `events.trash` (`events trash`)
   - `events.unarchive` (`events unarchive`)
 
+## `host`
+
+- Commands: `15`
+- Command IDs:
+  - `hosts.bridge.check_in` (`host bridge check-in`)
+  - `hosts.enroll.approve` (`host enroll approve`)
+  - `hosts.enroll.complete` (`host enroll complete`)
+  - `hosts.enroll.deny` (`host enroll deny`)
+  - `hosts.enroll.headless` (`host enroll headless`)
+  - `hosts.enroll.pending` (`host enroll pending`)
+  - `hosts.enroll.poll` (`host enroll poll`)
+  - `hosts.enroll.start` (`host enroll start`)
+  - `hosts.get` (`host get`)
+  - `hosts.list` (`host list`)
+  - `hosts.patch` (`host patch`)
+  - `hosts.revoke` (`host revoke`)
+  - `hosts.tokens.create` (`host tokens create`)
+  - `hosts.tokens.list` (`host tokens list`)
+  - `hosts.tokens.revoke` (`host tokens revoke`)
+
 ## `inbox`
 
 - Commands: `4`
@@ -235,6 +254,14 @@ Generated from `contracts/anx-openapi.yaml`.
 - Command IDs:
   - `ref_edges.list` (`ref-edges list`)
 
+## `runs`
+
+- Commands: `3`
+- Command IDs:
+  - `runs.get` (`runs get`)
+  - `runs.list` (`runs list`)
+  - `runs.upsert` (`runs ingest`)
+
 ## `secret`
 
 - Commands: `6`
@@ -254,8 +281,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `work`
 
-- Commands: `9`
+- Commands: `10`
 - Command IDs:
+  - `agents.me.presence` (`work presence`)
   - `work.capabilities` (`work capabilities`)
   - `work.create` (`work create`)
   - `work.get` (`work get`)

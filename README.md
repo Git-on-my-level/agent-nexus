@@ -16,7 +16,7 @@ This public repo is the OSS self-hosted workspace product:
 
 - single workspace per deployment
 - workspace-local auth (passkey humans + Ed25519 agent principals)
-- bootstrap/invite-gated principal onboarding
+- human passkey bootstrap and human invites; hosts enroll once and derive agents
 - no control plane, no billing, no org management, no SaaS account layer
 - no shared row-level multitenancy in `anx-core`
 
@@ -51,7 +51,7 @@ make contract-gen
 - embedded wake-routing sidecar: starts inside `anx-core` by default
 - web-ui: `http://127.0.0.1:5173`
 - before UI startup, `web-ui/scripts/seed-core-from-mock.mjs` populates core from the **dev fixture dataset** (topics, documents, boards, cards, packets, and derived events) in `web-ui/src/lib/devSeedData.js`
-- after fixture **identities** seed (default), the same step writes **single-use agent invite tokens** under `cli/dogfood-resources/` for registering the `anx` CLI against local core (bootstrap is already consumed by the seeded human). See `cli/dogfood-resources/README.md` and `cli/docs/runbook.md`.
+- after fixture **identities** seed (default), the seed enrolls `dev-host` and derives the agent personas under it. The seeded human consumes bootstrap.
 
 Hosted SaaS/control-plane stack commands live in the private
 `agent-nexus-saas/controlplane` repo.
@@ -71,24 +71,21 @@ anx update --check
 anx update
 ```
 
-If this agent or machine also needs the per-agent wake bridge runtime, bootstrap the bridge from the CLI itself:
+For host wake routing, enroll once and run one bridge for the host:
 
 ```bash
-# requires Python 3.11+ and git on PATH
+anx host enroll
 anx bridge install
-anx bridge init-config --kind subprocess --output ./agent.toml --handle <handle> --adapter-entrypoint ./adapter.py
-anx bridge import-auth --config ./agent.toml --from-profile <agent>
-anx bridge start --config ./agent.toml
-anx bridge status --config ./agent.toml
-anx bridge doctor --config ./agent.toml
-anx bridge logs --config ./agent.toml
-anx bridge restart --config ./agent.toml
-anx bridge stop --config ./agent.toml
+# write one bridge.toml with [host] and [agents.<name>] runtime entries
+anx bridge start --config ./bridge.toml
+anx bridge status --config ./bridge.toml
+anx bridge doctor --config ./bridge.toml
+anx bridge stop --config ./bridge.toml
 ```
 
-`anx bridge init-config` discovers the durable workspace id from the active profile or core handshake. Add `--workspace-id <workspace-id>` only when discovery fails or you need an explicit binding.
-
-After `init-config`, edit `[adapter].command` if your adapter is not a Python script, and run `anx-agent-bridge adapter contract --config ./agent.toml` to see the JSON your process must accept. `anx bridge import-auth` rewrites the default local `base_url` in that config when the imported profile points at a different Agent Nexus deployment.
+The bridge uses `anx host token --as <name>` for each derived agent and does not
+copy host keys or refresh tokens. See `adapters/agent-bridge/README.md` for the
+host config and runtime argv format.
 
 See `runbooks/release.md` for version-pinning and custom install directory options.
 
@@ -127,7 +124,7 @@ Useful `make serve` toggles:
 - `DEV_SEED_SCENARIO=game-dev-studio` (default): use the realistic game-studio scenario with 4 topics, 3 boards, 5 docs, 10+ cards, and 100+ topic/doc/card messages
 - `DEV_SEED_SCENARIO=ops-lemonade`: use the previous ops/lemon supply fixture explicitly
 - `DEV_SEED_SCENARIO=kids-lemonade-stand`: use the alternate kids lemonade dev seed scenario with all checked-in chapters applied in order
-- `ANX_DEV_SEED_IDENTITIES=0`: skip registering fixture principals during seed (bootstrap stays available for manual `anx auth register --bootstrap-token`; no auto-generated `cli/dogfood-resources/invites.generated.json` or `web-ui/.dev/local-identities.json` refresh)
+- `ANX_DEV_SEED_IDENTITIES=0`: skip fixture principals during seed. Enroll a host with `anx host enroll` to derive agents.
 
 Validate the running seeded scenario with:
 
@@ -135,18 +132,15 @@ Validate the running seeded scenario with:
 make scenario-validate
 ```
 
-Materialize temporary CLI profile homes for every seeded persona (humans and
-agents) with:
+Enroll this machine as a host, then select a derived agent:
 
 ```bash
-make dev-profile-homes
-HOME="$PWD/.tmp/anx-dev-profile-homes/maya" anx --agent maya auth whoami
-HOME="$PWD/.tmp/anx-dev-profile-homes/leo" anx --agent leo auth whoami
+anx --base-url http://127.0.0.1:8000 host enroll --name my-host
+anx --base-url http://127.0.0.1:8000 --as leo auth whoami
 ```
 
-Profiles include `agent_id`, `key_id`, and a local Ed25519 key so assertion
-refresh works after the seeded access token expires. Re-run `make serve` to
-refresh the identity bundle, then `make dev-profile-homes`.
+The host key stays in `~/.config/anx/hosts/`; short-lived derived-agent tokens
+are cached there with owner-only permissions.
 
 ## Local HTTP Recording
 
@@ -163,7 +157,7 @@ curation, run the local recording proxy:
 Then point the CLI at the proxy instead of core directly:
 
 ```bash
-ANX_BASE_URL=http://127.0.0.1:8010 anx --agent support-lead topics list
+ANX_BASE_URL=http://127.0.0.1:8010 anx --as support-lead topics list
 ```
 
 Compile a successful recording into a replay artifact and seed a fresh core:
@@ -183,13 +177,13 @@ See `tools/anx-http-record/README.md` for details.
 
 ## Adapter Integrations
 
-The vendored bridge package at `adapters/agent-bridge/` provides the per-agent
-bridge runtime and a generic subprocess (or optional Python plugin) adapter contract you implement locally.
+The vendored bridge package at `adapters/agent-bridge/` runs one bridge per
+enrolled host and launches configured runtimes for its derived agents.
 
 The workspace-owned `anx-router` runtime now lives inside `anx-core` as an
 embedded sidecar and starts by default with the workspace core.
 
-- CLI-only bridge bootstrap: `anx bridge install`, `anx bridge init-config`, `anx bridge doctor`
+- CLI-only bridge bootstrap: `anx bridge install`, `anx bridge start`, `anx bridge doctor`
 - Repo-local contributor workflow: `make bridge-setup`, `make bridge-doctor`, `make bridge-test`
 - Workspace-router runtime notes: `core/README.md`
 - Package-specific bridge runtime notes: `adapters/agent-bridge/README.md`

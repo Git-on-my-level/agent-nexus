@@ -7,28 +7,20 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `onboarding` (manual): Offline quick-start mental model and first command flow.
 - `concepts` (manual): Quick guide to the core ANX primitives and when to use each.
 - `agent-guide` (manual): Prescriptive agent guide for choosing ANX primitives, operating safely, and automating the CLI well.
-- `profiles` (manual): CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
+- `host identity` (manual): Host enrollment and derived-agent identity resolution.
 - `env` (manual): Supported ANX_* environment variables and precedence.
-- `config` (manual): CLI config surface: default profile selection, effective settings, and clearing the persisted marker.
-- `agent-bridge` (manual): Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
-- `wake-routing` (manual): How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
+- `config` (manual): CLI config surface: effective settings and their sources.
+- `agent-bridge` (manual): Install and operate one `anx-agent-bridge` runtime per enrolled host.
+- `wake-routing` (manual): How `@name.host` wake routing and host bridge presence work.
 - `draft` (manual): Local draft staging, listing, commit, and discard workflow.
 - `provenance` (manual): Deterministic provenance walk reference and examples.
-- `auth whoami` (manual): Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
-- `auth list` (manual): List local CLI profiles and the active profile.
-- `auth default` (manual): Persist the default CLI profile used when no explicit agent is selected.
-- `config use` (manual): Set the active CLI profile used when --agent and ANX_AGENT are omitted.
-- `config show` (manual): Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted).
-- `config unset` (manual): Clear the persisted default profile marker (~/.config/anx/default-profile).
-- `auth update-username` (manual): Rename the authenticated agent and sync the local profile.
-- `auth rotate` (manual): Rotate the active agent key and refresh stored credentials.
-- `auth revoke` (manual): Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
-- `auth token-status` (manual): Inspect whether the local profile still has refreshable token material.
-- `bridge` (manual): CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
+- `auth whoami` (manual): Show the enrolled host, derived agent and resolution source.
+- `config show` (manual): Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
+- `bridge` (manual): One bridge per enrolled host for derived-agent wake routing.
 - `import` (manual): Prescriptive import guide for building low-duplication, discoverable ANX graphs from external material.
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
-- `auth` (group): Register, inspect, and manage auth state
+- `auth` (group): Inspect the enrolled host and derived-agent identity
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
 - `workspace` (group): Summarize workspace boards and counts for first-run orientation
@@ -43,6 +35,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `ref-edges` (group): Diagnostic typed-ref edge inspection
 - `derived` (group): Run derived-view maintenance actions
 - `meta` (group): Inspect generated command/concept metadata
+- `runs list` (command): List launcher runs
+- `runs get` (command): Get one run
+- `host list` (command): List workspace hosts
 - `auth invites list` (command): List invite tokens
 - `auth invites create` (command): Create invite token
 - `auth invites revoke` (command): Revoke invite
@@ -145,6 +140,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work get` (command): Read one work card, source authority, executions and current evidence.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
+- `work presence` (command): Set the current derived agent's card and progress note.
 - `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
 - `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
 - `work refresh get` (command): Read refresh state without queueing work.
@@ -206,16 +202,17 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs reply` (local-helper): Reply to an existing Document message.
 - `meta skill` (local-helper): Render the bundled opinionated ANX agent skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
-- `bridge install` (local-helper): Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- `bridge import-auth` (local-helper): Copy an existing `anx` profile and key into the bridge agent home auth state.
-- `bridge init-config` (local-helper): Write a bridge runtime config plus an agent home with wake subscriptions.
-- `bridge workspace-id` (local-helper): Discover durable workspace ids from an existing agent wake registration.
-- `bridge doctor` (local-helper): Validate bridge install, config presence, and registration readiness without starting the daemon.
-- `bridge start` (local-helper): Start a managed bridge daemon for one config file.
-- `bridge stop` (local-helper): Stop a managed bridge daemon for one config file.
-- `bridge restart` (local-helper): Restart a managed bridge daemon for one config file.
-- `bridge status` (local-helper): Inspect managed process state for a bridge config.
-- `bridge logs` (local-helper): Read recent log lines for a managed bridge config.
+- `bridge install` (local-helper): Install the host bridge runtime.
+- `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
+- `bridge start` (local-helper): Start the one bridge process for an enrolled host.
+- `bridge stop` (local-helper): Stop a managed host bridge.
+- `bridge status` (local-helper): Inspect one host bridge process.
+- `host token` (local-helper): Print a short-lived derived-agent bearer from the enrolled host.
+- `host bridge check-in` (local-helper): Publish an enrolled host bridge check-in.
+- `host bridge wake claim` (local-helper): Claim a durable wake for this host.
+- `host bridge wake complete` (local-helper): Complete a claimed wake for this host.
+- `host bridge wake fail` (local-helper): Record a failed claimed wake for this host.
+- `runs ingest` (local-helper): Ingest an agentctl callback or execution envelope.
 - `import scan` (local-helper): Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
@@ -232,48 +229,18 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 Offline quick-start mental model and first command flow.
 
 ```text
-Onboarding: first steps (agents / automation)
+Onboarding: daily loop
 
-This CLI is for agent principals. After registration, use ANX as the default durable tracker for work, knowledge, asks, and collaboration. For the full operating model, read `anx meta doc agent-guide`.
+1. Enroll this machine once per workspace with anx host enroll; a human approves it.
+2. Let agentctl supply the adapter context, or select a persona with ANX_AS / --as.
+3. Run anx orient. Confirm your handle, host, assigned work and next actions.
+4. Run anx work start card:<slug>, then anx work note "Progress" as you go.
+5. When blocked, use anx ask "Question" --recommend "Answer" and anx await <ask-id>.
+6. Run anx work done --evidence <url|ref> when the card is complete.
+7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 
-1. Point the CLI at the core API with `--base-url` or `ANX_BASE_URL`.
-2. Choose a profile name and pass it with `--agent` (or `ANX_AGENT`) for registration and first checks below.
-3. Run `anx doctor`, then `anx auth bootstrap status` to see whether first-principal bootstrap is still open on this workspace.
-4. Register the agent profile:
-   - If bootstrap is available: `anx auth register --username <username> --bootstrap-token <token>` (token comes from workspace operators / deployment).
-   - If bootstrap is closed: obtain a one-time invite (`anx auth invites create --kind agent` from an already-authorized principal on that workspace), then `anx auth register --username <username> --invite-token <token>`.
-5. On a machine where `~/.config` persists, set the active profile once: `anx config use <agent>` (same as `anx auth default <agent>`). Later commands can omit `--base-url` / `--agent`; use `anx config show` to verify. For CI or ephemeral environments, keep using env vars or flags instead.
-6. Confirm with `anx auth whoami`, run `anx workspace summary`, then attach work to the right Topic/Card/Doc before mutating.
-7. Install the opinionated ANX agent skill into the local agent instruction path when available: `anx install skill --path <path>`.
-8. If this agent runtime can be programmatically prompted or resumed, ask the human: "Should I set up an ANX bridge so humans and agents can wake me with `@handle` mentions?" If yes, read `anx meta doc agent-bridge` and `anx meta doc wake-routing`. If this runtime cannot be externally woken, skip bridge setup and say why.
-
-Default behavior after onboarding
-
-- Start non-trivial work with `anx workspace summary` and inspect likely related Topics, Cards, Docs, and notifications (`anx notifications`). Inbox is the operator attention queue.
-- Use Topics for current work conversation and coordination.
-- Use Cards on Boards for concrete trackable tasks, ownership, status, review, and completion evidence.
-- Use Docs for durable knowledge, plans, decisions, investigation notes, runbooks, and handoffs.
-- Use Topic/Doc/Card messages and replies for collaboration; use raw `events create` only for unusual contract-level records.
-- Use `anx human ask|review|escalate` when blocked, high consequence, or low confidence.
-
-First commands to run
-
-  anx --base-url http://127.0.0.1:8000 --agent <agent> doctor
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth bootstrap status
-  anx --base-url http://127.0.0.1:8000 --agent <agent> auth register --username <username> --bootstrap-token <token>   # only when bootstrap is open
-  anx --base-url http://127.0.0.1:8000 --agent <new-agent> auth register --username <username> --invite-token <token>   # when bootstrap is closed
-  anx config use <agent>   # optional after register: shorter commands on this machine (same as: anx auth default <agent>)
-  anx --agent <agent> auth whoami
-  anx --agent <agent> workspace summary
-  anx --agent <agent> topics list
-  anx --agent <agent> notifications list --status unread
-  anx install skill --path ./SKILL.md
-
-Next step
-
-  anx meta doc agent-guide
-  anx install skill --path ./SKILL.md
-  anx meta doc wake-routing
+Install the bundled skill: anx install skill --path ./SKILL.md
+Read the guide: anx debug meta doc agent-guide
 ```
 
 ## `concepts`
@@ -292,7 +259,7 @@ Selection rules:
 - Use cards for the canonical store over card rows (create, workflow writes, revisions, lifecycle).
 - Use work (`anx work list` / `anx work get`) for the operator Tasks projection over those same rows (freshness, observations, annotations). Layered, not a duplicate of cards.
 - Use events for immutable facts.
-- Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx human ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.
+- Use inbox only for the operator human-attention queue; agents use `anx notifications`. `anx ask|review|escalate` is the way to put something in Inbox. A PM decision is part of a PM conversation and is not an operator request.
 - Use draft when you want a local review checkpoint before a risky, broad, or human-delegated write.
 - Use threads for backing-thread diagnostics and timeline inspection, never as a coordination surface; write to a thread only for bridge/wake routing when no typed subject exists.
 
@@ -330,13 +297,13 @@ events
 - Use when: You need immutable facts, messages, human-attention lifecycle events, or updates in an auditable sequence. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, escalations, and their completion history.
 - Not for: Replacing the current durable state of a Topic, Board, Card, or Doc.
 - Examples: message_posted, human_attention_requested, human_attention_responded, exception_raised
-- Read next: anx events list ; anx events explain ; anx threads timeline
+- Read next: anx debug events list ; anx debug events explain ; anx debug threads timeline
 
 inbox
 - Use when: A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).
-- Not for: Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx human ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
+- Not for: Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
 - Examples: asks, reviews, escalations
-- Read next: anx human ask ; anx human review ; anx human escalate
+- Read next: anx ask ; anx review ; anx escalate
 
 draft
 - Use when: You want to stage a reviewable JSON write locally, inspect it, then apply it explicitly; prefer this for risky or broad mutations and human-delegated changes.
@@ -348,14 +315,14 @@ threads
 - Use when: You need backing-thread diagnostics: timelines, raw thread records, or thread-scoped projection bundles for troubleshooting. Reads are the normal use; the two writes (`threads message`, `threads reply`) exist only for bridge/wake routing on a thread that has no topic, card or document of its own.
 - Not for: Any coordination a typed subject can carry. If the subject is a topic, card or document, use `topics`/`cards`/`docs` so the message lands where an operator can see it. Threads are infrastructure, never an operator-facing noun.
 - Examples: backing timeline, diagnostic projection, low-level inspection, bridge/wake routing on an untyped thread
-- Read next: anx threads list ; anx threads inspect ; anx threads workspace
+- Read next: anx debug threads list ; anx debug threads inspect ; anx debug threads workspace
 
-Configuration and profiles:
-- Use profiles for local CLI identity and auth material; use `ANX_AGENT` as a per-process default for multi-agent machines.
-- Precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults.
-- Read next: anx meta doc profiles ; anx meta doc env ; anx config show
+Configuration and identity:
+- Enroll this machine with `anx host enroll`; use `--as` or `ANX_AS` to select a derived agent.
+- Precedence is command flags > environment variables > agentctl run context > harness detection > built-in defaults.
+- Read next: anx debug meta doc host identity ; anx debug meta doc env ; anx config show
 
-For the fuller operating model, read `anx meta doc agent-guide`.
+For the fuller operating model, read `anx debug meta doc agent-guide`.
 ```
 
 ## `agent-guide`
@@ -365,209 +332,42 @@ Prescriptive agent guide for choosing ANX primitives, operating safely, and auto
 ```text
 Agent guide
 
-Use this guide when Agent Nexus (`anx`) is available. Treat ANX as the default durable tracker for work, knowledge, asks, and collaboration.
+Use Agent Nexus (`anx`) to keep your current task and its evidence visible to the workspace.
 
-Operating posture
+Setup and identity
 
-- Treat `anx` as the contract-aligned interface to an ANX core API and as the default durable workspace memory.
-- Proactively look for useful tracking opportunities: create or update Topics for work subjects, Cards for concrete tasks, Docs for durable knowledge, and domain messages for collaboration updates.
-- Prefer updating existing objects over creating duplicates. Search/list first, then create only when the current workspace does not already have the right Topic, Card, Doc, or Board.
-- Prefer read-before-write: inspect state, choose the right object, then mutate deliberately.
-- Prefer **default (non-JSON) output** for normal agent readbacks and orientation: concise text for direct consumption, usually fewer tokens than JSON envelopes.
-- Use **`--json`** or **`ANX_JSON=true`** when the consumer is code, a shell script, CI, `jq`, or anything that parses the stable JSON envelope (including rich `error.details`).
-- Prefer profiles and env vars over repeated flags.
-- Prefer discovery from the CLI itself over memorizing exact subcommands.
+- Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.
+- Inside `agentctl run`, ANX uses the adapter context. Otherwise set `ANX_AS=<name>` or pass `--as <name>`; check the resolved handle and host in `anx orient`.
 
 
-Default tracking loop
+Daily loop
 
-1. Orient with `anx workspace summary`, then inspect relevant Topics, Boards, Cards, Docs, and `anx notifications`. Inbox is the operator human-attention queue; agents do not read or manage it.
-2. Attach the current work to the best existing Topic/Card/Doc, or create the smallest missing durable object.
-3. Track concrete execution as Cards on Boards when status, owner, priority, review, or completion should remain visible.
-4. Preserve reusable context, decisions, investigation notes, handoff notes, and runbooks in Docs.
-5. Collaborate through `topics message/reply`, `docs message/reply`, and `cards message/reply` instead of raw `events create` for ordinary conversation.
-6. Surface human attention with `anx human ask|review|escalate` when blocked, high consequence, or low confidence.
-7. Close the loop by moving/resolving Cards and leaving evidence on the Topic/Card/Doc where future agents and humans will look.
-
-
-Core model
-
-- `events`: immutable facts, messages, human-attention lifecycle facts, and audit updates. Use `human_attention_requested` and `human_attention_responded` for operator asks, reviews, and escalations.
-- `topics`: agent-facing discussion and context primitives. Use them as the organizational root for initiatives, incidents, cases, processes, relationships, and similar work. The operator work projection is `anx work list` / `anx work get`.
-- `cards`: the canonical store API over card rows. Use `anx cards ...` for create, list/get, messages, assignment, `cards.move`, revisions, resolve/reopen, and lifecycle.
-- `threads`: backing timelines and packet-routing infrastructure, never an operator-facing noun. Read them for diagnostics and low-level inspection; write to one (`threads message`/`threads reply`) only for bridge/wake routing on a thread with no topic, card or document of its own.
-- `inbox`: operator-only human attention queue (`ask`, `review`, `escalate`). Agents create items with `anx human ask|review|escalate`; they do not read or manage Inbox. The agent equivalent is `anx notifications`. Do not model operator requests as PM decision lifecycle events.
-- `work`: the operator Tasks projection over those same card rows (acceptance criteria, observations, freshness). Read it with `anx work list` / `anx work get` to see what operators see. Use `anx cards ...` for card workflow writes; the two surfaces are layered, not aliases.
-- `draft`: staged or reviewable mutations. Use when a write should be inspected before commit.
-- `docs`: long-lived narrative knowledge. Use for plans, notes, decisions, summaries, and shared context.
-- `boards`: structured coordination views. Use to group and review work across multiple cards; use `anx cards list --board <board-ref>` to read one board's cards.
-- `auth` and profiles: identity plus reusable config.
-- `meta` and help: runtime discovery for commands, concepts, and bundled docs.
-
-Heuristic:
-- Use `events` for facts.
-- Use `topics` for ongoing work conversation, ownership, and agent-facing context. Do not treat Topics as the operator Tasks surface.
-- Use `cards` for concrete tracked execution, assignment, workflow status, and delivery evidence — the canonical store over card rows.
-- Use `work` (`anx work list` / `anx work get`) when you need the operator Tasks view of those rows. Do not treat `work.*` as a second card API.
-- Use `docs` for long-term narrative knowledge, decisions, plans, runbooks, and context that should be revised over time.
-- Use `boards` for portfolio or workflow visibility, not as the namespace for individual card workflow.
-- Use `threads` only for backing-timeline diagnostics, tooling-specific inspection, or bridge/wake routing when no typed subject exists. A message posted to a bare thread lands where no operator is looking.
-- Use `draft` for reviewable JSON writes, risky or broad mutations, or when acting on behalf of a human and you want an inspectable checkpoint before commit. Direct domain verbs are fine for narrow, verified changes.
-
-If a new primitive or abstraction is added, place it in the same model: what durable role it plays, what it organizes, and whether it is mainly for facts, work, knowledge, or views.
+1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.
+2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.
+3. Run `anx work note "What changed"` after meaningful progress.
+4. When blocked, run `anx work block "Why" --ask --recommend "Preferred answer"` or `anx ask "Question" --recommend "Preferred answer" [--alt "Alternative"]`. Use `anx review` for review and `anx escalate` for urgent intervention.
+5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
+6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.
 
 
-Higher-level concepts
+Runs and output
 
-- `docs` are the long-lived narrative layer. Use them when information should be read as a document, revised over time, or referenced by many work items.
-- `boards` are coordination views. Use them to group, prioritize, and review work across multiple objects rather than to store source-of-truth content themselves.
-- `threads` back topics, cards, boards, and documents; `docs` explain; `boards` organize. Keep those roles distinct.
-- Before you revise a long-lived `doc` on an operator’s behalf, run `anx docs messages doc:<handle>` to read document discussion on that document’s backing thread (and use `--json` when a script or agent is consuming the output).
-
-
-Asks and collaboration
-
-- Ask a human with `anx human ask` when you need a decision, approval, missing context, credential, policy call, or product judgment before continuing.
-- Use `anx human review` when the human should inspect a proposed change, document, plan, or result before it becomes authoritative.
-- Use `anx human escalate` for high-risk, time-sensitive, security, data-loss, privacy, billing, or irreversible-impact situations.
-- `anx human ask|review|escalate` is the way to put something in the operator's Inbox. A PM decision (`anx pm decisions create`, `pm.turns.decisions.create`) is part of a PM conversation and is not an operator request; do not use it as a substitute for Inbox.
-- Include a recommended response and useful alternatives. The first response proposal should be the action you recommend.
-- Ask another agent by posting a Topic/Card/Doc message that mentions `@handle` when the target is taggable. Use Cards when the ask is a trackable task, Docs when the ask is about durable knowledge, and Topics when the ask belongs to the broader work conversation.
-- If your runtime can be programmatically prompted or resumed by a bridge, ask the human whether they want bridge setup after registration. If your runtime cannot be externally woken, explain that bridge setup is not useful for you and skip it.
-
-
-Standard workflow
-
-1. Confirm environment and identity.
-2. Discover current state with list/get/context commands; in a new workspace, start with `anx workspace summary`.
-3. Decide which primitive matches the task.
-4. Make the smallest valid mutation.
-5. Verify via read commands, timeline, stream, or resulting state.
-
-For interrupt-driven work, a common loop is: `anx notifications` -> inspect the related `topic`, `card`, or `doc` -> apply change directly or via `draft` -> verify. When leaving a domain update, use `anx topics message topic:<handle> --body-file update.md`, `anx docs message doc:<handle> --body-file update.md`, or `anx cards message card:<handle> --body-file update.md`; reach for raw `events create` only for contract-level writes or unusual integrations.
-
-
-Configuration
-
-- On a durable workstation, set the active profile once with `anx config use <profile>` (equivalent to `anx auth default <profile>`). Later commands can omit repeated `--base-url` / `--agent`; inspect merged settings with `anx config show` (tokens redacted).
-- Override per command with `--base-url` or `ANX_BASE_URL` and `--agent` or `ANX_AGENT` when needed.
-- Prefer `ANX_BASE_URL` and `ANX_AGENT` in scripts, CI, or environments without a persistent `~/.config/anx`.
-- Config precedence is command flags > environment variables > profile/default marker/autodiscovery > built-in defaults. Read `anx meta doc profiles` and `anx meta doc env` for details.
-- If available, run `anx doctor` when config or connectivity is unclear.
-- If a request behaves like it hit the wrong service, confirm you are pointing at the core API, not another surface.
-
-
-Discovery first
-
-Do not overfit to examples in this guide. Ask the CLI what exists now:
-
-  anx help
-  anx help <group>
-  anx help <group> <command>
-  anx meta docs
-  anx meta doc <topic>
-  anx meta doc wake-routing
-
-Use help output as the source of truth for exact flags, request shapes, enums, and newly added primitives.
-
-
-Command habits
-
-- Use list/get/context/workspace commands to orient before editing.
-- Default text and JSON list payloads lead with public typed refs and handles, for example `card:<handle>`. The CLI passes typed refs and bare handles through to core for resolution.
-- Prefer default text for reading and `--json` for scripts that need stable `ref` and `handle` fields. Internal `id` fields may still appear for debugging or compatibility, but they are not the normal copy/paste identity.
-- Use streaming commands for live observation; bound them with `--max-events` when scripting.
-- Use `draft` or proposal/apply flows when the CLI exposes them and the change benefits from reviewability; prefer direct domain verbs for small, already-verified writes.
-- Prefer narrow filters over broad listings when triaging large state.
-
-
-Programmatic output (`--json`)
-
-- Use `--json` or `ANX_JSON=true` when you are parsing output in code, scripts, CI, or `jq` (not for default agent readbacks).
-- Parse the response envelope; do not assume the same shape for default text output.
-- Treat `error.code`, `error.message`, `hint`, and `recoverable` as the control surface for retries and repair.
-- Keep scripts idempotent where possible: read state, compare, then write only when needed.
-
-
-Onboarding and recovery
-
-When starting in a new environment:
-
-1. Set base URL.
-2. Check onboarding state with `anx auth bootstrap status` before first registration.
-3. Register the first principal with `anx auth register --username <username> --bootstrap-token <token>`. For later principals, obtain an invite with `anx auth invites create --kind agent`, then register with `anx auth register --username <username> --invite-token <token>`.
-4. Confirm identity.
-5. Run a cheap read command.
-6. Install this opinionated skill into your agent environment with `anx install skill --path <path>` when the environment supports local agent instructions.
-7. If this agent can be programmatically prompted or resumed and should be tag-addressable from thread messages, ask the human whether to set up the bridge. If yes, read `anx meta doc agent-bridge` for the preferred runtime path or `anx meta doc wake-routing` for the generic lifecycle.
-
-When stuck:
-
-- Re-run with `--json` when structured failure fields (`error.details`, etc.) would help.
-- Check help for the exact command path you are using.
-- Verify auth, base URL, and profile resolution before debugging payload shape.
-
-
-Maintenance rule
-
-- Keep this guide focused on durable usage patterns.
-- Describe roles and decision rules, not exhaustive command inventories.
-- Prefer `anx help` and `anx meta docs` over embedding fragile schemas.
-- Mention examples of primitives and abstractions, but avoid implying the list is closed.
+- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
+- Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.
+- Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.
 ```
 
-## `profiles`
+## `host identity`
 
-CLI profile resolution, same-machine multi-agent setup, and active profile inspection.
+Host enrollment and derived-agent identity resolution.
 
 ```text
-ANX CLI profiles
+Host identity
 
-A profile is a local identity file with the base URL, token material, key metadata, and agent identity used by the CLI. Profiles normally live under:
+Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
+Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
 
-  ~/.config/anx/profiles/<profile>.json
-
-Active profile resolution:
-
-  1. --agent <profile>       Explicit command flag for one invocation
-  2. ANX_AGENT=<profile>     Per-process default for shells, scripts, services
-  3. default-profile marker  ~/.config/anx/default-profile written by config use/auth default
-  4. single profile          Auto-selected only when exactly one profile exists
-  5. none                    Multiple profiles without selection fail config resolution
-
-Precedence:
-
-  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults
-
-Use anx config use <profile> for a durable workstation default. It writes ~/.config/anx/default-profile.
-
-Use ANX_AGENT=<profile> for multi-agent machines, launchd/systemd services, CI jobs, or any process that should not mutate a shared default marker:
-
-  ANX_AGENT=engineering anx auth whoami
-  ANX_AGENT=reviewer anx cards list
-
-Use --agent <profile> for a one-off command that should override both the process environment and the persisted default:
-
-  ANX_AGENT=engineering anx --agent reviewer auth whoami
-
-Inspect the effective profile, base URL, token redaction status, and per-field sources with:
-
-  anx config show
-
-Switch or clear the persisted default with:
-
-  anx config use <profile>
-  anx config unset
-  anx auth list
-
-Bridge isolation:
-
-Bridge configs are agent-isolated by their own handle/config path and imported auth material. Multiple bridges can coexist on one machine; prefer explicit bridge configs plus ANX_AGENT or --agent during setup so the CLI default profile does not become hidden shared state.
-
-Related docs:
-  anx meta doc env
-  anx help config
-  anx auth list
+Old ~/.config/anx/profiles/*.json agent profiles are considered only for adoption during host enrollment. Use anx host enroll --plan to inspect them.
 ```
 
 ## `env`
@@ -577,464 +377,73 @@ Supported ANX_* environment variables and precedence.
 ```text
 ANX environment variables
 
-Use environment variables as per-process defaults for shells, scripts, services, and same-machine multi-agent setups. Explicit command flags still win for one command.
+ANX_AS selects a derived agent. --as wins over ANX_AS. When neither is set, anx checks agentctl run context, then verified harness markers.
+ANX_BASE_URL selects the core workspace. ANX_CONFIG_DIR or --config-dir selects the absolute host config directory when HOME is unavailable, including agentctl command callbacks. ANX_TIMEOUT, ANX_JSON and ANX_NO_COLOR control request and output behavior.
+ANX_ACCESS_TOKEN supplies an explicit bearer for controlled human or test contexts. It does not use the host assertion grant.
 
-Precedence:
-  command flags > environment variables > profile/default marker/autodiscovery > built-in defaults
-
-Supported variables:
-
-Variable          Overrides                 Example
---------          ---------                 -------
-ANX_AGENT         active profile selection  ANX_AGENT=engineering
-ANX_BASE_URL      core API base URL         ANX_BASE_URL=https://anx.example.com/ws/org/workspace
-ANX_TIMEOUT       request timeout           ANX_TIMEOUT=30s
-ANX_NO_COLOR      color output              ANX_NO_COLOR=1
-ANX_JSON          JSON output mode          ANX_JSON=true
-ANX_PROFILE_PATH  profile file path         ANX_PROFILE_PATH=/path/to/profile.json
-ANX_ACCESS_TOKEN  bearer access token       ANX_ACCESS_TOKEN=<token>
-
-Notes:
-- Prefer `ANX_AGENT` in long-running agent services so each process has its own identity without rewriting `~/.config/anx/default-profile`.
-- Prefer `ANX_BASE_URL` in CI and scripts when the target workspace is known outside the profile file.
-- Use `ANX_PROFILE_PATH` for isolated launch contexts that should not read the normal profile directory.
-- Treat `ANX_ACCESS_TOKEN` as secret material. Profile-backed auth is usually easier to refresh and audit.
-
-Inspect effective values and sources with `anx config show`.
+Run anx config show to inspect effective values without printing secrets.
 ```
 
 ## `config`
 
-CLI config surface: default profile selection, effective settings, and clearing the persisted marker.
+CLI config surface: effective settings and their sources.
 
 ```text
-Config surface for the active CLI profile
-
-Use this group to set or inspect which local profile supplies base URL and auth when you omit --agent / --base-url.
-
-Core commands:
-  config use <profile>   Persist the active profile (equivalent to auth default).
-  config show            Print effective settings and per-field sources (tokens redacted).
-  config unset           Remove the default profile marker (~/.config/anx/default-profile).
-
-Related:
-  auth list              List profiles and which is active.
-  auth default <profile> Same selection as config use.
-
-Docs:
-  anx meta doc profiles
-  anx meta doc env
+Config: anx config show prints the workspace URL, selected agent name, and sources (secrets redacted).
 ```
 
 ## `agent-bridge`
 
-Install, configure, and operate the preferred per-agent `anx-agent-bridge` runtime (local adapter + check-in); workspace wake routing still lives in `anx-core`.
+Install and operate one `anx-agent-bridge` runtime per enrolled host.
 
 ```text
 Agent bridge
 
-Use this when you want the preferred per-agent bridge path for wake registration and live `@handle` delivery.
+Enroll this machine once with anx host enroll. Run one bridge per enrolled host.
+The bridge obtains short-lived tokens through anx host token --as <name> and
+calls host-signed CLI helpers for check-in and wake mutations. It stores no
+agent keys, copied refresh tokens, or per-agent homes.
 
-What changed
-
-- The main CLI now owns the per-agent bootstrap path for fresh machines:
-  - `anx bridge install`
-  - `anx bridge import-auth`
-  - `anx bridge init-config`
-  - `anx bridge start|stop|restart|status|logs`
-  - `anx bridge workspace-id`
-  - `anx bridge doctor`
-- The Python package still owns runtime behavior:
-  - `anx-agent-bridge auth register`
-  - `anx-agent-bridge bridge run` under the hood
-  - `anx-agent-bridge notifications list|read|dismiss` for bridge-local pull flows
-- The workspace wake-routing service is deployment-owned and runs inside `anx-core`, not through `anx bridge`.
-- Registrations become taggable once the registration and workspace binding are valid. Fresh bridge check-in only controls whether delivery is immediate.
-
-Install on a fresh machine with only `anx`
-
-1. Install the bridge runtime into a managed Python `3.11+` virtualenv:
+Create one bridge.toml with [host] base_url, id, slug, config_dir and one [agents.<name>]
+command array for each active, non-excluded derived agent. Then run:
 
   anx bridge install
-
-  By default, this installs the bridge package at the same git ref as your `anx` release tag and writes the launcher into `~/.local/bin`. Use `--ref main` when you need the latest default-branch commit ahead of that tag. Override `--bin-dir` if needed. The current bootstrap path also requires `git` on PATH. For opt-in unattended alignment with that pinned ref during `anx bridge doctor` / `anx bridge start`, generate configs with `anx bridge init-config ... --managed-package-auto-update` so `[bridge].managed_package_auto_update` is set (same prerequisites as install: Python `3.11+`, `git`, outbound network access, macOS/Linux). Agents who leave it unset only get textual skew hints and should run `anx bridge install` manually (or pass `--bridge-config` during `anx update` alongside that opt-in when they want refreshes tied to CLI upgrades).
-
-2. If you need bridge test dependencies on the same machine:
-
-  anx bridge install --with-dev
-
-3. Verify the wrapper works:
-
-  anx-agent-bridge --version
-
-Contributor path from a repo checkout
-
-- For local development inside this repo, prefer:
-  - `make setup`
-  - `make doctor`
-  - `make test`
-- Local contributor rules for the adapter live in `adapters/agent-bridge/AGENTS.md`.
-
-Config generation
-
-Generate minimal configs from the CLI:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-  anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id <workspace-id> --workspace-id <workspace-id-2> --handle <handle> --plugin-module my_bridge --plugin-factory build_adapter
-
-Use `--kind hermes` for the bundled Hermes ACP subprocess adapter and `--kind openclaw` for the bundled OpenClaw subprocess adapter. Use `subprocess` or `python-plugin` when you own a custom adapter implementation.
-
-This scaffolds an explicit agent home:
-
-- `.anx/agent.toml` anchors identity and auth state
-- `.anx/wake.toml` owns workspace wake subscriptions
-- `bridge.toml` owns adapter/runtime behavior
-
-These templates intentionally default the bridge lifecycle to:
-
-- `status = "pending"`
-- `checkin_interval_seconds = 60`
-- `checkin_ttl_seconds = 300`
-
-That is the guardrail for live delivery: the bridge still needs to check in before the agent shows online, but humans can tag a valid offline registration and let notifications queue.
-
-Workspace id source of truth
-
-- `<workspace-id>` must be the durable workspace id for the deployment, not a slug and not a UI path segment.
-- In the common single-workspace path, `anx bridge init-config` discovers the id from the active profile or core handshake.
-- If discovery fails, pass `--workspace-id <workspace-id>` explicitly.
-- If the agent already has wake registration metadata, use `anx bridge workspace-id --handle <handle>` to read its enabled workspace bindings.
-- If the workspace deployment documents the configured `workspace_id`, copy that exact value as the explicit override.
-- If the deployment is driven by control-plane workspace records, copy the durable `workspace_id` from that workspace record, not the slug.
-- The bundled example value `ws_main` is only a sample.
-- If you still do not know the real workspace id for your deployment, stop and ask the operator. Do not guess.
-
-First-time agent-host path
-
-1. Install the runtime:
-
-  anx bridge install
-
-2. Render the bridge runtime config and agent home. For Hermes ACP:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-
-  For OpenClaw:
-
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-
-  For a custom subprocess adapter, render the config and then inspect the JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`:
-
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-
-  Add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding.
-
-3. If a matching `anx` profile already exists for the target principal, import it into the agent home:
-
-  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
-
-4. Register the target bridge principal and write the initial pending registration when auth does not already exist:
-
-  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
-
-5. Start the managed bridge daemon from the main CLI:
-
   anx bridge start --config ./bridge.toml
-
-6. Confirm the process and readiness state before expecting immediate delivery:
-
   anx bridge status --config ./bridge.toml
   anx bridge doctor --config ./bridge.toml
+  anx bridge stop --config ./bridge.toml
 
-  Use `anx bridge logs --config ./bridge.toml` when you need the recent daemon output, and `anx bridge restart --config ./bridge.toml` if you change config or recover from a stale process.
-
-  The doctor should report both adapter readiness and the bridge as online for immediate delivery. If it still says offline, stale, or adapter probe failed, tags will queue notifications until you fix that.
-
-7. Post a test wake message containing `@<handle>`.
-
-8. Confirm the durable trace:
-  - `message_posted`
-  - a queued wake record visible through `anx notifications list --status unread`
-  - if online, bridge reply `message_posted`
-  - if online, the wake record moves to completed delivery status
-  - if offline, the notification remains queued until the bridge reconnects
-
-9. Pull or dismiss queued notifications directly when needed:
-
-  anx notifications list --status unread
-  anx notifications dismiss --wakeup-id <wakeup-id>
-  anx-agent-bridge notifications list --config ./bridge.toml --status unread
-
-10. If the bridge is online but tagged delivery still fails, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
-
-Lifecycle note
-
-- `anx-agent-bridge registration apply` updates the agent principal registration, but the bridge runtime still owns live presence updates.
-- The bridge runtime refreshes registration readiness on check-in.
-- If the bridge stops checking in, the registration stays taggable but delivery falls back to queued notifications until the bridge returns.
-- The preferred operational path is to manage the bridge daemon with `anx bridge start|stop|restart|status|logs`, not ad hoc shell backgrounding.
-
-Troubleshooting
-
-- `anx-agent-bridge: command not found`:
-  - run `anx bridge install` or add the managed wrapper directory to PATH
-- bridge doctor says the bridge is offline:
-  - the bridge has not checked in yet or is no longer refreshing; start or restart `anx bridge start --config ./bridge.toml` and verify `.anx/wake.toml` points at the right workspace set
-- wake request is durable but never claimed:
-  - the bridge is offline, the embedded wake-routing sidecar in `anx-core` is unhealthy, or `workspace_id` is wrong
-- principal exists but wake still fails:
-  - inspect the principal registration for actor mismatch, disabled status, stale check-in, or missing workspace binding
-
-Related docs
-
-  anx help bridge
-  anx meta doc wake-routing
-  anx bridge doctor --config ./bridge.toml
+When agentctl is available, each wake uses agentctl run and a command
+subscription to anx runs ingest. The subscription passes --config-dir and
+--base-url because agentctl's command environment has no HOME or ANX variables.
+A card subject adds anx.card.<slug>.
+Without agentctl, the runtime receives ANX_AS=<name>. The runtime should
+post its own response with anx; a run's end does not finish a card.
 ```
 
 ## `wake-routing`
 
-How `@handle` wake routing works, including self-registration, verification, and troubleshooting.
+How `@name.host` wake routing and host bridge presence work.
 
 ```text
 Wake routing
 
-Use this when you want humans or agents to wake other agents from thread messages by tagging `@handle`.
+The core router turns @<name>.<host> mentions into durable wakes. A derived
+agent is taggable while its host is active and its name is not excluded.
+A fresh host bridge check-in controls immediate delivery; offline wakes stay
+queued. Run one bridge per enrolled host and configure an exact runtime argv
+for every active, non-excluded derived agent on that host.
 
-How it works
-
-- Wake routing is provided by a workspace-owned sidecar hosted inside `anx-core`, not by the per-agent CLI.
-- The durable wake registration now lives on the agent principal metadata, not in `docs`.
-- The bridge-owned readiness proof is direct presence state on that principal registration.
-- A tagged message becomes durable wake work when the target agent is registered for the workspace. Bridge readiness only changes whether delivery is immediate or queued.
-
-What counts as taggable
-
-- principal kind is `agent`
-- principal is not revoked
-- principal has a username/handle
-- principal has wake registration metadata
-- registration `actor_id` matches the principal actor
-- registration has an enabled binding for the current workspace
-- registration status is not `disabled` (often `pending` until the first bridge check-in, then `active`)
-
-What counts as online
-
-- the agent is already taggable
-- registration records a bridge instance id, signed proof, check-in timestamp, expiry timestamp, and covered workspace ids
-- the signed proof matches the registration's bridge signing public key and its expiry is still fresh for the current workspace
-
-Important lifecycle rule
-
-- Bridge-managed registrations still start as `pending` until the bridge checks in and finalizes the live registration payload.
-- Once registration and workspace binding are valid, humans can tag the agent even if the bridge is offline.
-- If the bridge stops checking in, the agent becomes offline but remains taggable; pending notifications queue until the bridge returns.
-
-How humans discover it
-
-- In the web UI Access page, look for registered agent principals and their `@handle`.
-- `Online` means immediate delivery is available now. `Offline` means tags still queue durable notifications for later delivery.
-
-How agents discover it
-
-- Read this topic with `anx meta doc wake-routing`.
-- Read the preferred runtime path with `anx meta doc agent-bridge`.
-- Use `anx help bridge` to bootstrap the per-agent bridge runtime from the main CLI.
-- Let `anx bridge init-config` discover the durable workspace id from the active profile or core handshake; pass `--workspace-id` only when discovery fails or you need an explicit binding.
-- Use `anx bridge workspace-id --handle <handle>` when an existing registration is the easiest source of truth for enabled bindings.
-- Use `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists.
-- Use `anx notifications list --status unread` to inspect queued notifications with the main CLI.
-- Use `anx notifications dismiss --wakeup-id <wakeup-id>` to dismiss a notification so it no longer wakes the bridge.
-- Use `anx auth whoami` to confirm your current username and actor id.
-- Use `anx auth principals list --handles-only` to inspect the exact handles that can be mentioned.
-- Use `anx auth principals list --taggable` if you want the filtered principal rows as well.
-- Use `anx auth principals list` for readable rows; add `--json` when you need the full wake-routing metadata in a parseable envelope (scripts, debugging).
-
-Preferred path when you are using `anx-agent-bridge`
-
-1. Install the runtime:
-
+  anx host enroll
   anx bridge install
-
-2. Generate the agent config. For Hermes ACP, use the bundled adapter:
-
-  anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>
-
-  For OpenClaw, use the bundled adapter:
-
-  anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle <handle> --openclaw-bin /opt/homebrew/bin/openclaw
-
-  For custom adapters, use subprocess JSON or python_plugin:
-
-  anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle <handle> --adapter-entrypoint ./adapter.py
-
-  Add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding.
-
-  Inspect the exact stdin/stdout JSON contract with `anx-agent-bridge adapter contract --config ./bridge.toml`.
-
-3. If matching `anx` auth already exists, import it into the agent home:
-
-  anx bridge import-auth --config ./bridge.toml --from-profile <agent>
-
-4. Register auth and write the initial pending registration when auth does not already exist:
-
-  anx-agent-bridge auth register --config ./bridge.toml --invite-token <token> --apply-registration
-
-  If auth already exists and you only need to rewrite the principal registration:
-
-  anx-agent-bridge registration apply --config ./bridge.toml
-
-5. Start the target bridge:
-
   anx bridge start --config ./bridge.toml
-
-6. Verify the bridge has checked in before expecting immediate delivery:
-
-  anx bridge status --config ./bridge.toml
-  anx bridge doctor --config ./bridge.toml
-  anx-agent-bridge registration status --config ./bridge.toml
-
-7. Pull or dismiss queued notifications directly when needed:
-
-  anx notifications list --status unread
-  anx-agent-bridge notifications list --config ./bridge.toml --status unread
-  anx notifications dismiss --wakeup-id <wakeup-id>
-
-8. If the bridge is online but tagged delivery still does not work, ask the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
-
-Generic ANX CLI lifecycle
-
-If you are writing registration state manually, update the agent principal registration only. Manual principal updates do not replace the live bridge-owned check-in endpoint.
-
-1. Confirm the identity you are registering:
-
-  anx auth whoami
-
-  Use the server-resolved username as `<handle>` and the server actor id as `<actor-id>`.
-
-2. Resolve the durable workspace id you want to enable:
-
-  - In the common single-workspace path, use `anx bridge init-config` and let it discover the id from the active profile or core handshake.
-  - If an existing registration is available, use `anx bridge workspace-id --handle <handle>` to inspect enabled bindings.
-  - If the workspace deployment documents the configured `workspace_id`, copy that exact value as the explicit override.
-  - If your deployment is driven by control-plane workspace records, copy the durable workspace id from that record, not the slug.
-  - The bundled example value `ws_main` is only a sample.
-  - Do not use a workspace slug or URL path segment. If you cannot determine the real value, stop and ask the operator.
-
-3. Create a first-time registration payload such as `wake-registration.json`:
-
-  {
-    "registration": {
-      "version": "agent-registration/v1",
-      "handle": "<handle>",
-      "actor_id": "<actor-id>",
-      "delivery_mode": "pull",
-      "driver_kind": "custom",
-      "resume_policy": "resume_or_create",
-      "status": "pending",
-      "adapter_kind": "custom",
-      "updated_at": "<current-utc-timestamp>",
-      "workspace_bindings": [
-        {
-          "workspace_id": "<workspace-id>",
-          "enabled": true
-        }
-      ]
-    }
-  }
-
-4. For first-time registration, patch the current authenticated agent:
-
-  curl -X PATCH "$ANX_BASE_URL/agents/me" \
-    -H "Authorization: Bearer <access-token>" \
-    -H "Content-Type: application/json" \
-    --data @wake-registration.json
-
-5. If auth already exists, prefer the supported bridge-managed path instead of hand-patching:
-
-  anx-agent-bridge registration apply --config ./bridge.toml
-
-Registration schema notes
-
-- Fields required for routing correctness are:
-  - `content.handle` matching the principal username
-  - `content.actor_id` matching the principal actor id
-  - at least one enabled `content.workspace_bindings[].workspace_id` matching the current workspace id
-- Bridge readiness fields are:
-  - `content.bridge_instance_id` identifies the currently checking-in bridge runtime
-  - `content.bridge_signing_public_key_spki_b64` stores the bridge-managed public proof key
-  - `content.bridge_checked_in_at` and `content.bridge_expires_at` define freshness
-  - `content.bridge_workspace_ids` lists the workspaces covered by the proof
-  - `content.bridge_proof_signature_b64` must verify against the registration's public proof key
-- `updated_at` is advisory metadata. Set it to the current UTC time when creating or updating the registration, or let bridge-managed flows populate it.
-- Do not hand-edit `status = "active"` before the bridge has actually checked in.
-- Do not try to hand-author the bridge readiness proof. The supported path is to let the running bridge call the bridge check-in endpoint and refresh the registration.
-
-Verification flow
-
-1. Confirm your local and server identity:
-
-  anx auth whoami
-
-2. Confirm a principal exists for the target handle:
-
-  anx auth principals list --handles-only
-
-3. Read the principal registration (`--json` when a script parses the full payload):
-
-  anx auth principals list --json
-
-4. Verify all of the following:
-  - principal kind is `agent`
-  - principal username is exactly `<handle>`
-  - principal actor id matches `content.actor_id`
-  - `workspace_bindings` contains the current workspace id with `enabled: true`
-  - `status` is `active`
-  - if you need online delivery right now, `bridge_instance_id`, `bridge_checked_in_at`, `bridge_expires_at`, `bridge_workspace_ids`, and `bridge_proof_signature_b64` are present
-  - if you need online delivery right now, `bridge_workspace_ids` contains the current workspace id
-  - if you need online delivery right now, `bridge_expires_at` is still in the future
-
-5. If you are using `anx-agent-bridge`, prefer:
-
   anx bridge doctor --config ./bridge.toml
 
-Concrete wake example
-
-1. Ensure the target registration is valid for the workspace, and ensure the bridge is running if you want immediate delivery. The workspace deployment must also be running `anx-core` with the embedded wake-routing sidecar enabled.
-2. Post a thread message containing `@<handle>`, for example:
-
-  @<handle> summarize the latest onboarding blockers.
-
-3. Expected durable trace:
-- existing `message_posted`
-- new wake queue record visible through notifications
-- if online, wake queue status becomes `claimed`
-- if online, new bridge reply `message_posted`
-- if online, wake queue status becomes `completed`
-- if offline, the wake queue record stays requested until the bridge later claims it
-
-Common failure modes
-
-- unknown handle: no matching agent principal username exists
-- missing registration: the agent principal does not have wake registration metadata
-- registration actor mismatch: the registration points at a different actor
-- workspace not bound: registration exists but is not enabled for this workspace
-- bridge not checked in: the registration may still be pending, or the bridge may simply be offline for immediate delivery
-- stale bridge check-in: the bridge stopped refreshing readiness, so delivery is queued until it returns
-- wake-routing sidecar unavailable: the workspace deployment is not currently routing tagged messages
-- wrong workspace id: the registration uses a slug or another id that does not match the workspace deployment
-
-Operational note
-
-- This mechanism is discoverable from the CLI and UI, but actual wake dispatch is owned by the workspace deployment's `anx-core` process plus the per-agent bridge runtime.
-
-Next steps
-
-  anx help bridge
-  anx meta doc agent-bridge
-  anx bridge doctor --config ./bridge.toml
+The bridge verifies its configured roster before check-in. It reads each
+agent's notifications with a short-lived token from anx host token --as.
+Wake claim, completion, and failure use host-signed CLI requests. With
+agentctl present, wakes are launched via agentctl run and subscribed to
+anx runs ingest so executions appear in the runs roster.
 ```
 
 ## `draft`
@@ -1124,12 +533,12 @@ Examples:
 
 ## `auth whoami`
 
-Validate the active profile, print resolved identity metadata, and point agents at wake-registration next steps.
+Show the enrolled host, derived agent and resolution source.
 
 ```text
 Local Help: auth whoami
 
-Validate the active profile against the server, print resolved identity metadata, and point to wake-registration next steps.
+Show the enrolled host, derived agent and identity resolution source.
 
 Usage:
   anx auth whoami
@@ -1139,83 +548,17 @@ Examples:
   anx --json auth whoami
 
 Next steps:
-  If this agent should be wakeable by `@handle`, read `anx meta doc wake-routing`.
+  If this agent should be wakeable by `@handle`, read `anx debug meta doc wake-routing`.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth whoami ... ; anx --json auth whoami ... ; anx auth whoami ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth list`
-
-List local CLI profiles and the active profile.
-
-```text
-Local Help: auth list
-
-List local CLI profiles and identify the active one.
-
-Usage:
-  anx auth list
-
-Examples:
-  anx auth list
-  anx --json auth list
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth list ... ; anx --json auth list ... ; anx auth list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth default`
-
-Persist the default CLI profile used when no explicit agent is selected.
-
-```text
-Local Help: auth default
-
-Persist the default profile used when no explicit agent is selected.
-
-Usage:
-  anx auth default <profile>
-
-Examples:
-  anx auth default agent-a
-  anx --json auth default agent-a
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth default ... ; anx --json auth default ... ; anx auth default ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `config use`
-
-Set the active CLI profile used when --agent and ANX_AGENT are omitted.
-
-```text
-Local Help: config use
-
-Persist the named profile as the active default used when --agent and ANX_AGENT are omitted.
-
-Usage:
-  anx config use <profile>
-
-Examples:
-  anx config use agent-a
-  anx --json config use agent-a
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx config use ... ; anx --json config use ... ; anx config use ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `config show`
 
-Print effective CLI profile settings, per-field sources, precedence, and env var hints (tokens redacted).
+Print effective CLI settings, per-field sources, precedence, and env var hints (tokens redacted).
 
 ```text
 Local Help: config show
@@ -1232,167 +575,24 @@ Examples:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx config show ... ; anx --json config show ... ; anx config show ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `config unset`
-
-Clear the persisted default profile marker (~/.config/anx/default-profile).
-
-```text
-Local Help: config unset
-
-Remove the default profile marker file so the CLI falls back to single-profile auto-select or explicit flags/env.
-
-Usage:
-  anx config unset
-
-Examples:
-  anx config unset
-  anx --json config unset
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx config unset ... ; anx --json config unset ... ; anx config unset ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth update-username`
-
-Rename the authenticated agent and sync the local profile.
-
-```text
-Local Help: auth update-username
-
-Update the authenticated agent username and sync the local profile copy.
-
-Usage:
-  anx auth update-username --username <username>
-
-Examples:
-  anx auth update-username --username renamed_agent
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth update-username ... ; anx --json auth update-username ... ; anx auth update-username ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth rotate`
-
-Rotate the active agent key and refresh stored credentials.
-
-```text
-Local Help: auth rotate
-
-Rotate the active agent key and refresh stored credentials.
-
-Usage:
-  anx auth rotate
-
-Examples:
-  anx auth rotate
-  anx --json auth rotate
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth rotate ... ; anx --json auth rotate ... ; anx auth rotate ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth revoke`
-
-Revoke the active agent and mark the local profile revoked. Use explicit human-lockout flags only for break-glass recovery.
-
-```text
-Local Help: auth revoke
-
-Revoke the active agent and mark the local profile revoked.
-
-Usage:
-  anx auth revoke
-
-Examples:
-  anx auth revoke
-  anx --json auth revoke
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth revoke ... ; anx --json auth revoke ... ; anx auth revoke ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `auth token-status`
-
-Inspect whether the local profile still has refreshable token material.
-
-```text
-Local Help: auth token-status
-
-Inspect whether the local profile still has refreshable token material.
-
-Usage:
-  anx auth token-status
-
-Examples:
-  anx auth token-status
-  anx --json auth token-status
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx auth token-status ... ; anx --json auth token-status ... ; anx auth token-status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge`
 
-CLI-managed bridge bootstrap helpers for installing, templating, and checking `anx-agent-bridge`.
+One bridge per enrolled host for derived-agent wake routing.
 
 ```text
-Bridge bootstrap
+Bridge: one process per enrolled host
 
-Use `anx bridge` when you only have the main CLI installed and need to bootstrap, manage, or inspect the Python `anx-agent-bridge` runtime for one agent. This is the discoverable install/setup path for agent operators. The bridge package still owns the runtime behavior; the main CLI installs it and acts as the local process manager.
+anx host enroll
+anx bridge install
+anx bridge start --config ./bridge.toml
+anx bridge status --config ./bridge.toml
+anx bridge doctor --config ./bridge.toml
+anx bridge stop --config ./bridge.toml
 
-Bootstrap prerequisites
-
-- Python `3.11+`
-- `git` on PATH for the current GitHub-subdirectory install path
-
-Lifecycle constraint
-
-- Registration plus a matching enabled workspace binding makes an agent taggable.
-- A fresh bridge check-in makes the agent online for immediate delivery.
-- Offline agents still accumulate durable wake notifications and will receive them when the bridge comes back.
-
-Subcommands
-
-  bridge install      Install or refresh the managed `anx-agent-bridge` virtualenv and wrapper
-  bridge import-auth  Copy an existing `anx` profile into bridge auth state
-  bridge init-config  Render a minimal agent bridge TOML config
-  bridge start        Start a managed bridge daemon for one config
-  bridge stop         Stop a managed bridge daemon for one config
-  bridge restart      Restart a managed bridge daemon for one config
-  bridge status       Inspect managed process state for one config
-  bridge logs         Read recent log lines for one config
-  bridge workspace-id Read workspace ids from an existing wake registration
-  bridge doctor       Validate install/config/readiness without starting daemons
-
-Recommended order
-
-1. `anx bridge install`
-2. `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle <handle>`, `--kind openclaw`, or `--kind subprocess --adapter-entrypoint ./adapter.py` (add `--workspace-id <workspace-id>` only if discovery fails or you need an explicit binding)
-3. `anx bridge workspace-id --handle <handle>` if a wake registration already exists and you want to reuse its bindings
-4. `anx bridge import-auth --config ./bridge.toml --from-profile <agent>` when matching `anx` auth already exists
-5. `anx-agent-bridge auth register ...` for the agent principal when auth does not already exist
-6. `anx bridge start --config ./bridge.toml`
-7. `anx bridge status --config ./bridge.toml` and `anx bridge doctor --config ./bridge.toml` before expecting immediate online delivery
-8. `anx notifications list --status unread` or `anx-agent-bridge notifications list --config ./bridge.toml --status unread` when you want to pull pending notifications directly
-
-Workspace-owned wake routing
-
-- `anx bridge` only manages per-agent bridge daemons.
-- Tagged wake routing runs inside `anx-core` as an embedded workspace sidecar.
-- If tagged delivery still fails while the bridge is online, hand off to the workspace operator to inspect the embedded wake-routing sidecar in `anx-core`.
+Config: [host] base_url, id, slug; one [agents.<name>] command argv per enabled derived agent.
 ```
 
 ## `import`
@@ -1459,25 +659,7 @@ Output conventions
 Query commitments, evidence, freshness and refresh state
 
 ```text
-Local Help: work
-
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
-
-  anx work capabilities        Read capabilities actually advertised by the authenticated central API.
-  anx work context             Compose work, a bounded observation page and refresh status using read-only requests.
-  anx work create              Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
-  anx work freshness           Inspect last observed, source activity and meaningful progress independently.
-  anx work get                 Read one work card, source authority, executions and current evidence.
-  anx work list                List work cards across sources in the authenticated workspace.
-  anx work observations list   Read append-only evidence for a work card, preserving pagination and uncertainty.
-  anx work observations submit Submit an authenticated remote observation; preserve its idempotency key on retry.
-  anx work patch               Update work metadata with if_version; external status remains source-owned.
-  anx work refresh get         Read refresh state without queueing work.
-  anx work refresh request     Request a bounded refresh; queued is not a successful observation.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
+Daily work: anx work start [card]; anx work note <text> [card]; anx work block <why> [card] [--ask --recommend <answer>]; anx work done [card] --evidence <url|ref>. Omitted cards use presence. For inventory use anx work list.
 ```
 
 ## `pm`
@@ -1487,7 +669,7 @@ Read and operate durable PM conversations, decisions and action receipts
 ```text
 Local Help: pm
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
   anx pm actions acknowledge   Acknowledge a failed or unresolvable action.
   anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
@@ -1521,28 +703,10 @@ Use --json for one machine-readable envelope.
 
 ## `auth`
 
-Register, inspect, and manage auth state
+Inspect the enrolled host and derived-agent identity
 
 ```text
-Auth lifecycle and registration surface
-
-Use this group to register a profile, inspect the active identity, and manage local auth state.
-
-Core commands:
-  auth register       Create or register a profile.
-  auth whoami         Inspect the active profile.
-  auth list           List local profiles.
-  auth default        Select the default profile.
-  auth update-username  Rename the current principal locally.
-  auth rotate         Rotate the active agent key.
-  auth revoke         Revoke the current profile.
-  auth token-status   Inspect whether the profile still has refreshable token material.
-
-	Related commands:
-  auth invites        Manage invite tokens and invite-backed registration.
-  auth bootstrap      Inspect bootstrap status before first registration.
-  auth principals     Inspect or revoke principals.
-  auth audit          Inspect audit records for auth activity.
+Auth: anx auth whoami reports the enrolled host, derived agent and resolution source. Enroll with anx host enroll.
 ```
 
 ## `topics`
@@ -1576,7 +740,7 @@ Agent-facing topic surface:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics ... ; anx --json topics ... ; anx topics ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1624,7 +788,7 @@ Read paths:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards ... ; anx --json boards ... ; anx boards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1685,7 +849,7 @@ Local inspection helpers:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs ... ; anx --json docs ... ; anx docs ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1729,7 +893,7 @@ Agent-facing Card workflow:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards ... ; anx --json cards ... ; anx cards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1741,7 +905,7 @@ Inspect and clear durable wake notifications for the active agent
 ```text
 Agent notification surface
 
-Use this group to inspect and clear durable wake notifications for the active agent profile.
+Use this group to inspect and clear durable wake notifications for the resolved derived agent.
 
 Core commands:
   notifications list       List queued notifications, usually with --status unread.
@@ -1765,11 +929,11 @@ Read-only backing-thread inspection (tooling and diagnostics)
 Generated Help: threads
 
 Commands:
-  threads context          Get backing thread coordination context
-  threads inspect          Inspect backing thread
-  threads list             List backing threads
-  threads timeline         Get backing thread timeline
-  threads workspace        Get backing thread workspace projection (diagnostic)
+  debug threads context    Get backing thread coordination context
+  debug threads inspect    Inspect backing thread
+  debug threads list       List backing threads
+  debug threads timeline   Get backing thread timeline
+  debug threads workspace  Get backing thread workspace projection (diagnostic)
 
 Read-only backing-thread diagnostics and direct thread messages:
   threads message         Post directly to a backing thread; prefer domain commands like `anx cards message` or `anx topics message`.
@@ -1777,12 +941,12 @@ Read-only backing-thread diagnostics and direct thread messages:
   threads workspace       Diagnostic workspace projection (context + inbox + related threads).
   threads inspect          Smaller diagnostic bundle (context + inbox).
   threads timeline         Backing thread timeline and expansions.
-	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for agent-facing topic context. Use `anx threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx threads get` (contract: `threads.inspect`).
+	  Tip: prefer domain commands like `anx cards message card:<handle>` for normal authoring and `anx topics workspace topic:<handle>` for agent-facing topic context. Use `anx debug threads workspace --full-id` (debug/admin) when you need the backing-thread projection with full ids in default text; use `--state active` to discover backing threads by lifecycle state. For a minimal `{thread}` read, use `anx debug threads get` (contract: `threads.inspect`).
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads ... ; anx --json threads ... ; anx threads ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads ... ; anx --json debug threads ... ; anx debug threads ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1795,14 +959,14 @@ Manage events and event streams
 Generated Help: events
 
 Commands:
-  events archive           Archive event
-  events create            Create event
-  events get               Get event
-  events list              List events
-  events restore           Restore event from trash
-  events stream            Stream events (SSE)
-  events trash             Move event to trash
-  events unarchive         Unarchive event
+  debug events archive     Archive event
+  debug events create      Create event
+  debug events get         Get event
+  debug events list        List events
+  debug events restore     Restore event from trash
+  debug events stream      Stream events (SSE)
+  debug events trash       Move event to trash
+  debug events unarchive   Unarchive event
 
 Local inspection helpers:
   events list              List timeline events with thread/type/actor filters, id mode, and preview summaries.
@@ -1810,12 +974,12 @@ Local inspection helpers:
   events validate          Validate an events.create payload from stdin/--from-file without sending a request.
 	  Tip: use `--mine` or `--actor-id <id>` to audit one actor; add `--full-id` (debug/admin) for copy/paste IDs.
 	  Raw `events create` is a contract escape hatch. For ordinary discussion, use `anx topics message topic:<handle>`, `anx docs message doc:<handle>`, or `anx cards message card:<handle>` instead of hand-authoring a `message_posted` event.
-  For details: `anx events explain <event-type>`
+  For details: `anx debug events explain <event-type>`
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events ... ; anx --json events ... ; anx events ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events ... ; anx --json debug events ... ; anx debug events ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1828,15 +992,15 @@ Operator diagnostics for human attention inbox items
 Generated Help: inbox
 
 Commands:
-  inbox get                Get one inbox item
-  inbox list               List inbox items
-  inbox respond            Respond to human attention inbox item
-  inbox stream             Stream inbox items (SSE)
+  debug inbox get          Get one inbox item
+  debug inbox list         List inbox items
+  debug inbox respond      Respond to human attention inbox item
+  debug inbox stream       Stream inbox items (SSE)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox ... ; anx --json inbox ... ; anx inbox ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox ... ; anx --json debug inbox ... ; anx debug inbox ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1879,7 +1043,7 @@ Lower-level helpers:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts ... ; anx --json artifacts ... ; anx artifacts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1892,13 +1056,13 @@ Diagnostic actor inventory and fixture helpers
 Generated Help: actors
 
 Commands:
-  actors create            Create actor (dev fixture)
-  actors list              List actors
+  debug actors create      Create actor (dev fixture)
+  debug actors list        List actors
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors ... ; anx --json actors ... ; anx actors ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug actors ... ; anx --json debug actors ... ; anx debug actors ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1911,12 +1075,12 @@ Diagnostic typed-ref edge inspection
 Generated Help: ref-edges
 
 Commands:
-  ref-edges list           List ref edges (forward or reverse indexed lookup)
+  debug ref-edges list     List ref edges (forward or reverse indexed lookup)
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx ref-edges ... ; anx --json ref-edges ... ; anx ref-edges ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug ref-edges ... ; anx --json debug ref-edges ... ; anx debug ref-edges ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -1960,6 +1124,90 @@ Reference commands:
   meta ops        Inspect operational metadata helpers.
 ```
 
+## `runs list`
+
+List launcher runs
+
+```text
+Generated Help: runs list
+
+- Command ID: `runs.list`
+- CLI path: `runs list`
+- HTTP: `GET /runs`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: See current and recent agent executions.
+- Output: Returns `{ runs, next_cursor? }`.
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
+- Concepts: `runs`, `agents`, `cards`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `runs get`, `runs ingest`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx runs list ... ; anx --json runs list ... ; anx runs list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `runs get`
+
+Get one run
+
+```text
+Generated Help: runs get
+
+- Command ID: `runs.get`
+- CLI path: `runs get`
+- HTTP: `GET /runs/{run_id}`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect execution attribution and outcome.
+- Output: Returns `{ run }`.
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Concepts: `runs`, `agents`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `runs ingest`, `runs list`
+
+Inputs:
+  Required:
+  - path `run_id`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx runs get ... ; anx --json runs get ... ; anx runs get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host list`
+
+List workspace hosts
+
+```text
+Generated Help: host list
+
+- Command ID: `hosts.list`
+- CLI path: `host list`
+- HTTP: `GET /hosts`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Inspect enrolled machines.
+- Output: Returns `{ hosts }`.
+- Error codes: `auth_required`, `invalid_token`
+- Concepts: `hosts`, `agents`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `host bridge check-in`, `host enroll approve`, `host enroll complete`, `host enroll deny`, `host enroll headless`, `host enroll pending`, `host enroll poll`, `host enroll start`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host list ... ; anx --json host list ... ; anx host list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
 ## `auth invites list`
 
 List invite tokens
@@ -1970,19 +1218,20 @@ Generated Help: auth invites list
 - Command ID: `auth.invites.list`
 - CLI path: `auth invites list`
 - HTTP: `GET /auth/invites`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator listing of outstanding invites.
 - Output: Returns `{ invites }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites list ... ; anx --json auth invites list ... ; anx auth invites list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth invites create`
@@ -1995,19 +1244,26 @@ Generated Help: auth invites create
 - Command ID: `auth.invites.create`
 - CLI path: `auth invites create`
 - HTTP: `POST /auth/invites`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Issue a one-time invite for human or agent principals.
+- Why: Issue a one-time invite for a human principal; kind must be human.
 - Output: Returns `{ invite, token }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `forbidden`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
+Inputs:
+  Required:
+  - body `kind` (string)
+  Optional:
+  - body `expires_at` (datetime)
+  Enum values: kind: human
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites create ... ; anx --json auth invites create ... ; anx auth invites create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth invites revoke`
@@ -2020,13 +1276,14 @@ Generated Help: auth invites revoke
 - Command ID: `auth.invites.revoke`
 - CLI path: `auth invites revoke`
 - HTTP: `POST /auth/invites/{invite_id}/revoke`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Invalidate an outstanding invite by id.
 - Output: Returns `{ invite }`.
 - Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 Inputs:
   Required:
@@ -2035,7 +1292,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites revoke ... ; anx --json auth invites revoke ... ; anx auth invites revoke ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth bootstrap status`
@@ -2048,18 +1305,19 @@ Generated Help: auth bootstrap status
 - Command ID: `auth.bootstrap.status`
 - CLI path: `auth bootstrap status`
 - HTTP: `GET /auth/bootstrap/status`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
-- Why: Report whether first-principal bootstrap registration is still available.
+- Why: Report whether first-human passkey bootstrap registration is still available; hosts cannot bootstrap.
 - Output: Returns `{ bootstrap_registration_available, dev_passkey_bypass_available? }`, where the dev bypass field reflects the effective local-only passkey bypass capability.
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth bootstrap status ... ; anx --json auth bootstrap status ... ; anx auth bootstrap status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth principals list`
@@ -2072,19 +1330,20 @@ Generated Help: auth principals list
 - Command ID: `auth.principals.list`
 - CLI path: `auth principals list`
 - HTTP: `GET /auth/principals`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator visibility into registered principals for the workspace.
 - Output: Returns principal list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals revoke`, `auth token`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth principals list ... ; anx --json auth principals list ... ; anx auth principals list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth principals revoke`
@@ -2097,13 +1356,14 @@ Generated Help: auth principals revoke
 - Command ID: `auth.principals.revoke`
 - CLI path: `auth principals revoke`
 - HTTP: `POST /auth/principals/{principal_id}/revoke`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Administrative revocation of a principal linkage.
 - Output: Returns result JSON.
 - Error codes: `auth_required`, `invalid_request`, `not_found`, `invalid_token`, `conflict`
 - Concepts: `auth`
-- Adjacent commands: `auth register`, `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
+- Adjacent commands: `auth audit list`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth token`
 
 Inputs:
   Required:
@@ -2112,7 +1372,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth principals revoke ... ; anx --json auth principals revoke ... ; anx auth principals revoke ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `auth audit list`
@@ -2125,19 +1385,20 @@ Generated Help: auth audit list
 - Command ID: `auth.audit.list`
 - CLI path: `auth audit list`
 - HTTP: `GET /auth/audit`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Operator audit trail for auth-sensitive actions.
 - Output: Returns audit list JSON.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `auth`, `audit`
-- Adjacent commands: `auth register`, `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
+- Adjacent commands: `auth bootstrap status`, `auth invites create`, `auth invites list`, `auth invites revoke`, `auth passkey dev login`, `auth passkey dev register`, `auth passkey login options`, `auth passkey login verify`, `auth passkey register options`, `auth passkey register verify`, `auth principals list`, `auth principals revoke`, `auth token`
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth audit list ... ; anx --json auth audit list ... ; anx auth audit list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `actors list`
@@ -2148,21 +1409,22 @@ List actors
 Generated Help: actors list
 
 - Command ID: `actors.list`
-- CLI path: `actors list`
+- CLI path: `debug actors list`
 - HTTP: `GET /actors`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate durable actor records for operator UI and dev fixtures.
 - Output: Returns `{ actors, next_cursor? }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `actors`, `auth`
-- Adjacent commands: `actors create`
+- Adjacent commands: `debug actors create`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors list ... ; anx --json actors list ... ; anx actors list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug actors list ... ; anx --json debug actors list ... ; anx debug actors list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `actors create`
@@ -2173,21 +1435,22 @@ Create actor (dev fixture)
 Generated Help: actors create
 
 - Command ID: `actors.create`
-- CLI path: `actors create`
+- CLI path: `debug actors create`
 - HTTP: `POST /actors`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Dev-only actor registration when dev_actor_mode is enabled.
 - Output: Returns `{ actor }`.
 - Error codes: `auth_required`, `invalid_request`, `dev_actor_mode_disabled`
 - Concepts: `actors`, `auth`
-- Adjacent commands: `actors list`
+- Adjacent commands: `debug actors list`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx actors create ... ; anx --json actors create ... ; anx actors create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug actors create ... ; anx --json debug actors create ... ; anx debug actors create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics list`
@@ -2200,6 +1463,7 @@ Generated Help: topics list
 - Command ID: `topics.list`
 - CLI path: `topics list`
 - HTTP: `GET /topics`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan the durable topic inventory.
@@ -2212,7 +1476,7 @@ Generated Help: topics list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics list ... ; anx --json topics list ... ; anx topics list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics get`
@@ -2225,6 +1489,7 @@ Generated Help: topics get
 - Command ID: `topics.get`
 - CLI path: `topics get`
 - HTTP: `GET /topics/{topic_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one topic and its canonical durable fields.
@@ -2240,7 +1505,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics get ... ; anx --json topics get ... ; anx topics get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics timeline`
@@ -2253,6 +1518,7 @@ Generated Help: topics timeline
 - Command ID: `topics.timeline`
 - CLI path: `topics timeline`
 - HTTP: `GET /topics/{topic_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load chronological evidence and related resources for one topic.
@@ -2268,7 +1534,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics timeline ... ; anx --json topics timeline ... ; anx topics timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics workspace`
@@ -2281,6 +1547,7 @@ Generated Help: topics workspace
 - Command ID: `topics.workspace`
 - CLI path: `topics workspace`
 - HTTP: `GET /topics/{topic_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Agent-facing discussion/context primitive. Load the topic workspace composed from linked cards, docs, backing threads, and inbox items. The operator work projection is `work.list` / `work.get`.
@@ -2296,7 +1563,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics workspace ... ; anx --json topics workspace ... ; anx topics workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics archive`
@@ -2309,6 +1576,7 @@ Generated Help: topics archive
 - Command ID: `topics.archive`
 - CLI path: `topics archive`
 - HTTP: `POST /topics/{topic_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Soft-archive a topic and derive its lifecycle state from archived_at.
@@ -2329,7 +1597,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics archive ... ; anx --json topics archive ... ; anx topics archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics unarchive`
@@ -2342,6 +1610,7 @@ Generated Help: topics unarchive
 - Command ID: `topics.unarchive`
 - CLI path: `topics unarchive`
 - HTTP: `POST /topics/{topic_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Clear archived_at on a topic (restore default list visibility).
@@ -2362,7 +1631,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics unarchive ... ; anx --json topics unarchive ... ; anx topics unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics restore`
@@ -2375,6 +1644,7 @@ Generated Help: topics restore
 - Command ID: `topics.restore`
 - CLI path: `topics restore`
 - HTTP: `POST /topics/{topic_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Clear trash lifecycle fields on a topic after an explicit restore action.
@@ -2395,7 +1665,7 @@ CLI input:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics restore ... ; anx --json topics restore ... ; anx topics restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards list`
@@ -2408,6 +1678,7 @@ Generated Help: boards list
 - Command ID: `boards.list`
 - CLI path: `boards list`
 - HTTP: `GET /boards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan durable coordination boards and lightweight summaries.
@@ -2420,7 +1691,7 @@ Generated Help: boards list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards list ... ; anx --json boards list ... ; anx boards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards get`
@@ -2433,6 +1704,7 @@ Generated Help: boards get
 - Command ID: `boards.get`
 - CLI path: `boards get`
 - HTTP: `GET /boards/{board_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve canonical board state and summary.
@@ -2448,7 +1720,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards get ... ; anx --json boards get ... ; anx boards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards patch`
@@ -2461,6 +1733,7 @@ Generated Help: boards patch
 - Command ID: `boards.patch`
 - CLI path: `boards patch`
 - HTTP: `PATCH /boards/{board_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update board metadata with optimistic concurrency.
@@ -2486,7 +1759,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards patch ... ; anx --json boards patch ... ; anx boards patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards archive`
@@ -2499,6 +1772,7 @@ Generated Help: boards archive
 - Command ID: `boards.archive`
 - CLI path: `boards archive`
 - HTTP: `POST /boards/{board_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-archive a board and derive its lifecycle state from archived_at.
@@ -2516,7 +1790,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards archive ... ; anx --json boards archive ... ; anx boards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards unarchive`
@@ -2529,6 +1803,7 @@ Generated Help: boards unarchive
 - Command ID: `boards.unarchive`
 - CLI path: `boards unarchive`
 - HTTP: `POST /boards/{board_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on a board (restore default list visibility).
@@ -2546,7 +1821,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards unarchive ... ; anx --json boards unarchive ... ; anx boards unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards trash`
@@ -2559,6 +1834,7 @@ Generated Help: boards trash
 - Command ID: `boards.trash`
 - CLI path: `boards trash`
 - HTTP: `POST /boards/{board_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move board to trash with an explicit operator reason.
@@ -2577,7 +1853,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards trash ... ; anx --json boards trash ... ; anx boards trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards restore`
@@ -2590,6 +1866,7 @@ Generated Help: boards restore
 - Command ID: `boards.restore`
 - CLI path: `boards restore`
 - HTTP: `POST /boards/{board_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on a board after an explicit restore action.
@@ -2607,7 +1884,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards restore ... ; anx --json boards restore ... ; anx boards restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards purge`
@@ -2620,6 +1897,7 @@ Generated Help: boards purge
 - Command ID: `boards.purge`
 - CLI path: `boards purge`
 - HTTP: `POST /boards/{board_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed board (human-gated).
@@ -2637,7 +1915,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards`
@@ -2666,7 +1944,7 @@ Canonical card workflow:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards ... ; anx --json boards cards ... ; anx boards cards ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -2681,6 +1959,7 @@ Generated Help: boards cards create-batch
 - Command ID: `boards.cards.batch_add`
 - CLI path: `boards cards create-batch`
 - HTTP: `POST /boards/{board_id}/cards/batch`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create multiple cards in one transaction using a single board concurrency token.
@@ -2694,14 +1973,14 @@ Inputs:
   - path `board_id`
   - body `items` (list<any>)
   Optional:
-  - body `actor_id` (string): Defaults from the active CLI profile when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
+  - body `actor_id` (string): Defaults from the resolved derived agent when omitted. Non-empty `--actor-id` overrides `actor_id` in the JSON body.
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response. You may pass `--if-board-updated-at` instead of embedding it in JSON.
   - body `request_key` (string): Idempotency key for the whole batch. Non-empty `--request-key` overrides `request_key` in the JSON body.
 
 CLI input:
   - Provide a JSON object on stdin or via `--from-file`; it must include `items` (array of card create payloads).
   - Board target: a single positional `<board-ref-or-handle>` before flags (preferred), or `--board-id <board-ref-or-handle>` for compatibility.
-  - `actor_id` defaults from the active profile when omitted from JSON; `--actor-id` sets or overrides it.
+  - `actor_id` defaults from the resolved agent when omitted from JSON; `--actor-id` sets or overrides it.
   - `--request-key` and `--if-board-updated-at`, when non-empty, override the same keys in the JSON body.
 
 Agent tip: run `anx boards get <board-ref-or-handle> --json` (or `boards workspace`) first, copy `board.updated_at` into `if_board_updated_at`, or pass `--if-board-updated-at` from that value. Each item's `related_refs` must reference source threads not already backing another card on this board, or the server returns `conflict`.
@@ -2709,7 +1988,7 @@ Agent tip: run `anx boards get <board-ref-or-handle> --json` (or `boards workspa
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards create-batch ... ; anx --json boards cards create-batch ... ; anx boards cards create-batch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards get`
@@ -2722,6 +2001,7 @@ Generated Help: boards cards get
 - Command ID: `boards.cards.get`
 - CLI path: `boards cards get`
 - HTTP: `GET /boards/{board_id}/cards/{card_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve a card through its board membership context.
@@ -2738,7 +2018,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards get ... ; anx --json boards cards get ... ; anx boards cards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs list`
@@ -2751,6 +2031,7 @@ Generated Help: docs list
 - Command ID: `docs.list`
 - CLI path: `docs list`
 - HTTP: `GET /docs`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan canonical document lineages.
@@ -2765,7 +2046,7 @@ Generated Help: docs list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs list ... ; anx --json docs list ... ; anx docs list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs history`
@@ -2778,6 +2059,7 @@ Generated Help: docs history
 - Command ID: `docs.revisions.list`
 - CLI path: `docs history`
 - HTTP: `GET /docs/{document_id}/revisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable revisions for one document lineage.
@@ -2795,7 +2077,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs history ... ; anx --json docs history ... ; anx docs history ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revision`
@@ -2811,7 +2093,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision ... ; anx --json docs revision ... ; anx docs revision ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -2826,6 +2108,7 @@ Generated Help: docs archive
 - Command ID: `docs.archive`
 - CLI path: `docs archive`
 - HTTP: `POST /docs/{document_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-archive a document lineage (orthogonal to head revision content).
@@ -2845,7 +2128,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs archive ... ; anx --json docs archive ... ; anx docs archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs unarchive`
@@ -2858,6 +2141,7 @@ Generated Help: docs unarchive
 - Command ID: `docs.unarchive`
 - CLI path: `docs unarchive`
 - HTTP: `POST /docs/{document_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on a document so it returns to default visibility.
@@ -2877,7 +2161,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs unarchive ... ; anx --json docs unarchive ... ; anx docs unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs restore`
@@ -2890,6 +2174,7 @@ Generated Help: docs restore
 - Command ID: `docs.restore`
 - CLI path: `docs restore`
 - HTTP: `POST /docs/{document_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash state on a document after an explicit restore action.
@@ -2910,7 +2195,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs restore ... ; anx --json docs restore ... ; anx docs restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs purge`
@@ -2923,6 +2208,7 @@ Generated Help: docs purge
 - Command ID: `docs.purge`
 - CLI path: `docs purge`
 - HTTP: `POST /docs/{document_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed document (human-gated).
@@ -2942,7 +2228,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revision get`
@@ -2955,6 +2241,7 @@ Generated Help: docs revision get
 - Command ID: `docs.revisions.get`
 - CLI path: `docs revision get`
 - HTTP: `GET /docs/{document_id}/revisions/{revision_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one immutable document revision.
@@ -2971,7 +2258,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revision get ... ; anx --json docs revision get ... ; anx docs revision get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards get`
@@ -2984,6 +2271,7 @@ Generated Help: cards get
 - Command ID: `cards.get`
 - CLI path: `cards get`
 - HTTP: `GET /cards/{card_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one first-class card by public ref or handle.
@@ -2999,7 +2287,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards get ... ; anx --json cards get ... ; anx cards get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards history`
@@ -3012,6 +2300,7 @@ Generated Help: cards history
 - Command ID: `cards.revisions.list`
 - CLI path: `cards history`
 - HTTP: `GET /cards/{card_id}/revisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Enumerate immutable content revisions for one card lineage.
@@ -3027,7 +2316,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards history ... ; anx --json cards history ... ; anx cards history ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards archive`
@@ -3040,6 +2329,7 @@ Generated Help: cards archive
 - Command ID: `cards.archive`
 - CLI path: `cards archive`
 - HTTP: `POST /cards/{card_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Soft-delete a first-class card by setting archived_at (board concurrency via if_board_updated_at).
@@ -3058,7 +2348,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards archive ... ; anx --json cards archive ... ; anx cards archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards purge`
@@ -3071,6 +2361,7 @@ Generated Help: cards purge
 - Command ID: `cards.purge`
 - CLI path: `cards purge`
 - HTTP: `POST /cards/{card_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete an archived or trashed card (human-gated).
@@ -3088,7 +2379,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards purge ... ; anx --json cards purge ... ; anx cards purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards restore`
@@ -3101,6 +2392,7 @@ Generated Help: cards restore
 - Command ID: `cards.restore`
 - CLI path: `cards restore`
 - HTTP: `POST /cards/{card_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archive or trash lifecycle fields on a card so it reappears on boards.
@@ -3119,7 +2411,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards restore ... ; anx --json cards restore ... ; anx cards restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards timeline`
@@ -3132,6 +2424,7 @@ Generated Help: cards timeline
 - Command ID: `cards.timeline`
 - CLI path: `cards timeline`
 - HTTP: `GET /cards/{card_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load chronological evidence and related resources for one card.
@@ -3147,7 +2440,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards timeline ... ; anx --json cards timeline ... ; anx cards timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads list`
@@ -3158,21 +2451,22 @@ List backing threads
 Generated Help: threads list
 
 - Command ID: `threads.list`
-- CLI path: `threads list`
+- CLI path: `debug threads list`
 - HTTP: `GET /threads`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect backing infrastructure threads without making them the primary planning noun.
 - Output: Returns `{ threads }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads inspect`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads timeline`, `debug threads workspace`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads list ... ; anx --json threads list ... ; anx threads list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads list ... ; anx --json debug threads list ... ; anx debug threads list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads get`
@@ -3183,15 +2477,16 @@ Inspect backing thread
 Generated Help: threads get
 
 - Command ID: `threads.inspect`
-- CLI path: `threads inspect`
+- CLI path: `debug threads inspect`
 - HTTP: `GET /threads/{thread_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Output: Returns `{ thread }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3199,8 +2494,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads get ... ; anx --json threads get ... ; anx threads get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads get ... ; anx --json debug threads get ... ; anx debug threads get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads timeline`
@@ -3211,15 +2506,16 @@ Get backing thread timeline
 Generated Help: threads timeline
 
 - Command ID: `threads.timeline`
-- CLI path: `threads timeline`
+- CLI path: `debug threads timeline`
 - HTTP: `GET /threads/{thread_id}/timeline`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Retrieve event history plus typed-ref expansions for one backing thread.
 - Output: Returns `{ thread, events, artifacts, topics, cards, documents, notification_receipts }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `timeline`
-- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads list`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3235,8 +2531,8 @@ Note: by default, archived and trashed events are excluded from the timeline out
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads timeline ... ; anx --json threads timeline ... ; anx threads timeline ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads timeline ... ; anx --json debug threads timeline ... ; anx debug threads timeline ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads context`
@@ -3247,15 +2543,16 @@ Get backing thread coordination context
 Generated Help: threads context
 
 - Command ID: `threads.context`
-- CLI path: `threads context`
+- CLI path: `debug threads context`
 - HTTP: `GET /threads/{thread_id}/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load a compact coordination bundle (thread, recent events, key artifacts, cards, documents) for inspection and triage.
 - Output: Returns `{ thread, recent_events, key_artifacts, open_cards, documents }` plus forward-compatible fields.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads inspect`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads inspect`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -3263,8 +2560,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads context ... ; anx --json threads context ... ; anx threads context ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads context ... ; anx --json debug threads context ... ; anx debug threads context ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events get`
@@ -3275,15 +2572,16 @@ Get event
 Generated Help: events get
 
 - Command ID: `events.get`
-- CLI path: `events get`
+- CLI path: `debug events get`
 - HTTP: `GET /events/{event_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Fetch one append-only event record by public ref or handle.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3291,8 +2589,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events get ... ; anx --json events get ... ; anx events get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events get ... ; anx --json debug events get ... ; anx debug events get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events create`
@@ -3303,15 +2601,16 @@ Create event
 Generated Help: events create
 
 - Command ID: `events.create`
-- CLI path: `events create`
+- CLI path: `debug events create`
 - HTTP: `POST /events`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append an event that links first-class resources and evidence through typed refs.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3345,7 +2644,7 @@ Common authoring types:
   - `exception_raised`
 
 Usually emitted by higher-level commands:
-  - `human_attention_requested`: prefer `anx human ask|review|escalate`
+  - `human_attention_requested`: prefer `anx ask|review|escalate`
 
 Local CLI notes:
   - Prefer higher-level commands for topic, board, card, doc, and human-attention lifecycle writes.
@@ -3353,8 +2652,8 @@ Local CLI notes:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events create ... ; anx --json events create ... ; anx events create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events create ... ; anx --json debug events create ... ; anx debug events create ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events stream`
@@ -3365,21 +2664,22 @@ Stream events (SSE)
 Generated Help: events stream
 
 - Command ID: `events.stream`
-- CLI path: `events stream`
+- CLI path: `debug events stream`
 - HTTP: `GET /stream/events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events stream ... ; anx --json events stream ... ; anx events stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events stream ... ; anx --json debug events stream ... ; anx debug events stream ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events tail`
@@ -3390,21 +2690,22 @@ Stream events (SSE)
 Generated Help: events tail
 
 - Command ID: `events.stream`
-- CLI path: `events stream`
+- CLI path: `debug events stream`
 - HTTP: `GET /stream/events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Long-lived SSE feed of workspace events with optional thread/type filters and Last-Event-ID resume.
 - Output: Each SSE message is `event: …` with JSON data `{ "event": <event> }` (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events tail ... ; anx --json events tail ... ; anx events tail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events tail ... ; anx --json debug events tail ... ; anx debug events tail ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events archive`
@@ -3415,15 +2716,16 @@ Archive event
 Generated Help: events archive
 
 - Command ID: `events.archive`
-- CLI path: `events archive`
+- CLI path: `debug events archive`
 - HTTP: `POST /events/{event_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Set archived_at on an append-only event record for filtered views.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3433,8 +2735,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events archive ... ; anx --json events archive ... ; anx events archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events archive ... ; anx --json debug events archive ... ; anx debug events archive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events unarchive`
@@ -3445,15 +2747,16 @@ Unarchive event
 Generated Help: events unarchive
 
 - Command ID: `events.unarchive`
-- CLI path: `events unarchive`
+- CLI path: `debug events unarchive`
 - HTTP: `POST /events/{event_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on an event.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events trash`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`
 
 Inputs:
   Required:
@@ -3463,8 +2766,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events unarchive ... ; anx --json events unarchive ... ; anx events unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events unarchive ... ; anx --json debug events unarchive ... ; anx debug events unarchive ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events trash`
@@ -3475,15 +2778,16 @@ Move event to trash
 Generated Help: events trash
 
 - Command ID: `events.trash`
-- CLI path: `events trash`
+- CLI path: `debug events trash`
 - HTTP: `POST /events/{event_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move event to trash with an explicit operator reason.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events restore`, `events stream`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3494,8 +2798,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events trash ... ; anx --json events trash ... ; anx events trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events trash ... ; anx --json debug events trash ... ; anx debug events trash ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events restore`
@@ -3506,15 +2810,16 @@ Restore event from trash
 Generated Help: events restore
 
 - Command ID: `events.restore`
-- CLI path: `events restore`
+- CLI path: `debug events restore`
 - HTTP: `POST /events/{event_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash state on an event after an explicit restore action.
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`
 - Concepts: `events`, `write`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events list`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3524,8 +2829,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events restore ... ; anx --json events restore ... ; anx events restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events restore ... ; anx --json debug events restore ... ; anx debug events restore ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox list`
@@ -3536,19 +2841,20 @@ List inbox items
 Generated Help: inbox list
 
 - Command ID: `inbox.list`
-- CLI path: `inbox list`
+- CLI path: `debug inbox list`
 - HTTP: `GET /inbox`
+- Side effect class: `read_only`
 - Input mode: `none`
 - Why: Load the operator-only human attention queue derived from explicit human_attention_requested events.
 - Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`
+- Adjacent commands: `debug inbox get`, `debug inbox respond`, `debug inbox stream`
 
 
 View scoping:
   - `inbox list` is read from the active CLI identity's perspective.
-  - The response includes `viewing_as` so you can confirm the resolved profile, username, and actor_id.
-  - Switch perspective with `--agent <profile>` or `ANX_AGENT` before reading or acting.
+  - The response includes `viewing_as` so you can confirm the resolved agent, username, and actor_id.
+  - Switch perspective with `--as <name>` or `ANX_AS` before reading or acting.
 
 Inbox kinds:
   - `ask`: A requesting agent needs an answer, judgment, or missing context.
@@ -3557,8 +2863,8 @@ Inbox kinds:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox list ... ; anx --json inbox list ... ; anx inbox list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox list ... ; anx --json debug inbox list ... ; anx debug inbox list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox get`
@@ -3569,15 +2875,16 @@ Get one inbox item
 Generated Help: inbox get
 
 - Command ID: `inbox.get`
-- CLI path: `inbox get`
+- CLI path: `debug inbox get`
 - HTTP: `GET /inbox/{inbox_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Side-effect free read of one materialized inbox row.
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`
+- Adjacent commands: `debug inbox list`, `debug inbox respond`, `debug inbox stream`
 
 Inputs:
   Required:
@@ -3585,8 +2892,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox get ... ; anx --json inbox get ... ; anx inbox get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox get ... ; anx --json debug inbox get ... ; anx debug inbox get ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox respond`
@@ -3597,42 +2904,46 @@ Respond to human attention inbox item
 Generated Help: inbox respond
 
 - Command ID: `inbox.respond`
-- CLI path: `inbox respond`
+- CLI path: `debug inbox respond`
 - HTTP: `POST /inbox/{inbox_id}/respond`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Record a freeform human response, close the human attention item, and optionally notify the selected requester/replacement agent.
+- Why: A human principal records one response per request, closes the human attention item, and optionally notifies the selected requester/replacement agent.
 - Output: Returns `{ event, notify }`.
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox stream`
 
 Inputs:
   Required:
   - path `inbox_id`
+  - body `outcome` (string)
   - body `response_text` (string)
   Optional:
   - body `actor_id` (string)
+  - body `idempotency_key` (string)
   - body `inbox_item_id` (string)
   - body `notify_mode` (string)
   - body `notify_target_actor_id` (string)
   - body `notify_target_agent_id` (string)
   - body `related_refs` (list<any>)
-  Enum values: notify_mode: none, original, replacement
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, rejected
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `inbox list`).
   --response-text <text>  Freeform response text.
+  --outcome <value>       answered, approved, rejected, or acknowledged (required).
   --notify-mode <mode>    original, target, or none.
-  --actor-id <id>         Actor id (`me` uses the active profile's actor when configured).
+  --actor-id <id>         Actor id (`me` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).
   Positional: inbox item id when not given via `--inbox-item-id`.
-  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, optional fields).
+  Otherwise: JSON object on stdin (`inbox_item_id`, `response_text`, `outcome`, optional fields).
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox respond ... ; anx --json inbox respond ... ; anx inbox respond ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox respond ... ; anx --json debug inbox respond ... ; anx debug inbox respond ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox stream`
@@ -3643,21 +2954,22 @@ Stream inbox items (SSE)
 Generated Help: inbox stream
 
 - Command ID: `inbox.stream`
-- CLI path: `inbox stream`
+- CLI path: `debug inbox stream`
 - HTTP: `GET /stream/inbox`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox stream ... ; anx --json inbox stream ... ; anx inbox stream ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox stream ... ; anx --json debug inbox stream ... ; anx debug inbox stream ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `inbox tail`
@@ -3668,21 +2980,22 @@ Stream inbox items (SSE)
 Generated Help: inbox tail
 
 - Command ID: `inbox.stream`
-- CLI path: `inbox stream`
+- CLI path: `debug inbox stream`
 - HTTP: `GET /stream/inbox`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Server-sent events feed of inbox projection updates.
 - Output: SSE `inbox_item` events with JSON payloads.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`
+- Adjacent commands: `debug inbox get`, `debug inbox list`, `debug inbox respond`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx inbox tail ... ; anx --json inbox tail ... ; anx inbox tail ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug inbox tail ... ; anx --json debug inbox tail ... ; anx debug inbox tail ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts list`
@@ -3695,6 +3008,7 @@ Generated Help: artifacts list
 - Command ID: `artifacts.list`
 - CLI path: `artifacts list`
 - HTTP: `GET /artifacts`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Search and filter immutable artifacts across the workspace.
@@ -3707,7 +3021,7 @@ Generated Help: artifacts list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts list ... ; anx --json artifacts list ... ; anx artifacts list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts content`
@@ -3720,6 +3034,7 @@ Generated Help: artifacts content
 - Command ID: `artifacts.content`
 - CLI path: `artifacts content`
 - HTTP: `GET /artifacts/{artifact_id}/content`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
@@ -3735,7 +3050,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts content ... ; anx --json artifacts content ... ; anx artifacts content ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts download`
@@ -3748,6 +3063,7 @@ Generated Help: artifacts download
 - Command ID: `artifacts.content`
 - CLI path: `artifacts content`
 - HTTP: `GET /artifacts/{artifact_id}/content`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Return raw artifact bytes with accurate Content-Type, Content-Disposition, ETag, and Last-Modified for attachments.
@@ -3763,7 +3079,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts download ... ; anx --json artifacts download ... ; anx artifacts download ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts attachments`
@@ -3779,7 +3095,7 @@ Commands:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts attachments ... ; anx --json artifacts attachments ... ; anx artifacts attachments ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
 ```
@@ -3794,6 +3110,7 @@ Generated Help: artifacts archive
 - Command ID: `artifacts.archive`
 - CLI path: `artifacts archive`
 - HTTP: `POST /artifacts/{artifact_id}/archive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Set archived_at on artifact metadata (orthogonal to trash lifecycle).
@@ -3811,7 +3128,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts archive ... ; anx --json artifacts archive ... ; anx artifacts archive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts unarchive`
@@ -3824,6 +3141,7 @@ Generated Help: artifacts unarchive
 - Command ID: `artifacts.unarchive`
 - CLI path: `artifacts unarchive`
 - HTTP: `POST /artifacts/{artifact_id}/unarchive`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear archived_at on artifact metadata.
@@ -3841,7 +3159,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts unarchive ... ; anx --json artifacts unarchive ... ; anx artifacts unarchive ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts trash`
@@ -3854,6 +3172,7 @@ Generated Help: artifacts trash
 - Command ID: `artifacts.trash`
 - CLI path: `artifacts trash`
 - HTTP: `POST /artifacts/{artifact_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move artifact metadata to trash with an explicit operator reason.
@@ -3872,7 +3191,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts trash ... ; anx --json artifacts trash ... ; anx artifacts trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts restore`
@@ -3885,6 +3204,7 @@ Generated Help: artifacts restore
 - Command ID: `artifacts.restore`
 - CLI path: `artifacts restore`
 - HTTP: `POST /artifacts/{artifact_id}/restore`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Clear trash lifecycle fields on an artifact after an explicit restore action.
@@ -3902,7 +3222,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts restore ... ; anx --json artifacts restore ... ; anx artifacts restore ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts purge`
@@ -3915,6 +3235,7 @@ Generated Help: artifacts purge
 - Command ID: `artifacts.purge`
 - CLI path: `artifacts purge`
 - HTTP: `POST /artifacts/{artifact_id}/purge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Permanently delete a trashed artifact (human-gated).
@@ -3932,7 +3253,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts purge ... ; anx --json artifacts purge ... ; anx artifacts purge ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `ref-edges list`
@@ -3943,8 +3264,9 @@ List ref edges (forward or reverse indexed lookup)
 Generated Help: ref-edges list
 
 - Command ID: `ref_edges.list`
-- CLI path: `ref-edges list`
+- CLI path: `debug ref-edges list`
 - HTTP: `GET /ref-edges`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `query`
 - Why: Query the write-through ref index by source or target typed ref (mutually exclusive); reverse lookup uses target_ref.
@@ -3955,8 +3277,8 @@ Generated Help: ref-edges list
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx ref-edges list ... ; anx --json ref-edges list ... ; anx ref-edges list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug ref-edges list ... ; anx --json debug ref-edges list ... ; anx debug ref-edges list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `derived rebuild`
@@ -3967,8 +3289,9 @@ Rebuild derived projections
 Generated Help: derived rebuild
 
 - Command ID: `derived.rebuild`
-- CLI path: `derived rebuild`
+- CLI path: `debug derived rebuild`
 - HTTP: `POST /derived/rebuild`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Deterministic operator repair for inbox/thread projections.
@@ -3979,8 +3302,8 @@ Generated Help: derived rebuild
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx derived rebuild ... ; anx --json derived rebuild ... ; anx derived rebuild ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug derived rebuild ... ; anx --json debug derived rebuild ... ; anx debug derived rebuild ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta commands`
@@ -3991,21 +3314,22 @@ List command registry metadata
 Generated Help: meta commands
 
 - Command ID: `meta.commands.list`
-- CLI path: `meta commands`
+- CLI path: `debug meta commands`
 - HTTP: `GET /meta/commands`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Expose embedded Agent Nexus command metadata for discovery and codegen parity.
 - Output: Returns generated command registry JSON.
 - Error codes: `meta_unavailable`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta concept`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta commands ... ; anx --json meta commands ... ; anx meta commands ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug meta commands ... ; anx --json debug meta commands ... ; anx debug meta commands ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta command`
@@ -4016,15 +3340,16 @@ Get one command metadata entry
 Generated Help: meta command
 
 - Command ID: `meta.commands.get`
-- CLI path: `meta command`
+- CLI path: `debug meta command`
 - HTTP: `GET /meta/commands/{command_id}`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Resolve command metadata by stable command id.
 - Output: Returns `{ command }`.
 - Error codes: `meta_unavailable`, `not_found`
 - Concepts: `compatibility`
-- Adjacent commands: `meta commands`, `meta concept`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta commands`, `debug meta concept`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 Inputs:
   Required:
@@ -4032,8 +3357,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta command ... ; anx --json meta command ... ; anx meta command ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug meta command ... ; anx --json debug meta command ... ; anx debug meta command ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta concepts`
@@ -4044,21 +3369,22 @@ List concept index
 Generated Help: meta concepts
 
 - Command ID: `meta.concepts.list`
-- CLI path: `meta concepts`
+- CLI path: `debug meta concepts`
 - HTTP: `GET /meta/concepts`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Group command metadata by concept tags.
 - Output: Returns `{ concepts: [...] }`.
 - Error codes: `meta_unavailable`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta commands`, `meta concept`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta commands`, `debug meta concept`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta concepts ... ; anx --json meta concepts ... ; anx meta concepts ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug meta concepts ... ; anx --json debug meta concepts ... ; anx debug meta concepts ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta concept`
@@ -4069,15 +3395,16 @@ Get commands grouped by concept
 Generated Help: meta concept
 
 - Command ID: `meta.concepts.get`
-- CLI path: `meta concept`
+- CLI path: `debug meta concept`
 - HTTP: `GET /meta/concepts/{concept_name}`
+- Side effect class: `read_only`
 - Stability: `stable`
 - Input mode: `none`
 - Why: Expand one concept into related commands.
 - Output: Returns `{ concept: {...} }`.
 - Error codes: `meta_unavailable`, `not_found`
 - Concepts: `compatibility`
-- Adjacent commands: `meta command`, `meta commands`, `meta concepts`, `meta handshake`, `meta health`, `meta livez`, `meta readyz`, `meta version`
+- Adjacent commands: `debug meta command`, `debug meta commands`, `debug meta concepts`, `debug meta handshake`, `debug meta health`, `debug meta livez`, `debug meta readyz`, `debug meta version`
 
 Inputs:
   Required:
@@ -4085,8 +3412,8 @@ Inputs:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta concept ... ; anx --json meta concept ... ; anx meta concept ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug meta concept ... ; anx --json debug meta concept ... ; anx debug meta concept ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm context`
@@ -4099,6 +3426,7 @@ Generated Help: pm context
 - Command ID: `pm.context`
 - CLI path: `pm context`
 - HTTP: `GET /pm/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read bounded authorized PM context.
@@ -4108,7 +3436,7 @@ Generated Help: pm context
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read bounded authorized PM context; partial coverage stays explicit.
 
@@ -4133,6 +3461,7 @@ Generated Help: pm actions acknowledge
 - Command ID: `pm.actions.acknowledge`
 - CLI path: `pm actions acknowledge`
 - HTTP: `POST /pm/actions/{action_id}/acknowledge`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Acknowledge a failed, unresolvable, or undeliverable action.
@@ -4146,7 +3475,7 @@ Inputs:
   Required:
   - path `action_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Acknowledge a failed or unresolvable action.
 
@@ -4167,6 +3496,7 @@ Generated Help: pm actions get
 - Command ID: `pm.actions.get`
 - CLI path: `pm actions get`
 - HTTP: `GET /pm/actions/{action_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read an action and its receipts.
@@ -4180,7 +3510,7 @@ Inputs:
   Required:
   - path `action_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read authorization, attempts and receipt; source_reported is not verified.
 
@@ -4201,6 +3531,7 @@ Generated Help: pm actions list
 - Command ID: `pm.actions.list`
 - CLI path: `pm actions list`
 - HTTP: `GET /pm/actions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List action receipts and attempts.
@@ -4210,7 +3541,7 @@ Generated Help: pm actions list
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Report durable action and receipt statuses with principal-bound pagination.
 
@@ -4233,6 +3564,7 @@ Generated Help: pm actions reconcile
 - Command ID: `pm.actions.reconcile`
 - CLI path: `pm actions reconcile`
 - HTTP: `POST /pm/actions/{action_id}/reconcile`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Read back an action outcome without resending.
@@ -4246,7 +3578,7 @@ Inputs:
   Required:
   - path `action_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Request authoritative read-back of an action receipt; does not resend the action.
 
@@ -4267,6 +3599,7 @@ Generated Help: pm bindings create
 - Command ID: `pm.bindings.create`
 - CLI path: `pm bindings create`
 - HTTP: `POST /pm/bindings`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Bind an exact channel identity to a workspace principal.
@@ -4292,13 +3625,13 @@ Inputs:
   - body `work_ref` (string)
   - body `workspace_id` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
 
 Usage: anx pm bindings create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4315,6 +3648,7 @@ Generated Help: pm bindings list
 - Command ID: `pm.bindings.list`
 - CLI path: `pm bindings list`
 - HTTP: `GET /pm/bindings`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
@@ -4324,7 +3658,7 @@ Generated Help: pm bindings list
 - Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 List channel identity bindings for this workspace; an operator check, never a send.
 
@@ -4347,6 +3681,7 @@ Generated Help: pm conversations create
 - Command ID: `pm.conversations.create`
 - CLI path: `pm conversations create`
 - HTTP: `POST /pm/conversations`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a durable PM conversation.
@@ -4363,13 +3698,13 @@ Inputs:
   Optional:
   - body `work_ref` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Create a durable conversation using request_key, title and optional work_ref.
 
 Usage: anx pm conversations create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4386,6 +3721,7 @@ Generated Help: pm conversations get
 - Command ID: `pm.conversations.get`
 - CLI path: `pm conversations get`
 - HTTP: `GET /pm/conversations/{conversation_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read PM conversation and turns.
@@ -4399,7 +3735,7 @@ Inputs:
   Required:
   - path `conversation_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read a conversation and its durable turns.
 
@@ -4420,6 +3756,7 @@ Generated Help: pm conversations list
 - Command ID: `pm.conversations.list`
 - CLI path: `pm conversations list`
 - HTTP: `GET /pm/conversations`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List PM conversations.
@@ -4429,7 +3766,7 @@ Generated Help: pm conversations list
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 List durable PM conversations with principal-bound pagination.
 
@@ -4452,6 +3789,7 @@ Generated Help: pm conversations message
 - Command ID: `pm.conversations.messages.create`
 - CLI path: `pm conversations message`
 - HTTP: `POST /pm/conversations/{conversation_id}/messages`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Queue a contextual PM turn.
@@ -4467,13 +3805,13 @@ Inputs:
   - body `request_key` (string)
   - body `text` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
 
 Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4490,6 +3828,7 @@ Generated Help: pm decisions answer
 - Command ID: `pm.decisions.answer`
 - CLI path: `pm decisions answer`
 - HTTP: `POST /pm/decisions/{decision_id}/answer`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Answer and authorize a scoped decision.
@@ -4506,13 +3845,13 @@ Inputs:
   - body `revision` (integer)
   - body `text` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Answer with revision, approve and text; the server requires an authorized human principal.
 
 Usage: anx pm decisions answer <ref> (or --decision-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4529,6 +3868,7 @@ Generated Help: pm decisions create
 - Command ID: `pm.decisions.create`
 - CLI path: `pm decisions create`
 - HTTP: `POST /pm/decisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Propose a scoped PM decision.
@@ -4550,13 +3890,13 @@ Inputs:
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Propose an instruction bound to work, scope and target_revision; never approves it.
 
 Usage: anx pm decisions create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4573,6 +3913,7 @@ Generated Help: pm decisions dispatch
 - Command ID: `pm.decisions.dispatch`
 - CLI path: `pm decisions dispatch`
 - HTTP: `POST /pm/decisions/{decision_id}/dispatch`
+- Side effect class: `external_side_effect`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Hand off an authorized source action.
@@ -4586,7 +3927,7 @@ Inputs:
   Required:
   - path `decision_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
 
@@ -4607,6 +3948,7 @@ Generated Help: pm decisions get
 - Command ID: `pm.decisions.get`
 - CLI path: `pm decisions get`
 - HTTP: `GET /pm/decisions/{decision_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a PM decision.
@@ -4620,7 +3962,7 @@ Inputs:
   Required:
   - path `decision_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read an instruction, authorization scope, revision and answer status.
 
@@ -4641,6 +3983,7 @@ Generated Help: pm decisions list
 - Command ID: `pm.decisions.list`
 - CLI path: `pm decisions list`
 - HTTP: `GET /pm/decisions`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List durable PM decisions.
@@ -4650,7 +3993,7 @@ Generated Help: pm decisions list
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 List durable decisions with principal-bound pagination.
 
@@ -4673,6 +4016,7 @@ Generated Help: pm turns claim
 - Command ID: `pm.turns.claim`
 - CLI path: `pm turns claim`
 - HTTP: `POST /pm/turns/claim`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Claim one queued turn for the selected PM agent so two runners never answer it.
@@ -4686,14 +4030,14 @@ Inputs:
   Optional:
   - body `runner_id` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Claim the next queued turn with an exclusive runner lease. 204 means none.
 
 Usage: anx pm turns claim [--from-file <path|->] [--runner-id <id>]
   --runner-id <id> (defaults to the authenticated actor id; claims are idempotent for the same runner_id)
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4710,6 +4054,7 @@ Generated Help: pm turns complete
 - Command ID: `pm.turns.complete`
 - CLI path: `pm turns complete`
 - HTTP: `POST /pm/turns/{turn_id}/complete`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent response.
@@ -4727,13 +4072,13 @@ Inputs:
   Optional:
   - body `evidence_refs` (list<string>)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Selected PM agent records response text and evidence_refs; does not complete work.
 
 Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4750,6 +4095,7 @@ Generated Help: pm turns context
 - Command ID: `pm.turns.context`
 - CLI path: `pm turns context`
 - HTTP: `POST /pm/turns/{turn_id}/context`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Read requesting principal context as selected PM agent.
@@ -4768,7 +4114,7 @@ Inputs:
   - body `limit` (integer)
   - body `query` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read context as the requesting actor; only the selected PM agent may call this.
 
@@ -4793,6 +4139,7 @@ Generated Help: pm turns fail
 - Command ID: `pm.turns.fail`
 - CLI path: `pm turns fail`
 - HTTP: `POST /pm/turns/{turn_id}/fail`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent failure reason without inventing a reply.
@@ -4808,13 +4155,13 @@ Inputs:
   - body `lease_token` (string)
   - body `reason` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Mark a claimed turn failed with a reason; does not complete work.
 
 Usage: anx pm turns fail <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4831,6 +4178,7 @@ Generated Help: pm turns get
 - Command ID: `pm.turns.get`
 - CLI path: `pm turns get`
 - HTTP: `GET /pm/turns/{turn_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a PM conversation turn.
@@ -4844,7 +4192,7 @@ Inputs:
   Required:
   - path `turn_id`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read a PM conversation turn.
 
@@ -4865,6 +4213,7 @@ Generated Help: pm turns heartbeat
 - Command ID: `pm.turns.heartbeat`
 - CLI path: `pm turns heartbeat`
 - HTTP: `POST /pm/turns/{turn_id}/heartbeat`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Keep an active runner lease alive during execution.
@@ -4879,13 +4228,13 @@ Inputs:
   - path `turn_id`
   - body `lease_token` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
 
 Usage: anx pm turns heartbeat <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4902,6 +4251,7 @@ Generated Help: pm turns propose
 - Command ID: `pm.turns.decisions.create`
 - CLI path: `pm turns propose`
 - HTTP: `POST /pm/turns/{turn_id}/decisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Record a selected PM agent proposal.
@@ -4925,14 +4275,14 @@ Inputs:
   - body `payload.resolution_refs` (list<string>)
   Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Selected PM agent proposes an instruction for the requesting actor, never approval.
 
 Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|-> [--lease-token <token>]
   --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4949,6 +4299,7 @@ Generated Help: pm turns release
 - Command ID: `pm.turns.release`
 - CLI path: `pm turns release`
 - HTTP: `POST /pm/turns/{turn_id}/release`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Return interrupted work to the queue for another claim.
@@ -4964,13 +4315,13 @@ Inputs:
   - body `lease_token` (string)
   - body `runner_id` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Lease owner returns a claimed turn to the queue.
 
 Usage: anx pm turns release <ref> (or --turn-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4987,6 +4338,7 @@ Generated Help: work capabilities
 - Command ID: `work.capabilities`
 - CLI path: `work capabilities`
 - HTTP: `GET /work/capabilities`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect work tracking capabilities. `canonical_entity` is `card`; work is a projection over cards, not a second store.
@@ -4994,9 +4346,9 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read capabilities actually advertised by the authenticated central API.
 
@@ -5017,6 +4369,7 @@ Generated Help: work create
 - Command ID: `work.create`
 - CLI path: `work create`
 - HTTP: `POST /work`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Register a card-backed commitment. board_ref is optional; omitted uses the workspace default board.
@@ -5024,7 +4377,7 @@ Generated Help: work create
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5053,13 +4406,13 @@ Inputs:
   - body `summary` (string)
   - body `wake_condition` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 
 Usage: anx work create --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5076,6 +4429,7 @@ Generated Help: work get
 - Command ID: `work.get`
 - CLI path: `work get`
 - HTTP: `GET /work/{card_ref}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read a commitment and its evidence. Same card row as `cards.get`, with projection fields (freshness, observations, annotations).
@@ -5083,13 +4437,13 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
   - path `card_ref`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read one work card, source authority, executions and current evidence.
 
@@ -5110,6 +4464,7 @@ Generated Help: work list
 - Command ID: `work.list`
 - CLI path: `work list`
 - HTTP: `GET /work`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List the operator Tasks projection over cards. `work.*` adds acceptance criteria, observations, and freshness on the same rows as `cards.*`; use `cards.*` for the canonical store and card workflow writes.
@@ -5117,9 +4472,9 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 List work cards across sources in the authenticated workspace.
 
@@ -5148,6 +4503,7 @@ Generated Help: work patch
 - Command ID: `work.patch`
 - CLI path: `work patch`
 - HTTP: `PATCH /work/{card_ref}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update local commitment annotations.
@@ -5155,7 +4511,7 @@ Generated Help: work patch
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5174,13 +4530,51 @@ Inputs:
   - body `patch.start_at` (string)
   - body `patch.wake_condition` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Update work metadata with if_version; external status remains source-owned.
 
 Usage: anx work patch <ref> (or --work-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work presence`
+
+Set the current derived agent's card and progress note.
+
+```text
+Generated Help: work presence
+
+- Command ID: `agents.me.presence`
+- CLI path: `work presence`
+- HTTP: `PATCH /agents/me/presence`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Report current card and progress.
+- Output: Returns `{ presence }`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
+- Concepts: `agents`, `cards`, `runs`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Optional:
+  - body `current_card_ref` (string)
+  - body `note` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Set the current derived agent's card and progress note.
+
+Usage: anx work presence --from-file <path|->
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5197,6 +4591,7 @@ Generated Help: work observations list
 - Command ID: `work.observations.list`
 - CLI path: `work observations list`
 - HTTP: `GET /work/{card_ref}/observations`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List append-only work observations.
@@ -5204,13 +4599,13 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
   - path `card_ref`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read append-only evidence for a work card, preserving pagination and uncertainty.
 
@@ -5233,6 +4628,7 @@ Generated Help: work observations submit
 - Command ID: `work.observations.submit`
 - CLI path: `work observations submit`
 - HTTP: `POST /work/{card_ref}/observations`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Submit an attributed source observation.
@@ -5240,7 +4636,7 @@ Generated Help: work observations submit
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -5270,13 +4666,13 @@ Inputs:
   - body `observation.work_ref` (string)
   Enum values: observation.status: error, reported, uncertain, verified; observation.verification: reported
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Submit an authenticated remote observation; preserve its idempotency key on retry.
 
 Usage: anx work observations submit <ref> (or --work-id <ref>) --from-file <path|->
 
-JSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 Body: {"observation":{"idempotency_key":"stable-report-key","reader_id":"reader","reader_revision":"v1","observed_at":"RFC3339 timestamp","status":"reported","facts":{},"evidence":[]}}
 Preserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.
 
@@ -5295,6 +4691,7 @@ Generated Help: work refresh get
 - Command ID: `work.refresh.get`
 - CLI path: `work refresh get`
 - HTTP: `GET /work/{card_ref}/refresh`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect durable refresh lifecycle.
@@ -5302,13 +4699,13 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh request`
 
 Inputs:
   Required:
   - path `card_ref`
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Read refresh state without queueing work.
 
@@ -5329,6 +4726,7 @@ Generated Help: work refresh request
 - Command ID: `work.refresh.request`
 - CLI path: `work refresh request`
 - HTTP: `POST /work/{card_ref}/refresh`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Queue or coalesce a read-only refresh.
@@ -5336,7 +4734,7 @@ Generated Help: work refresh request
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`
 
 Inputs:
   Required:
@@ -5344,7 +4742,7 @@ Inputs:
   Optional:
   - body `actor_id` (string)
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Request a bounded refresh; queued is not a successful observation.
 
@@ -5365,6 +4763,7 @@ Generated Help: secret list
 - Command ID: `secrets.list`
 - CLI path: `secret list`
 - HTTP: `GET /secrets`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List workspace secret metadata without exposing values.
@@ -5377,7 +4776,7 @@ Generated Help: secret list
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret list ... ; anx --json secret list ... ; anx secret list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret create`
@@ -5390,6 +4789,7 @@ Generated Help: secret create
 - Command ID: `secrets.create`
 - CLI path: `secret create`
 - HTTP: `POST /secrets`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Store an encrypted workspace credential with metadata.
@@ -5409,7 +4809,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret create ... ; anx --json secret create ... ; anx secret create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret delete`
@@ -5422,6 +4822,7 @@ Generated Help: secret delete
 - Command ID: `secrets.delete`
 - CLI path: `secret delete`
 - HTTP: `DELETE /secrets/{secret_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Permanently remove a secret and its encrypted value.
@@ -5438,7 +4839,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret delete ... ; anx --json secret delete ... ; anx secret delete ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret get --reveal`
@@ -5451,6 +4852,7 @@ Generated Help: secret get --reveal
 - Command ID: `secrets.reveal`
 - CLI path: `secret get --reveal`
 - HTTP: `POST /secrets/{secret_id}/reveal`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Decrypt and return a secret value. Logged in audit.
@@ -5467,7 +4869,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret get --reveal ... ; anx --json secret get --reveal ... ; anx secret get --reveal ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret exec`
@@ -5480,6 +4882,7 @@ Generated Help: secret exec
 - Command ID: `secrets.reveal-batch`
 - CLI path: `secret exec`
 - HTTP: `POST /secrets/reveal-batch`
+- Side effect class: `external_side_effect`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Batch-fetch secrets for env injection. Each reveal is audited.
@@ -5496,7 +4899,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret exec ... ; anx --json secret exec ... ; anx secret exec ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `secret update`
@@ -5509,6 +4912,7 @@ Generated Help: secret update
 - Command ID: `secrets.update`
 - CLI path: `secret update`
 - HTTP: `PUT /secrets/{secret_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Replace an encrypted secret value.
@@ -5528,7 +4932,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `lifecycle verbs`
@@ -5539,6 +4943,7 @@ Uniform lifecycle surface for archive, unarchive, trash, restore, and purge acro
 Local Help: lifecycle verbs
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Uniform lifecycle surface for archive, unarchive, trash, restore, and purge across artifacts, boards, docs, events, cards, and topics.
 - Composition: Canonical resources and verbs are listed in `internal/app/lifecycle_spec.go`. When a flag replaces a non-empty JSON field, `--json --dry-run` includes `_overrides` and `anx_cli_recovery.kind=json_flag_overlay`.
 - JSON body: Optional `--from-file` JSON object body; `--reason`, `--actor-id` (except purge), and `--dry-run` augment or replace JSON fields.
@@ -5557,7 +4962,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx lifecycle verbs ... ; anx --json lifecycle verbs ... ; anx lifecycle verbs ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics create`
@@ -5570,6 +4975,7 @@ Generated Help: topics create
 - Command ID: `topics.create`
 - CLI path: `topics create`
 - HTTP: `POST /topics`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a first-class durable topic before attaching cards, docs, or artifacts.
@@ -5595,6 +5001,7 @@ Inputs:
 Local Help: topics create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a topic from plain flags, or from advanced JSON.
 - Composition: Builds the `topics.create` request. Use Topics for discussion and current context around a project, incident, decision, or recurring process.
 - JSON body: Either flags building `{ topic }`, or advanced JSON body `{ topic }` from stdin/--from-file.
@@ -5606,7 +5013,7 @@ Local Help: topics create
 Flags:
   --title <text>               Topic title.
   --summary <text>             Topic summary.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --owner-ref <typed-ref>      Owner typed ref, repeatable.
   --document-ref <typed-ref>   Linked document typed ref, repeatable.
   --board-ref <typed-ref>      Linked board typed ref, repeatable.
@@ -5617,7 +5024,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics create ... ; anx --json topics create ... ; anx topics create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics patch`
@@ -5630,6 +5037,7 @@ Generated Help: topics patch
 - Command ID: `topics.patch`
 - CLI path: `topics patch`
 - HTTP: `PATCH /topics/{topic_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update topic state with provenance and optimistic concurrency.
@@ -5656,6 +5064,7 @@ Inputs:
 Local Help: topics patch
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Patch a topic from scalar flags, or from advanced JSON.
 - Composition: Fetches the Topic to discover `updated_at` when `--if-updated-at` is omitted.
 - JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
@@ -5669,14 +5078,14 @@ Flags:
   --title <text>               Topic title.
   --summary <text>             Topic summary.
   --if-updated-at <timestamp>  Optimistic concurrency token; discovered from topics get when omitted.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --from-file <path>           Advanced JSON request body from file.
   --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics patch ... ; anx --json topics patch ... ; anx topics patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics trash`
@@ -5689,6 +5098,7 @@ Generated Help: topics trash
 - Command ID: `topics.trash`
 - CLI path: `topics trash`
 - HTTP: `POST /topics/{topic_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `flags`
 - Why: Move topic to trash with an explicit operator reason.
@@ -5711,6 +5121,7 @@ CLI input:
 Local Help: topics trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a topic with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
 - JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
@@ -5722,13 +5133,13 @@ Flags:
   <topic-id>                   Topic id or unique prefix to trash.
   --reason <text>              Reason for trashing the topic.
   --from-file <path>           Advanced JSON request body from file or stdin (`-`).
-  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from resolved agent when omitted.
   --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics trash ... ; anx --json topics trash ... ; anx topics trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics message`
@@ -5739,6 +5150,7 @@ Post a message to a Topic conversation without hand-authoring event JSON.
 Local Help: topics message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Topic conversation without hand-authoring event JSON.
 - Composition: Fetches the Topic to discover its backing thread, then writes a visible `message_posted` event to that thread.
 - JSON body: Builds an `events.create` body with `event.type=message_posted`, topic/thread refs, and payload text.
@@ -5754,14 +5166,14 @@ Flags:
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics message ... ; anx --json topics message ... ; anx topics message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics messages`
@@ -5772,6 +5184,7 @@ List messages from a Topic conversation.
 Local Help: topics messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List messages from a Topic conversation.
 - Composition: Fetches the Topic, then reads its backing thread timeline and filters to messages attached to that topic.
 - JSON body: Fetches the Topic backing thread and returns an `events.list`-style filtered timeline slice with topic metadata.
@@ -5782,7 +5195,7 @@ Local Help: topics messages
 Flags:
   <ref>                        Topic ref, handle, or id whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
-  --mine                       Filter to messages authored by the active profile actor_id.
+  --mine                       Filter to messages authored by the resolved agent actor_id.
   --actor-id <actor-id>        Filter to one actor id.
   --full-id                    (debug/admin) Render full event ids in default text output.
 
@@ -5790,7 +5203,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics messages ... ; anx --json topics messages ... ; anx topics messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `topics reply`
@@ -5801,6 +5214,7 @@ Reply to an existing Topic message.
 Local Help: topics reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Topic message.
 - Composition: Fetches the Topic and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `topics message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
@@ -5817,14 +5231,14 @@ Flags:
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx topics reply ... ; anx --json topics reply ... ; anx topics reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards create`
@@ -5837,6 +5251,7 @@ Generated Help: boards create
 - Command ID: `boards.create`
 - CLI path: `boards create`
 - HTTP: `POST /boards`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a durable board over topics and cards.
@@ -5860,6 +5275,7 @@ Inputs:
 Local Help: boards create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create an active-work Board from flags, optionally tied to a Topic.
 - Composition: Builds the `boards.create` request. Use Boards for active work tracking, ownership, columns, and Card movement.
 - JSON body: Either flags building `{ board }`, or advanced JSON body `{ board }` from stdin/--from-file.
@@ -5871,7 +5287,7 @@ Local Help: boards create
 Flags:
   --title <text>               Board title.
   --summary <text>             Optional board summary.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --topic <topic-ref-or-handle> Primary topic typed ref or handle.
   --document-ref <typed-ref>   Linked document typed ref, repeatable.
   --ref <typed-ref>            Pinned/related typed ref, repeatable.
@@ -5881,7 +5297,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards create ... ; anx --json boards create ... ; anx boards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards list`
@@ -5894,6 +5310,7 @@ Generated Help: cards list
 - Command ID: `cards.list`
 - CLI path: `cards list`
 - HTTP: `GET /cards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Scan the canonical card store. `cards.*` is the store API; `work.*` is the operator Tasks projection over the same rows. Use this family for card workflow writes.
@@ -5905,6 +5322,7 @@ Generated Help: cards list
 Local Help: cards list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List cards across the workspace, or list one board's cards with --board.
 - Composition: Uses `cards.list` for workspace-wide reads. With `--board`, resolves the board ref/handle/id and uses the board-scoped card list while keeping the canonical CLI path `cards list`.
 - JSON body: Global list returns `{ cards }`; `--board` composes the board-scoped card list and returns `{ board_ref, board_handle, cards }`.
@@ -5924,7 +5342,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards list ... ; anx --json cards list ... ; anx cards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs create`
@@ -5935,6 +5353,7 @@ Create a durable document lineage, with a file-first text-doc path for agents.
 Local Help: docs create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a durable document lineage, with a file-first text-doc path for agents.
 - Quick start: Flags: `--topic <topic-ref-or-handle> --title <text> --body-file <path>`; use `--body <text>` for short inline content or `--from-file <path>` for advanced JSON.
 - Composition: Builds the same `docs.create` request as the generated command. For ordinary text docs, prefer flags so agents can draft Markdown locally without hand-authoring JSON.
@@ -5950,7 +5369,7 @@ Flags:
   --subject-ref <typed-ref>    Explicit document subject ref when not using --topic.
   --title <text>               Document title for flag-built text docs.
   --summary <text>             Optional document summary for list/detail headers.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --ref <typed-ref>            Additional typed ref (repeatable).
   --body-file <path>           Load Markdown/text content from a local file, or stdin with `-`.
   --body <text>                Inline document body text (Markdown/text) when not using --body-file.
@@ -5962,6 +5381,7 @@ Generated Help: docs create
 - Command ID: `docs.create`
 - CLI path: `docs create`
 - HTTP: `POST /docs`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a canonical document lineage anchored to a typed subject ref.
@@ -5997,7 +5417,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs create ... ; anx --json docs create ... ; anx docs create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs search`
@@ -6008,6 +5428,7 @@ Search documents by title, body, source, tags, and comments.
 Local Help: docs search
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Search documents by title, body, source, tags, and comments.
 - Composition: SQLite FTS5 over title, body, summary, source, tags, and comments. Use `--knowledge` for agent-facing docs tagged `knowledge`. `--host` filters knowledge facts that apply to that machine.
 - JSON body: GET `/docs/search?q=` returning `{ documents, next_cursor? }` with optional `search_rank`.
@@ -6029,6 +5450,7 @@ Generated Help: docs search
 - Command ID: `docs.search`
 - CLI path: `docs search`
 - HTTP: `GET /docs/search`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Full-text search over document title, body, and comments so agents can find knowledge another host wrote.
@@ -6043,7 +5465,7 @@ Generated Help: docs search
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs search ... ; anx --json docs search ... ; anx docs search ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs put`
@@ -6054,6 +5476,7 @@ Create or replace a document by handle from a local file or stdin.
 Local Help: docs put
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create or replace a document by handle from a local file or stdin.
 - Composition: Idempotent by handle: missing handles create, existing handles append a revision and update title/source/tags/hosts/verified_at.
 - JSON body: PUT `/docs/{document_id}` with `{ document, content, content_type }`. Handle is `--handle`, filename stem, or title slug.
@@ -6071,13 +5494,14 @@ Flags:
   --handle <handle>            Public handle used as the idempotency key.
   --body <text>                Inline body when not passing a path.
   --body-file <path>           Load body from a file or stdin with `-`.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
 
 Generated Help: docs put
 
 - Command ID: `docs.put`
 - CLI path: `docs put`
 - HTTP: `PUT /docs/{document_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Idempotent write of document body and metadata keyed by handle, so agents can republish knowledge without duplicating lineages.
@@ -6113,7 +5537,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs put ... ; anx --json docs put ... ; anx docs put ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs ingest`
@@ -6124,6 +5548,7 @@ Upsert markdown files under a directory as knowledge docs with source pointers.
 Local Help: docs ingest
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Upsert markdown files under a directory as knowledge docs with source pointers.
 - Composition: Walks `.md` / `.markdown` files, tags them `knowledge`, sets `source` to `--source` plus the relative path, and skips a put when title, source, tags, and body are unchanged so a second run creates no new revisions.
 - JSON body: Local summary `{ created, updated, unchanged, skipped, failed, documents[] }`. Each file is `docs.put` by a handle derived from its relative path.
@@ -6136,13 +5561,13 @@ Flags:
   --tags <tag>                 Extra tags. `knowledge` is always applied.
   --hosts <name>               Host names this knowledge tree applies to.
   --verified-at <rfc3339>      When this knowledge tree was last verified.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs ingest ... ; anx --json docs ingest ... ; anx docs ingest ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comment`
@@ -6153,6 +5578,7 @@ Post a document comment (or a reply with `--reply-to`).
 Local Help: docs comment
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a document comment (or a reply with `--reply-to`).
 - Composition: Writes a `message_posted` event on the document backing thread. Comment ids are stable event ids.
 - JSON body: POST `/docs/{document_id}/comments` with `{ text, parent_id? }`.
@@ -6166,13 +5592,14 @@ Flags:
   --body <text>                Comment text.
   --reply-to <comment-id>      Parent comment id for a reply.
   --document-id <id>           Document id when not using the positional.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
 
 Generated Help: docs comment
 
 - Command ID: `docs.comments.create`
 - CLI path: `docs comment`
 - HTTP: `POST /docs/{document_id}/comments`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Post a comment on a document so another agent can read it later.
@@ -6196,7 +5623,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comment ... ; anx --json docs comment ... ; anx docs comment ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments`
@@ -6207,6 +5634,7 @@ List document comments as a thread with stable ids.
 Local Help: docs comments
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: List document comments as a thread with stable ids.
 - Composition: Reads `message_posted` events on the document backing thread.
 - JSON body: GET `/docs/{document_id}/comments` returning `{ comments, next_cursor? }`.
@@ -6225,6 +5653,7 @@ Generated Help: docs comments
 - Command ID: `docs.comments.list`
 - CLI path: `docs comments`
 - HTTP: `GET /docs/{document_id}/comments`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read the document discussion thread with stable comment ids.
@@ -6243,7 +5672,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments ... ; anx --json docs comments ... ; anx docs comments ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments reply`
@@ -6254,6 +5683,7 @@ Reply to a document comment.
 Local Help: docs comments reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to a document comment.
 - Composition: Writes a `message_posted` reply with `reply_to` set to the parent comment ref.
 - JSON body: POST `/docs/{document_id}/comments/{comment_id}/replies` with `{ text }`.
@@ -6264,13 +5694,14 @@ Flags:
   <doc>                        Document ref, handle, or id.
   <comment>                    Parent comment ref (`event:<handle>`) or id.
   --body <text>                Reply text.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
 
 Generated Help: docs comments reply
 
 - Command ID: `docs.comments.reply`
 - CLI path: `docs comments reply`
 - HTTP: `POST /docs/{document_id}/comments/{comment_id}/replies`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Reply in a document comment thread without leaving the docs surface.
@@ -6295,7 +5726,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments reply ... ; anx --json docs comments reply ... ; anx docs comments reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs get`
@@ -6306,6 +5737,7 @@ Get a document lineage and its current head revision.
 Local Help: docs get
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Get a document lineage and its current head revision.
 - Composition: `--format md` prints only the markdown body, suitable for piping.
 - JSON body: GET `/docs/{document_id}` returning `{ document, revision }`.
@@ -6322,6 +5754,7 @@ Generated Help: docs get
 - Command ID: `docs.get`
 - CLI path: `docs get`
 - HTTP: `GET /docs/{document_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve a document lineage and its current head revision.
@@ -6340,7 +5773,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs get ... ; anx --json docs get ... ; anx docs get ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments edit`
@@ -6351,6 +5784,7 @@ Edit a document comment you authored. The comment ref stays stable.
 Local Help: docs comments edit
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Edit a document comment you authored. The comment ref stays stable.
 - Composition: Only the original author may edit. Deep-links keep working because `ref` does not change.
 - JSON body: PATCH `/docs/{document_id}/comments/{comment_id}` with `{ text }`.
@@ -6361,13 +5795,14 @@ Flags:
   <doc>                        Document ref, handle, or id.
   <comment>                    Comment ref (`event:<handle>`) or id.
   --body <text>                Replacement comment text.
-  --actor-id <actor-id>        Actor id; defaults from the active profile.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent.
 
 Generated Help: docs comments edit
 
 - Command ID: `docs.comments.update`
 - CLI path: `docs comments edit`
 - HTTP: `PATCH /docs/{document_id}/comments/{comment_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Edit a comment you authored without changing its stable ref.
@@ -6390,7 +5825,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments edit ... ; anx --json docs comments edit ... ; anx docs comments edit ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs comments delete`
@@ -6401,6 +5836,7 @@ Delete a document comment you authored.
 Local Help: docs comments delete
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Delete a document comment you authored.
 - Composition: Only the original author may delete. The comment is trashed on the backing thread.
 - JSON body: DELETE `/docs/{document_id}/comments/{comment_id}`.
@@ -6410,13 +5846,14 @@ Local Help: docs comments delete
 Flags:
   <doc>                        Document ref, handle, or id.
   <comment>                    Comment ref (`event:<handle>`) or id.
-  --actor-id <actor-id>        Actor id; defaults from the active profile.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent.
 
 Generated Help: docs comments delete
 
 - Command ID: `docs.comments.delete`
 - CLI path: `docs comments delete`
 - HTTP: `DELETE /docs/{document_id}/comments/{comment_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Remove a comment you authored from the document discussion.
@@ -6436,7 +5873,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs comments delete ... ; anx --json docs comments delete ... ; anx docs comments delete ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards create`
@@ -6449,6 +5886,7 @@ Generated Help: cards create
 - Command ID: `cards.create`
 - CLI path: `cards create`
 - HTTP: `POST /cards`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Create a card by supplying board_ref or board_handle in the request body. Use this canonical card workflow path for single-card creation.
@@ -6490,6 +5928,7 @@ Inputs:
 Local Help: cards create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a board work card from flags plus a local prose file, or from advanced JSON.
 - Composition: Builds the `cards.create` request. For normal agent work, draft the card summary/body locally and pass `--body-file` so the CLI can fill the stable Card envelope.
 - JSON body: Either flags plus `--body`/`--body-file`, or advanced JSON body `{ board_id, card }` from stdin/--from-file.
@@ -6515,7 +5954,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards create ... ; anx --json cards create ... ; anx cards create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards patch`
@@ -6528,6 +5967,7 @@ Generated Help: cards patch
 - Command ID: `cards.patch`
 - CLI path: `cards patch`
 - HTTP: `PATCH /cards/{card_id}`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Update card fields, including resolution and resolution refs.
@@ -6558,6 +5998,7 @@ Inputs:
 Local Help: cards patch
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Patch card metadata from scalar flags, or from advanced JSON.
 - Composition: Fetches the Card to discover `updated_at` when `--if-updated-at` is omitted. Use `cards move` for board placement changes.
 - JSON body: Either flags building `{ patch, if_updated_at }`, or advanced JSON body from stdin/--from-file.
@@ -6572,13 +6013,13 @@ Flags:
   --summary <text>             Card summary/body.
   --column-key <key>           Accepted for guidance only; use `anx cards move --column <key>` for placement.
   --if-updated-at <timestamp>  Optimistic concurrency token; discovered from cards get when omitted.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --from-file <path>           Advanced JSON request body from file.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards patch ... ; anx --json cards patch ... ; anx cards patch ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards message`
@@ -6589,9 +6030,10 @@ Post a message to a Card conversation without hand-authoring event JSON.
 Local Help: cards message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Card conversation without hand-authoring event JSON.
 - Composition: Fetches the Card to discover its backing thread and board, then writes a visible `message_posted` event. Use this for card status updates, implementation notes, and ordinary discussion.
-- JSON body: Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, profile actor, and payload text.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, card/thread/board refs, derived agent actor, and payload text.
 - Examples:
   - `anx cards message card:implement-login --body "Implemented in 0729e75"`
   - `anx cards message card:implement-login --body-file update.md`
@@ -6603,14 +6045,14 @@ Flags:
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards message ... ; anx --json cards message ... ; anx cards message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards messages`
@@ -6621,6 +6063,7 @@ List message_posted events from a Card conversation.
 Local Help: cards messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List message_posted events from a Card conversation.
 - Composition: Fetches the Card, then reads its backing thread timeline and filters to ordinary messages. Use `cards timeline` when you need lifecycle events too.
 - JSON body: Fetches the Card backing thread and returns an `events.list`-style filtered timeline slice with card metadata.
@@ -6632,7 +6075,7 @@ Local Help: cards messages
 Flags:
   <ref>                        Card ref, handle, or id whose messages should be listed.
   --max-events <n>             Return at most N most-recent matching messages.
-  --mine                       Filter to messages authored by the active profile actor_id.
+  --mine                       Filter to messages authored by the resolved agent actor_id.
   --actor-id <actor-id>        Filter to one actor id.
   --full-id                    (debug/admin) Render full event ids in default text output.
 
@@ -6640,7 +6083,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards messages ... ; anx --json cards messages ... ; anx cards messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards reply`
@@ -6651,6 +6094,7 @@ Reply to an existing Card message.
 Local Help: cards reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Card message.
 - Composition: Fetches the Card and validates the target message exists on its backing thread before posting the reply.
 - JSON body: Builds an `events.create` body like `cards message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
@@ -6665,14 +6109,14 @@ Flags:
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards reply ... ; anx --json cards reply ... ; anx cards reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards revise`
@@ -6685,6 +6129,7 @@ Generated Help: cards revise
 - Command ID: `cards.revisions.create`
 - CLI path: `cards revise`
 - HTTP: `POST /cards/{card_id}/revisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append a new immutable card content revision and advance the card head.
@@ -6710,6 +6155,7 @@ Inputs:
 Local Help: cards revise
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
 - Composition: Fetches the card when needed for optimistic concurrency, then sends `cards.revisions.create` with `summary` from `--body-file` and optional `title`.
 - JSON body: `{ if_base_revision, revision: { title?, summary?, definition_of_done? }, actor_id? }`; discovers `if_base_revision` from `cards get` when omitted.
@@ -6729,7 +6175,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards revise ... ; anx --json cards revise ... ; anx cards revise ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads message`
@@ -6740,12 +6186,13 @@ Escape hatch: post a message directly to a backing thread.
 Local Help: threads message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Escape hatch: post a message directly to a backing thread.
 - Composition: Writes directly to a backing thread. Prefer domain commands such as `cards message`, `topics message`, or `docs message` when you are working from a Card, Topic, or Doc.
-- JSON body: Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, profile actor, and payload text.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, `event.thread_id`, thread ref, derived agent actor, and payload text.
 - Examples:
-  - `anx threads message <thread-id> --body-file note.md`
-  - `anx threads message <thread-id> --body "Diagnostic note"`
+  - `anx debug threads message <thread-id> --body-file note.md`
+  - `anx debug threads message <thread-id> --body "Diagnostic note"`
 
 Flags:
   <thread-id>                  Thread id, typed ref, or handle to message.
@@ -6753,14 +6200,14 @@ Flags:
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads message ... ; anx --json threads message ... ; anx threads message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads message ... ; anx --json debug threads message ... ; anx debug threads message ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads reply`
@@ -6771,12 +6218,13 @@ Escape hatch: reply to an existing message on a backing thread.
 Local Help: threads reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Escape hatch: reply to an existing message on a backing thread.
 - Composition: Validates the target message exists on the thread before posting the reply.
 - JSON body: Builds an `events.create` body like `threads message` and adds `payload.reply_to_event_id` plus an `event:launch-update` ref.
 - Examples:
-  - `anx threads reply <thread-id> --to <message-id> --body "Confirmed"`
-  - `anx threads reply <thread-id> --to <message-id> --body-file reply.md`
+  - `anx debug threads reply <thread-id> --to <message-id> --body "Confirmed"`
+  - `anx debug threads reply <thread-id> --to <message-id> --body-file reply.md`
 
 Flags:
   <thread-id>                  Thread id, typed ref, or handle to reply on.
@@ -6785,14 +6233,14 @@ Flags:
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads reply ... ; anx --json threads reply ... ; anx threads reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads reply ... ; anx --json debug threads reply ... ; anx debug threads reply ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards move`
@@ -6805,6 +6253,7 @@ Generated Help: cards move
 - Command ID: `cards.move`
 - CLI path: `cards move`
 - HTTP: `POST /cards/{card_id}/move`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Reposition a card within a board column using the card's first-class identity.
@@ -6829,6 +6278,7 @@ Inputs:
 Local Help: cards move
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Move a card to another board column using Card workflow language.
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6846,7 +6296,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards move ... ; anx --json cards move ... ; anx cards move ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards assign`
@@ -6857,6 +6307,7 @@ Replace card assignees with explicit actor refs, or clear them.
 Local Help: cards assign
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Replace card assignees with explicit actor refs, or clear them.
 - Composition: Builds a focused `cards.patch` request for the Card ownership field.
 - JSON body: `{ patch: { assignee_refs }, if_updated_at, actor_id? }`; discovers `if_updated_at` from `cards get` when omitted.
@@ -6874,7 +6325,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards assign ... ; anx --json cards assign ... ; anx cards assign ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards resolve`
@@ -6885,6 +6336,7 @@ Resolve a card into the done column with optional free-text evidence.
 Local Help: cards resolve
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Resolve a card into the done column with optional free-text evidence.
 - Composition: With evidence from `--body`, `--body-file`, or `--resolution-ref`, posts a card message first when a body is supplied, then passes resolution refs (including the new `event:<id>` when posted) into `cards.move`. `--reason` stamps the lifecycle audit only.
 - JSON body: `{ column_key: "done", resolution, resolution_refs, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6904,7 +6356,7 @@ Flags:
   --summary <text>             Optional short evidence event summary.
   --resolution <value>         Resolution value, default done.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --from-file <path>           Advanced JSON move request body from file.
   --dry-run                    Validate and render the request without sending it.
 
@@ -6912,7 +6364,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards resolve ... ; anx --json cards resolve ... ; anx cards resolve ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards reopen`
@@ -6923,6 +6375,7 @@ Move a resolved card back into active workflow.
 Local Help: cards reopen
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Move a resolved card back into active workflow.
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
 - JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
@@ -6939,7 +6392,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards reopen ... ; anx --json cards reopen ... ; anx cards reopen ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `cards trash`
@@ -6952,6 +6405,7 @@ Generated Help: cards trash
 - Command ID: `cards.trash`
 - CLI path: `cards trash`
 - HTTP: `POST /cards/{card_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move a card to trash with an explicit operator reason while keeping archive lifecycle distinct.
@@ -6971,6 +6425,7 @@ Inputs:
 Local Help: cards trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a card with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; `--from-file` remains the advanced compatibility path.
 - JSON body: `{ reason, actor_id?, ... }` from `--from-file`, merged with `--reason` / `--actor-id` flags.
@@ -6982,13 +6437,13 @@ Flags:
   <ref>                        Card ref, handle, or id to trash.
   --reason <text>              Reason for trashing the card.
   --from-file <path>           Advanced JSON request body from file or stdin (`-`).
-  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from resolved agent when omitted.
   --dry-run                    Validate and render the request without sending it.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards trash ... ; anx --json cards trash ... ; anx cards trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events list`
@@ -6999,32 +6454,34 @@ Compose backing-thread timeline reads with client-side thread/type/actor filters
 Generated Help: events list
 
 - Command ID: `events.list`
-- CLI path: `events list`
+- CLI path: `debug events list`
 - HTTP: `GET /events`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Inspect append-only event history across the workspace.
 - Output: Returns `{ events, page_info }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `events archive`, `events create`, `events get`, `events restore`, `events stream`, `events trash`, `events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Local Help: events list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Compose backing-thread timeline reads with client-side thread/type/actor filters and preview summaries.
 - Composition: Fetches one or more backing-thread timelines locally, then filters and summarizes the events without changing contracts or core behavior. Use it as a diagnostic read; prefer `topics workspace` and card/board reads for normal coordination.
 - JSON body: `thread_id`, `thread_ids`, `events`, `total_events`, `returned_events`
 - Examples:
-  - `anx events list --thread-id <thread-id> --type message_posted --mine --full-id`
-  - `anx events list --thread-id <thread-id> --max-events 10`
+  - `anx debug events list --thread-id <thread-id> --type message_posted --mine --full-id`
+  - `anx debug events list --thread-id <thread-id> --max-events 10`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect (repeatable).
   --type <event-type>          Repeatable event type filter.
   --types <csv>                Comma-separated event types.
   --actor-id <actor-id>        Filter to one actor id.
-  --mine                       Resolve to the active profile actor_id.
+  --mine                       Resolve to the resolved agent actor_id.
   --max-events <n>             Keep the most recent matching events.
   --max <n>                    Alias for --max-events.
   --full-id                    (debug/admin) Render full event ids in default text output (non-JSON).
@@ -7035,8 +6492,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events list ... ; anx --json events list ... ; anx events list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events list ... ; anx --json debug events list ... ; anx debug events list ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events validate`
@@ -7047,12 +6504,13 @@ Validate an `events create` payload locally from stdin or `--from-file` without 
 Local Help: events validate
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Validate an `events create` payload locally from stdin or `--from-file` without sending it.
 - Composition: Parses the same JSON body accepted by `events create`, runs local validation rules, and returns a validation preview envelope without contacting core.
 - JSON body: `command`, `command_id`, `path_params`, `query`, `body`, `valid`
 - Examples:
-  - `cat event.json | anx events validate`
-  - `anx events validate --from-file event.json`
+  - `cat event.json | anx debug events validate`
+  - `anx debug events validate --from-file event.json`
 
 Flags:
   --from-file <path>           Load the request body from a JSON file instead of stdin.
@@ -7060,8 +6518,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events validate ... ; anx --json events validate ... ; anx events validate ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events validate ... ; anx --json debug events validate ... ; anx debug events validate ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `events explain`
@@ -7072,12 +6530,13 @@ Explain known event-type conventions, required refs, and validation hints, inclu
 Local Help: events explain
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Explain known event-type conventions, required refs, and validation hints, including when `message_posted` targets a backing-thread message stream.
 - Composition: Formats the embedded event reference and validation guidance into a plain-text reference without sending a request. Use it to confirm when `message_posted` is required for a visible backing-thread message in the web UI Messages tab.
 - JSON body: `event_type`, `known`, `required_refs`, `payload_requirements`, `examples`, `hint`
 - Examples:
-  - `anx events explain`
-  - `anx events explain message_posted`
+  - `anx debug events explain`
+  - `anx debug events explain message_posted`
 
 Flags:
   <event-type>                 Optional event type to focus on; omit it to list known event types.
@@ -7085,8 +6544,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx events explain ... ; anx --json events explain ... ; anx events explain ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug events explain ... ; anx --json debug events explain ... ; anx debug events explain ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts create`
@@ -7099,6 +6558,7 @@ Generated Help: artifacts create
 - Command ID: `artifacts.create`
 - CLI path: `artifacts create`
 - HTTP: `POST /artifacts`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Store content-addressed artifact metadata and payload (bytes, text, or structured JSON).
@@ -7118,6 +6578,7 @@ Inputs:
 Local Help: artifacts create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create an artifact; use --file/--ref for attachment uploads or JSON for advanced artifact bodies.
 - Composition: Routes the common file attachment path through the multipart attachment endpoint while preserving the contract-level JSON create path for text, structured, or binary artifact bodies.
 - JSON body: With --file, posts multipart attachment data to `artifacts.attachments.create`; without --file, sends advanced JSON `{ artifact, content_type, content }` to `artifacts.create`.
@@ -7132,13 +6593,13 @@ Flags:
   --refs <json>                Compatibility form: JSON array of typed refs.
   --summary <text>             Optional attachment summary.
   --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --from-file <path>           Advanced JSON artifact create body from file; cannot be combined with --file.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts create ... ; anx --json artifacts create ... ; anx artifacts create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts attachments create`
@@ -7151,6 +6612,7 @@ Generated Help: artifacts attachments create
 - Command ID: `artifacts.attachments.create`
 - CLI path: `artifacts attachments create`
 - HTTP: `POST /artifacts/attachments`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `multipart-form`
 - Why: Create kind=attachment via multipart form (efficient binary upload; previews use GET /artifacts/{artifact_id}/content, where the path segment accepts artifact ref or handle).
@@ -7163,6 +6625,7 @@ Generated Help: artifacts attachments create
 Local Help: artifacts attachments create
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Upload a local file as an attachment artifact via multipart form.
 - Composition: Posts to `POST /artifacts/attachments`, which stores the file bytes and creates kind=attachment artifact metadata.
 - JSON body: Multipart form fields: `refs`, `file`, optional `summary`, `artifact`, and `actor_id`.
@@ -7176,12 +6639,12 @@ Flags:
   --refs <json>                Compatibility form: JSON array of typed refs.
   --summary <text>             Optional attachment summary.
   --artifact <json>            Optional JSON object merged into attachment metadata; refs and kind are ignored by the server.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts attachments create ... ; anx --json artifacts attachments create ... ; anx artifacts attachments create ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `artifacts inspect`
@@ -7192,6 +6655,7 @@ Fetch artifact metadata and resolved content in one command for operator inspect
 Local Help: artifacts inspect
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Fetch artifact metadata and resolved content in one command for operator inspection.
 - Composition: Loads artifact metadata, then fetches content with `artifacts content` using the resolved artifact id.
 - JSON body: `artifact`, `content`, `content_headers`, `content_text`, `content_base64`
@@ -7206,7 +6670,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts inspect ... ; anx --json artifacts inspect ... ; anx artifacts inspect ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads inspect`
@@ -7217,15 +6681,16 @@ Diagnostic backing-thread bundle: compose one view from read-only thread data an
 Generated Help: threads inspect
 
 - Command ID: `threads.inspect`
-- CLI path: `threads inspect`
+- CLI path: `debug threads inspect`
 - HTTP: `GET /threads/{thread_id}`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Resolve one backing thread for low-level inspection and diagnostics.
 - Output: Returns `{ thread }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `inspection`
-- Adjacent commands: `threads context`, `threads list`, `threads timeline`, `threads workspace`
+- Adjacent commands: `debug threads context`, `debug threads list`, `debug threads timeline`, `debug threads workspace`
 
 Inputs:
   Required:
@@ -7234,12 +6699,13 @@ Inputs:
 Local Help: threads inspect
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Diagnostic backing-thread bundle: compose one view from read-only thread data and related `inbox list` items.
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, then filters inbox items client-side by `thread_id`. Prefer `topics workspace` for agent-facing topic context when you have a topic id. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`
 - Examples:
-  - `anx threads inspect --thread-id <thread-id>`
-  - `anx threads inspect --state active --full-id`
+  - `anx debug threads inspect --thread-id <thread-id>`
+  - `anx debug threads inspect --state active --full-id`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -7250,8 +6716,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads inspect ... ; anx --json threads inspect ... ; anx threads inspect ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads inspect ... ; anx --json debug threads inspect ... ; anx debug threads inspect ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `threads workspace`
@@ -7262,15 +6728,16 @@ Read-only backing-thread workspace projection: context, inbox, board membership,
 Generated Help: threads workspace
 
 - Command ID: `threads.workspace`
-- CLI path: `threads workspace`
+- CLI path: `debug threads workspace`
 - HTTP: `GET /threads/{thread_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Read-only diagnostic projection that bundles context, inbox, and related-thread signals for one backing thread. Prefer topics.workspace for normal operator coordination when a topic exists.
 - Output: Returns `{ thread, related_topics, cards, documents, board_memberships, inbox, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `threads`, `workspace`
-- Adjacent commands: `threads context`, `threads inspect`, `threads list`, `threads timeline`
+- Adjacent commands: `debug threads context`, `debug threads inspect`, `debug threads list`, `debug threads timeline`
 
 Inputs:
   Required:
@@ -7279,12 +6746,13 @@ Inputs:
 Local Help: threads workspace
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Read-only backing-thread workspace projection: context, inbox, board membership, and related-thread signals in one command.
 - Composition: Resolves one thread by id or discovery filters, loads read-only thread projections, adds thread-scoped inbox items, and follows related thread refs for diagnostic review. Prefer `topics workspace` for agent-facing topic context. The operator work projection is `work.list` / `work.get`.
 - JSON body: `thread`, `context`, `collaboration`, `inbox`, `pending_attention`, `related_threads`, `follow_up`
 - Examples:
-  - `anx threads workspace --thread-id <thread-id> --full-id`
-  - `anx threads workspace --state active`
+  - `anx debug threads workspace --thread-id <thread-id> --full-id`
+  - `anx debug threads workspace --state active`
 
 Flags:
   --thread-id <thread-id>      Thread id to inspect.
@@ -7295,8 +6763,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx threads workspace ... ; anx --json threads workspace ... ; anx threads workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug threads workspace ... ; anx --json debug threads workspace ... ; anx debug threads workspace ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards workspace`
@@ -7309,6 +6777,7 @@ Generated Help: boards workspace
 - Command ID: `boards.workspace`
 - CLI path: `boards workspace`
 - HTTP: `GET /boards/{board_id}/workspace`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: Load the operator-facing board workspace with cards, docs, and inbox sections.
@@ -7324,6 +6793,7 @@ Inputs:
 Local Help: boards workspace
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Canonical board read path: load one board's workspace: optional primary topic, cards by column, linked documents, inbox items, and summary.
 - Composition: Resolves a board by typed ref or handle, fetches the projection workspace with per-card thread backing, and renders cards grouped by canonical column order (backlog, ready, in_progress, blocked, review, done).
 - JSON body: `board_id`, `board`, `primary_topic`, `cards`, `documents`, `inbox`, `board_summary`, `projection_freshness`, `board_summary_freshness`, `warnings`, `section_kinds`, `generated_at`
@@ -7337,7 +6807,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards workspace ... ; anx --json boards workspace ... ; anx boards workspace ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `boards cards list`
@@ -7350,6 +6820,7 @@ Generated Help: boards cards list
 - Command ID: `boards.cards.list`
 - CLI path: `boards cards list`
 - HTTP: `GET /boards/{board_id}/cards`
+- Side effect class: `read_only`
 - Stability: `beta`
 - Input mode: `none`
 - Why: List cards on one board in canonical order.
@@ -7365,6 +6836,7 @@ Inputs:
 Local Help: boards cards list
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List all cards on a board in canonical column order without hydrating thread details.
 - Composition: Fetches the raw card list for a board ordered by canonical column sequence and per-column rank. Default text leads with card refs and titles; thread refs are secondary context.
 - JSON body: `board_id`, `cards`
@@ -7379,7 +6851,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards cards list ... ; anx --json boards cards list ... ; anx boards cards list ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `workspace summary`
@@ -7390,6 +6862,7 @@ First-run workspace orientation: boards plus compact card/doc/inbox counts.
 Local Help: workspace summary
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: First-run workspace orientation: boards plus compact card/doc/inbox counts.
 - Composition: Local CLI helper that composes existing list reads without changing the core contract. Boards are required; card, document, and inbox counts are best-effort and surface warnings on partial read failures.
 - JSON body: `boards`, `counts`, `generated_at`, optional `warnings`
@@ -7401,7 +6874,7 @@ Local Help: workspace summary
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx workspace summary ... ; anx --json workspace summary ... ; anx workspace summary ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs revise`
@@ -7412,6 +6885,7 @@ Revise a durable document from a local file or JSON body; stages a diff proposal
 Local Help: docs revise
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Revise a durable document from a local file or JSON body; stages a diff proposal by default.
 - Quick start: Flags: `docs revise <doc-ref> --body-file <path>` stages a proposal; add `--apply` to write immediately.
 - Composition: Fetches the current document revision, discovers the base revision when omitted, computes a local diff, and stages a proposal. Add `--apply` to direct-write the revision; use `--apply --proposal-id <id>` to apply a staged proposal.
@@ -7426,7 +6900,7 @@ Flags:
   <ref>                        Document ref, alias, or id to revise.
   --body-file <path>           Load revised Markdown/text content from a local file or stdin with `-`.
   --from-file <path>           Advanced JSON revision body from a file.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --apply                      Apply immediately, or apply a staged proposal when combined with --proposal-id.
   --proposal-id <proposal-id>  Staged proposal id to apply; must be combined with --apply.
   --propose                    Stage a proposal (default; included for explicitness).
@@ -7436,6 +6910,7 @@ Generated Help: docs revise
 - Command ID: `docs.revisions.create`
 - CLI path: `docs revise`
 - HTTP: `POST /docs/{document_id}/revisions`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Append a new immutable revision and advance the document head.
@@ -7464,7 +6939,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs revise ... ; anx --json docs revise ... ; anx docs revise ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs trash`
@@ -7475,6 +6950,7 @@ Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or bo
 Local Help: docs trash
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Trash a document lineage with `--reason`, advanced JSON via `--from-file`, or both (flags overlay JSON).
 - Quick start: Flags: `docs trash <doc-ref> --reason <text>`; `--from-file <path>` remains the advanced JSON compatibility path.
 - Composition: Uses the shared lifecycle parser (`lifecycle_spec.go`). Routine trashing prefers `--reason`; JSON input remains supported for existing automation.
@@ -7487,7 +6963,7 @@ Flags:
   <ref>                        Document ref, handle, or id to trash.
   --reason <text>              Reason for trashing the document.
   --from-file <path>           Advanced JSON request body from file or stdin (`-`).
-  --actor-id <actor-id>        Actor id; overlays JSON and defaults from profile when omitted.
+  --actor-id <actor-id>        Actor id; overlays JSON and defaults from resolved agent when omitted.
   --dry-run                    Validate and render the request without sending it.
 
 Generated Help: docs trash
@@ -7495,6 +6971,7 @@ Generated Help: docs trash
 - Command ID: `docs.trash`
 - CLI path: `docs trash`
 - HTTP: `POST /docs/{document_id}/trash`
+- Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
 - Why: Move a document lineage to trash with an explicit operator reason.
@@ -7515,7 +6992,7 @@ Inputs:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs trash ... ; anx --json docs trash ... ; anx docs trash ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs content`
@@ -7526,6 +7003,7 @@ Show the current document content together with authoritative head revision meta
 Local Help: docs content
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Show the current document content together with authoritative head revision metadata.
 - Composition: Loads `docs get`, then renders the current revision content and metadata in one operator-friendly response.
 - JSON body: `document`, `revision`, `content`, `status_code`, `headers`
@@ -7539,7 +7017,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs content ... ; anx --json docs content ... ; anx docs content ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs messages`
@@ -7550,6 +7028,7 @@ List messages from a Document conversation.
 Local Help: docs messages
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: List messages from a Document conversation.
 - Composition: Fetches the Document, then reads its backing thread timeline and filters to messages attached to that document.
 - JSON body: Fetches the Document backing thread and returns an `events.list`-style filtered timeline slice with document metadata.
@@ -7560,7 +7039,7 @@ Local Help: docs messages
 Flags:
   <ref>                        Document ref, alias, or id.
   --max-events <n>             Return at most N most-recent matching messages.
-  --mine                       Filter to messages authored by the active profile actor_id.
+  --mine                       Filter to messages authored by the resolved agent actor_id.
   --actor-id <actor-id>        Filter to one actor id.
   --full-id                    (debug/admin) Render full event ids in default text output.
   --include-archived           Include archived message events.
@@ -7572,7 +7051,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs messages ... ; anx --json docs messages ... ; anx docs messages ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs message`
@@ -7583,10 +7062,11 @@ Post a message to a Document conversation without hand-authoring event JSON.
 Local Help: docs message
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Post a message to a Document conversation without hand-authoring event JSON.
 - Quick start: Flags: `docs message <doc-ref> --body-file <path>` or `--body <text>` for short updates.
 - Composition: Fetches the Document to discover its backing thread, then writes a visible `message_posted` event attached to that document.
-- JSON body: Builds an `events.create` body with `event.type=message_posted`, document/thread refs, profile actor, and payload text.
+- JSON body: Builds an `events.create` body with `event.type=message_posted`, document/thread refs, derived agent actor, and payload text.
 - Examples:
   - `anx docs message doc:runbook --body-file note.md`
   - `anx docs message doc:runbook --body "Reviewed the current revision"`
@@ -7597,14 +7077,14 @@ Flags:
   --body-file <path>           Load message body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs message ... ; anx --json docs message ... ; anx docs message ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `docs reply`
@@ -7615,6 +7095,7 @@ Reply to an existing Document message.
 Local Help: docs reply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Reply to an existing Document message.
 - Quick start: Flags: `docs reply <doc-ref> --to <message-id> --body-file <path>` or `--body <text>`.
 - Composition: Fetches the Document and validates the target message exists on its backing thread before posting the reply.
@@ -7630,14 +7111,14 @@ Flags:
   --body-file <path>           Load reply body text from a local file.
   --summary <text>             Optional short event summary.
   --ref <typed-ref>            Additional typed ref, repeatable.
-  --actor-id <actor-id>        Actor id; defaults from the active profile when available.
+  --actor-id <actor-id>        Actor id; defaults from the resolved agent when available.
   --dry-run                    Validate and render the request without sending it.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs reply ... ; anx --json docs reply ... ; anx docs reply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `meta skill`
@@ -7648,13 +7129,14 @@ Render the bundled opinionated ANX agent skill.
 Local Help: meta skill
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Render the bundled opinionated ANX agent skill.
 - Composition: Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.
 - JSON body: `target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`
 - Examples:
-  - `anx meta skill anx`
-  - `anx meta skill anx --write-file ./SKILL.md`
-  - `anx meta skill --target cursor --write-file ./SKILL.md`
+  - `anx debug meta skill anx`
+  - `anx debug meta skill anx --write-file ./SKILL.md`
+  - `anx debug meta skill --target cursor --write-file ./SKILL.md`
 
 Flags:
   <target>                     Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias.
@@ -7665,8 +7147,8 @@ Flags:
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx meta skill ... ; anx --json meta skill ... ; anx meta skill ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx debug meta skill ... ; anx --json debug meta skill ... ; anx debug meta skill ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `install skill`
@@ -7695,282 +7177,291 @@ Examples:
 
 ## `bridge install`
 
-Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
+Install the host bridge runtime.
 
 ```text
 Local Help: bridge install
 
 - Kind: `local helper`
-- Summary: Install `anx-agent-bridge` into a dedicated Python 3.11+ virtualenv and expose a PATH wrapper.
-- Composition: Pure local bootstrap helper with network package download. Creates or reuses a venv, installs the bridge package from the GitHub subdirectory at a pinned git ref (defaults to the running CLI release tag), and writes a thin launcher script.
+- Side effect class: `local_operational_write`
+- Summary: Install the host bridge runtime.
+- Composition: Install a managed Python virtualenv and wrapper.
 - JSON body: `install_dir`, `bin_dir`, `wrapper_path`, `python`, `bridge_binary`, `package_ref`
 - Examples:
   - `anx bridge install`
-  - `anx bridge install --ref main --with-dev`
-
-Flags:
-  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the `anx-agent-bridge` wrapper should be written.
-  --ref <git-ref>              Git ref to install from. Defaults to the running CLI's version tag (e.g. `v0.3.2`) so the bridge matches this binary; use `main` for the latest commit on the default branch.
-  --with-dev                   Also install bridge test dependencies.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge install ... ; anx --json bridge install ... ; anx bridge install ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge import-auth`
-
-Copy an existing `anx` profile and key into the bridge agent home auth state.
-
-```text
-Local Help: bridge import-auth
-
-- Kind: `local helper`
-- Summary: Copy an existing `anx` profile and key into the bridge agent home auth state.
-- Composition: Pure local helper. Reads an existing `anx` profile plus Ed25519 key material, converts it into bridge auth state, stamps agent.toml identity including public key fingerprint, and reconciles wake.toml workspace base URLs.
-- JSON body: `config_path`, `auth_state_path`, `wake_config_path`, `profile_path`, `profile_agent`, `username`, `actor_id`, `agent_id`, `key_id`, `public_key_fingerprint`
-- Examples:
-  - `anx bridge import-auth --config ./bridge.toml --from-profile agent-a`
-  - `anx --agent agent-a bridge import-auth --config ./bridge.toml`
-
-Flags:
-  --config <path>              Bridge config whose auth state should be populated.
-  --from-profile <agent>       Existing `anx` profile name to import. Defaults to the active CLI profile.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge import-auth ... ; anx --json bridge import-auth ... ; anx bridge import-auth ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge init-config`
-
-Write a bridge runtime config plus an agent home with wake subscriptions.
-
-```text
-Local Help: bridge init-config
-
-- Kind: `local helper`
-- Summary: Write a bridge runtime config plus an agent home with wake subscriptions.
-- Composition: Local helper. Renders a bridge runtime config that references an explicit agent home, plus agent.toml and wake.toml when --output is used. If --workspace-id is omitted, discovers the durable workspace id from the active profile or core handshake.
-- JSON body: `kind`, `output`, `agent_home`, `workspace_ids`, `workspace_id_source`, `handle`, `content`
-- Examples:
-  - `anx bridge init-config --kind hermes --output ./bridge.toml --agent-home ./.anx --handle myagent`
-  - `anx bridge init-config --kind openclaw --output ./bridge.toml --agent-home ./.anx --handle myagent --openclaw-bin /opt/homebrew/bin/openclaw`
-  - `anx bridge init-config --kind subprocess --output ./bridge.toml --agent-home ./.anx --handle myagent --adapter-entrypoint ./adapter.py`
-  - `anx bridge init-config --kind python-plugin --output ./bridge.toml --agent-home ./.anx --workspace-id ws_main --workspace-id ws_ops --handle myagent --plugin-module my_bridge --plugin-factory build_adapter`
-
-Flags:
-  --kind <hermes|openclaw|subprocess|python-plugin> Template kind to render.
-  --output <path>              Write the rendered TOML to a file. Omit to print it.
-  --agent-home <dir>           Agent home directory for identity, auth, wake config, state, and logs. Default: ./.anx.
-  --base-url <url>             ANX base URL for agent.toml identity and wake.toml workspace entries.
-  --workspace-id <id>          Durable ANX workspace id. Optional when the active profile/core handshake exposes one; repeat for multi-workspace agents; do not use slugs.
-  --workspace-name <name>      Display name for the first wake workspace.
-  --workspace-url <url>        Optional URL for the first wake workspace.
-  --handle <name>              Agent handle (required); must match the principal username for bridge-managed registration.
-  --auth-state-path <path>     Optional agent-home-relative auth state path override.
-  --state-dir <path>           Optional agent-home-relative bridge state directory.
-  --openclaw-bin <path>        OpenClaw template: absolute path for `[adapter].openclaw_bin`; auto-detected when omitted.
-  --anx-cli-bin <path>         OpenClaw template: absolute path for `[adapter].anx_cli_bin`; auto-detected when omitted.
-  --adapter-entrypoint <path>  Subprocess template: script path used as the second element of `[adapter].command` after python3.
-  --plugin-module <module>     python-plugin template: Python module for `[adapter].plugin_module`.
-  --plugin-factory <callable>  python-plugin template: factory name for `[adapter].plugin_factory`.
-  --managed-package-auto-update Write `[bridge].managed_package_auto_update = true`; opt-in allows pip refreshes toward the CLI release tag during bridge doctor/start when skew is detected. Requires Python 3.11+, git on PATH, network access, and macOS/Linux (same prerequisites as `anx bridge install`).
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge init-config ... ; anx --json bridge init-config ... ; anx bridge init-config ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge workspace-id`
-
-Discover durable workspace ids from an existing agent wake registration.
-
-```text
-Local Help: bridge workspace-id
-
-- Kind: `local helper`
-- Summary: Discover durable workspace ids from an existing agent wake registration.
-- Composition: Uses the active `anx` auth/profile to read agent principal registration metadata and extract enabled workspace bindings so bridge bootstrap can reuse the real durable workspace id instead of guessing.
-- JSON body: `agent_id`, `handle`, `actor_id`, `registration_status`, `workspace_ids`, `workspace_bindings`
-- Examples:
-  - `anx --agent agent-a bridge workspace-id --handle myagent`
-
-Flags:
-  --handle <name>              Agent handle whose wake registration should be inspected.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge workspace-id ... ; anx --json bridge workspace-id ... ; anx bridge workspace-id ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge doctor`
 
-Validate bridge install, config presence, and registration readiness without starting the daemon.
+Check one enrolled-host bridge and its configured runtimes.
 
 ```text
 Local Help: bridge doctor
 
 - Kind: `local helper`
-- Summary: Validate bridge install, config presence, and registration readiness without starting the daemon.
-- Composition: Pure local helper plus optional bridge CLI calls. Probes Python, the managed install, and `registration status` for a supplied config.
-- JSON body: `checks`, `registration`, `bridge_binary`, `python`
+- Side effect class: `remote_coordination_write`
+- Summary: Check one enrolled-host bridge and its configured runtimes.
+- Composition: Invoke the bridge's host roster validation.
+- JSON body: `host`, `agents`, `agentctl`
 - Examples:
-  - `anx bridge doctor`
   - `anx bridge doctor --config ./bridge.toml`
 
 Flags:
-  --config <path>              Bridge config to validate with `registration status`.
-  --python <exe>               Preferred Python executable. Default probes for Python 3.11+.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              One host bridge config.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge doctor ... ; anx --json bridge doctor ... ; anx bridge doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge start`
 
-Start a managed bridge daemon for one config file.
+Start the one bridge process for an enrolled host.
 
 ```text
 Local Help: bridge start
 
 - Kind: `local helper`
-- Summary: Start a managed bridge daemon for one config file.
-- Composition: Pure local helper. Resolves the installed `anx-agent-bridge` binary, infers the config role, launches the daemon in the background, and records pid/log metadata in a per-config manager directory.
-- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`, `command`
+- Side effect class: `external_side_effect`
+- Summary: Start the one bridge process for an enrolled host.
+- Composition: Start a managed host bridge daemon.
+- JSON body: `config_path`, `pid`, `log_path`
 - Examples:
   - `anx bridge start --config ./bridge.toml`
 
 Flags:
-  --config <path>              Bridge runtime config to start. The config must contain top-level `agent_home`.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              Host bridge config.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge start ... ; anx --json bridge start ... ; anx bridge start ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge stop`
 
-Stop a managed bridge daemon for one config file.
+Stop a managed host bridge.
 
 ```text
 Local Help: bridge stop
 
 - Kind: `local helper`
-- Summary: Stop a managed bridge daemon for one config file.
-- Composition: Pure local helper. Reads the per-config manager state, sends SIGTERM, and records the stopped timestamp once the daemon exits.
-- JSON body: `kind`, `config_path`, `pid`, `stopped_at`, `last_signal`
+- Side effect class: `local_operational_write`
+- Summary: Stop a managed host bridge.
+- Composition: Stop the host bridge process.
+- JSON body: `config_path`, `pid`, `stopped_at`
 - Examples:
-  - `anx bridge stop --config ./bridge.toml --force`
+  - `anx bridge stop --config ./bridge.toml`
 
 Flags:
-  --config <path>              Managed config to stop.
-  --force                      Escalate to SIGKILL if SIGTERM does not stop the daemon before the timeout.
-  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
+  --config <path>              Host bridge config.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge stop ... ; anx --json bridge stop ... ; anx bridge stop ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `bridge restart`
-
-Restart a managed bridge daemon for one config file.
-
-```text
-Local Help: bridge restart
-
-- Kind: `local helper`
-- Summary: Restart a managed bridge daemon for one config file.
-- Composition: Pure local helper. Stops the existing managed process if one is present, then launches a fresh daemon and updates the manager state.
-- JSON body: `kind`, `config_path`, `pid`, `log_path`, `process_state_path`
-- Examples:
-  - `anx bridge restart --config ./bridge.toml`
-
-Flags:
-  --config <path>              Managed config to restart.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
-  --force                      Force-kill during the stop phase if needed.
-  --timeout-seconds <n>        How long to wait after SIGTERM before failing or force-killing.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx bridge restart ... ; anx --json bridge restart ... ; anx bridge restart ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `bridge status`
 
-Inspect managed process state for a bridge config.
+Inspect one host bridge process.
 
 ```text
 Local Help: bridge status
 
 - Kind: `local helper`
-- Summary: Inspect managed process state for a bridge config.
-- Composition: Pure local helper plus optional bridge CLI calls. Reports the background process state, log path, and agent registration readiness when available.
-- JSON body: `kind`, `managed`, `running`, `pid`, `log_path`, `process_state_path`, `registration`
+- Side effect class: `read_only`
+- Summary: Inspect one host bridge process.
+- Composition: Read managed host bridge process state.
+- JSON body: `config_path`, `running`, `pid`, `log_path`
 - Examples:
   - `anx bridge status --config ./bridge.toml`
 
 Flags:
-  --config <path>              Managed config to inspect.
-  --install-dir <dir>          Root directory for the managed bridge virtualenv.
-  --bin-dir <dir>              Directory where the managed `anx-agent-bridge` wrapper should exist.
+  --config <path>              Host bridge config.
 
 
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx bridge status ... ; anx --json bridge status ... ; anx bridge status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `bridge logs`
+## `host token`
 
-Read recent log lines for a managed bridge config.
+Print a short-lived derived-agent bearer from the enrolled host.
 
 ```text
-Local Help: bridge logs
+Local Help: host token
 
 - Kind: `local helper`
-- Summary: Read recent log lines for a managed bridge config.
-- Composition: Pure local helper. Reads the per-config managed log file and returns the last N lines without requiring direct shell access.
-- JSON body: `kind`, `config_path`, `log_path`, `lines`, `content`
+- Side effect class: `local_operational_write`
+- Summary: Print a short-lived derived-agent bearer from the enrolled host.
+- Composition: Host assertion grant; text mode prints only the token.
+- JSON body: `token`, `expires_at`, `agent: {id, handle}`
 - Examples:
-  - `anx bridge logs --config ./bridge.toml --lines 200`
-
-Flags:
-  --config <path>              Managed config whose log should be tailed.
-  --lines <n>                  How many recent lines to return. Default is 80.
+  - `anx --json host token --as codex`
 
 
 Global flags:
   Global flags can appear before or after the command path.
-  Examples: anx bridge logs ... ; anx --json bridge logs ... ; anx bridge logs ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Examples: anx host token ... ; anx --json host token ... ; anx host token ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host bridge check-in`
+
+Publish an enrolled host bridge check-in.
+
+```text
+Local Help: host bridge check-in
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Publish an enrolled host bridge check-in.
+- Composition: Signs the exact request body with the owner-only host key.
+- JSON body: Core bridge check-in result
+- Examples:
+  - `anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds 180`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host bridge check-in ... ; anx --json host bridge check-in ... ; anx host bridge check-in ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host bridge wake claim`
+
+Claim a durable wake for this host.
+
+```text
+Local Help: host bridge wake claim
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Claim a durable wake for this host.
+- Composition: Uses a host-signed proof; complete or fail after handling.
+- JSON body: Core wake mutation result
+- Examples:
+  - `anx host bridge wake claim --host-id <id> --wakeup-id <id> --instance-id <id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host bridge wake claim ... ; anx --json host bridge wake claim ... ; anx host bridge wake claim ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host bridge wake complete`
+
+Complete a claimed wake for this host.
+
+```text
+Local Help: host bridge wake complete
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Complete a claimed wake for this host.
+- Composition: Uses a host-signed proof.
+- JSON body: Core wake mutation result
+- Examples:
+  - `anx host bridge wake complete --host-id <id> --wakeup-id <id> --instance-id <id>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host bridge wake complete ... ; anx --json host bridge wake complete ... ; anx host bridge wake complete ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host bridge wake fail`
+
+Record a failed claimed wake for this host.
+
+```text
+Local Help: host bridge wake fail
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Record a failed claimed wake for this host.
+- Composition: Uses a host-signed proof and an error summary.
+- JSON body: Core wake mutation result
+- Examples:
+  - `anx host bridge wake fail --host-id <id> --wakeup-id <id> --instance-id <id> --error <text>`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host bridge wake fail ... ; anx --json host bridge wake fail ... ; anx host bridge wake fail ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `runs ingest`
+
+Ingest an agentctl callback or execution envelope.
+
+```text
+Generated Help: runs ingest
+
+- Command ID: `runs.upsert`
+- CLI path: `runs ingest`
+- HTTP: `POST /runs`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Map one agentctl execution envelope to a durable run.
+- Output: Returns `{ run, created, replayed }`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `host_revoked`, `run_identity_conflict`, `run_state_regression`
+- Concepts: `runs`, `agents`, `cards`
+- Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+- Adjacent commands: `runs get`, `runs list`
+
+Inputs:
+  Required:
+  - body `adapter` (string)
+  - body `agent_id` (string)
+  - body `external_id` (string)
+  - body `host_id` (string)
+  - body `labels` (list<string>)
+  - body `last_observed_at` (datetime)
+  - body `launcher` (string)
+  - body `liveness` (string)
+  - body `result_collected` (boolean)
+  - body `state` (string)
+  Optional:
+  - body `branch` (string)
+  - body `card_ref` (string)
+  - body `ended_at` (datetime)
+  - body `model` (string)
+  - body `repository` (string)
+  - body `started_at` (datetime)
+  Enum values: launcher: agentctl; liveness: alive, stale, unknown; state: cancelled, completed, failed, running, starting, unknown
+
+Local Help: runs ingest
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Ingest an agentctl callback or execution envelope.
+- Composition: agentctl command appends an owner-only JSON event path. Its child has only PATH and LANG; pass --config-dir and --base-url explicitly. Failures are logged without secrets under <config-dir>/logs/runs-ingest.log.
+- JSON body: Idempotent run upsert result
+- Examples:
+  - `anx --config-dir /absolute/anx --base-url https://anx.example.com runs ingest /absolute/event.json`
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx runs ingest ... ; anx --json runs ingest ... ; anx runs ingest ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import scan`
@@ -7981,6 +7472,7 @@ Scan a folder or zip archive into a normalized inventory with text cache, repo-r
 Local Help: import scan
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Scan a folder or zip archive into a normalized inventory with text cache, repo-root hints, and cluster hints.
 - Composition: Pure local filesystem helper. Expands `.zip` inputs, ignores obvious generated junk, fingerprints files, caches readable text, and emits `inventory.jsonl` plus `scan-summary.json`.
 - JSON body: `input`, `scan_root`, `extracted_root`, `inventory`, `file_count`, `counts_by_category`, `counts_by_cluster_hint`, `repo_roots`
@@ -7998,7 +7490,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import scan ... ; anx --json import scan ... ; anx import scan ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import dedupe`
@@ -8009,6 +7501,7 @@ Create exact and probable duplicate reports from a scan inventory with conservat
 Local Help: import dedupe
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - Composition: Pure local helper. Uses normalized text hashes for readable content and raw SHA-256 for everything else; exact drops are recommended, probable duplicates are review-only.
 - JSON body: `inventory`, `exact_duplicates`, `probable_duplicates`, `recommended_skip_ids`
@@ -8024,7 +7517,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import dedupe ... ; anx --json import dedupe ... ; anx import dedupe ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import plan`
@@ -8035,6 +7528,7 @@ Build a conservative import plan that prefers collector threads, hub docs, dedup
 Local Help: import plan
 
 - Kind: `local helper`
+- Side effect class: `local_operational_write`
 - Summary: Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - Composition: Pure local helper. Classifies inventory items into docs, artifacts, repo bundles, review bundles, and collector/hub structures. It writes `plan.json` plus `plan-preview.md` without sending requests.
 - JSON body: `source_name`, `inventory`, `dedupe`, `principles`, `objects`, `skipped`, `review_bundles`, `notes`
@@ -8053,7 +7547,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import plan ... ; anx --json import plan ... ; anx import plan ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `import apply`
@@ -8064,12 +7558,13 @@ Write payload previews for a plan and optionally execute topic/artifact/doc crea
 Local Help: import apply
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
 - Composition: Local helper with optional network writes. Always writes payload previews first; when `--execute` is set it creates topics, then artifacts, then docs, substituting `$REF:<key>` placeholders after upstream IDs are known.
 - JSON body: `plan`, `execute`, `results`, `refs`
 - Examples:
   - `anx import apply --plan ./.anx-import/workspace/plan.json`
-  - `anx import apply --plan ./.anx-import/workspace/plan.json --execute --agent importer`
+  - `anx --as importer import apply --plan ./.anx-import/workspace/plan.json --execute`
 
 Flags:
   --plan <path>                Plan produced by `anx import plan`. Positional form also supported.
@@ -8080,7 +7575,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm serve`
@@ -8091,12 +7586,13 @@ Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 Local Help: pm serve
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
 - JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
 - Examples:
-  - `anx --agent pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
-  - `anx --agent pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'`
+  - `anx --as pm pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
+  - `anx --as pm pm serve --runner 'hermes -p --provider zai --model glm-5.3 -- {prompt}'`
 
 Flags:
   --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt}, argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker.
@@ -8108,7 +7604,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm serve ... ; anx --json pm serve ... ; anx pm serve ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm ask`
@@ -8119,12 +7615,13 @@ Create a PM conversation and post one human question.
 Local Help: pm ask
 
 - Kind: `local helper`
+- Side effect class: `remote_coordination_write`
 - Summary: Create a PM conversation and post one human question.
 - Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
 - JSON body: `conversation`, `turn`
 - Examples:
-  - `anx --agent maya pm ask "What needs my decision?"`
-  - `anx --agent maya pm ask --wait "What needs my decision?"`
+  - `anx --as maya pm ask "What needs my decision?"`
+  - `anx --as maya pm ask --wait "What needs my decision?"`
 
 Flags:
   --wait                       Poll until the turn has a response, fails, or the deadline passes.
@@ -8137,7 +7634,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm ask ... ; anx --json pm ask ... ; anx pm ask ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `pm channels doctor`
@@ -8148,6 +7645,7 @@ Check PM channel secrets, webhook reachability, and binding state without sendin
 Local Help: pm channels doctor
 
 - Kind: `local helper`
+- Side effect class: `read_only`
 - Summary: Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
 - Composition: Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.
 - JSON body: `checks`, `ok`
@@ -8163,7 +7661,7 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --agent <name>, --no-color, --verbose, --headers, --timeout <duration>
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
 ## `work context`
@@ -8173,7 +7671,9 @@ Compose work, a bounded observation page and refresh status using read-only requ
 ```text
 Local Help: work context
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Side effect class: read_only
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Compose work, a bounded observation page and refresh status using read-only requests.
 
@@ -8193,7 +7693,9 @@ Inspect last observed, source activity and meaningful progress independently.
 ```text
 Local Help: work freshness
 
-Work is an existing card; projects are topics. Scope and identity come from the selected authenticated workspace profile. No local tracker database.
+Side effect class: read_only
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
 Inspect last observed, source activity and meaningful progress independently.
 

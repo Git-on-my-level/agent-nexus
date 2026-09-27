@@ -18,7 +18,7 @@ import (
 func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 	home := t.TempDir()
 	for _, name := range []string{"one", "two"} {
-		writeAgentProfile(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+		writeDerivedAgentFixture(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 	}
 	for _, tc := range []struct {
 		args []string
@@ -60,7 +60,7 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 func TestWorkHelpOffline(t *testing.T) {
 	for _, args := range [][]string{{"help", "work"}, {"work", "list", "--help"}, {"work", "observations", "submit", "--help"}} {
 		payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--json"}, args...)))
-		raw, _ := json.Marshal(payload["data"])
+		raw, _ := json.Marshal(payload["result"])
 		if !strings.Contains(string(raw), "anx ") {
 			t.Errorf("missing useful help: %s", raw)
 		}
@@ -113,7 +113,7 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 			if calls != 1 {
 				t.Errorf("calls=%d", calls)
 			}
-			got, _ := json.Marshal(result["data"])
+			got, _ := json.Marshal(result["result"])
 			var want any
 			_ = json.Unmarshal([]byte(tc.response), &want)
 			w, _ := json.Marshal(want)
@@ -145,7 +145,7 @@ func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 	}))
 	defer server.Close()
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "work", "context", "card:launch", "--limit", "1", "--cursor", "page"}))
-	body := asMap(payload["data"])
+	body := asMap(payload["result"])
 	if got := asMap(body["observations"])["next_cursor"]; got != "older" {
 		t.Errorf("pagination lost: %v", body)
 	}
@@ -157,7 +157,7 @@ func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 	}
 	calls = nil
 	payload = assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "work", "freshness", "card:launch"}))
-	body = asMap(payload["data"])
+	body = asMap(payload["result"])
 	if got := asMap(body["freshness"])["status"]; got != "error" {
 		t.Errorf("freshness=%v", body)
 	}
@@ -178,7 +178,7 @@ func TestWorkRemoteErrorsAndInvalidBodies(t *testing.T) {
 			}))
 			defer server.Close()
 			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{"observation":{}}`), []string{"--json", "--base-url", server.URL, "work", "observations", "submit", "card:launch", "--from-file", "-"}))
-			if payload["command_id"] != "work.observations.submit" {
+			if machineEnvelopeCommandID(payload) != "work.observations.submit" {
 				t.Errorf("identity lost: %v", payload)
 			}
 			if !strings.Contains(fmt.Sprint(payload["error"]), "fixture denial") {
@@ -238,7 +238,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(tc.body), append([]string{"--json", "--base-url", server.URL}, tc.args...)))
 			var want any
 			_ = json.Unmarshal([]byte(tc.response), &want)
-			got, _ := json.Marshal(payload["data"])
+			got, _ := json.Marshal(payload["result"])
 			w, _ := json.Marshal(want)
 			if string(got) != string(w) {
 				t.Errorf("receipt/status altered: %s want %s", got, w)
@@ -252,7 +252,7 @@ func TestPMCommandsUseDurableDecisionAndReceiptAPI(t *testing.T) {
 
 func TestWorkAndPMMetadataDocsAreDiscoverable(t *testing.T) {
 	for _, topic := range []string{"work", "work observations submit", "pm", "pm decisions answer", "pm actions reconcile", "pm actions acknowledge"} {
-		payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "meta", "doc", topic}))
+		payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "debug", "meta", "doc", topic}))
 		if !strings.Contains(fmt.Sprint(payload), "anx ") {
 			t.Errorf("missing actionable help %s: %v", topic, payload)
 		}
@@ -262,7 +262,7 @@ func TestWorkAndPMMetadataDocsAreDiscoverable(t *testing.T) {
 func TestWorkGroupHelpDoesNotRequireProfileSelection(t *testing.T) {
 	home := t.TempDir()
 	for _, name := range []string{"one", "two"} {
-		writeAgentProfile(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture"}`)
+		writeDerivedAgentFixture(t, home, name, `{"agent":"`+name+`","base_url":"http://127.0.0.1:1","access_token":"fixture"}`)
 	}
 	for _, args := range [][]string{{"work"}, {"work", "observations"}, {"work", "refresh"}, {"pm"}, {"pm", "decisions"}} {
 		assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, append([]string{"--json"}, args...)))
@@ -297,7 +297,7 @@ func TestPMPaginationCarriesOpaqueCursor(t *testing.T) {
 			}))
 			defer server.Close()
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", kind, "list", "--limit", "200", "--cursor", "bound+opaque"}))
-			if asMap(payload["data"])["next_cursor"] != "next-page" {
+			if asMap(payload["result"])["next_cursor"] != "next-page" {
 				t.Errorf("cursor lost: %v", payload)
 			}
 		})
@@ -314,12 +314,12 @@ func TestPMContextPaginationCarriesOpaqueCursor(t *testing.T) {
 	}))
 	defer server.Close()
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "pm", "context", "--limit", "20", "--cursor", "bound+opaque"}))
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	if data["next_cursor"] != "next-ctx" || data["has_more"] != true {
 		t.Errorf("json envelope changed or lost pagination: %v", payload)
 	}
 	text := runCLIForTest(t, t.TempDir(), nil, nil, []string{"--base-url", server.URL, "pm", "context", "--limit", "20", "--cursor", "bound+opaque"})
-	if !strings.Contains(text, "has_more: true") || !strings.Contains(text, "next_cursor: next-ctx") {
+	if !strings.Contains(text, "result.has_more=true") || !strings.Contains(text, "result.next_cursor=next-ctx") {
 		t.Errorf("text mode lost pagination: %s", text)
 	}
 }
@@ -338,7 +338,7 @@ func TestPMTurnsContextPostsLeaseTokenAndFilters(t *testing.T) {
 		"ANX_ACCESS_TOKEN":   "fixture",
 		"ANX_PM_LEASE_TOKEN": "lease-from-env",
 	}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "context", "turn-1", "--cursor", "turn+page", "--query", "evidence", "--limit", "5"}))
-	if asMap(payload["data"])["next_cursor"] != "next-turn" {
+	if asMap(payload["result"])["next_cursor"] != "next-turn" {
 		t.Errorf("cursor lost: %v", payload)
 	}
 	if gotMethod != http.MethodPost || gotPath != "/pm/turns/turn-1/context" || gotQuery != "" {
@@ -395,7 +395,7 @@ func TestPMTurnsProposeInjectsLeaseTokenFromEnv(t *testing.T) {
 		"ANX_ACCESS_TOKEN":   "fixture",
 		"ANX_PM_LEASE_TOKEN": "lease-from-env",
 	}, strings.NewReader(fromFile), []string{"--json", "--base-url", server.URL, "pm", "turns", "propose", "turn-1", "--from-file", "-"}))
-	if asMap(payload["data"])["id"] != "decision-1" {
+	if asMap(payload["result"])["id"] != "decision-1" {
 		t.Fatalf("payload=%v", payload)
 	}
 	var body map[string]any
@@ -409,7 +409,7 @@ func TestPMTurnsProposeInjectsLeaseTokenFromEnv(t *testing.T) {
 
 func TestPMContextHelpDocumentsCursor(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "context"}))
-	raw := fmt.Sprint(payload["data"])
+	raw := fmt.Sprint(payload["result"])
 	if !strings.Contains(raw, "--cursor") {
 		t.Errorf("pm context help missing --cursor: %s", raw)
 	}
@@ -417,7 +417,7 @@ func TestPMContextHelpDocumentsCursor(t *testing.T) {
 
 func TestPMTurnsContextHelpDocumentsLeaseToken(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "context"}))
-	raw := fmt.Sprint(payload["data"])
+	raw := fmt.Sprint(payload["result"])
 	if !strings.Contains(raw, "--lease-token") || !strings.Contains(raw, "ANX_PM_LEASE_TOKEN") {
 		t.Errorf("pm turns context help missing lease token: %s", raw)
 	}
@@ -425,7 +425,7 @@ func TestPMTurnsContextHelpDocumentsLeaseToken(t *testing.T) {
 
 func TestPMTurnsProposeHelpDocumentsLeaseToken(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "propose"}))
-	raw := fmt.Sprint(payload["data"])
+	raw := fmt.Sprint(payload["result"])
 	if !strings.Contains(raw, "--lease-token") || !strings.Contains(raw, "ANX_PM_LEASE_TOKEN") {
 		t.Errorf("pm turns propose help missing lease token: %s", raw)
 	}
@@ -433,7 +433,7 @@ func TestPMTurnsProposeHelpDocumentsLeaseToken(t *testing.T) {
 
 func TestPMTurnsClaimHelpDocumentsRunnerIDAndFromFile(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "help", "pm", "turns", "claim"}))
-	raw := fmt.Sprint(payload["data"])
+	raw := fmt.Sprint(payload["result"])
 	for _, needle := range []string{"--runner-id", "--from-file", "actor id"} {
 		if !strings.Contains(raw, needle) {
 			t.Errorf("pm turns claim help missing %q: %s", needle, raw)
@@ -809,7 +809,7 @@ func TestPMConflictHintsUseRevisionNotIfUpdatedAt(t *testing.T) {
 			stdin := strings.NewReader(tc.body)
 			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, stdin, append([]string{"--json", "--base-url", server.URL}, tc.args...)))
 			errObj := asMap(payload["error"])
-			hint := fmt.Sprint(errObj["hint"])
+			hint := fmt.Sprint(asMap(errObj["details"])["hint"])
 			if !strings.Contains(strings.ToLower(hint), strings.ToLower(tc.want)) {
 				t.Errorf("hint=%q want substring %q payload=%v", hint, tc.want, payload)
 			}
@@ -922,7 +922,7 @@ func TestPMTurnLeaseHints(t *testing.T) {
 			}
 			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), env, strings.NewReader(tc.body), append([]string{"--json", "--base-url", server.URL}, tc.args...)))
 			errObj := asMap(payload["error"])
-			hint := fmt.Sprint(errObj["hint"])
+			hint := fmt.Sprint(asMap(errObj["details"])["hint"])
 			if !strings.Contains(hint, tc.want) {
 				t.Errorf("hint=%q want substring %q payload=%v", hint, tc.want, payload)
 			}
@@ -947,7 +947,7 @@ func TestPMReconcileNothingDeliveredHint(t *testing.T) {
 	}))
 	defer server.Close()
 	payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{}`), []string{"--json", "--base-url", server.URL, "pm", "actions", "reconcile", "action-1"}))
-	hint := fmt.Sprint(asMap(payload["error"])["hint"])
+	hint := fmt.Sprint(asMap(asMap(payload["error"])["details"])["hint"])
 	if !strings.Contains(hint, "already acknowledged") || strings.Contains(hint, "deliver first or acknowledge") {
 		t.Fatalf("hint=%q payload=%v", hint, payload)
 	}
@@ -963,7 +963,7 @@ func TestPMReconcileTextMode(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{}`), []string{"--base-url", server.URL, "pm", "actions", "reconcile", "action-1"})
-	if !strings.Contains(text, "action-1") || !strings.Contains(text, "status=unknown") || !strings.Contains(text, "receipt=unknown") || !strings.Contains(text, "still pending") || !strings.Contains(text, "reconciliation_conflict=false") {
+	if !strings.Contains(text, "result.id=action-1") || !strings.Contains(text, "result.status=unknown") || !strings.Contains(text, "result.receipt.status=unknown") || !strings.Contains(text, "still pending") || !strings.Contains(text, "result.reconciliation_conflict=false") {
 		t.Fatalf("text=%s", text)
 	}
 	if strings.Contains(text, `"id":`) {
@@ -990,7 +990,7 @@ func TestPMConversationMessageBusyHints(t *testing.T) {
 			}))
 			defer server.Close()
 			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, strings.NewReader(`{"request_key":"k","text":"hello"}`), []string{"--json", "--base-url", server.URL, "pm", "conversations", "message", "conv-1", "--from-file", "-"}))
-			hint := fmt.Sprint(asMap(payload["error"])["hint"])
+			hint := fmt.Sprint(asMap(asMap(payload["error"])["details"])["hint"])
 			if !strings.Contains(hint, tc.want) {
 				t.Fatalf("hint=%q want %q payload=%v", hint, tc.want, payload)
 			}
@@ -1027,18 +1027,18 @@ func TestPMAskBusyHints(t *testing.T) {
 			}))
 			defer server.Close()
 			payload := assertEnvelopeError(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "ask", "What needs my decision?"}))
-			if fmt.Sprint(payload["command_id"]) != "pm.ask" {
-				t.Fatalf("command_id=%v payload=%v", payload["command_id"], payload)
+			if fmt.Sprint(machineEnvelopeCommandID(payload)) != "pm.ask" {
+				t.Fatalf("command_id=%v payload=%v", machineEnvelopeCommandID(payload), payload)
 			}
-			hint := fmt.Sprint(asMap(payload["error"])["hint"])
+			hint := fmt.Sprint(asMap(asMap(payload["error"])["details"])["hint"])
 			if !strings.Contains(hint, tc.want) {
 				t.Fatalf("hint=%q want %q payload=%v", hint, tc.want, payload)
 			}
 			if strings.Contains(hint, tc.hide) {
 				t.Fatalf("hint still has %q: %q", tc.hide, hint)
 			}
-			if rec, _ := asMap(payload["error"])["recoverable"].(bool); !rec {
-				t.Fatalf("recoverable=%v payload=%v", asMap(payload["error"])["recoverable"], payload)
+			if rec, _ := asMap(payload["error"])["retryable"].(bool); !rec {
+				t.Fatalf("recoverable=%v payload=%v", asMap(payload["error"])["retryable"], payload)
 			}
 			if !strings.Contains(hint, "Conversation conv-1") || !strings.Contains(hint, "anx pm conversations message conv-1") {
 				t.Fatalf("missing conversation retry hint: %q", hint)
@@ -1160,20 +1160,17 @@ func TestPMDispatchTextRendersReceiptAndNothingSent(t *testing.T) {
 			if strings.Contains(text, `"id"`) || strings.Contains(text, `"receipt"`) {
 				t.Fatalf("text mode still printed JSON: %s", text)
 			}
-			for _, needle := range tc.want {
+			var textBody map[string]any
+			_ = json.Unmarshal([]byte(tc.body), &textBody)
+			for _, needle := range []string{"result.id=" + anyString(textBody["id"]), "result.status=" + anyString(textBody["status"]), "result.receipt.status=" + anyString(asMap(textBody["receipt"])["status"])} {
 				if !strings.Contains(text, needle) {
 					t.Fatalf("missing %q in %s", needle, text)
-				}
-			}
-			for _, needle := range tc.hide {
-				if strings.Contains(text, needle) {
-					t.Fatalf("unexpected %q in %s", needle, text)
 				}
 			}
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "decisions", "dispatch", "decision-1"}))
 			var want any
 			_ = json.Unmarshal([]byte(tc.body), &want)
-			got, _ := json.Marshal(payload["data"])
+			got, _ := json.Marshal(payload["result"])
 			encodedWant, _ := json.Marshal(want)
 			if string(got) != string(encodedWant) {
 				t.Fatalf("JSON output changed: %s want %s", got, encodedWant)
@@ -1197,9 +1194,10 @@ func TestPMAcknowledgeTextRendersIDStatusAndTimestamp(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "actions", "acknowledge", "action-1"})
-	want := "action-1  status=acknowledged  acknowledged_at=2026-09-13T02:00:00Z"
-	if !strings.Contains(text, want) {
-		t.Fatalf("missing %q in %s", want, text)
+	for _, want := range []string{"result.id=action-1", "result.status=acknowledged", "result.acknowledged_at=2026-09-13T02:00:00Z"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in %s", want, text)
+		}
 	}
 	if strings.Contains(text, `"acknowledged_by"`) {
 		t.Fatalf("text mode still printed JSON: %s", text)
@@ -1207,7 +1205,7 @@ func TestPMAcknowledgeTextRendersIDStatusAndTimestamp(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "actions", "acknowledge", "action-1"}))
 	var wantBody any
 	_ = json.Unmarshal([]byte(body), &wantBody)
-	got, _ := json.Marshal(payload["data"])
+	got, _ := json.Marshal(payload["result"])
 	encodedWant, _ := json.Marshal(wantBody)
 	if string(got) != string(encodedWant) {
 		t.Fatalf("JSON output changed: %s want %s", got, encodedWant)
@@ -1222,14 +1220,14 @@ func TestPMTurnsGetTextRendersQueuedAndInProgress(t *testing.T) {
 		{
 			name: "unclaimed sending",
 			body: `{"id":"turn-1","status":"sending","claimed":false,"deadline":"2026-09-08T22:00:00Z"}`,
-			want: []string{"turn-1", "status=queued", "deadline=2026-09-08T22:00:00Z"},
-			hide: []string{"status=sending", "claimed_at="},
+			want: []string{"result.id=turn-1", "result.status=sending", "result.deadline=2026-09-08T22:00:00Z"},
+			hide: []string{"result.claimed_at="},
 		},
 		{
 			name: "claimed sending",
 			body: `{"id":"turn-2","status":"sending","claimed":true,"claimed_at":"2026-09-08T21:00:00Z","deadline":"2026-09-08T22:00:00Z"}`,
-			want: []string{"turn-2", "status=in progress", "claimed_at=2026-09-08T21:00:00Z"},
-			hide: []string{"status=sending"},
+			want: []string{"result.id=turn-2", "result.status=sending", "result.claimed_at=2026-09-08T21:00:00Z"},
+			hide: []string{},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1267,14 +1265,11 @@ func TestPMAcknowledgeClosedWithoutDeliveryText(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "actions", "acknowledge", "action-2"})
-	if !strings.Contains(text, "status=closed, nothing delivered") {
+	if !strings.Contains(text, "result.closed_without_delivery=true") {
 		t.Fatalf("close-without-delivery text=%s", text)
 	}
-	if strings.Contains(text, "status=acknowledged") {
-		t.Fatalf("still printed acknowledged: %s", text)
-	}
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "actions", "acknowledge", "action-2"}))
-	if asMap(payload["data"])["closed_without_delivery"] != true {
+	if asMap(payload["result"])["closed_without_delivery"] != true {
 		t.Fatalf("JSON dropped closed_without_delivery: %v", payload)
 	}
 }
@@ -1308,9 +1303,9 @@ func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
 			args := []string{"--base-url", server.URL}
 			env := map[string]string{"ANX_ACCESS_TOKEN": "fixture"}
 			if tc.agent {
-				writeAgentProfile(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				writeDerivedAgentFixture(t, home, "pm", `{"agent":"pm","actor_id":"actor-pm","access_token":"fixture","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
 				env = map[string]string{}
-				args = []string{"--agent", "pm", "--base-url", server.URL}
+				args = []string{"--as", "pm", "--base-url", server.URL}
 			}
 			args = append(args, "pm", "turns", "claim")
 			args = append(args, tc.args...)
@@ -1326,7 +1321,7 @@ func TestPMTurnsClaimSendsRunnerIDAndPrintsLease(t *testing.T) {
 			if body["runner_id"] != tc.wantID {
 				t.Fatalf("runner_id=%v want %s body=%s", body["runner_id"], tc.wantID, gotBody)
 			}
-			for _, needle := range []string{"turn-1", "status=in progress", "runner_id=runner-1", "lease_token=tok-1"} {
+			for _, needle := range []string{"result.id=turn-1", "result.status=sending", "result.lease_owner=runner-1", "result.lease_token=tok-1"} {
 				if !strings.Contains(text, needle) {
 					t.Fatalf("missing %q in %s", needle, text)
 				}
@@ -1344,7 +1339,7 @@ func TestPMTurnsClaimJSONEmptyIsEnvelope(t *testing.T) {
 	}))
 	defer server.Close()
 	payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "claim"}))
-	data := asMap(payload["data"])
+	data := asMap(payload["result"])
 	if data["claimed"] != false {
 		t.Fatalf("claimed=%v payload=%v", data["claimed"], payload)
 	}
@@ -1355,13 +1350,13 @@ func TestPMTurnsClaimJSONEmptyIsEnvelope(t *testing.T) {
 		t.Fatalf("empty body leaked into envelope: %v", payload)
 	}
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "turns", "claim"})
-	if !strings.Contains(text, "No claimable turn") {
+	if !strings.Contains(text, "result.reason=\"nothing to claim\"") {
 		t.Fatalf("text=%s", text)
 	}
 }
 
 func TestPMTurnsClaimCapacityShapes(t *testing.T) {
-	wantText := "No lease available: 2 of 2 runner leases are held; 3 turn(s) are waiting."
+	wantText := "result.reason=capacity"
 	for _, tc := range []struct {
 		name   string
 		status int
@@ -1396,7 +1391,7 @@ func TestPMTurnsClaimCapacityShapes(t *testing.T) {
 				t.Fatalf("capacity used empty-claim text: %s", text)
 			}
 			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", server.URL, "pm", "turns", "claim"}))
-			data := asMap(payload["data"])
+			data := asMap(payload["result"])
 			if data["claimed"] != false {
 				t.Fatalf("claimed=%v payload=%v", data["claimed"], payload)
 			}
@@ -1436,10 +1431,10 @@ func TestPMConversationsListTextFetchesLatestTurn(t *testing.T) {
 	}))
 	defer server.Close()
 	text := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--base-url", server.URL, "pm", "conversations", "list"})
-	if gets != 3 {
-		t.Fatalf("fetched %d conversation details, want 3; text=%s", gets, text)
+	if gets != 0 {
+		t.Fatalf("text projection made extra reads: %d; text=%s", gets, text)
 	}
-	for _, needle := range []string{"conv-queued  card:x  status=queued  Queued", "conv-done    status=delivered  Done", "conv-expired    status=expired  Expired"} {
+	for _, needle := range []string{"result.items.0.id=conv-queued", "result.items.1.id=conv-done", "result.items.2.id=conv-expired"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("missing %q in %s", needle, text)
 		}

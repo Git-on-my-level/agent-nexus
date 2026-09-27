@@ -412,6 +412,44 @@ const adapterCommandTable = [
   ["listActors", "actors.list", (filters) => ({ options: q(filters) })],
   ["issueAuthToken", "auth.token", (payload) => ({ options: b(payload) })],
   ["getCurrentAgent", "agents.me.get"],
+  ["listAgents", "agents.list"],
+  ["getAgent", "agents.get", (agentId) => p(pathParams({ agent_id: agentId }))],
+  ["listRuns", "runs.list", (filters) => ({ options: q(filters) })],
+  ["getRun", "runs.get", (runId) => p(pathParams({ run_id: runId }))],
+  ["listHosts", "hosts.list"],
+  ["getHost", "hosts.get", (hostId) => p(pathParams({ host_id: hostId }))],
+  [
+    "patchHost",
+    "hosts.patch",
+    (hostId, payload) => pb(pathParams({ host_id: hostId }), payload),
+  ],
+  [
+    "revokeHost",
+    "hosts.revoke",
+    (hostId) => p(pathParams({ host_id: hostId })),
+  ],
+  ["listPendingHostEnrollments", "hosts.enroll.pending"],
+  [
+    "approveHostEnrollment",
+    "hosts.enroll.approve",
+    (enrollmentId) => pb(pathParams({ enrollment_id: enrollmentId }), {}),
+  ],
+  [
+    "denyHostEnrollment",
+    "hosts.enroll.deny",
+    (enrollmentId) => pb(pathParams({ enrollment_id: enrollmentId }), {}),
+  ],
+  ["listHostEnrollmentTokens", "hosts.tokens.list"],
+  [
+    "createHostEnrollmentToken",
+    "hosts.tokens.create",
+    (payload) => ({ options: b(payload) }),
+  ],
+  [
+    "revokeHostEnrollmentToken",
+    "hosts.tokens.revoke",
+    (tokenId) => pb(pathParams({ token_id: tokenId }), {}),
+  ],
   [
     "passkeyRegisterOptions",
     "auth.passkey.register.options",
@@ -873,7 +911,6 @@ export function createAnxCoreClient(options = {}) {
     const parsedUrl = new URL(String(input), sameOriginProxyBaseUrl);
     return (
       parsedUrl.pathname === "/auth/token" ||
-      parsedUrl.pathname === "/auth/agents/register" ||
       parsedUrl.pathname.startsWith("/auth/passkey/")
     );
   }
@@ -1116,12 +1153,34 @@ export function createAnxCoreClient(options = {}) {
   return {
     baseUrl: resolvedBaseUrl,
     ...tableDrivenClient,
-    streamThreadEvents: async ({ threadId, lastEventId, signal, onEvent }) => {
+    /**
+     * `GET /stream/events`. `threadId` scopes to one backing thread; without
+     * it the stream is workspace-wide. `types` filters by event type.
+     */
+    streamEvents: async ({
+      threadId,
+      types,
+      lastEventId,
+      signal,
+      onEvent,
+    } = {}) => {
       const response = await invokeDirectRaw("/stream/events", {
         query: {
-          thread_id: String(threadId),
+          thread_id: threadId ? String(threadId) : undefined,
+          type: Array.isArray(types) && types.length ? types : undefined,
           last_event_id: lastEventId,
         },
+        accept: "text/event-stream",
+        signal,
+      });
+      await consumeSSEStream(response, { onEvent, signal });
+    },
+    /**
+     * `GET /stream/agents`: ephemeral `agents_changed` invalidations (no
+     * replay cursor, not in the event log). Core sends one on connect.
+     */
+    streamAgentChanges: async ({ signal, onEvent } = {}) => {
+      const response = await invokeDirectRaw("/stream/agents", {
         accept: "text/event-stream",
         signal,
       });
@@ -1240,6 +1299,13 @@ export function createAnxCoreClient(options = {}) {
       const responseText = String(payload?.response_text ?? "").trim();
       if (!responseText) {
         throw new Error("respondInboxItem requires a non-empty response_text.");
+      }
+      if (
+        !["answered", "approved", "rejected", "acknowledged"].includes(
+          payload?.outcome,
+        )
+      ) {
+        throw new Error("respondInboxItem requires a valid outcome.");
       }
       return invokeCommand("inbox.respond", {
         pathParams: pathParams({ inbox_id: id }),

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -432,18 +433,21 @@ func (a *App) runSecretExec(ctx context.Context, args []string, cfg config.Resol
 	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
 	cmd.Env = childEnv
 	cmd.Stdin = a.Stdin
-	cmd.Stdout = a.Stdout
-	cmd.Stderr = a.Stderr
+	var childStdout, childStderr bytes.Buffer
+	cmd.Stdout = &childStdout
+	cmd.Stderr = &childStderr
 
 	execErr := cmd.Run()
 	if execErr != nil {
 		if exitErr, ok := execErr.(*exec.ExitError); ok {
-			return &commandResult{RawWritten: true}, "secret exec", errnorm.Wrap(errnorm.KindLocal, "child_exit", fmt.Sprintf("child process exited with code %d", exitErr.ExitCode()), execErr)
+			wrapped := errnorm.Wrap(errnorm.KindLocal, "child_exit", fmt.Sprintf("child process exited with code %d", exitErr.ExitCode()), execErr)
+			wrapped.Details = map[string]any{"child_exit_code": exitErr.ExitCode(), "stdout": childStdout.String(), "stderr": childStderr.String()}
+			return nil, "secret exec", wrapped
 		}
 		return nil, "secret exec", errnorm.Wrap(errnorm.KindLocal, "exec_failed", "failed to run child process", execErr)
 	}
 
-	return &commandResult{RawWritten: true}, "secret exec", nil
+	return &commandResult{Data: map[string]any{"child_exit_code": 0, "stdout": childStdout.String(), "stderr": childStderr.String()}}, "secret exec", nil
 }
 
 func (a *App) resolveSecretID(ctx context.Context, client *httpclient.Client, cfg config.Resolved, nameOrID string) (string, error) {

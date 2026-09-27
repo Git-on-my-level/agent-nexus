@@ -40,9 +40,11 @@ Agent Nexus web UI does **not**:
 - The UI MUST authenticate the current operator as an actor ID from the anx-core actor registry.
 - Every write operation MUST include the actor ID.
 - The UI displays actor `display_name` wherever `actor_id` appears.
+- Machine identifiers are not labels. Actor ids, machine-minted principal handles (`passkey.<slug>.<hex>`, `external.<hash>`), connection ids, thread refs and raw error payloads are never printed as the name of something. The UI shows the name (or a person-chosen handle) and keeps the identifier behind a copy affordance where an operator may need it for the CLI or a bug report: "Copy actor id" on `/more`, "Copy connection id" and "Copy error" on Integrations (connections read "GitHub · main" when a tool has more than one), "Copy ref" on the Threads list, task and doc pages and in ⌘K. Access and agent pages show principal, host key and run ids the same way (`CopyableId`).
+- **Who wrote something.** A host-derived agent is named by its host relation, "codex on m5-mbp", wherever the UI names an author or requester (task and doc messages, Inbox requesters, timelines, ⌘K). The shell loads the roster (`GET /agents`) once and `buildActorNameMap` prefers the agent's `display_name` over the actor record's name (`lib/actorSession.js` → `agentRegistry`). An event written inside a launcher run carries `run_attribution`; message items show a quiet "via run exec-…" beside the time that opens that run on the agent's page (`components/agents/RunAttribution.svelte`).
 - **Auth-first model**: Production deployments require authenticated principals by default.
   - Passkey registration/login creates a linked actor with `principal_kind=human`, `auth_method=passkey`.
-  - Ed25519 key registration creates a linked actor with `principal_kind=agent`, `auth_method=public_key`.
+  - Agents are not registered one by one. A machine is enrolled once as a **host** (`anx host enroll`, approved in Access, or a headless token); every agent on it is derived from the host as `<name>.<host>` (`principal_kind=agent`, `auth_method=host_assertion`) the first time it uses `anx`. Agent invites and public-key self-registration do not exist.
   - When `dev_actor_mode=false` (default), the UI MUST NOT show the legacy actor picker/creator flow.
   - When `dev_actor_mode=true` (development convenience), the legacy actor picker/creator flow MAY be shown, clearly labeled as development-only.
   - Browser session state is cookie-backed and same-origin; refresh tokens MUST NOT be written to script-readable browser storage.
@@ -70,15 +72,15 @@ Agent Nexus web UI does **not**:
 
 Operator-facing copy MUST use one term per concept. Banned aliases MUST NOT appear in navigation, buttons, banners, or empty states except where noted as technical exceptions.
 
-**Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
+**Scope.** This is enforced on the surfaces an operator cannot avoid: primary navigation, the onboarding tour, and the page copy of Inbox, Agents, Tasks and Docs. Three places are exempt, because their whole job is to expose the core model:
 
 1. **Diagnostics surfaces** (`/events` "Audit", `/threads`), including their nav entries and headings.
-2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`getInboxSubjectLabel`) — because their job is to name the *ref type*. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
+2. **Ref-type labels**, wherever they are rendered — `RefLink` / `refLinkModel` chips and Inbox subject lines (`inboxSubjectNoun`) — because their job is to name the *ref type*. These still use the operator noun where one exists: a `card:` subject reads "Task", a `topic:` subject reads "Project". Types with no operator equivalent (`thread:`, `artifact:`, `board:`) keep the core name. The exemption is the label's job, not the module it lives in: any new surface that names a ref type follows the same rule, and must not introduce its own noun map.
 3. **Timeline and audit event rows**, which name the core event that occurred.
 
 Those three exemptions are the remaining places "card" (and other core nouns) may appear in operator-visible copy. Inbox, Tasks, Docs, onboarding, keyboard help, and compact `RefLink` chips use Task / Project. Do not add new leaks, and do not read an exemption as license to teach core nouns on product surfaces. Task creation asks the operator to choose a Board only when more than one board already exists, because `work.create` defaults the backing board.
 
-**Open:** the Tasks table still renders a Board column for every row, including in a workspace whose only board is the one core provisioned. By the rule above that column is plumbing whenever there is no choice to make, but removing or conditioning it is a product decision about the Tasks table, not a copy fix, so it is recorded here rather than changed silently.
+The Tasks table and board cards name the board only when more than one board is in view; with one board there is no choice to make, so there is no Board column and no board name on a card.
 
 | Concept | Canonical term | Banned UI aliases | Allowed technical exceptions |
 | --- | --- | --- | --- |
@@ -89,13 +91,15 @@ Those three exemptions are the remaining places "card" (and other core nouns) ma
 | Document collection | Docs | Documents (as collection label) | `document` for singular resources and API field names |
 | Inbox triage action | Acknowledge | Dismiss | — |
 | Operator-facing actor in prose | Operator | user, end user | `actor`, `principal` in identity and auth contexts |
+| Enrolled machine | Host (Access), machine (prose) | device, node, runner (as the concept) | `host:` refs, `host_id`, the `hosts.*` command family |
+| Human with access | People (Access section), person | principal, user (as operator labels) | `principal` in audit copy ids and API paths |
 | Irreversible removal | Permanently delete | Purge (primary copy) | CLI/command `purge` where it is the API surface name |
 
 `Artifact` remains the umbrella object; `Receipt` and `Review` are artifact kinds only.
 
 **Domain note:** Operator vocabulary and core vocabulary are deliberately different. The boundary between them is the typed ref.
 
-- **Operator-facing nouns are Inbox, Tasks and Docs, and nothing else.** A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards).
+- **Operator-facing nouns are Inbox, Agents, Tasks and Docs, plus Hosts and People inside Access.** A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards). An **Agent** is a derived principal on a host, shown by what it is doing; the Agents view is presence, not a second attention queue.
 - **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `document:` — the contract's prefixes, per `contracts/anx-schema.yaml` → `ref_format`; `doc:` is a CLI target shorthand only and is rejected inside a ref) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
 - A **thread** is infrastructure: a durable append-only event timeline that backs topics, cards, boards and documents, and resolves packet subjects. It is never an operator-facing noun.
 - A **topic** is the core discussion/context primitive built on a thread. It has **no operator destination**; it appears only as a ref-type label (e.g. in `RefLink` or an Events filter) and as the detail rendering of its backing thread.
@@ -104,13 +108,19 @@ The practical rule: if an operator has to learn a word to use the product, it be
 
 ---
 
-## 2. Core UX model: Inbox, Tasks, Docs
+## 2. Core UX model: Inbox, Agents, Tasks, Docs
 
-### 2.1 Three product primitives
+### 2.1 Primary navigation
 
-The primary navigation units are **Inbox**, **Tasks**, and **Docs**. Ask PM is
-an action in the shell, not a nav category. Settings (Access, Secrets,
-Integrations, Audit) live in the sidebar footer and `/more`.
+The primary navigation units are **Inbox**, **Agents**, **Tasks**, and
+**Docs**, in that order, in the sidebar and in the mobile bottom bar. Inbox
+shows its Needs you count; Agents shows how many agents are working (nothing at
+zero). Agents is presence: who is working, waiting on a human, idle or stale.
+It never answers an ask; a waiting agent's row links into the Inbox. Ask PM is
+an action in the shell, not a nav category. The account menu in the sidebar
+footer and the `/more` hub group the secondary destinations under two labels:
+**Settings** (Access, Secrets, Integrations) and **Diagnostics** (Audit,
+Threads). Sign out is the last item of the account menu.
 
 Tasks is the operator projection over work (`work.list` / `work.get`), shown as
 table or board. Boards and cards remain the backing store; they are not
@@ -119,8 +129,9 @@ inbox deep links and audit inspection at `/threads/...`.
 
 `/threads` and `/events` are **Diagnostics**, not product: they expose core
 primitives that are deliberately not operator nouns. Both are reachable only
-from the sidebar footer / `/more` hub — `/events` under Settings as "Audit",
-`/threads` under a "Diagnostics" group. They MUST NOT appear in primary nav.
+from the account menu / `/more` hub under the "Diagnostics" group (`/events`
+as "Audit", `/threads` as "Threads"), and from the ⌘K palette's "Go to" list.
+They MUST NOT appear in primary nav.
 A diagnostic surface is labelled and grouped rather than merely unlinked: an
 orphaned page reachable only by typing its URL is undiscoverable to the
 operator who needs it and unexplained to everyone else.
@@ -166,40 +177,67 @@ Mutable fields are interpretive and versioned through events. The timeline is du
 
 ### 3.0 Workspace root and Events
 
-The workspace root redirects to Inbox. There is no Home unread-feed destination.
+The workspace root redirects to Inbox. There is no Home unread-feed destination. Agents (§3.8) is a presence view, not a home.
 
-Events is the full workspace event browser under settings. It reads `GET /events`,
+Events ("Audit") is the full workspace event browser under Diagnostics. It reads `GET /events`,
 supports URL/shareable filter intent for type, group, backing scope, topic, actor,
 search, time range, and cursor.
 Events stays under More on mobile rather than a primary bottom-nav slot.
 
 ### 3.1 Inbox
 
-A dedicated surface showing items that need operator attention.
+A dedicated surface showing items that need operator attention. It is the only attention surface; other views (Tasks, the Agents roster) link into it rather than handling items themselves.
 
-**Display:**
+**Mailboxes and order:**
 
 - Inbox items are grouped into three **mailboxes** — **Needs you**, **Watching**, **Handled** (`lib/inboxMailbox.js`). Item `kind` (`ask`, `review`, `escalate`) drives affordances within an item, not the grouping; unknown kinds MUST still appear rather than being dropped.
-- Within each group, sorted by inferred **urgency** (from kind, optional severity, and trigger/source recency) and then by **source or trigger time**; v0 does not add a separate ranking engine beyond that ordering.
-- Each item shows: title, kind, requester context, and a link to the relevant task, document, thread, or artifact.
+- **Needs you** is ordered by how long the requester has been blocked (the age of the open request, compared at minute resolution), then by severity (critical, high, …), then by kind. Blocked tasks use their last update as the start of the wait, because core does not record when a task entered Blocked. **Watching** and **Handled** are newest first.
+- A `?work_ref=<card ref>` link ("Inbox for this task") narrows every mailbox to rows about that task and shows a removable "Only <task>" chip. Counts on the mailbox tabs follow the filter; the sidebar count does not.
+
+**Rows:**
+
+- An ask, review or escalation row reads: title and loud severity badge; then the requester by name and the subject ("Omar Reed · Task: Lock hub quest path"); on the right, in Needs you, how long they have waited ("3h 12m", amber from one hour). The subject prefers the task an item names over the project it was filed on (`inboxItemSubject`).
+- Names, not identifiers: requesters and responders resolve through the actor registry. When only an id exists the UI shows a short stand-in (`agent 6400c2d2`) with the full id behind a copy button; a raw UUID is never the label.
+- Watching **update** rows (`home.unread` groups) are digests in operator language built from the group's events — "Leo moved 2 tasks to review · Nina commented", "You updated 2 tasks" — never core nouns ("Board updates") or a bare count badge (`lib/inboxDigest.js`).
+- Handled rows drop core's "Human response recorded:" title prefix; the mailbox already says the item was answered.
 - Inbox item IDs are deterministic (see schema) and stable across rebuilds.
 
-**Actions:**
+**Detail pane and standalone item page:**
 
-- Navigate to the relevant inbox item, task, document, thread inspection route, or artifact.
+- The first row of the current mailbox is selected automatically; the pane is never an empty placeholder while rows exist. The automatic selection stays on its row while the list refreshes, so a live update never swaps the item being answered. Below `lg` the list and the detail are separate screens and only an explicit choice (`?item=`) opens the detail.
+- The pane header says who is blocked and for how long ("Omar Reed has been blocked for 3h 12m").
+- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). When the requester is an agent with a presence note (`anx work note`), the strip also shows that note with its age and the agent's state dot, linked to the agent page (`components/agents/AgentPresenceLine.svelte`, read from the shell roster). Threads and boards are not operator subjects and get no subject line.
+- The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event, numbered 1–5. The first is marked **Recommended**. Choosing a proposal selects it and sends it; **`review`** items also offer **Approve** / **Reject**, which send fixed text. A freeform reply and **Acknowledge** complete the surface. The Inbox pane and the standalone item route (`/inbox/{id}`) share this component (`InboxRespondPanel`) and behave the same; the standalone page adds the notify-target and attachment controls.
+- Both surfaces notify the original requester by default when core can reach them (`notification_target_status.resolvable`), and nobody otherwise. Acknowledge never notifies.
+- Links from the standalone page back into the Inbox use the Inbox's own parameters (`?mailbox=handled&item=…`); `?status=` is not an Inbox parameter.
+
+**Undo:**
+
+- Sending a proposal, a reply, Approve/Reject or Acknowledge does not call core immediately. The response waits about five seconds behind an undo toast ("Sent to Omar Reed · Undo"); Undo or ⌘Z takes it back and restores the selection and draft. When the window closes the UI commits exactly the `inbox.respond` request built at send time. Queuing a second response commits the first at once; closing the tab commits a waiting response (with the browser's leave prompt to give it time). A refused commit returns the item to Needs you with a "Not sent" toast and Retry (`lib/inboxResponseQueue.js`).
+- While a response waits or has just committed, the item is filed under Handled locally so the list and the sidebar count move at once; core's projection takes over within a minute.
+- The standalone page returns to the Inbox after sending; undoing a response sent there goes back to that page with the draft, notify target and attachments restored.
+
+**Keyboard:**
+
+- `J` / `K` next and previous row, `1`–`5` send that suggested response, `R` focus the reply, `⌘Enter` send the reply, `E` acknowledge (or mark an update read, or acknowledge a failed delivery), `O` open the subject task or doc, `⌘Z` undo the waiting response, `?` the shortcut list, `Esc` close it. Single keys never fire while typing in a field, with a modifier held, or under another dialog. The pane footer shows the keys that apply to the selected row (`lib/inboxShortcuts.js`).
+
+**Live updates:**
+
+- The Inbox follows the workspace event stream through `liveWorkspaceEvents` (§6) and reloads quietly, coalescing bursts. There is no Reload button. A quiet reload never blanks the list and clears a load error once the load succeeds again.
+- The sidebar Inbox item shows the Needs you count (nothing at zero). While the Inbox page is open it publishes its own count; elsewhere the shell loads the Needs you sources itself and refreshes on the same shared stream (`lib/inboxCount.js`).
+
+**Writes:**
+
 - Respond to an item → emits a `human_attention_responded` event with `inbox:<inbox_item_id>` in refs. Responded items are suppressed from the inbox unless a new human attention request is created.
-- The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event: the first entry is the **recommended** response (highlighted); additional entries are optional fill-ins for the freeform response text. **`review`** items also expose local **Approve** / **Reject** actions that submit fixed response text without using those chips.
 - Record a response (creates a `human_attention_responded` event for inbox items, or a `message_posted` event for general notes) with notes and typed refs. The write is anchored on the inbox item's backing **thread** (`thread_id` / `thread:` in event refs). Topic refs are optional context when present, never the anchor.
 
 ### 3.2 Thread inspection list
 
 `/threads` is a filterable inspection list of backing conversations (docs-as-rooms, inbox deep links, audit). It is not a fourth product primitive and MUST NOT appear in primary nav. It is listed under the **Diagnostics** group in the sidebar footer / `/more` hub, so it is discoverable by link rather than only by URL.
 
-Document and thread list rows SHOULD use compact inline metrics for scanability. Zero values may be shown when the metric set is stable across rows, but list-only API enrichments such as `timeline_message_count`, `revision_count`, and `head_revision_character_count` remain read hints: the UI must tolerate missing fields and degrade them to zero or an unavailable placeholder rather than treating them as durable editable state.
-
 **Filters:** lifecycle `state` (`active`, `archived`, `trashed`), archive/trash visibility flags, and search (`q`).
 
-Each row shows: title, lifecycle state, summary, and last activity timestamp.
+Each row shows: title, lifecycle state (when not active), last activity timestamp, and whether a topic is linked. The thread ref is not printed; a "Copy ref" icon button carries it for CLI use.
 
 ### 3.3 Thread / topic inspection detail
 
@@ -243,36 +281,86 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 - Nexus-owned Tasks board drops MUST persist through `cards.move` with public `card:` refs. Source-owned drops MUST file a PM decision rather than silently mutating the source.
 - `/boards` is not an operator destination, and neither is `/work` — the operator route is `/tasks`.
 - There is no card-detail modal on a board workspace.
+- **Attention order.** The table lists open work by what needs a look first: Blocked, In progress, In review, Ready, Backlog, then phases Nexus has no name for; within a phase, `work.list` order (most recently updated first). Done and Cancelled fold into one quiet toggle under the table ("3 done"); `?closed=1` shows them (URL-backed) and filtering by Done or Cancelled shows them regardless. On the board, columns keep workflow order and cards keep their rank (rank is what a drag writes); the Done and Cancelled columns collapse to their count with the same toggle and stay drop targets.
+- **One row per source item.** Tasks whose `source.authority` and `source.native_id` match (one GitHub issue read through two connections) show as one row: the one whose reader is not failing, then the most recently read, then the oldest. The folded tasks are listed on the kept task's page under "Also tracked through another connection", with their read state. Nexus-owned tasks never fold.
+- **Columns earn their place.** Board appears only when more than one board is in view. "Last checked" means the last read from the source, so it appears only when a source-backed task is in view, and a Nexus-owned row leaves it empty rather than repeating "created here". The next-actor line under a title shows the actor's name, never the actor id.
+- **Evidence on the task page is grouped by source.** One line per source ("GitHub #208 · 4 observations · last 1m ago") with the latest read's claim badge (Reported claim / Uncertain report / Verified evidence; "verified" is trusted only from `verification`), the latest read's uncertainty, then each distinct evidence link once, named by kind (Issue #208, Comment 1, Review · APPROVED, Check · build: completed / success); long lists show six and a "N more" toggle. A failed latest read is one warn line with the source's message (instants humanized). The read-by-read history, with consecutive identical reads folded ("Reported claim × 18 between 47m ago and 14m ago"), is an "Observation history" disclosure; raw reader payloads stay under Details.
+- **Live.** The Tasks list and the task page follow the workspace event stream (card and board events); there is no Reload button on the list. The task page keeps Reload for evidence, which arrives as observations rather than events.
 
 **Docs:**
 
 - The UI MUST present docs as canonical long-lived lineages with a mutable head and explicit revision history, not generic stored text blobs.
 - Doc create/edit workflows SHOULD use searchable thread-link pickers for common linkage flows, with manual raw-ID entry hidden behind an advanced path.
 - Doc detail SHOULD make the current head revision versus prior lineage history legible at a glance.
+- Docs list rows show the title, the head version chip (`v3`), tags and source, the last comment preview when it says more than the title, and the update time. There is no comment count or version count: the chip already says the version, and without per-reader unread state a comment total is the same noise on every row. The list follows the event stream (document events and comments on a listed doc) with no Reload button.
+
+### 3.6a Command palette (⌘K) and keyboard
+
+The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is keyboard-first and takes actions, not only searches. Rows are grouped, in this order:
+
+1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref, Ask PM about this task. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
+2. **Go to:** Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination.
+3. **Search results:** tasks (one row per source item) and docs, from two characters on.
+
+Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through `applyTaskPhaseMove`, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
+
+Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then I/A/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G I/T/D and ⌘K alongside the page's own keys.
 
 ### 3.7 Access management
 
-The Access page provides workspace-local operator visibility and intervention for principals and invites.
+Access (`/access`, under Settings) is where machines and people get and lose access. Sections, top to bottom:
 
-**Principal management:**
+**Waiting for approval** (only while requests exist):
 
-- The UI MUST display current principals with their agent ID, kind (human/agent), auth method, revocation status, joined time, and last-seen time.
-- Any authenticated principal MAY view the principal list.
-- An operator MAY revoke another principal through the UI using the `auth principals revoke` API path, which creates an audit trail.
-- The UI MUST prevent self-revocation (the calling principal cannot revoke itself through the Access page).
-- The UI MUST enforce break-glass protection for the last active human principal:
-  - Revoking the last active human requires explicit confirmation, including typing the target agent ID and providing a human-lockout reason.
-  - The break-glass flow uses the `allow_human_lockout` and `human_lockout_reason` parameters.
+- Lists pending host enrollments (`GET /auth/hosts/enrollments/pending`): requested host name, `os_user@hostname`, requesting IP, agents found on the machine, adopted agent names, age and expiry, and the user code the machine printed, set large.
+- Approval is deliberate: **Approve…** opens an inline confirmation that repeats the code ("Approve only if J6FA-N4XI is the code printed on m5-mbp.local") and says every agent running there can act in the workspace; only **Codes match, approve** calls `POST …/approve`. **Deny** is one click. An expired request cannot be approved. After a decision the page says what happens next (an approved host appears under Hosts once the machine finishes).
+- The list polls every few seconds while the page is visible, so a request shows up while the operator is looking. Host cards re-read on the roster stream (`liveAgentChanges`). Core may return a full workspace web UI verification URL ending in `/access/hosts/enroll`; that route redirects here (`#host-requests`). Without a configured URL, the CLI tells the operator to open Access → Hosts.
 
-**Invite management:**
+**Hosts:**
 
-- The UI MUST display pending and revoked invites with their invite ID, kind, and creation time.
-- Any authenticated principal MAY create and revoke invites.
-- The UI SHOULD display created invite tokens with a copy-to-clipboard affordance and a clear warning that tokens are shown only once.
+- One card per active host (`GET /hosts`): name, `os_user@hostname`, enrolled age, host key id behind a copy button, bridge online/offline, and its agents. Agent rows show the state dot and derived state from the host read itself, name, handle and whether it is an adapter, persona or adopted agent, and link to the agent page. Adapters found on the machine but not yet used are listed as "Also installed".
+- **Exclusions** are edited in place (`PATCH /hosts/{id}` `excluded_names`): add a name (validated against the agent-name pattern) or remove one. An excluded name cannot act from that machine; its open sessions end and its history stays.
+- **Revoke host…** opens an inline confirmation inside the card that names every agent that loses access and requires typing the host name before `DELETE /hosts/{id}`. Revoked hosts collapse behind "Show N revoked hosts".
+- **Enroll a machine** shows the command (`anx --base-url <core> host enroll`, with a copy button) and the headless option: create a one-time token with a label and lifetime (10 minutes to 24 hours); the token and the full `host enroll --token` command are shown once with copy buttons. Unused tokens can be revoked; used and expired ones collapse. With no hosts, this panel is open by default.
 
-**Audit trail:**
+**People:**
 
-- The Access page SHOULD surface recent auth audit events for operator visibility.
+- Humans only, by name (actor display name, then username), with joined and last-seen age and the principal id behind a copy button. Agents are never listed here; they appear under their hosts.
+- **Invite a person** (self-hosted) creates a human invite and shows the one-time token with a copy button; open invites list with Revoke. Hosted workspaces invite people from Organizations instead, and the section says so.
+- Revoking a person asks for confirmation. The last active human requires break-glass: typing the principal id and a lockout reason (`allow_human_lockout`, `human_lockout_reason`). The signed-in principal cannot revoke itself.
+
+**Standalone agents** (only when present): agents registered before hosts and not adopted. They keep working until revoked here.
+
+**Recent access events:** auth audit events as sentences with names and host names ("Maya Chen approved m5-mbp", "codex on m5-mbp used anx for the first time"); event ids sit behind a copy button on hover. Eight show first, then more, then older pages.
+
+Agent identity is managed through host enrollment and host-level exclusions; there are no per-agent enrollment or wake controls. There is no Refresh button: actions re-read what they change.
+
+### 3.8 Agents
+
+`/agents` is the roster of every agent in the workspace (`GET /agents`), grouped by the state core derives: **Waiting on you**, **Working**, **Idle**, **Stale**, in that order, each with its state dot and count. The subtitle counts the roster ("6 agents · 1 working · 2 waiting on you · 1 idle · 2 stale").
+
+Each row answers who, where, doing what, and for how long:
+
+- **Who:** display name ("codex on m5-mbp"), `@handle`, runtime (adapter and model of the active run, or the adapter when the agent is one), and the bridge indicator (a secondary icon; online means tagging wakes it now). Bridge state is never the row's state.
+- **Waiting on you:** the oldest open ask (title linked to the Inbox item, kind, severity, the task it is about, "N more open"), how long it has waited, and **Answer in Inbox**. Waiting rows sort by longest wait. The roster never answers an ask.
+- **Working:** the current task (linked), the last progress note quoted with its age, and run time (or time since the last update without a run). Longest-running first.
+- **Idle:** current task or "No current task", last signal age.
+- **Stale:** "No signal for 2d" or "Never checked in", dimmed.
+
+Waiting rows read everything from the roster: `waiting_ask` carries the ask's title, kind, severity, subject, Inbox item id (the link) and `created_at` (the wait start). While core's inbox projection has not caught up (`inbox_item_id` null) the link opens Needs you.
+
+**Keyboard:** `J`/`K` (or arrows) move the selection, `Enter` or `O` opens the agent, `I` opens the selected agent's ask in the Inbox, `T` its current task, `?` the shortcut list (`KeyboardShortcutsDialog`), `Esc` closes it. Keys never fire while typing, with a modifier held, or under a dialog. A footer shows the keys (`lib/agentShortcuts.js`).
+
+**Live updates:** the shell keeps one roster loaded (`lib/agentRoster.js`) for the nav badge, names and this page. It re-reads `GET /agents` on every `agents_changed` notification from core's roster stream (`GET /stream/agents` via `liveAgentChanges`, §6), which arrives on connect, after run, presence, host and bridge changes, and after a reconnect; on ask events from the workspace stream (`human_attention_requested`/`responded`); when the tab becomes visible; and on a two-minute fallback timer. Durations tick every 15 seconds; run time counts forward from core's `duration_seconds` between reads. The agent page re-reads its history when the roster moves (at most every 3 seconds) and takes `open_asks` (with `inbox_item_id` and `created_at`) straight from `GET /agents/{id}`.
+
+**Agent page** (`/agents/{handle}`):
+
+- Header: state dot, display name, state label, `@handle` (copy), host (links to its Access card), adapter or persona and runtime, bridge state.
+- **Waiting on you** (when there are open asks), each linked to its Inbox item with wait time. **Now:** current task, last note with age, active run, last signal.
+- **Recent runs:** launcher id (`exec-…`, copyable), state, adapter and model, duration, whether the result was collected ("Not collected" when a finished run's result was never read), and the task. `?run=<id>` highlights a run (the "via run" link lands here).
+- **Notes and messages:** progress notes and the agent's messages (`events.list` by actor), newest first, with task and "via run" attribution; six first, then the rest.
+- **Recent tasks** with phase and age.
+- **Identity** (secondary, aside): host and machine, name and kind, derived/adopted/standalone, created, agent and actor ids behind copy buttons. Auth admins can exclude the agent's name on its host (reversible; inline confirmation) or revoke the agent (permanent: for a derived agent the host can never use that name again, and the confirmation says so). Revoking every agent on a machine is done on the host in Access.
 
 ---
 
@@ -312,7 +400,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 ## 6. Concurrency
 
 - Agent Nexus web UI MUST assume multiple writers (operators and agents) may update anx-core concurrently.
-- The UI SHOULD poll or subscribe for changes and refresh when canonical state changes.
+- The UI SHOULD subscribe for changes and refresh when canonical state changes. List pages use `liveWorkspaceEvents` (`lib/liveWorkspaceEvents.js`) over `GET /stream/events`: it starts after the newest event core has (no history replay), filters by type and an optional predicate, coalesces bursts into one re-read, resumes with `last_event_id` after a drop, backs off while core is unreachable, and stops on 401/403. Subscriptions for the whole workspace share one connection per client (types and predicates filter per subscriber), so the Inbox, the sidebar count, the agent roster and a list page never open parallel streams; a thread-scoped subscription gets its own. Tasks, Docs, the task page, the Inbox (§3.1), the Inbox count and the agent roster (§3.8) use it; thread detail keeps its own thread-scoped stream. The same module's `liveAgentChanges` follows `GET /stream/agents`, core's ephemeral roster invalidation (not in the event log, no cursor): one shared connection per client, a callback on connect, on every `agents_changed` and after reconnects. The roster, the agent page and Access host cards use it. A live re-read keeps the rows on screen and, on failure, says they may be stale.
 - For v0, optimistic locking on current-state edits is sufficient: if a view's `updated_at` has changed since the UI loaded it, warn the operator and reload before saving. Patch/merge semantics with wholesale list replacement reduce the risk of accidental field erasure.
 
 ---
@@ -332,6 +420,7 @@ Replies SHOULD reference the parent event ID as `event:<parent_event_id>` in the
 Agent Nexus web UI v0 is complete when it can:
 
 - Display Inbox grouped by category with navigation to relevant tasks, docs, or thread inspection, and support responses that persist across inbox rebuilds.
+- Show every agent's derived state, current work, asks and runs on Agents, and enroll, exclude and revoke hosts in Access.
 - Show Tasks as table and board over `work.list`, including Nexus-owned drag via `cards.move`.
 - Show Docs list/detail with head vs revision lineage.
 - Inspect backing threads at `/threads` without making that a primary nav primitive.

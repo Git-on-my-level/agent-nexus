@@ -127,12 +127,18 @@ func (a *App) runMetaCommands(args []string) (*commandResult, error) {
 	}
 
 	commands := make([]registry.Command, 0, len(meta.Commands))
+	fullCount := 0
 	for _, cmd := range meta.Commands {
+		if strings.TrimSpace(cmd.CLIPath) == "" || !runtimeSupportsCommand(cmd.CommandID) {
+			continue
+		}
+		fullCount++
+		cmd.CLIPath = runtimePathFromRegistryPath(cmd.CLIPath)
 		if strings.TrimSpace(groupFlag.value) == "" {
 			commands = append(commands, cmd)
 			continue
 		}
-		runtimePath := runtimePathFromRegistryPath(cmd.CLIPath)
+		runtimePath := cmd.CLIPath
 		parts := strings.Fields(runtimePath)
 		if len(parts) == 0 {
 			continue
@@ -151,7 +157,7 @@ func (a *App) runMetaCommands(args []string) (*commandResult, error) {
 		"commands":           commands,
 		"source":             "embedded-generated-registry",
 		"group_filter":       strings.TrimSpace(groupFlag.value),
-		"full_command_count": meta.CommandCount,
+		"full_command_count": fullCount,
 	}
 	text := fmt.Sprintf("Generated commands: %d", len(commands))
 	return &commandResult{Text: text, Data: data}, nil
@@ -184,7 +190,7 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 		return nil, errnorm.Wrap(errnorm.KindInternal, "registry_unavailable", "failed to load generated command metadata", err)
 	}
 	cmd, ok := meta.CommandByID(commandID)
-	if !ok {
+	if !ok || !runtimeSupportsCommand(cmd.CommandID) || strings.TrimSpace(cmd.CLIPath) == "" {
 		return nil, errnorm.Local("not_found", "command metadata not found")
 	}
 	if strings.TrimSpace(cmd.Why) == "" {
@@ -192,7 +198,7 @@ func (a *App) runMetaCommand(args []string) (*commandResult, error) {
 	}
 
 	text := formatGeneratedCommandHelp(runtimePathFromRegistryPath(cmd.CLIPath), cmd, true)
-	return &commandResult{Text: text, Data: map[string]any{"command": cmd, "source": "embedded-generated-registry"}}, nil
+	return &commandResult{Text: text, Data: map[string]any{"command": cmd, "source": "embedded-generated-registry", "help_text": text}}, nil
 }
 
 func (a *App) runMetaConcepts(args []string) (*commandResult, error) {
@@ -284,9 +290,10 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 	if listFlag.value {
 		topics := runtimeHelpDocTopics()
 		return &commandResult{Text: RuntimeHelpDocsIndexMarkdown(topics), Data: map[string]any{
-			"topics": topics,
-			"source": "runtime-help-catalog",
-			"count":  len(topics),
+			"markdown": RuntimeHelpDocsIndexMarkdown(topics),
+			"topics":   topics,
+			"source":   "runtime-help-catalog",
+			"count":    len(topics),
 		}}, nil
 	}
 	if strings.TrimSpace(searchFlag.value) != "" {
@@ -296,10 +303,11 @@ func (a *App) runMetaDocs(args []string) (*commandResult, error) {
 			text = "No runtime help topics matched: " + strings.TrimSpace(searchFlag.value)
 		}
 		return &commandResult{Text: text, Data: map[string]any{
-			"query":   strings.TrimSpace(searchFlag.value),
-			"topics":  matches,
-			"source":  "runtime-help-catalog",
-			"matches": len(matches),
+			"markdown": text,
+			"query":    strings.TrimSpace(searchFlag.value),
+			"topics":   matches,
+			"source":   "runtime-help-catalog",
+			"matches":  len(matches),
 		}}, nil
 	}
 
@@ -494,6 +502,7 @@ func (a *App) runInstallSkill(args []string) (*commandResult, error) {
 		"Next: read the installed skill, then run `anx workspace summary` before starting durable workspace work.",
 	}, "\n")
 	return &commandResult{Text: text, Data: map[string]any{
+		"text":          text,
 		"path":          writtenPath,
 		"content":       content,
 		"written_files": []string{writtenPath},
@@ -521,7 +530,7 @@ Options:
 Examples:
   anx meta docs
   anx meta docs --list
-  anx meta docs --search profile
+  anx meta docs --search identity
   anx meta docs --write-dir ./docs/generated`)
 }
 
@@ -536,7 +545,7 @@ Print one bundled Markdown topic from the runtime help catalog.
 
 Examples:
   anx meta doc agent-guide
-  anx meta doc profiles
+  anx meta doc "host identity"
   anx meta doc env
   anx meta doc "docs trash"`)
 }

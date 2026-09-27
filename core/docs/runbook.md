@@ -28,6 +28,7 @@ variables.
 | Schema path | `--schema-path` | `ANX_SCHEMA_PATH` | `../contracts/anx-schema.yaml` |
 | Core instance identifier | `--core-instance-id` | `ANX_CORE_INSTANCE_ID` | `core-local` |
 | Core base URL for wake-packet links | n/a | `ANX_CORE_BASE_URL` | derived from listen address |
+| Public workspace web UI URL for host enrollment (for example `https://example.com/o/acme/w/main`) | `--public-web-ui-workspace-url` | `ANX_PUBLIC_WEB_UI_WORKSPACE_URL` | unset; enrollment returns the code without a link |
 | Durable workspace id for wake routing | n/a | `ANX_WORKSPACE_ID` | `ws_main` |
 | Workspace display name for wake packets | n/a | `ANX_WORKSPACE_NAME` | `Main` |
 | Enable embedded wake-routing sidecar | n/a | `ANX_SIDECAR_ROUTER_ENABLED` | `true` |
@@ -126,8 +127,10 @@ storage.
 
 From the repo root, `make serve` starts `anx-core`, seeds a local workspace,
 and starts the web UI. For the default game-dev-studio scenario it also seeds
-the Studio PM agent (`actor-gds-pm` / `dev.pm`), sets `ANX_PM_AGENT_ACTOR_ID`
-and `ANX_PM_AGENT_HANDLE`, writes CLI profile homes, and prints `anx pm serve`.
+the Studio PM agent (`actor-gds-pm` / `pm.dev-host`), sets `ANX_PM_AGENT_ACTOR_ID`
+and `ANX_PM_AGENT_HANDLE`, enrolls the local dev host, and prints `anx pm serve`.
+`make serve` also configures the local workspace web URL so interactive host
+enrollment links to the web UI port.
 Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
 `POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
 `lease_token`. Runners must renew through `POST /pm/turns/{turn_id}/heartbeat`
@@ -180,13 +183,13 @@ auto-retried.
 `anx-router` is the embedded workspace-scoped sidecar inside `anx-core` that:
 
 - tails `message_posted` from `anx-core`
-- resolves `@handle` mentions against registered agent principals
-- verifies durable registration + workspace binding before creating wake intent
+- resolves `@handle` mentions against enabled derived-agent handles
+- resolves enabled derived-agent handles before creating wake intent
 - treats bridge check-in freshness as online/offline delivery state
 - writes wake artifacts plus first-class `agent_wakeups` queue records
 
-Per-agent bridges remain separate runtimes. They do not communicate with the
-router directly; both services communicate through `anx-core` primitives.
+One bridge runs per enrolled host. It does not communicate with the router
+directly; both services communicate through `anx-core` primitives.
 
 ## Verify server health
 
@@ -227,12 +230,11 @@ from browser-origin headers forwarded by the UI/proxy.
 ## Auth model
 
 - Workspace writes require authenticated principals.
-- First principal registration is bootstrap-token gated via
-  `POST /auth/agents/register` or passkey registration endpoints.
-- After bootstrap is consumed, registration is invite-only.
+- The first principal is a human registered through the bootstrap passkey ceremony.
+- After bootstrap, human registration uses human invites; hosts enroll through human approval or a one-time headless token.
 - Principal types are workspace-local:
   - humans via passkeys
-  - agents via Ed25519 key assertions
+  - hosts via Ed25519 key proofs, deriving agent access tokens
 
 ## Reverse proxy considerations
 

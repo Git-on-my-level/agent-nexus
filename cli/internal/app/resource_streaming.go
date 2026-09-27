@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,19 +25,20 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 		return nil, errnorm.Usage("invalid_request", "--max-events must be >= 0")
 	}
 
-	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	client, err := httpclient.New(authCfg)
-	if err != nil {
-		return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
-	}
-
+	authCfg := cfg
 	cursor := strings.TrimSpace(lastEventID)
 	received := 0
 
 	for {
+		var err error
+		authCfg, err = a.cfgWithResolvedAuthToken(ctx, authCfg)
+		if err != nil {
+			return nil, err
+		}
+		client, err := httpclient.New(authCfg)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindLocal, "http_client_init_failed", "failed to initialize HTTP client", err)
+		}
 		callCtx := ctx
 		headers := map[string]string{"Accept": "text/event-stream"}
 		if cursor != "" {
@@ -95,6 +95,9 @@ func (a *App) runTailStream(ctx context.Context, cfg config.Resolved, commandNam
 		}
 		_ = resp.Body.Close()
 		if !follow || !dropped {
+			if received == 0 {
+				return &commandResult{Data: map[string]any{"received_events": 0}}, nil
+			}
 			return &commandResult{RawWritten: true}, nil
 		}
 		time.Sleep(250 * time.Millisecond)
@@ -130,6 +133,9 @@ func streamPayload(commandID string, parsedData any) (string, any) {
 }
 
 func (a *App) writeStreamEvent(commandName string, commandID string, event streaming.Event, jsonMode bool) error {
+	if parts := strings.Fields(commandName); len(parts) > 0 && isDiagnosticGroup(parts[0]) {
+		commandName = "debug " + commandName
+	}
 	parsedData := parseResponseBody([]byte(event.Data))
 	payloadKey, payloadValue := streamPayload(commandID, parsedData)
 	frame := map[string]any{
@@ -143,17 +149,13 @@ func (a *App) writeStreamEvent(commandName string, commandID string, event strea
 	}
 	if jsonMode {
 		identity := resolveMachineCommandIdentity(commandName)
-		envelope := output.Envelope{OK: true, Command: identity.Command, CommandID: identity.CommandID, Data: frame}
+		envelope := output.Envelope{OK: true, Command: identity.Command, Result: frame}
 		if err := output.WriteEnvelopeJSON(a.Stdout, envelope); err != nil {
 			return errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write stream envelope", err)
 		}
 		return nil
 	}
-	line := fmt.Sprintf("[%s] %s", event.ID, event.Type)
-	if strings.TrimSpace(event.Data) != "" {
-		line += " " + strings.TrimSpace(event.Data)
-	}
-	if _, err := io.WriteString(a.Stdout, line+"\n"); err != nil {
+	if err := output.WriteEnvelopeText(a.Stdout, output.Envelope{OK: true, Command: commandName, Result: frame}); err != nil {
 		return errnorm.Wrap(errnorm.KindLocal, "stdout_write_failed", "failed to write stream event", err)
 	}
 	return nil
