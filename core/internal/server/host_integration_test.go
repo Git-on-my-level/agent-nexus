@@ -46,13 +46,15 @@ func hostSign(key ed25519.PrivateKey, message string) string {
 	return base64.StdEncoding.EncodeToString(ed25519.Sign(key, []byte(message)))
 }
 func hostSignedHTTP(t *testing.T, method, url, hostID, keyID, kind string, priv ed25519.PrivateKey, body any) (int, map[string]any) {
+	return hostSignedHTTPAt(t, method, url, hostID, keyID, kind, priv, body, time.Now().UTC().Format(time.RFC3339Nano))
+}
+func hostSignedHTTPAt(t *testing.T, method, url, hostID, keyID, kind string, priv ed25519.PrivateKey, body any, signed string) (int, map[string]any) {
 	t.Helper()
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequest(method, url, bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	signed := time.Now().UTC().Format(time.RFC3339Nano)
 	digest := sha256.Sum256(raw)
 	message := "anx-host-" + kind + "|" + hostID + "|" + signed + "|" + base64.RawURLEncoding.EncodeToString(digest[:])
 	req.Header.Set("Content-Type", "application/json")
@@ -92,6 +94,19 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 201, p)
 	host := p["host"].(map[string]any)
 	id, keyID := host["id"].(string), host["key_id"].(string)
+	standalone := seedMachinePrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "agent-standalone", "actor-standalone", "standalone", "standalone-access")
+	status, p = hostHTTP(t, "GET", url+"/hosts", standalone.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", url+"/hosts/"+id, standalone.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollment-tokens", standalone.AccessToken, nil)
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollments/pending", standalone.AccessToken, nil)
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+id, standalone.AccessToken, map[string]any{"display_name": "Forbidden"})
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "DELETE", url+"/hosts/"+id, standalone.AccessToken, nil)
+	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/headless", "", map[string]any{"public_key": public, "requested_slug": "other", "os_user": "test", "hostname": "test", "discovered_adapters": []string{}, "request_nonce": nonce, "adoptions": []any{}, "enrollment_token": secret, "signature": hostSign(priv, "anx-host-headless-enroll|"+nonce+"|other|"+public)})
 	hostStatus(t, status, 401, p)
 	grant := func(name, signed string) (int, map[string]any) {
@@ -110,6 +125,11 @@ func TestHostIdentityLifecycle(t *testing.T) {
 		t.Fatal(tokens)
 	}
 	access := tokens["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/agents/me", access, nil)
+	hostStatus(t, status, 200, p)
+	if p["agent"].(map[string]any)["handle"] != "codex.dev-host" {
+		t.Fatal(p)
+	}
 	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollment-tokens", access, nil)
 	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens", access, map[string]any{"label": "denied", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
@@ -126,6 +146,16 @@ func TestHostIdentityLifecycle(t *testing.T) {
 		if item.(map[string]any)["token"] != nil {
 			t.Fatal("listed token secret")
 		}
+	}
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens", admin, map[string]any{"label": "revoke-me", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
+	hostStatus(t, status, 201, p)
+	revokeID := p["enrollment_token"].(map[string]any)["id"].(string)
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens/"+revokeID+"/revoke", access, nil)
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens/"+revokeID+"/revoke", admin, nil)
+	hostStatus(t, status, 200, p)
+	if p["enrollment_token"].(map[string]any)["revoked_at"] == nil {
+		t.Fatal(p)
 	}
 	status, p = grant("codex", signed)
 	hostStatus(t, status, 401, p)
@@ -158,6 +188,14 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	}
 	status, p = hostSignedHTTP(t, "PATCH", url+"/hosts/"+id, id, keyID, "patch", priv, map[string]any{"display_name": "Signed Host"})
 	hostStatus(t, status, 200, p)
+	patchBody := map[string]any{"display_name": "Replayed Host"}
+	patchSigned := time.Now().UTC().Format(time.RFC3339Nano)
+	status, p = hostSignedHTTPAt(t, "PATCH", url+"/hosts/"+id, id, keyID, "patch", priv, patchBody, patchSigned)
+	hostStatus(t, status, 200, p)
+	status, p = hostSignedHTTPAt(t, "PATCH", url+"/hosts/"+id, id, keyID, "patch", priv, patchBody, patchSigned)
+	hostStatus(t, status, 401, p)
+	status, p = hostSignedHTTPAt(t, "PATCH", url+"/hosts/"+id, id, keyID, "patch", priv, map[string]any{"display_name": "Old Host"}, time.Now().Add(-6*time.Minute).UTC().Format(time.RFC3339Nano))
+	hostStatus(t, status, 401, p)
 	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+id, access, map[string]any{"excluded_names": []string{"codex"}})
 	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+id, admin, map[string]any{"display_name": "Dev Host", "excluded_names": []string{"codex"}})
@@ -166,10 +204,30 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "GET", url+"/hosts", access, nil)
 	hostStatus(t, status, 401, p)
+	status, p = grant("generic", time.Now().UTC().Format(time.RFC3339))
+	hostStatus(t, status, 200, p)
+	otherAccess := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "DELETE", url+"/hosts/"+id, admin, nil)
+	hostStatus(t, status, 200, p)
+	status, p = hostHTTP(t, "GET", url+"/hosts", otherAccess, nil)
+	hostStatus(t, status, 401, p)
 	status, p = hostHTTP(t, "DELETE", url+"/hosts/"+id, admin, nil)
 	hostStatus(t, status, 200, p)
 	status, p = grant("generic", time.Now().UTC().Format(time.RFC3339))
 	hostStatus(t, status, 403, p)
+	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokes := 0
+	for _, event := range events {
+		if event.EventType == "host_revoked" {
+			revokes++
+		}
+	}
+	if revokes != 1 {
+		t.Fatalf("host revoke audit count = %d, want 1", revokes)
+	}
 }
 
 func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
@@ -192,6 +250,11 @@ func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
 	id, poll := start("interactive")
 	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollments/pending", "", nil)
 	hostStatus(t, status, 401, p)
+	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollments/pending", admin, nil)
+	hostStatus(t, status, 200, p)
+	if len(p["enrollments"].([]any)) != 1 {
+		t.Fatal(p)
+	}
 	req, err := http.NewRequest("GET", url+"/auth/hosts/enrollments/"+id, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -214,9 +277,19 @@ func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
 	hostStatus(t, status, 200, p)
 	status, p = complete(id, poll)
 	hostStatus(t, status, 201, p)
+	host := p["host"].(map[string]any)
+	hostID, hostKeyID := host["id"].(string), host["key_id"].(string)
+	signed := time.Now().UTC().Format(time.RFC3339)
+	status, p = hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{"grant_type": "host_assertion", "host_id": hostID, "key_id": hostKeyID, "agent_name": "worker", "signed_at": signed, "signature": hostSign(priv, "anx-host-agent-token|"+hostID+"|"+hostKeyID+"|worker|"+signed)})
+	hostStatus(t, status, 200, p)
+	workerAccess := p["tokens"].(map[string]any)["access_token"].(string)
 	status, p = complete(id, poll)
 	hostStatus(t, status, 409, p)
 	denied, denyPoll := start("denied")
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/"+denied+"/approve", workerAccess, nil)
+	hostStatus(t, status, 403, p)
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/"+denied+"/deny", workerAccess, nil)
+	hostStatus(t, status, 403, p)
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/"+denied+"/deny", admin, nil)
 	hostStatus(t, status, 200, p)
 	status, p = complete(denied, denyPoll)
@@ -252,6 +325,11 @@ func TestHostAdoptionProofPreservesActor(t *testing.T) {
 	nonce := base64.RawURLEncoding.EncodeToString(hostPub[:16])
 	proof := map[string]any{"agent_id": "agent-old", "key_id": "key-old", "agent_name": "reviewer", "signature": hostSign(oldPriv, "anx-host-adopt|"+nonce+"|"+public+"|agent-old|reviewer")}
 	body := map[string]any{"public_key": public, "requested_slug": "adopt-host", "os_user": "test", "hostname": "test", "discovered_adapters": []string{}, "request_nonce": nonce, "adoptions": []any{proof}}
+	badProof := map[string]any{"agent_id": "agent-old", "key_id": "key-old", "agent_name": "reviewer", "signature": hostSign(hostPriv, "anx-host-adopt|"+nonce+"|"+public+"|agent-old|reviewer")}
+	body["adoptions"] = []any{badProof}
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments", "", body)
+	hostStatus(t, status, 401, p)
+	body["adoptions"] = []any{proof}
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments", "", body)
 	hostStatus(t, status, 201, p)
 	id, poll := p["enrollment_id"].(string), p["poll_token"].(string)
