@@ -1490,6 +1490,12 @@
               selected.kind === "inbox" && inboxItemNeedsResponse(selected.item)
                 ? Math.min(5, selected.responseProposals.length)
                 : 0}
+            {@const canOpen =
+              selected.kind === "task" ||
+              (selected.kind === "decision" &&
+                !selectedDecision?.work_missing) ||
+              (selected.kind === "inbox" &&
+                Boolean(contextSubject && subjectHref(selected.subject)))}
             <p
               class="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-subtle px-4 py-2 text-micro text-fg-subtle lg:flex"
               data-inbox-key-hints
@@ -1508,7 +1514,9 @@
               <span
                 ><kbd class="inbox-kbd">J</kbd>/<kbd class="inbox-kbd">K</kbd> move</span
               >
-              <span><kbd class="inbox-kbd">O</kbd> open</span>
+              {#if canOpen}
+                <span><kbd class="inbox-kbd">O</kbd> open</span>
+              {/if}
               <button
                 class="ml-auto hover:text-fg"
                 type="button"
