@@ -29,7 +29,7 @@ point for seed generation.
 Then point the CLI at the proxy instead of core directly:
 
 ```bash
-ANX_BASE_URL=http://127.0.0.1:8010 anx --agent support-lead topics list
+ANX_BASE_URL=http://127.0.0.1:8010 anx --as support-lead topics list
 ```
 
 If you want an explicit human-analysis label separate from the normal
