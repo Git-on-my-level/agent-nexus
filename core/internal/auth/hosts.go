@@ -48,6 +48,30 @@ func hostSecret() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
+
+const hostUserCodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+func hostUserCode() (string, error) {
+	var random [5]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	var bits uint64
+	for _, b := range random {
+		bits = (bits << 8) | uint64(b)
+	}
+	var chars [9]byte
+	for i := 7; i >= 0; i-- {
+		position := i
+		if i >= 4 {
+			position++
+		}
+		chars[position] = hostUserCodeAlphabet[bits&31]
+		bits >>= 5
+	}
+	chars[4] = '-'
+	return string(chars[:]), nil
+}
 func hostKey(raw string) (ed25519.PublicKey, error) {
 	k, err := base64.StdEncoding.DecodeString(raw)
 	if err != nil || len(k) != ed25519.PublicKeySize {
@@ -241,11 +265,10 @@ func (s *Store) StartHostEnrollment(ctx context.Context, in HostEnrollmentInput,
 	if err != nil {
 		return EnrollmentStart{}, err
 	}
-	codeSecret, err := hostSecret()
+	code, err := hostUserCode()
 	if err != nil {
 		return EnrollmentStart{}, err
 	}
-	code := strings.ToUpper(codeSecret[:4] + "-" + codeSecret[4:8])
 	id := "henr_" + uuid.NewString()
 	expires := time.Now().UTC().Add(10 * time.Minute).Format(time.RFC3339Nano)
 	adapters, _ := json.Marshal(in.DiscoveredAdapters)
@@ -884,7 +907,8 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		return HostAgent{}, TokenBundle{}, err
 	}
 	var agentID, actorID, kind string
-	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind)
+	var agentRevoked sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind, &agentRevoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		handle := name + "." + slug
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE username=?`, handle).Scan(&count); err != nil {
@@ -927,6 +951,8 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		}
 	} else if err != nil {
 		return HostAgent{}, TokenBundle{}, err
+	} else if agentRevoked.Valid {
+		return HostAgent{}, TokenBundle{}, ErrAgentRevoked
 	}
 	if linkedActorID != "" && actorID != linkedActorID {
 		return HostAgent{}, TokenBundle{}, ErrAdoptionConflict

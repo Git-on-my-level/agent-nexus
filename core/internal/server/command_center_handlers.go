@@ -93,6 +93,7 @@ func attachRunAttribution(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	ctx := commandcenter.WithAttribution(r.Context(), commandcenter.Attribution{RunID: run.ID, HostID: identity.HostID, AgentID: identity.AgentID, Adapter: run.Adapter})
 	*r = *r.WithContext(ctx)
+	opts.agentChanges.publish()
 	return true
 }
 func handleRuns(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
@@ -185,6 +186,9 @@ func handleRuns(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			status := 200
 			if created {
 				status = 201
+			}
+			if !replayed {
+				opts.agentChanges.publish()
 			}
 			writeJSON(w, status, map[string]any{"run": run, "created": created, "replayed": replayed})
 			return
@@ -279,6 +283,7 @@ func handleAgents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			writeError(w, 500, "internal_error", "failed to set presence")
 			return
 		}
+		opts.agentChanges.publish()
 		writeJSON(w, 200, map[string]any{"presence": p})
 		return
 	}

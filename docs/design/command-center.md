@@ -279,6 +279,14 @@ routes remain.
 
 (Append dated entries here: decision, reason, files.)
 
+- 2026-09-27 (core fixes): `/stream/agents` is a process-local SSE invalidation
+  stream. It sends an initial `agents_changed` signal and coalesced signals after
+  roster-affecting writes; revisions are connection hints, not event-log cursors.
+  Clients refetch `GET /agents` on connect, each signal, and reconnect, retaining
+  visibility/focus refresh as a fallback. Presence and run telemetry remain
+  outside canonical workspace events. (`contracts/anx-openapi.yaml`,
+  `core/internal/server/agent_changes.go`.)
+
 - 2026-09-27 (S7): A host bridge checks its configured runtime names against
   all active, non-excluded derived agents returned by `GET /hosts/{id}` before
   each signed check-in. Core's existing check-in marks every such child online,

@@ -107,7 +107,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"agents", "runs", "cards", "inbox"},
-		Adjacent:   []string{"agents.list", "agents.me.get"},
+		Adjacent:   []string{"agents.list", "agents.me.get", "agents.stream"},
 	},
 	{
 		CommandID: "agents.list",
@@ -118,7 +118,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "runs", "inbox"},
-		Adjacent:  []string{"agents.get", "agents.me.get"},
+		Adjacent:  []string{"agents.get", "agents.me.get", "agents.stream"},
 	},
 	{
 		CommandID: "agents.me.get",
@@ -129,7 +129,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"auth", "agents"},
-		Adjacent:  []string{"agents.get", "agents.list"},
+		Adjacent:  []string{"agents.get", "agents.list", "agents.stream"},
 	},
 	{
 		CommandID: "agents.me.presence",
@@ -141,6 +141,17 @@ var CommandRegistry = []CommandSpec{
 		Stability: "beta",
 		Concepts:  []string{"agents", "cards", "runs"},
 		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID: "agents.stream",
+		CLIPath:   "agents stream",
+		Group:     "agents",
+		Method:    "GET",
+		Path:      "/stream/agents",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"agents"},
+		Adjacent:  []string{"agents.get", "agents.list", "agents.me.get"},
 	},
 	{
 		CommandID:  "artifacts.archive",
@@ -2379,6 +2390,10 @@ func (c *Client) AgentsMeGet(ctx context.Context, opts RequestOptions) (*http.Re
 
 func (c *Client) AgentsMePresence(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "agents.me.presence", nil, opts)
+}
+
+func (c *Client) AgentsStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agents.stream", nil, opts)
 }
 
 func (c *Client) ArtifactsArchive(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

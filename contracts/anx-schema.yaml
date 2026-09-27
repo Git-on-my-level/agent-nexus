@@ -970,6 +970,7 @@ command_center:
     enrollment_consumed: { status: 409, meaning: Enrollment was already completed or otherwise finalized. }
     host_revoked: { status: 403, meaning: Host or its key was revoked. }
     agent_excluded: { status: 403, meaning: This host excludes the requested agent name. }
+    agent_revoked: { status: 403, meaning: The derived agent principal was revoked and cannot receive new tokens. }
     agent_handle_taken: { status: 409, meaning: A standalone principal already owns the derived handle; adopt or rename it first. }
     run_identity_conflict: { status: 409, meaning: Composite run key was previously bound to a different agent or immutable identity. }
     run_state_regression: { status: 409, meaning: An observation would replace a terminal state or regress a known state. }

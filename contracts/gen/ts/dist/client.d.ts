@@ -65,6 +65,7 @@ export declare class AnxClient {
     agentsList(options?: RequestOptions): Promise<InvokeResult>;
     agentsMeGet(options?: RequestOptions): Promise<InvokeResult>;
     agentsMePresence(options?: RequestOptions): Promise<InvokeResult>;
+    agentsStream(options?: RequestOptions): Promise<InvokeResult>;
     artifactsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     artifactsAttachmentsCreate(options?: RequestOptions): Promise<InvokeResult>;
     artifactsContent(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

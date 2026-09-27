@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -79,6 +80,22 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	status, p := hostHTTP(t, "POST", url+"/auth/passkey/dev/register", "", map[string]any{"display_name": "Host Admin", "bootstrap_token": testBootstrapToken})
 	hostStatus(t, status, 201, p)
 	admin := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/agents/me", admin, nil)
+	hostStatus(t, status, 200, p)
+	self := p["agent"].(map[string]any)
+	if self["principal_kind"] != "human" || self["actor_id"] == "" || self["agent_id"] == "" {
+		t.Fatalf("human web self-identification: %#v", p)
+	}
+	status, p = hostHTTP(t, "POST", url+"/auth/passkey/dev/login", "", map[string]any{})
+	hostStatus(t, status, 200, p)
+	loginAccess := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/agents/me", loginAccess, nil)
+	hostStatus(t, status, 200, p)
+	if loggedIn := p["agent"].(map[string]any); loggedIn["principal_kind"] != "human" || loggedIn["actor_id"] != self["actor_id"] {
+		t.Fatalf("human web sign-in lookup: %#v", p)
+	}
+	status, p = hostHTTP(t, "GET", url+"/agents", admin, nil)
+	hostStatus(t, status, 200, p)
 	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens", admin, map[string]any{"label": "test", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
 	hostStatus(t, status, 201, p)
 	secret := p["token"].(string)
@@ -95,6 +112,11 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	host := p["host"].(map[string]any)
 	id, keyID := host["id"].(string), host["key_id"].(string)
 	standalone := seedMachinePrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "agent-standalone", "actor-standalone", "standalone", "standalone-access")
+	status, p = hostHTTP(t, "GET", url+"/agents/me", standalone.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	if p["agent"].(map[string]any)["identity_kind"] != "standalone" {
+		t.Fatalf("standalone self-identification: %#v", p)
+	}
 	status, p = hostHTTP(t, "GET", url+"/hosts", standalone.AccessToken, nil)
 	hostStatus(t, status, 200, p)
 	status, p = hostHTTP(t, "GET", url+"/hosts/"+id, standalone.AccessToken, nil)
@@ -128,6 +150,9 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	status, p = hostHTTP(t, "GET", url+"/agents/me", access, nil)
 	hostStatus(t, status, 200, p)
 	if p["agent"].(map[string]any)["handle"] != "codex.dev-host" {
+		t.Fatal(p)
+	}
+	if p["agent"].(map[string]any)["principal_kind"] != "agent" || p["agent"].(map[string]any)["adapter"] != "codex" {
 		t.Fatal(p)
 	}
 	status, p = hostHTTP(t, "GET", url+"/auth/hosts/enrollment-tokens", access, nil)
@@ -202,6 +227,9 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 200, p)
 	status, p = grant("codex", time.Now().UTC().Format(time.RFC3339))
 	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "agent_excluded" {
+		t.Fatalf("excluded grant: %#v", p)
+	}
 	status, p = hostHTTP(t, "GET", url+"/hosts", access, nil)
 	hostStatus(t, status, 401, p)
 	status, p = grant("generic", time.Now().UTC().Format(time.RFC3339))
@@ -215,6 +243,9 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	hostStatus(t, status, 200, p)
 	status, p = grant("generic", time.Now().UTC().Format(time.RFC3339))
 	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "host_revoked" {
+		t.Fatalf("revoked host grant: %#v", p)
+	}
 	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
 	if err != nil {
 		t.Fatal(err)
@@ -245,6 +276,13 @@ func TestHostInteractiveApproveDenyAndPoll(t *testing.T) {
 		nonce := base64.RawURLEncoding.EncodeToString(pub[:16])
 		status, p := hostHTTP(t, "POST", url+"/auth/hosts/enrollments", "", map[string]any{"public_key": public, "requested_slug": slug, "os_user": "operator", "hostname": "laptop", "discovered_adapters": []string{}, "request_nonce": nonce, "adoptions": []any{}})
 		hostStatus(t, status, 201, p)
+		code := p["user_code"].(string)
+		if !regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$`).MatchString(code) {
+			t.Fatalf("ambiguous enrollment user code: %q", code)
+		}
+		if code == p["poll_token"] {
+			t.Fatal("user code reused poll secret")
+		}
 		return p["enrollment_id"].(string), p["poll_token"].(string)
 	}
 	id, poll := start("interactive")
@@ -345,6 +383,16 @@ func TestHostAdoptionProofPreservesActor(t *testing.T) {
 	if a["actor_id"] != "actor-old" || a["handle"] != "reviewer.adopt-host" || a["identity_kind"] != "adopted" {
 		t.Fatal(a)
 	}
+	hostID, keyID := p["host"].(map[string]any)["id"].(string), p["host"].(map[string]any)["key_id"].(string)
+	grantAt := time.Now().UTC().Format(time.RFC3339Nano)
+	status, p = hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{"grant_type": "host_assertion", "host_id": hostID, "key_id": keyID, "agent_name": "reviewer", "signed_at": grantAt, "signature": hostSign(hostPriv, "anx-host-agent-token|"+hostID+"|"+keyID+"|reviewer|"+grantAt)})
+	hostStatus(t, status, 200, p)
+	adoptedAccess := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/agents/me", adoptedAccess, nil)
+	hostStatus(t, status, 200, p)
+	if self := p["agent"].(map[string]any); self["actor_id"] != "actor-old" || self["identity_kind"] != "adopted" || self["persona"] != true {
+		t.Fatalf("adopted persona self-identification: %#v", p)
+	}
 	signed := time.Now().UTC().Format(time.RFC3339)
 	status, p = hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{"grant_type": "assertion", "agent_id": "agent-old", "key_id": "key-old", "signed_at": signed, "signature": hostSign(oldPriv, "anx-auth-token|agent-old|key-old|"+signed)})
 	hostStatus(t, status, 401, p)
@@ -383,6 +431,28 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 	hostStatus(t, status, 200, p)
 	agent := p["agent"].(map[string]any)
 	access := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/stream/agents", "", nil)
+	hostStatus(t, status, 401, p)
+	streamReq, err := http.NewRequest("GET", url+"/stream/agents", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	streamReq.Header.Set("Authorization", "Bearer "+admin)
+	streamClient := &http.Client{Timeout: 5 * time.Second}
+	streamResp, err := streamClient.Do(streamReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if streamResp.StatusCode != 200 || streamResp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("agent stream response: %d %s", streamResp.StatusCode, streamResp.Header.Get("Content-Type"))
+	}
+	changes, stop := startSSEReader(streamResp.Body)
+	defer stop()
+	initial := awaitSSEEvent(t, changes, 2*time.Second)
+	if initial.Event != "agents_changed" {
+		t.Fatalf("initial agent signal: %#v", initial)
+	}
+	eventsBefore := countTableRows(t, env.workspace.DB(), "events")
 	observed := time.Now().UTC().Format(time.RFC3339Nano)
 	runBody := map[string]any{"launcher": "agentctl", "external_id": "exec-persona", "host_id": hostID,
 		"agent_id": agent["id"], "adapter": "codex", "state": "running", "liveness": "alive",
@@ -396,6 +466,22 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 	resp.Body.Close()
 	if runResponse["run"].(map[string]any)["adapter"] != "codex" {
 		t.Fatal(runResponse)
+	}
+	change := awaitSSEEvent(t, changes, 2*time.Second)
+	if change.Event != "agents_changed" || change.Data["revision"].(float64) <= initial.Data["revision"].(float64) {
+		t.Fatalf("run change signal: %#v after %#v", change, initial)
+	}
+	if got := countTableRows(t, env.workspace.DB(), "events"); got != eventsBefore {
+		t.Fatalf("run telemetry wrote canonical event: %d to %d", eventsBefore, got)
+	}
+	status, p = hostHTTP(t, "PATCH", url+"/agents/me/presence", access, map[string]any{"note": "Reviewing the capture build"})
+	hostStatus(t, status, 200, p)
+	change = awaitSSEEvent(t, changes, 2*time.Second)
+	if change.Event != "agents_changed" {
+		t.Fatalf("presence change signal: %#v", change)
+	}
+	if got := countTableRows(t, env.workspace.DB(), "events"); got != eventsBefore {
+		t.Fatalf("presence telemetry wrote canonical event: %d to %d", eventsBefore, got)
 	}
 	checkRoster := func(wantOnline bool) {
 		t.Helper()
@@ -411,6 +497,18 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 				row["bridge_online"] != wantOnline || row["active_run"].(map[string]any)["adapter"] != "codex" {
 				t.Fatalf("persona roster: %#v", row)
 			}
+			status, detail := hostHTTP(t, "GET", url+"/hosts/"+hostID, admin, nil)
+			hostStatus(t, status, 200, detail)
+			hostAgents := detail["host"].(map[string]any)["agents"].([]any)
+			if len(hostAgents) != 1 || hostAgents[0].(map[string]any)["state"] != row["state"] || hostAgents[0].(map[string]any)["bridge_online"] != row["bridge_online"] {
+				t.Fatalf("host detail diverged from roster: %#v vs %#v", hostAgents, row)
+			}
+			status, listed := hostHTTP(t, "GET", url+"/hosts", admin, nil)
+			hostStatus(t, status, 200, listed)
+			listAgents := listed["hosts"].([]any)[0].(map[string]any)["agents"].([]any)
+			if len(listAgents) != 1 || listAgents[0].(map[string]any)["state"] != row["state"] {
+				t.Fatalf("host list diverged from roster: %#v vs %#v", listAgents, row)
+			}
 			return
 		}
 		t.Fatal("derived persona missing from roster")
@@ -420,7 +518,78 @@ func TestHostPersonaRunRosterAndBridge(t *testing.T) {
 		map[string]any{"bridge_instance_id": "bridge-1", "checked_in_at": time.Now().UTC().Format(time.RFC3339), "expires_at": time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339)})
 	hostStatus(t, status, 200, p)
 	checkRoster(true)
+	change = awaitSSEEvent(t, changes, 2*time.Second)
+	if change.Event != "agents_changed" {
+		t.Fatalf("bridge change signal: %#v", change)
+	}
 	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+hostID, admin, map[string]any{"excluded_names": []string{name}})
 	hostStatus(t, status, 200, p)
 	checkRoster(false)
+}
+
+func TestRevokedDerivedAgentGrantCreatesNoToken(t *testing.T) {
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, allowPasskeyDevBypass: true})
+	url := env.server.URL
+	status, p := hostHTTP(t, "POST", url+"/auth/passkey/dev/register", "", map[string]any{"display_name": "Admin", "bootstrap_token": testBootstrapToken})
+	hostStatus(t, status, 201, p)
+	admin := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollment-tokens", admin, map[string]any{"label": "revoke test", "expires_at": time.Now().Add(20 * time.Minute).UTC().Format(time.RFC3339)})
+	hostStatus(t, status, 201, p)
+	secret := p["token"].(string)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := base64.StdEncoding.EncodeToString(pub)
+	nonce := base64.RawURLEncoding.EncodeToString(pub[:16])
+	slug := "revoke-host"
+	status, p = hostHTTP(t, "POST", url+"/auth/hosts/enrollments/headless", "", map[string]any{"public_key": public, "requested_slug": slug, "os_user": "test", "hostname": "test", "discovered_adapters": []string{}, "request_nonce": nonce, "adoptions": []any{}, "enrollment_token": secret, "signature": hostSign(priv, "anx-host-headless-enroll|"+nonce+"|"+slug+"|"+public)})
+	hostStatus(t, status, 201, p)
+	host := p["host"].(map[string]any)
+	hostID, keyID := host["id"].(string), host["key_id"].(string)
+	grant := func(name string) (int, map[string]any) {
+		signed := time.Now().UTC().Format(time.RFC3339Nano)
+		return hostHTTP(t, "POST", url+"/auth/token", "", map[string]any{"grant_type": "host_assertion", "host_id": hostID, "key_id": keyID, "agent_name": name, "signed_at": signed, "signature": hostSign(priv, "anx-host-agent-token|"+hostID+"|"+keyID+"|"+name+"|"+signed)})
+	}
+	status, p = grant("codex")
+	hostStatus(t, status, 200, p)
+	agentID := p["agent"].(map[string]any)["id"].(string)
+	if _, err := env.workspace.DB().Exec(`UPDATE agents SET revoked_at=? WHERE id=?`, time.Now().UTC().Format(time.RFC3339Nano), agentID); err != nil {
+		t.Fatal(err)
+	}
+	before := countTableRows(t, env.workspace.DB(), "auth_access_tokens")
+	sessionsBefore := countTableRows(t, env.workspace.DB(), "auth_refresh_sessions")
+	status, p = grant("codex")
+	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "agent_revoked" {
+		t.Fatalf("revoked agent grant: %#v", p)
+	}
+	if after := countTableRows(t, env.workspace.DB(), "auth_access_tokens"); after != before {
+		t.Fatalf("revoked grant created token: %d to %d", before, after)
+	}
+	if after := countTableRows(t, env.workspace.DB(), "auth_refresh_sessions"); after != sessionsBefore {
+		t.Fatalf("revoked grant created session: %d to %d", sessionsBefore, after)
+	}
+	status, p = hostHTTP(t, "PATCH", url+"/hosts/"+hostID, admin, map[string]any{"excluded_names": []string{"cursor"}})
+	hostStatus(t, status, 200, p)
+	before = countTableRows(t, env.workspace.DB(), "auth_access_tokens")
+	status, p = grant("cursor")
+	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "agent_excluded" {
+		t.Fatalf("excluded grant: %#v", p)
+	}
+	if after := countTableRows(t, env.workspace.DB(), "auth_access_tokens"); after != before {
+		t.Fatalf("excluded grant created token: %d to %d", before, after)
+	}
+	status, p = hostHTTP(t, "DELETE", url+"/hosts/"+hostID, admin, nil)
+	hostStatus(t, status, 200, p)
+	before = countTableRows(t, env.workspace.DB(), "auth_access_tokens")
+	status, p = grant("generic")
+	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "host_revoked" {
+		t.Fatalf("revoked host grant: %#v", p)
+	}
+	if after := countTableRows(t, env.workspace.DB(), "auth_access_tokens"); after != before {
+		t.Fatalf("revoked host grant created token: %d to %d", before, after)
+	}
 }

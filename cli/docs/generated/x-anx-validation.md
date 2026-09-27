@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `180`
+- Command operations: `181`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `162`
+- Missing recommended examples: `163`
 
 ## Baseline gap counts
 
@@ -151,6 +151,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `agents.list` `GET /agents`
 - `agents.me.get` `GET /agents/me`
 - `agents.me.presence` `PATCH /agents/me/presence`
+- `agents.stream` `GET /stream/agents`
 - `artifacts.archive` `POST /artifacts/{artifact_id}/archive`
 - `artifacts.attachments.create` `POST /artifacts/attachments`
 - `artifacts.content` `GET /artifacts/{artifact_id}/content`

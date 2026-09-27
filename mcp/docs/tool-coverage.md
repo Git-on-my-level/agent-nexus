@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 180
+- Command count: 181
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -12,7 +12,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | actors | 2 |
 | agent | 4 |
-| agents | 3 |
+| agents | 4 |
 | artifacts | 10 |
 | auth | 14 |
 | boards | 13 |
@@ -46,7 +46,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | unsupported_interactive | 5 |
 | unsupported_other | 2 |
 | unsupported_shell_shaped | 1 |
-| unsupported_streaming | 3 |
+| unsupported_streaming | 4 |
 
 ## Counts by Surface
 
@@ -56,7 +56,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 59 | explicit read-only private-app allowlist |
 | gated | 33 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 20 | not represented as direct MCP tools in v1 |
+| unsupported | 21 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -72,6 +72,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agents.list | agents | GET | /agents | exposed_read | agent roster is workspace presence data |
 | agents.me.get | agents | GET | /agents/me | exposed_read | authenticated caller self-inspection |
 | agents.me.presence | work | PATCH | /agents/me/presence | exposed_write | an agent may report its current task and progress note |
+| agents.stream | agents | GET | /stream/agents | unsupported_streaming | ephemeral roster SSE needs a bounded read adapter before MCP exposure |
 | artifacts.archive | artifacts | POST | /artifacts/{artifact_id}/archive | exposed_write | ordinary reversible artifact lifecycle write |
 | artifacts.attachments.create | artifacts | POST | /artifacts/attachments | unsupported_shell_shaped | multipart binary upload needs a dedicated MCP content adapter |
 | artifacts.content | artifacts | GET | /artifacts/{artifact_id}/content | exposed_read | artifact content read; executor must bound and redact output |

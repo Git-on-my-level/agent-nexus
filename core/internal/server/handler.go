@@ -172,6 +172,7 @@ type handlerOptions struct {
 	actorRegistry                  ActorRegistry
 	authStore                      *auth.Store
 	runStore                       *commandcenter.Store
+	agentChanges                   *agentChangeHub
 	workspaceHumanGrantVerifier    auth.WorkspaceHumanGrantIdentityVerifier
 	workspaceManagedGrantVerifier  auth.WorkspaceManagedAgentGrantIdentityVerifier
 	passkeySessionStore            *auth.PasskeySessionStore
@@ -634,6 +635,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts.requestBodyLimits = opts.requestBodyLimits.normalize()
 	opts.routeRateLimits = opts.routeRateLimits.normalize()
 	opts.rateLimiter = newRouteRateLimiter(opts.routeRateLimits)
+	opts.agentChanges = newAgentChangeHub()
 	if (opts.workspaceHumanGrantVerifier != nil || opts.workspaceManagedGrantVerifier != nil) && opts.workspaceHumanGrantRateLimiter == nil {
 		opts.workspaceHumanGrantRateLimiter = newRouteRateLimiter(RouteRateLimits{
 			AuthRequestsPerMinute:  10,
@@ -1141,6 +1143,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	})
 	registerRoute("/agents", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
 	registerRoute("/agents/", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleAgents(w, r, opts) })
+	registerStreamRoute("agents", exactRouteAccess(routeAccessAuthenticatedPrincipal, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		handleAgentChangesStream(w, r, opts)
+	})
 	registerRoute("/hosts", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
 	registerRoute("/hosts/", hostRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleHostRoutes(w, r, opts) })
 	registerRoute("/runs", commandCenterRunRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleRuns(w, r, opts) })

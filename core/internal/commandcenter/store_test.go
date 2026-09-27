@@ -129,7 +129,11 @@ func TestPresenceAndDerivedStates(t *testing.T) {
 	if _, _, _, e = s.UpsertRun(ctx, run); e != nil {
 		t.Fatal(e)
 	}
-	_, e = db.ExecContext(ctx, "INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('ask-1','human_attention_requested',?,'actor-waiting','[]',?)", now.Format(time.RFC3339Nano), `{"payload":{"kind":"ask","requester_agent_id":"waiting","requester_actor_id":"actor-waiting"}}`)
+	_, e = db.ExecContext(ctx, "INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('ask-1','human_attention_requested',?,'actor-waiting','[]',?)", now.Format(time.RFC3339Nano), `{"payload":{"kind":"ask","title":"Approve launch","severity":"high","requester_agent_id":"waiting","requester_actor_id":"actor-waiting"}}`)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = db.ExecContext(ctx, `INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,source_event_id,generated_at,data_json) VALUES('inbox-ask-1','thread-1','ask',?,'ask-1',?,'{}')`, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -146,6 +150,15 @@ func TestPresenceAndDerivedStates(t *testing.T) {
 		if a.State != want[a.ID] {
 			t.Errorf("%s state=%s want=%s", a.ID, a.State, want[a.ID])
 		}
+		if a.ID == "waiting" {
+			if a.WaitingAsk == nil || a.WaitingAsk.ID != "ask-1" || a.WaitingAsk.InboxItemID == nil || *a.WaitingAsk.InboxItemID != "inbox-ask-1" || a.WaitingAsk.Title != "Approve launch" || a.WaitingAsk.Severity == nil || *a.WaitingAsk.Severity != "high" || a.WaitingAsk.CreatedAt == "" {
+				t.Fatalf("waiting ask summary: %#v", a.WaitingAsk)
+			}
+		}
+	}
+	detail, e := s.AgentDetail(ctx, "waiting", now.Add(time.Minute))
+	if e != nil || len(detail.OpenAsks) != 1 || detail.OpenAsks[0].InboxItemID == nil || *detail.OpenAsks[0].InboxItemID != "inbox-ask-1" {
+		t.Fatalf("open asks detail: %#v %v", detail.OpenAsks, e)
 	}
 	_, e = db.ExecContext(ctx, "INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES('response-1','human_attention_responded',?,'actor-idle','[]',?)", now.Add(2*time.Minute).Format(time.RFC3339Nano), `{"payload":{"request_event_id":"ask-1"}}`)
 	if e != nil {

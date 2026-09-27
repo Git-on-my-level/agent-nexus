@@ -5904,7 +5904,7 @@ paths:
     post:
       operationId: issueAuthToken
       summary: Exchange host assertion or refresh auth tokens
-      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names fail before creation. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.'
+      description: 'grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|<host_id>|<key_id>|<agent_name>|<signed_at>` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `<agent_name>.<host_slug>`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.'
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: auth.token
@@ -6295,21 +6295,21 @@ paths:
   /agents/me:
     get:
       operationId: getCurrentAgent
-      summary: Get current authenticated agent
+      summary: Get current authenticated principal
       tags: [auth]
       x-anx-surface: utility
       x-anx-command-id: agents.me.get
       x-anx-cli-path: agents me
-      x-anx-why: Resolve a derived-agent bearer to its host, name, handle, and actor ID; retained for agent self-identification.
+      x-anx-why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent }`; derived agents have no independent signing keys."
+      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [auth, agents]
       x-anx-stability: beta
       responses:
         '200':
-          description: Agent profile
+          description: Current principal profile
           content:
             application/json:
               schema:
@@ -6476,6 +6476,31 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /stream/agents:
+    get:
+      operationId: streamAgentChanges
+      summary: Stream ephemeral agent roster changes (SSE)
+      description: 'Authenticated workspace principals receive an initial `agents_changed` notification and subsequent notifications after run upserts, presence writes, and host identity or bridge changes. The signal is process-local and not a canonical workspace event: it is not written to the event log, has no replay cursor, and may be coalesced. Reconnect and refetch `GET /agents` after every notification. Keep the existing visibility/focus refresh as a fallback across reconnects or server restarts.'
+      tags: [agents]
+      x-anx-surface: projection
+      x-anx-command-id: agents.stream
+      x-anx-cli-path: agents stream
+      x-anx-why: Prompt clients to refresh the agent roster without writing presence telemetry to workspace events.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: sse }
+      x-anx-output-envelope: 'SSE `agents_changed` messages with JSON `{ "revision": <integer> }`; no agent data or event-log cursor.'
+      x-anx-agent-notes: This is an ephemeral invalidation stream. Refetch the roster on connect, notification, and reconnect; do not treat revisions as durable event IDs.
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Ephemeral roster change SSE stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
 
   /stream/agent-notification-receipts:
     get:
@@ -6963,7 +6988,7 @@ components:
       additionalProperties: false
       properties:
         id: {type: string}
-        user_code: {type: string, description: Included in auth-admin pending list; omitted from poll response.}
+        user_code: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$', description: Included in auth-admin pending list; omitted from poll response.}
         requested_slug: {$ref: '#/components/schemas/HostSlug'}
         os_user: {type: string}
         hostname: {type: string}
@@ -6979,7 +7004,7 @@ components:
       additionalProperties: false
       properties:
         enrollment_id: {type: string}
-        user_code: {type: string, description: Short single-use code shown to the human.}
+        user_code: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$', description: Independent 40-bit Crockford-style code shown to the human; excludes ambiguous letters.}
         verification_url_path: {type: string, description: Local path such as `/access/hosts/enroll`; client joins its core origin.}
         poll_token: {type: string, description: High-entropy secret shown once.}
         poll_interval_seconds: {type: integer, minimum: 1}
@@ -7240,9 +7265,25 @@ components:
         last_progress_at: {type: string, nullable: true, format: date-time}
         active_run: {$ref: '#/components/schemas/AgentActiveRun'}
         open_asks_count: {type: integer, minimum: 0}
+        waiting_ask: {$ref: '#/components/schemas/AgentOpenAsk', nullable: true, description: Oldest open ask while waiting_on_human; null otherwise.}
         last_signal_at: {type: string, nullable: true, format: date-time}
         revoked_at: {type: string, nullable: true, format: date-time}
-      required: [id, ref, actor_id, host_id, host_slug, name, handle, display_name, identity_kind, state, bridge_online, current_card_ref, current_card_title, last_progress_note, last_progress_at, active_run, open_asks_count, last_signal_at, revoked_at]
+      required: [id, ref, actor_id, host_id, host_slug, name, handle, display_name, identity_kind, state, bridge_online, current_card_ref, current_card_title, last_progress_note, last_progress_at, active_run, open_asks_count, waiting_ask, last_signal_at, revoked_at]
+    AgentOpenAsk:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string, description: Immutable request event ID.}
+        inbox_item_id: {type: string, nullable: true, description: Inbox link target; null only while its derived projection is pending.}
+        title: {type: string}
+        severity: {type: string, nullable: true, description: Source-provided severity; null when omitted.}
+        created_at: {type: string, format: date-time, description: Request event time and wait start.}
+        kind: {type: string}
+        subject_ref: {type: string, nullable: true}
+        subject_title: {type: string, description: Human-readable subject when supplied by the request.}
+        requester_actor_id: {type: string}
+        requester_agent_id: {type: string, nullable: true}
+      required: [id, inbox_item_id, title, severity, created_at]
     AgentActiveRun:
       type: object
       nullable: true
@@ -7265,7 +7306,7 @@ components:
         agent: {$ref: '#/components/schemas/AgentSummary'}
         recent_cards: {type: array, items: {$ref: '#/components/schemas/Card'}}
         recent_runs: {type: array, items: {$ref: '#/components/schemas/Run'}}
-        open_asks: {type: array, items: {$ref: '#/components/schemas/InboxItem'}}
+        open_asks: {type: array, items: {$ref: '#/components/schemas/AgentOpenAsk'}}
         recent_notes: {type: array, items: {$ref: '#/components/schemas/AgentProgressNote'}}
       required: [agent, recent_cards, recent_runs, open_asks, recent_notes]
     AgentProgressNote:
@@ -7280,8 +7321,28 @@ components:
       type: object
       additionalProperties: false
       properties:
-        agent: {$ref: '#/components/schemas/AgentSummary'}
+        agent: {$ref: '#/components/schemas/PrincipalSelf'}
       required: [agent]
+    PrincipalSelf:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string, description: Principal ID; same value as agent_id for compatibility.}
+        agent_id: {type: string}
+        actor_id: {type: string}
+        ref: {type: string, pattern: '^actor:.+'}
+        username: {type: string}
+        handle: {type: string}
+        display_name: {type: string}
+        principal_kind: {type: string, enum: [human, agent]}
+        auth_method: {type: string}
+        identity_kind: {type: string, enum: [derived, adopted, standalone], description: Present for agent principals only.}
+        host_id: {type: string, description: Present for derived or adopted agents.}
+        host_slug: {type: string, description: Present for derived or adopted agents.}
+        name: {type: string, description: Host agent name or standalone handle. Present for agents only.}
+        adapter: {$ref: '#/components/schemas/AgentName', description: Default adapter for host-derived agents; generic for an explicit persona.}
+        persona: {type: boolean, description: True when the host-derived name is an explicit persona rather than a known adapter.}
+      required: [id, agent_id, actor_id, ref, username, handle, display_name, principal_kind, auth_method]
     PresencePatchRequest:
       type: object
       additionalProperties: false

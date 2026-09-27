@@ -15,7 +15,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `15`
+- Commands: `16`
 - Command IDs:
   - `agent.notification-receipts.stream`
   - `agent.notifications.dismiss`
@@ -25,6 +25,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `agents.list`
   - `agents.me.get`
   - `agents.me.presence`
+  - `agents.stream`
   - `hosts.bridge.check_in`
   - `hosts.get`
   - `hosts.list`

@@ -48,11 +48,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `agents.get` (`agents get`)
   - `agents.list` (`agents list`)
   - `agents.me.get` (`agents me`)
+  - `agents.stream` (`agents stream`)
 
 ## `artifacts`
 
