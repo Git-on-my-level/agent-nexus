@@ -91,6 +91,18 @@ type ActiveRun struct {
 	Model           *string `json:"model"`
 	DurationSeconds int64   `json:"duration_seconds"`
 }
+type OpenAsk struct {
+	ID               string  `json:"id"`
+	InboxItemID      *string `json:"inbox_item_id"`
+	Title            string  `json:"title"`
+	Severity         *string `json:"severity"`
+	CreatedAt        string  `json:"created_at"`
+	Kind             string  `json:"kind,omitempty"`
+	SubjectRef       *string `json:"subject_ref,omitempty"`
+	SubjectTitle     string  `json:"subject_title,omitempty"`
+	RequesterActorID string  `json:"requester_actor_id,omitempty"`
+	RequesterAgentID *string `json:"requester_agent_id,omitempty"`
+}
 type Summary struct {
 	ID               string     `json:"id"`
 	Ref              string     `json:"ref"`
@@ -109,6 +121,7 @@ type Summary struct {
 	LastProgressAt   *string    `json:"last_progress_at"`
 	ActiveRun        *ActiveRun `json:"active_run"`
 	OpenAsksCount    int        `json:"open_asks_count"`
+	WaitingAsk       *OpenAsk   `json:"waiting_ask"`
 	LastSignalAt     *string    `json:"last_signal_at"`
 	RevokedAt        *string    `json:"revoked_at"`
 }
@@ -116,7 +129,7 @@ type Detail struct {
 	Agent       Summary          `json:"agent"`
 	RecentCards []map[string]any `json:"recent_cards"`
 	RecentRuns  []Run            `json:"recent_runs"`
-	OpenAsks    []map[string]any `json:"open_asks"`
+	OpenAsks    []OpenAsk        `json:"open_asks"`
 	RecentNotes []map[string]any `json:"recent_notes"`
 }
 
@@ -237,10 +250,16 @@ func (s *Store) Roster(ctx context.Context, now time.Time) ([]Summary, error) {
 		return nil, e
 	}
 	for _, ask := range asks {
-		if i, ok := index[str(ask["requester_agent_id"])]; ok {
+		i, ok := index[value(ask.RequesterAgentID)]
+		if !ok {
+			i, ok = actorIndex[ask.RequesterActorID]
+		}
+		if ok {
 			out[i].OpenAsksCount++
-		} else if i, ok := actorIndex[str(ask["requester_actor_id"])]; ok {
-			out[i].OpenAsksCount++
+			if out[i].WaitingAsk == nil {
+				copy := ask
+				out[i].WaitingAsk = &copy
+			}
 		}
 	}
 	cardRows, e := s.DB.QueryContext(ctx, `SELECT id,handle,title FROM cards`)
@@ -298,16 +317,20 @@ func bridgeOnline(expires string, now time.Time) bool {
 	t, err := parseTime(expires)
 	return err == nil && t.After(now) && t.Sub(now) <= BridgeFreshness
 }
-func (s *Store) openAsks(ctx context.Context) ([]map[string]any, error) {
-	rows, e := s.DB.QueryContext(ctx, `SELECT req.id,req.payload_json FROM events req WHERE req.type='human_attention_requested' AND req.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events resp WHERE resp.type='human_attention_responded' AND resp.trashed_at IS NULL AND (json_extract(resp.payload_json,'$.payload.request_event_id')=req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.handle))`)
+func (s *Store) openAsks(ctx context.Context) ([]OpenAsk, error) {
+	rows, e := s.DB.QueryContext(ctx, `SELECT req.id,req.ts,COALESCE(json_extract(req.payload_json,'$.summary'),''),req.payload_json,
+		COALESCE((SELECT di.id FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),''),
+		COALESCE((SELECT di.data_json FROM derived_inbox_items di WHERE di.source_event_id=req.id AND di.category IN ('ask','review','escalate') ORDER BY di.id LIMIT 1),'')
+		FROM events req WHERE req.type='human_attention_requested' AND req.trashed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events resp WHERE resp.type='human_attention_responded' AND resp.trashed_at IS NULL AND (json_extract(resp.payload_json,'$.payload.request_event_id')=req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.id OR json_extract(resp.payload_json,'$.payload.request_event_ref')='event:'||req.handle))
+		ORDER BY julianday(req.ts),req.id`)
 	if e != nil {
 		return nil, e
 	}
 	defer rows.Close()
-	out := []map[string]any{}
+	out := []OpenAsk{}
 	for rows.Next() {
-		var id, raw string
-		if e = rows.Scan(&id, &raw); e != nil {
+		var id, at, summary, raw, inboxID, inboxRaw string
+		if e = rows.Scan(&id, &at, &summary, &raw, &inboxID, &inboxRaw); e != nil {
 			return nil, e
 		}
 		var wrapped map[string]any
@@ -318,8 +341,32 @@ func (s *Store) openAsks(ctx context.Context) ([]map[string]any, error) {
 		if !ok {
 			continue
 		}
-		p["id"] = id
-		out = append(out, p)
+		var inbox map[string]any
+		if inboxRaw != "" {
+			_ = json.Unmarshal([]byte(inboxRaw), &inbox)
+		}
+		ask := OpenAsk{ID: id, InboxItemID: stringPtr(inboxID), CreatedAt: at,
+			Kind: str(p["kind"]), SubjectRef: stringPtr(str(p["subject_ref"])),
+			SubjectTitle: str(p["subject_title"]), RequesterActorID: str(p["requester_actor_id"]),
+			RequesterAgentID: stringPtr(str(p["requester_agent_id"]))}
+		ask.Title = str(p["title"])
+		if ask.Title == "" {
+			ask.Title = str(inbox["title"])
+		}
+		if ask.Title == "" {
+			ask.Title = ask.SubjectTitle
+		}
+		if ask.Title == "" {
+			ask.Title = summary
+		}
+		if ask.Title == "" {
+			ask.Title = "Open ask"
+		}
+		ask.Severity = stringPtr(str(p["severity"]))
+		if ask.Severity == nil {
+			ask.Severity = stringPtr(str(inbox["severity"]))
+		}
+		out = append(out, ask)
 	}
 	return out, rows.Err()
 }
@@ -343,7 +390,7 @@ func (s *Store) AgentDetail(ctx context.Context, id string, now time.Time) (Deta
 	}
 	d.RecentCards = []map[string]any{}
 	d.RecentRuns = []Run{}
-	d.OpenAsks = []map[string]any{}
+	d.OpenAsks = []OpenAsk{}
 	d.RecentNotes = []map[string]any{}
 	runs, _, e := s.ListRuns(ctx, Filter{AgentID: d.Agent.ID, Limit: 50})
 	if e != nil {
@@ -355,7 +402,7 @@ func (s *Store) AgentDetail(ctx context.Context, id string, now time.Time) (Deta
 		return d, e
 	}
 	for _, v := range asks {
-		if str(v["requester_agent_id"]) == d.Agent.ID || str(v["requester_actor_id"]) == d.Agent.ActorID {
+		if value(v.RequesterAgentID) == d.Agent.ID || v.RequesterActorID == d.Agent.ActorID {
 			d.OpenAsks = append(d.OpenAsks, v)
 		}
 	}

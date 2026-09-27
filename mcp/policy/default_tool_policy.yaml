@@ -103,6 +103,9 @@ commands:
   "agents.me.presence":
     classification: exposed_write
     reason: "an agent may report its current task and progress note"
+  "agents.stream":
+    classification: unsupported_streaming
+    reason: "ephemeral roster SSE needs a bounded read adapter before MCP exposure"
   "artifacts.archive":
     classification: exposed_write
     reason: "ordinary reversible artifact lifecycle write"

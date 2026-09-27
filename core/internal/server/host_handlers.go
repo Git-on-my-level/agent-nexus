@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,7 +11,38 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/commandcenter"
 )
+
+type hostRosterView struct {
+	auth.Host
+	Agents []commandcenter.Summary `json:"agents"`
+}
+
+func hostRoster(ctx context.Context, opts handlerOptions) (map[string]commandcenter.Summary, error) {
+	if opts.runStore == nil {
+		return nil, errors.New("agent roster is unavailable")
+	}
+	items, err := opts.runStore.Roster(ctx, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]commandcenter.Summary, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	return byID, nil
+}
+
+func hostWithRoster(host auth.Host, byID map[string]commandcenter.Summary) hostRosterView {
+	out := hostRosterView{Host: host, Agents: []commandcenter.Summary{}}
+	for _, child := range host.Agents {
+		if item, ok := byID[child.ID]; ok {
+			out.Agents = append(out.Agents, item)
+		}
+	}
+	return out
+}
 
 func hostRouteAccess(r *http.Request) routeAccessRequirement {
 	path, method := r.URL.Path, r.Method
@@ -92,6 +124,8 @@ func hostError(w http.ResponseWriter, err error) {
 		status, code = http.StatusForbidden, "host_revoked"
 	case errors.Is(err, auth.ErrAgentExcluded):
 		status, code = http.StatusForbidden, "agent_excluded"
+	case errors.Is(err, auth.ErrAgentRevoked):
+		status, code = http.StatusForbidden, "agent_revoked"
 	case errors.Is(err, auth.ErrHostSlugTaken):
 		status, code = http.StatusConflict, "host_slug_taken"
 	case errors.Is(err, auth.ErrAgentHandleTaken):
@@ -176,6 +210,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 			hostError(w, err)
 			return
 		}
+		opts.agentChanges.publish()
 		writeJSON(w, 201, map[string]any{"host": h})
 		return
 	}
@@ -281,6 +316,7 @@ func handleHostAuthRoutes(w http.ResponseWriter, r *http.Request, opts handlerOp
 					hostError(w, err)
 					return
 				}
+				opts.agentChanges.publish()
 				writeJSON(w, 201, map[string]any{"host": h})
 				return
 			}
@@ -297,12 +333,21 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 			return
 		}
+		byID, err := hostRoster(r.Context(), opts)
+		if err != nil {
+			writeError(w, 503, "runs_unavailable", "agent roster is unavailable")
+			return
+		}
 		items, err := opts.authStore.ListHosts(r.Context())
 		if err != nil {
 			hostError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"hosts": items})
+		views := make([]hostRosterView, 0, len(items))
+		for _, host := range items {
+			views = append(views, hostWithRoster(host, byID))
+		}
+		writeJSON(w, 200, map[string]any{"hosts": views})
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/hosts/"), "/")
@@ -332,6 +377,7 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 			hostError(w, err)
 			return
 		}
+		opts.agentChanges.publish()
 		writeJSON(w, 200, map[string]any{"bridge": b})
 		return
 	}
@@ -344,12 +390,17 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
 			return
 		}
+		byID, err := hostRoster(r.Context(), opts)
+		if err != nil {
+			writeError(w, 503, "runs_unavailable", "agent roster is unavailable")
+			return
+		}
 		h, err := opts.authStore.GetHost(r.Context(), id)
 		if err != nil {
 			hostError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"host": h})
+		writeJSON(w, 200, map[string]any{"host": hostWithRoster(h, byID)})
 	case http.MethodPatch:
 		raw, ok := hostRawBody(w, r)
 		if !ok {
@@ -401,7 +452,13 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 			hostError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"host": h})
+		opts.agentChanges.publish()
+		byID, err := hostRoster(r.Context(), opts)
+		if err != nil {
+			writeError(w, 503, "runs_unavailable", "agent roster is unavailable")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"host": hostWithRoster(h, byID)})
 	case http.MethodDelete:
 		admin, ok := hostAdmin(w, r, opts)
 		if !ok {
@@ -412,7 +469,13 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 			hostError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"host": h})
+		opts.agentChanges.publish()
+		byID, err := hostRoster(r.Context(), opts)
+		if err != nil {
+			writeError(w, 503, "runs_unavailable", "agent roster is unavailable")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"host": hostWithRoster(h, byID)})
 	default:
 		writeError(w, 404, "not_found", "endpoint not found")
 	}

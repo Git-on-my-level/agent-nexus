@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `180`
+- Commands: `181`
 
 ## `actors.create`
 
@@ -111,10 +111,10 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `utility`
 - Input mode: `none`
-- Why: Resolve a derived-agent bearer to its host, name, handle, and actor ID; retained for agent self-identification.
+- Why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
 - Concepts: `auth`, `agents`
 - Error codes: `auth_required`, `invalid_token`
-- Output: Returns `{ agent }`; derived agents have no independent signing keys.
+- Output: Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.
 
 ## `agents.me.presence`
 
@@ -128,6 +128,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
 - Output: Returns `{ presence }`.
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
+
+## `agents.stream`
+
+- CLI path: `agents stream`
+- HTTP: `GET /stream/agents`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Prompt clients to refresh the agent roster without writing presence telemetry to workspace events.
+- Concepts: `agents`
+- Error codes: `auth_required`, `invalid_token`
+- Output: SSE `agents_changed` messages with JSON `{ "revision": <integer> }`; no agent data or event-log cursor.
+- Agent notes: This is an ephemeral invalidation stream. Refetch the roster on connect, notification, and reconnect; do not treat revisions as durable event IDs.
 
 ## `artifacts.archive`
 

@@ -68,6 +68,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			hostError(w, issueErr)
 			return
 		}
+		opts.agentChanges.publish()
 		writeJSON(w, http.StatusOK, map[string]any{"agent": agent, "tokens": issued})
 		return
 	case "refresh_token":
@@ -198,13 +199,9 @@ func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerO
 	if !ok {
 		return
 	}
-	if !isAgentPrincipal(principal) {
-		writeError(w, http.StatusForbidden, "forbidden", "derived agent required")
-		return
-	}
-	agent, err := opts.authStore.GetDerivedAgent(r.Context(), principal.AgentID)
+	agent, err := opts.authStore.GetSelfPrincipal(r.Context(), principal.AgentID)
 	if err != nil {
-		hostError(w, err)
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve current principal")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent": agent})

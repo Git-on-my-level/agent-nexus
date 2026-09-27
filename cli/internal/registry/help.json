@@ -50,11 +50,12 @@
     },
     {
       "name": "agents",
-      "command_count": 3,
+      "command_count": 4,
       "command_ids": [
         "agents.get",
         "agents.list",
-        "agents.me.get"
+        "agents.me.get",
+        "agents.stream"
       ]
     },
     {
@@ -314,7 +315,7 @@
       ]
     }
   ],
-  "command_count": 180,
+  "command_count": 181,
   "commands": [
     {
       "command_id": "actors.create",
@@ -537,7 +538,8 @@
       ],
       "adjacent_commands": [
         "agents.list",
-        "agents.me.get"
+        "agents.me.get",
+        "agents.stream"
       ],
       "go_method": "AgentsGet",
       "ts_method": "agentsGet"
@@ -571,7 +573,8 @@
       "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
       "adjacent_commands": [
         "agents.get",
-        "agents.me.get"
+        "agents.me.get",
+        "agents.stream"
       ],
       "go_method": "AgentsList",
       "ts_method": "agentsList"
@@ -583,13 +586,13 @@
       "method": "GET",
       "path": "/agents/me",
       "operation_id": "getCurrentAgent",
-      "summary": "Get current authenticated agent",
-      "why": "Resolve a derived-agent bearer to its host, name, handle, and actor ID; retained for agent self-identification.",
+      "summary": "Get current authenticated principal",
+      "why": "Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.",
       "input_mode": "none",
       "streaming": {
         "mode": "none"
       },
-      "output_envelope": "Returns `{ agent }`; derived agents have no independent signing keys.",
+      "output_envelope": "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.",
       "error_codes": [
         "auth_required",
         "invalid_token"
@@ -602,7 +605,8 @@
       "surface": "utility",
       "adjacent_commands": [
         "agents.get",
-        "agents.list"
+        "agents.list",
+        "agents.stream"
       ],
       "go_method": "AgentsMeGet",
       "ts_method": "agentsMeGet"
@@ -663,6 +667,39 @@
       ],
       "go_method": "AgentsMePresence",
       "ts_method": "agentsMePresence"
+    },
+    {
+      "command_id": "agents.stream",
+      "cli_path": "agents stream",
+      "group": "agents",
+      "method": "GET",
+      "path": "/stream/agents",
+      "operation_id": "streamAgentChanges",
+      "summary": "Stream ephemeral agent roster changes (SSE)",
+      "description": "Authenticated workspace principals receive an initial `agents_changed` notification and subsequent notifications after run upserts, presence writes, and host identity or bridge changes. The signal is process-local and not a canonical workspace event: it is not written to the event log, has no replay cursor, and may be coalesced. Reconnect and refetch `GET /agents` after every notification. Keep the existing visibility/focus refresh as a fallback across reconnects or server restarts.",
+      "why": "Prompt clients to refresh the agent roster without writing presence telemetry to workspace events.",
+      "input_mode": "none",
+      "streaming": {
+        "mode": "sse"
+      },
+      "output_envelope": "SSE `agents_changed` messages with JSON `{ \"revision\": \u003cinteger\u003e }`; no agent data or event-log cursor.",
+      "error_codes": [
+        "auth_required",
+        "invalid_token"
+      ],
+      "concepts": [
+        "agents"
+      ],
+      "stability": "beta",
+      "surface": "projection",
+      "agent_notes": "This is an ephemeral invalidation stream. Refetch the roster on connect, notification, and reconnect; do not treat revisions as durable event IDs.",
+      "adjacent_commands": [
+        "agents.get",
+        "agents.list",
+        "agents.me.get"
+      ],
+      "go_method": "AgentsStream",
+      "ts_method": "agentsStream"
     },
     {
       "command_id": "artifacts.archive",
@@ -1728,7 +1765,7 @@
       "path": "/auth/token",
       "operation_id": "issueAuthToken",
       "summary": "Exchange host assertion or refresh auth tokens",
-      "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names fail before creation. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.",
+      "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents.",
       "why": "Assertion or refresh-token exchange for bearer access.",
       "input_mode": "json-body",
       "streaming": {
