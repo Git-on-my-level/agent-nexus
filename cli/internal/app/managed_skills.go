@@ -1,0 +1,353 @@
+package app
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/filelock"
+	"agent-nexus-cli/skills"
+)
+
+const managedSkillMarkerName = ".anx-skill.json"
+const maxManagedSkillBytes = 1 << 20
+
+var skillDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+type managedSkillMarker struct {
+	SchemaVersion int    `json:"schema_version"`
+	ManagedBy     string `json:"managed_by"`
+	Role          string `json:"role"`
+	SkillName     string `json:"skill_name"`
+	SkillVersion  string `json:"skill_version"`
+	ContentSHA256 string `json:"content_sha256"`
+}
+
+type managedSkillState struct {
+	SchemaVersion        int    `json:"schema_version"`
+	Path                 string `json:"path"`
+	Role                 string `json:"role"`
+	SkillName            string `json:"skill_name"`
+	ExpectedVersion      string `json:"expected_version"`
+	InstalledVersion     string `json:"installed_version,omitempty"`
+	ExpectedSHA256       string `json:"expected_sha256"`
+	ObservedSHA256       string `json:"observed_sha256,omitempty"`
+	State                string `json:"state"`
+	Reason               string `json:"reason,omitempty"`
+	Delivery             string `json:"delivery"`
+	HarnessConfiguration string `json:"harness_configuration"`
+	SessionActivation    string `json:"session_activation"`
+	Changed              bool   `json:"changed"`
+	DryRun               bool   `json:"dry_run"`
+}
+
+func (a *App) runSkills(args []string) (*commandResult, string, error) {
+	if len(args) == 0 || isHelpToken(args[0]) {
+		return &commandResult{Text: skillsUsageText()}, "skills", nil
+	}
+	sub := args[0]
+	name := "skills " + sub
+	if sub != "configure" && sub != "status" && sub != "verify" {
+		return nil, "skills", skillsSubcommandSpec.unknownError(sub)
+	}
+	fs := newSilentFlagSet(name)
+	var path, role trackedString
+	var dryRun trackedBool
+	fs.Var(&path, "path", "Explicit skill directory; no harness discovery")
+	fs.Var(&role, "role", "participant or pm")
+	if sub == "configure" {
+		fs.Var(&dryRun, "dry-run", "Inspect without writing")
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return nil, name, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if len(fs.Args()) > 0 {
+		return nil, name, errnorm.Usage("invalid_args", "unexpected positional arguments")
+	}
+	if strings.TrimSpace(path.value) == "" || strings.TrimSpace(role.value) == "" {
+		return nil, name, errnorm.Usage("invalid_request", "--path <skill-directory> and --role participant|pm are required")
+	}
+	roleValue := strings.TrimSpace(role.value)
+	if roleValue != "participant" && roleValue != "pm" {
+		return nil, name, errnorm.Usage("invalid_request", "unknown skill role; use participant or pm")
+	}
+	skill, err := skills.Get(roleValue)
+	if err != nil {
+		return nil, name, errnorm.Wrap(errnorm.KindInternal, "skill_bundle_invalid", "failed to validate bundled skill", err)
+	}
+	target, err := filepath.Abs(strings.TrimSpace(path.value))
+	if err != nil {
+		return nil, name, errnorm.Usage("invalid_request", "invalid skill path")
+	}
+	state, err := inspectManagedSkill(target, skill)
+	if err != nil {
+		return nil, name, errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "failed to inspect skill destination", err)
+	}
+	state.DryRun = dryRun.value
+	if sub == "configure" && !dryRun.value {
+		if state.State != "missing" && state.State != "current" && state.State != "outdated" {
+			return nil, name, managedSkillError(state)
+		}
+		if state.State != "current" {
+			if err := configureManagedSkill(target, skill); err != nil {
+				return nil, name, err
+			}
+			state, err = inspectManagedSkill(target, skill)
+			if err != nil {
+				return nil, name, errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "failed to verify configured skill", err)
+			}
+			state.Changed = true
+		}
+	}
+	if sub == "verify" && state.State != "current" {
+		return nil, name, managedSkillError(state)
+	}
+	data, _ := json.Marshal(state)
+	var result map[string]any
+	_ = json.Unmarshal(data, &result)
+	result["text"] = fmt.Sprintf("skill name=%s role=%s state=%s expected_version=%s installed_version=%s path=%q\nverification scope=local_file harness_configuration=unknown session_activation=unknown\n", state.SkillName, state.Role, state.State, state.ExpectedVersion, state.InstalledVersion, state.Path)
+	if sub == "configure" && dryRun.value {
+		result["would_change"] = state.State == "missing" || state.State == "outdated"
+	}
+	return &commandResult{Data: result}, name, nil
+}
+
+func managedSkillError(state managedSkillState) error {
+	code := "conflict"
+	if state.State == "missing" {
+		code = "skill_not_found"
+	}
+	if state.State == "outdated" {
+		code = "skill_outdated"
+	}
+	return errnorm.WithDetails(errnorm.Local(code, "skill is "+state.State+"; existing content was preserved"), map[string]any{"skill": state})
+}
+
+// No harness catalog, environment detection, network reads or history access is
+// involved. A local file digest cannot prove configuration or session activation.
+func inspectManagedSkill(target string, skill skills.Skill) (managedSkillState, error) {
+	state := managedSkillState{SchemaVersion: 1, Path: target, Role: skill.Role, SkillName: skill.Name, ExpectedVersion: skill.Version, ExpectedSHA256: skill.SHA256, Delivery: "manual", HarnessConfiguration: "unknown", SessionActivation: "unknown"}
+	if err := skillPathWithoutSymlinks(target); err != nil {
+		state.State = "conflict"
+		state.Reason = err.Error()
+		return state, nil
+	}
+	if info, err := os.Lstat(target); err == nil && !info.IsDir() {
+		state.State = "conflict"
+		state.Reason = "destination is not a directory"
+		return state, nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return state, err
+	}
+	if _, err := os.Lstat(filepath.Join(target, ".agentctl-skill.json")); err == nil {
+		state.State = "conflict"
+		state.Reason = "agentctl owns this directory; use agentctl skills status/update"
+		return state, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return state, err
+	}
+	content, contentErr := readManagedSkillFile(filepath.Join(target, "SKILL.md"))
+	if contentErr != nil && !errors.Is(contentErr, os.ErrNotExist) {
+		return state, contentErr
+	}
+	markerBytes, markerErr := readManagedSkillFile(filepath.Join(target, managedSkillMarkerName))
+	if markerErr != nil && !errors.Is(markerErr, os.ErrNotExist) {
+		return state, markerErr
+	}
+	if contentErr == nil {
+		state.ObservedSHA256 = skills.Digest(content)
+	}
+	if errors.Is(markerErr, os.ErrNotExist) {
+		state.State = "missing"
+		if contentErr == nil {
+			state.State = "unmanaged"
+			state.Reason = "existing SKILL.md has no ANX ownership marker; use a new directory or keep managing it manually"
+		}
+		return state, nil
+	}
+	var marker managedSkillMarker
+	decoder := json.NewDecoder(bytes.NewReader(markerBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&marker); err != nil || decoder.Decode(&struct{}{}) != io.EOF || marker.SchemaVersion != 1 || marker.ManagedBy != "anx" || marker.Role != skill.Role || marker.SkillName != skill.Name || strings.TrimSpace(marker.SkillVersion) == "" || !skillDigestPattern.MatchString(marker.ContentSHA256) {
+		state.State = "conflict"
+		state.Reason = "invalid or incompatible ownership marker"
+		return state, nil
+	}
+	state.InstalledVersion = marker.SkillVersion
+	if contentErr != nil || marker.ContentSHA256 != state.ObservedSHA256 {
+		state.State = "drifted"
+		state.Reason = "managed skill was edited or removed; refresh refused"
+		return state, nil
+	}
+	state.State = "current"
+	if marker.SkillVersion != skill.Version || marker.ContentSHA256 != skill.SHA256 {
+		state.State = "outdated"
+	}
+	return state, nil
+}
+
+func configureManagedSkill(target string, skill skills.Skill) error {
+	// Only ANX writers share this advisory lock. Reinspect under it, and verify
+	// again immediately before replacement. User-authored shared files are never
+	// read or rewritten. Interrupted two-file updates fail closed as drift.
+	if err := skillPathWithoutSymlinks(target); err != nil {
+		return errnorm.Local("conflict", err.Error())
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "create skill directory", err)
+	}
+	lockPath := filepath.Join(target, ".anx-skill.lock")
+	lock, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "conflict", "skill configuration is locked; inspect an interrupted configure before removing its lock", err)
+	}
+	defer os.Remove(lockPath)
+	if err := lock.Close(); err != nil {
+		return err
+	}
+	state, err := inspectManagedSkill(target, skill)
+	if err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "inspect managed skill", err)
+	}
+	if state.State == "current" {
+		return nil
+	}
+	if state.State != "missing" && state.State != "outdated" {
+		return managedSkillError(state)
+	}
+	marker := managedSkillMarker{SchemaVersion: 1, ManagedBy: "anx", Role: skill.Role, SkillName: skill.Name, SkillVersion: skill.Version, ContentSHA256: skill.SHA256}
+	markerBytes, err := json.MarshalIndent(marker, "", "  ")
+	if err != nil {
+		return err
+	}
+	markerBytes = append(markerBytes, '\n')
+	// Detect user edits after preflight. A concurrent external editor is not a
+	// participant in this lock protocol; do not run editors and refresh together.
+	latest, err := inspectManagedSkill(target, skill)
+	if err != nil {
+		return err
+	}
+	if latest.State != state.State || latest.ObservedSHA256 != state.ObservedSHA256 || latest.InstalledVersion != state.InstalledVersion {
+		return errnorm.Local("conflict", "skill changed during configuration; retry after reviewing it")
+	}
+	if err := writeManagedSkillFile(filepath.Join(target, "SKILL.md"), []byte(skill.Content), state.State == "missing"); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "write managed skill", err)
+	}
+	if err := writeManagedSkillFile(filepath.Join(target, managedSkillMarkerName), markerBytes, state.State == "missing"); err != nil {
+		return errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "write ownership marker; verify reports any interrupted update as unmanaged or drifted", err)
+	}
+	return nil
+}
+
+func readManagedSkillFile(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxManagedSkillBytes {
+		return nil, fmt.Errorf("skill file must be a bounded regular non-symlink file")
+	}
+	file, err := filelock.OpenNoFollow(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, opened) {
+		return nil, fmt.Errorf("skill file changed during inspection")
+	}
+	content, err := io.ReadAll(io.LimitReader(file, maxManagedSkillBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > maxManagedSkillBytes {
+		return nil, fmt.Errorf("skill file exceeds size limit")
+	}
+	return content, nil
+}
+
+func skillPathWithoutSymlinks(path string) error {
+	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("skill path must not contain symlinks")
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+	return nil
+}
+
+func writeManagedSkillFile(path string, content []byte, exclusive bool) error {
+	if err := skillPathWithoutSymlinks(path); err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".anx-skill-tmp-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err = file.Write(content); err != nil {
+		file.Close()
+		return err
+	}
+	if err = file.Close(); err != nil {
+		return err
+	}
+	if exclusive {
+		return os.Link(file.Name(), path)
+	}
+	return os.Rename(file.Name(), path)
+}
+
+var skillsSubcommandSpec = subcommandSpec{command: "skills", valid: []string{"configure", "status", "verify"}, examples: []string{"anx skills configure --path ./anx-participant --role participant --dry-run", "anx skills verify --path ./anx-participant --role participant"}}
+
+func skillsUsageText() string {
+	return strings.TrimSpace(`Managed ANX skill primitives (local files only)
+
+Usage:
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
+unmanaged or edited files are preserved; there is no force or implicit adoption.
+Other files, shared instructions, credentials and harness settings are untouched.
+Dry-run and status perform no writes, network access or harness/history discovery.
+Verify checks the local version and bytes, not whether a harness/session loaded it.
+PM supplements the participant skill; configure both in separate directories.
+
+Status returns missing, unmanaged, current, outdated, drifted or conflict.
+Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
+and 1 for filesystem failures. Harness configuration and activation stay unknown.
+
+Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
+packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
+ANX source revision. ANX never edits that selection automatically. Arbitrary
+agents may consume the files manually; no supported-harness registry is required.`)
+}
+
+func init() {
+	for _, sub := range []string{"configure", "status", "verify"} {
+		flags := []localHelperFlag{{Name: "--path <skill-directory>", Description: "Explicit destination; no harness discovery."}, {Name: "--role <role>", Description: "participant or pm; PM supplements participant."}}
+		if sub == "configure" {
+			flags = append(flags, localHelperFlag{Name: "--dry-run", Description: "Inspect only; no writes or network."})
+		}
+		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "skills " + sub, Summary: "Inspect or maintain versioned local ANX skill files.", JSONShape: "`schema_version`, `state`, `expected_version`, `installed_version`, `expected_sha256`, `observed_sha256`, `harness_configuration`, `session_activation`", Composition: "Explicit local files only. Harness installation and activation are distinct; session activation remains unknown.", Flags: flags, Examples: []string{"anx skills " + sub + " --path ./anx-participant --role participant"}})
+	}
+}

@@ -122,7 +122,7 @@ func ExitCode(err error) int {
 		return 5
 	case "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
 		return 6
-	case "cli_outdated":
+	case "cli_outdated", "skill_outdated":
 		return 7
 	case "timeout", "timeout_exceeded":
 		return 8

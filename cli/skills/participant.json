@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "name": "anx-participant",
+      "path": "cli/skills/anx-participant",
+      "targets": [
+        "claude",
+        "codex",
+        "cursor",
+        "hermes",
+        "omp"
+      ]
+    }
+  ]
+}

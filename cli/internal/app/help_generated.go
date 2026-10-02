@@ -1038,7 +1038,8 @@ Onboarding:
   `+"`anx concepts`"+` for a quick primitive-selection guide.
   `+"`anx help onboarding`"+` for the offline quick-start topic.
   `+"`anx debug meta doc agent-guide`"+` for the prescriptive bundled agent guide.
-  `+"`anx install skill --path ./SKILL.md`"+` to install the opinionated ANX agent skill.
+  `+"`anx install skill --path ./SKILL.md`"+` to export the portable ANX participant skill.
+  `+"`anx skills configure --path ./anx-participant --role participant --dry-run`"+` for managed local setup.
 
 Global Flags:
   --json
@@ -1104,6 +1105,11 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	}
 	if topic == "import" {
 		return importUsageText() + "\n", true
+	}
+	if topic == "skills" || strings.HasPrefix(topic, "skills ") {
+		if topic == "skills" || topic == "skills configure" || topic == "skills status" || topic == "skills verify" {
+			return skillsUsageText() + "\n", true
+		}
 	}
 	if topic == "install" {
 		return installUsageText() + "\n", true
@@ -1239,7 +1245,7 @@ Core commands:
 Reference commands:
   meta docs       Print the bundled runtime help reference.
   meta doc        Print one bundled runtime help topic.
-  meta skill      Render the bundled opinionated ANX agent skill.
+  meta skill      Render the bundled participant or PM skill.
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
   meta ops        Inspect operational metadata helpers.`) + "\n", true
@@ -1461,7 +1467,7 @@ Lower-level helpers:
 		return strings.TrimSpace(`Shipped reference docs:
   meta docs               Print the bundled Markdown runtime reference.
   meta doc                Print one bundled Markdown topic, for example ` + "`anx meta doc agent-guide`" + `.
-  meta skill              Render the bundled opinionated ANX agent skill, for example ` + "`anx meta skill anx`" + `.
+  meta skill              Render a bundled participant or PM skill, for example ` + "`anx meta skill anx`" + `.
   Tip: use ` + "`anx help meta`" + ` for the short runtime surface, ` + "`anx meta docs`" + ` for the full shipped reference, and ` + "`anx install skill --path ./SKILL.md`" + ` to install the agent skill.`)
 	case "boards":
 		return strings.TrimSpace(`Active work tracking:

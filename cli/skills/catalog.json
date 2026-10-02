@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "role": "participant",
+      "name": "anx-participant",
+      "version": "anx.participant.v2",
+      "content_sha256": "sha256:217a83b2d1e72ad7a3ddb7242f78e91ab04e42f6aef0ea8ce14cdfd112f61634"
+    },
+    {
+      "role": "pm",
+      "name": "anx-pm",
+      "version": "anx.pm.v1",
+      "content_sha256": "sha256:b133bb1ecf0e0f3c9be4d6d21261d807dcc2b6ae281e24fed032f95dd6e2971f"
+    }
+  ]
+}
