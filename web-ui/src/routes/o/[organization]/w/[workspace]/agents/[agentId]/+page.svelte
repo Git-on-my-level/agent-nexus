@@ -24,6 +24,7 @@
   import { formatAbsoluteDateTime } from "$lib/formatDate";
   import { label as phaseLabel } from "$lib/pm/presentation.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
+  import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import AgentBridgeIndicator from "$lib/components/agents/AgentBridgeIndicator.svelte";
   import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
   import RunAttribution from "$lib/components/agents/RunAttribution.svelte";
@@ -99,6 +100,15 @@
   let currentTaskTitle = $derived(
     agent?.current_card_title || titleFromCardRef(currentTaskRef, titles),
   );
+  let participationTasks = $derived([
+    ...(currentTaskRef
+      ? [{ ref: currentTaskRef, title: currentTaskTitle }]
+      : []),
+    ...(detail?.recent_cards ?? []).map((card) => ({
+      ref: card.ref || (card.handle ? `card:${card.handle}` : ""),
+      title: card.title,
+    })),
+  ]);
   let hostExcludes = $derived(
     Boolean(agent?.name && host?.excluded_names?.includes(agent.name)),
   );
@@ -454,6 +464,12 @@
             </p>
           </div>
         </section>
+
+        <TaskParticipation
+          tasks={participationTasks}
+          agentId={agent.id}
+          {workspaceHref}
+        />
 
         <section id="runs" class="scroll-mt-6" aria-labelledby="agent-runs">
           <h2 id="agent-runs" class="ui-label">Recent runs</h2>

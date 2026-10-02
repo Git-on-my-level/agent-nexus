@@ -437,3 +437,34 @@ Actions:
 1. Open the UI on the hostname expected by core.
 2. Check forwarded host/origin handling at the reverse proxy.
 3. Do not assume path-prefix routing changes WebAuthn identity boundaries.
+
+## Shared task participation
+
+Task details read `GET /work/{card_ref}/participants` through the generated
+client. The agent detail page reads only the first eight distinct current/recent
+task refs already present in its detail response, then filters shared records by
+agent ID. It is explicitly a partial view, not a global session inventory.
+
+- Concurrent sessions remain separate task-scoped rows, including sessions from
+  the same agent. Agent-page counts are task participations, not unique sessions
+  across tasks. No private session read or registration is performed.
+- Reads use at most three concurrent tasks, three 100-record pages per task, a
+  ten-second instance-local cache, and coalesced in-flight requests. The cache is
+  replaced on workspace or authenticated actor changes. Old scopes stop queued
+  reads and cursor pagination when replaced or unmounted. Cursor or access limits
+  remain visible; unavailable reads clear previous active counts and never show
+  raw service errors.
+- Visible pages refresh every 30 seconds. Activity also expires locally every
+  five seconds against the server-provided expiry. Stale reports are not proof
+  of offline status. Activity, closed sessions, and finished runs never assign,
+  move, or complete tasks.
+- The evidence handoff summary uses existing task observations and preserves
+  reporter attribution, reported/uncertain/verified standing, and failed-latest-
+  read context. Participation is not completion evidence.
+
+Focused regression coverage: `tests/unit/taskParticipation.test.js`,
+`tests/unit/TaskParticipation.test.js`, and `tests/e2e/participation.spec.js`.
+The browser spec covers concurrent, stale, closed, inaccessible, recovered, and
+agent-scoped views at desktop, tablet, and mobile widths using synthetic API
+responses. Run it with the existing Playwright configuration and a supported
+browser before qualifying a release.
