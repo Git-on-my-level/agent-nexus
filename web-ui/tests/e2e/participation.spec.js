@@ -188,7 +188,10 @@ for (const viewport of [
       agentPanel.getByText("2 task participations · 2 currently active"),
     ).toBeVisible();
     await expect(
-      agentPanel.getByText(/Other tasks and private sessions are not included/),
+      agentPanel.getByText(
+        "Other tasks and private sessions are not included.",
+        { exact: false },
+      ),
     ).toBeVisible();
     await expect(
       agentPanel.getByRole("link", { name: workTitle() }),

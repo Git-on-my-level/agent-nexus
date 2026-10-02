@@ -669,6 +669,51 @@ describe("PM operator interactions", () => {
     );
     expect(wide).toEqual(["Task", "Board", "Status", "Owner", "Last checked"]);
   });
+  it("keeps the latest handoff report when older observation pagination fails", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Evidence task"),
+    });
+    client.listWorkObservations
+      .mockResolvedValueOnce({
+        observations: [
+          {
+            id: "current",
+            status: "reported",
+            actor_id: "reviewer",
+            observed_at: new Date().toISOString(),
+            evidence: [],
+          },
+        ],
+        next_cursor: "older",
+      })
+      .mockRejectedValueOnce(new Error("Older history unavailable"));
+    render(WorkDetail);
+    await screen.findByText("Latest shared report");
+    await fireEvent.click(screen.getByText("Observation history"));
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Older observations", hidden: true }),
+    );
+    await screen.findByText("Older history unavailable");
+    expect(screen.getByText("Latest shared report")).toBeTruthy();
+    expect(screen.queryByText(/Handoff evidence is unavailable/)).toBeNull();
+    expect(client.listWorkObservations).toHaveBeenLastCalledWith("card:one", {
+      limit: 30,
+      cursor: "older",
+    });
+  });
+  it("marks handoff unavailable when the initial evidence read fails", async () => {
+    state.route("/tasks/card%3Aone", { workId: "card:one" });
+    client.getWork.mockResolvedValue({
+      work: work("card:one", "Evidence task"),
+    });
+    client.listWorkObservations.mockRejectedValue(
+      new Error("Evidence unavailable"),
+    );
+    render(WorkDetail);
+    await screen.findByText(/Handoff evidence is unavailable/);
+    expect(screen.queryByText("Latest shared report")).toBeNull();
+  });
   it("shows task evidence as one source line with each link once", async () => {
     state.route("/tasks/card%3Aone", { workId: "card:one" });
     client.getWork.mockResolvedValue({
