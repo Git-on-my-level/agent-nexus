@@ -62,5 +62,10 @@ jobs:
 
             gh release upload "${GITHUB_REF_NAME}" "${upload_assets[@]}"
           else
-            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --generate-notes --verify-tag
+            notes_file="runbooks/releases/${GITHUB_REF_NAME}.md"
+            if [[ -f "${notes_file}" ]]; then
+              gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --notes-file "${notes_file}" --verify-tag
+            else
+              gh release create "${GITHUB_REF_NAME}" "${assets[@]}" --generate-notes --verify-tag
+            fi
           fi
