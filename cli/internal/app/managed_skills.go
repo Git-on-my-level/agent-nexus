@@ -277,18 +277,15 @@ func readManagedSkillFile(path string) ([]byte, error) {
 }
 
 func skillPathWithoutSymlinks(path string) error {
-	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
-		info, err := os.Lstat(current)
-		if err == nil && info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("skill path must not contain symlinks")
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
-		}
+	// Lstat the destination (or file) only. Walking every ancestor to root
+	// treats normal system prefixes such as macOS /tmp -> /private/tmp as a
+	// conflict, so configure/status/verify refuse ordinary scratch paths.
+	info, err := os.Lstat(filepath.Clean(path))
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("skill path must not contain symlinks")
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return nil
 }

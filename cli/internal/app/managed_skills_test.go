@@ -219,6 +219,34 @@ func TestManagedSkillsPreserveEditsAndLegacyMigration(t *testing.T) {
 	}
 }
 
+func TestManagedSkillsAllowsSymlinkAncestors(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	realParent := filepath.Join(root, "real")
+	if err := os.Mkdir(realParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkedParent := filepath.Join(root, "link")
+	if err := os.Symlink(realParent, linkedParent); err != nil {
+		t.Skip(err)
+	}
+	dir := filepath.Join(linkedParent, "anx-participant")
+	skill := participantFixture(t)
+	code, payload := skillCommand(t, "skills", "configure", "--path", dir, "--role", "participant")
+	if code != 0 {
+		t.Fatalf("symlink ancestor rejected: code=%d payload=%v", code, payload)
+	}
+	assertSkillState(t, dir, skill, "current")
+	code, payload = skillCommand(t, "skills", "status", "--path", dir, "--role", "participant")
+	if code != 0 {
+		t.Fatalf("status: %v", payload)
+	}
+	code, payload = skillCommand(t, "skills", "verify", "--path", dir, "--role", "participant")
+	if code != 0 {
+		t.Fatalf("verify: %v", payload)
+	}
+}
+
 func TestManagedSkillsUnsafePathsAndLock(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"directory-symlink", "file-symlink", "marker-symlink", "oversized", "file-destination", "lock"} {
