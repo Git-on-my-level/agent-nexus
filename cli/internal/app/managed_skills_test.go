@@ -219,34 +219,6 @@ func TestManagedSkillsPreserveEditsAndLegacyMigration(t *testing.T) {
 	}
 }
 
-func TestManagedSkillsAllowsSymlinkAncestors(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	realParent := filepath.Join(root, "real")
-	if err := os.Mkdir(realParent, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	linkedParent := filepath.Join(root, "link")
-	if err := os.Symlink(realParent, linkedParent); err != nil {
-		t.Skip(err)
-	}
-	dir := filepath.Join(linkedParent, "anx-participant")
-	skill := participantFixture(t)
-	code, payload := skillCommand(t, "skills", "configure", "--path", dir, "--role", "participant")
-	if code != 0 {
-		t.Fatalf("symlink ancestor rejected: code=%d payload=%v", code, payload)
-	}
-	assertSkillState(t, dir, skill, "current")
-	code, payload = skillCommand(t, "skills", "status", "--path", dir, "--role", "participant")
-	if code != 0 {
-		t.Fatalf("status: %v", payload)
-	}
-	code, payload = skillCommand(t, "skills", "verify", "--path", dir, "--role", "participant")
-	if code != 0 {
-		t.Fatalf("verify: %v", payload)
-	}
-}
-
 func TestManagedSkillsUnsafePathsAndLock(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"directory-symlink", "file-symlink", "marker-symlink", "oversized", "file-destination", "lock"} {
@@ -390,5 +362,126 @@ func TestManagedSkillsRepeatedDryRunAndConservativeClassification(t *testing.T) 
 		if got := commandSideEffectClass(strings.Join(args, " ")); got != "local_operational_write" {
 			t.Fatalf("unsafe classification: %s", got)
 		}
+	}
+}
+
+func TestManagedSkillsAllowsSymlinkAncestors(t *testing.T) {
+	t.Parallel()
+	// Deliberately use raw TempDir: on macOS this exercises real system aliases.
+	root := t.TempDir()
+	realParent := filepath.Join(root, "real")
+	if err := os.Mkdir(realParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkedParent := filepath.Join(root, "link")
+	if err := os.Symlink(realParent, linkedParent); err != nil {
+		t.Skip(err)
+	}
+	dir := filepath.Join(linkedParent, "missing", "anx-participant")
+	canonicalRoot, err := filepath.EvalSymlinks(realParent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := filepath.Join(canonicalRoot, "missing", "anx-participant")
+	code, payload := skillCommand(t, "skills", "configure", "--path", dir, "--role", "participant", "--dry-run")
+	if code != 0 {
+		t.Fatalf("dry-run: %v", payload)
+	}
+	if _, err := os.Stat(filepath.Join(realParent, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dry-run created missing prefix: %v", err)
+	}
+	for _, sub := range []string{"configure", "status", "verify"} {
+		code, payload = skillCommand(t, "skills", sub, "--path", dir, "--role", "participant")
+		if code != 0 {
+			t.Fatalf("%s: %v", sub, payload)
+		}
+		result := payload["result"].(map[string]any)
+		if result["path"] != canonical || result["requested_path"] != dir || result["state"] != "current" {
+			t.Fatalf("incorrect resolved path/state: %v", result)
+		}
+	}
+	// An aliased ancestor must never turn a symlink leaf into an owned directory.
+	leaf := filepath.Join(linkedParent, "leaf-link")
+	if err := os.Symlink(canonical, leaf); err != nil {
+		t.Fatal(err)
+	}
+	code, payload = skillCommand(t, "skills", "configure", "--path", leaf, "--role", "participant")
+	if code != 4 {
+		t.Fatalf("symlink leaf accepted: %v", payload)
+	}
+	// Drifted content remains protected when addressed through an ancestor alias.
+	custom := []byte("Keep this user customization\n")
+	if err := os.WriteFile(filepath.Join(canonical, "SKILL.md"), custom, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, payload = skillCommand(t, "skills", "configure", "--path", dir, "--role", "participant")
+	if code != 4 {
+		t.Fatalf("drift accepted through alias: %v", payload)
+	}
+	actual, _ := os.ReadFile(filepath.Join(canonical, "SKILL.md"))
+	if !bytes.Equal(actual, custom) {
+		t.Fatal("custom content changed")
+	}
+}
+
+func TestManagedSkillsResolvedParentCannotBeRetargeted(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	first := filepath.Join(root, "first")
+	second := filepath.Join(root, "second")
+	alias := filepath.Join(root, "alias")
+	for _, path := range []string{first, second} {
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(first, alias); err != nil {
+		t.Skip(err)
+	}
+	resolved, err := resolveManagedSkillDirectory(filepath.Join(alias, "missing", "skill"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(second, alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := configureManagedSkill(resolved, participantFixture(t)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(first, "missing", "skill", "SKILL.md")); err != nil {
+		t.Fatalf("canonical target missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(second, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("retargeted alias received a write: %v", err)
+	}
+}
+
+func TestManagedSkillsParentResolutionFailsClosed(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	file := filepath.Join(root, "file")
+	if err := os.WriteFile(file, []byte("unrelated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(file, "skill"), filepath.Join(file, "missing", "skill")} {
+		code, payload := skillCommand(t, "skills", "configure", "--path", path, "--role", "participant")
+		if code != 1 {
+			t.Fatalf("non-directory parent accepted: %v", payload)
+		}
+	}
+	dangling := filepath.Join(root, "dangling")
+	if err := os.Symlink(filepath.Join(root, "absent"), dangling); err != nil {
+		t.Skip(err)
+	}
+	code, payload := skillCommand(t, "skills", "configure", "--path", filepath.Join(dangling, "skill"), "--role", "participant")
+	if code != 1 {
+		t.Fatalf("dangling parent accepted: %v", payload)
+	}
+	actual, _ := os.ReadFile(file)
+	if string(actual) != "unrelated" {
+		t.Fatal("parent content modified")
 	}
 }

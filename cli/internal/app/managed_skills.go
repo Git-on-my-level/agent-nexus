@@ -82,9 +82,13 @@ func (a *App) runSkills(args []string) (*commandResult, string, error) {
 	if err != nil {
 		return nil, name, errnorm.Wrap(errnorm.KindInternal, "skill_bundle_invalid", "failed to validate bundled skill", err)
 	}
-	target, err := filepath.Abs(strings.TrimSpace(path.value))
+	requestedPath, err := filepath.Abs(strings.TrimSpace(path.value))
 	if err != nil {
 		return nil, name, errnorm.Usage("invalid_request", "invalid skill path")
+	}
+	target, err := resolveManagedSkillDirectory(requestedPath)
+	if err != nil {
+		return nil, name, errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "failed to resolve skill parent directory", err)
 	}
 	state, err := inspectManagedSkill(target, skill)
 	if err != nil {
@@ -112,6 +116,7 @@ func (a *App) runSkills(args []string) (*commandResult, string, error) {
 	data, _ := json.Marshal(state)
 	var result map[string]any
 	_ = json.Unmarshal(data, &result)
+	result["requested_path"] = requestedPath
 	result["text"] = fmt.Sprintf("skill name=%s role=%s state=%s expected_version=%s installed_version=%s path=%q\nverification scope=local_file harness_configuration=unknown session_activation=unknown\n", state.SkillName, state.Role, state.State, state.ExpectedVersion, state.InstalledVersion, state.Path)
 	if sub == "configure" && dryRun.value {
 		result["would_change"] = state.State == "missing" || state.State == "outdated"
@@ -276,16 +281,56 @@ func readManagedSkillFile(path string) ([]byte, error) {
 	return content, nil
 }
 
-func skillPathWithoutSymlinks(path string) error {
-	// Lstat the destination (or file) only. Walking every ancestor to root
-	// treats normal system prefixes such as macOS /tmp -> /private/tmp as a
-	// conflict, so configure/status/verify refuse ordinary scratch paths.
-	info, err := os.Lstat(filepath.Clean(path))
-	if err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("skill path must not contain symlinks")
+// Resolve existing parent aliases once, including normal macOS /tmp and /var
+// prefixes. Never resolve the destination leaf: it remains subject to the
+// symlink/ownership checks. All later operations use the canonical path so
+// retargeting the requested ancestor alias cannot redirect this operation.
+// Missing parent suffixes are reconstructed without creating anything.
+func resolveManagedSkillDirectory(target string) (string, error) {
+	parent := filepath.Dir(target)
+	suffix := []string{filepath.Base(target)}
+	for {
+		_, err := os.Lstat(parent)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		next := filepath.Dir(parent)
+		if next == parent {
+			return "", err
+		}
+		suffix = append([]string{filepath.Base(parent)}, suffix...)
+		parent = next
 	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	canonical, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(canonical)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("skill parent must be a directory")
+	}
+	return filepath.Join(append([]string{canonical}, suffix...)...), nil
+}
+
+func skillPathWithoutSymlinks(path string) error {
+	for current := filepath.Clean(path); ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("skill path must not contain symlinks")
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
 	}
 	return nil
 }

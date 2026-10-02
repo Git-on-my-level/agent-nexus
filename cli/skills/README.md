@@ -94,7 +94,10 @@ anx skills configure --path ./anx-pm --role pm
 
 Configure writes only `SKILL.md` and its schema-v1 `.anx-skill.json` ownership
 marker. The marker records role, skill name, contract version, and content
-SHA-256. Unrelated files, including shared `AGENTS.md` instructions, are never
+SHA-256. Existing parent aliases (including macOS `/tmp` and `/var`) are resolved
+once without creating missing parents. Results expose the absolute
+`requested_path` and canonical `path`; all operations use that canonical path.
+The destination directory and managed files themselves must not be symlinks. Unrelated files, including shared `AGENTS.md` instructions, are never
 read or changed. The marker is local maintenance evidence, not an authentication
 or permission grant. Re-running configure refreshes only unchanged owned content;
 there is no force flag or hidden maintenance during reads or enrollment.
@@ -134,7 +137,7 @@ new directory, or keep managing the old file yourself. Do not leave both old
 and new skills enabled without reviewing duplicate instructions.
 
 Manual updates serialize ANX writers with `.anx-skill.lock`, validate bounded
-regular files and reject symlink paths. Do not edit a skill concurrently with
+regular files and reject symlinks in the canonical destination or managed files. Do not edit a skill concurrently with
 configure. Each file is staged and replaced separately (rename atomicity is platform
 dependent). The skill and marker are two writes: interruption can leave `unmanaged` or `drifted` state, which fails closed
 rather than guessing ownership. Inspect and preserve any custom content, then
