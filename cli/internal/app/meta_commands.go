@@ -11,6 +11,7 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
 	"agent-nexus-cli/internal/registry"
+	"agent-nexus-cli/skills"
 )
 
 func (a *App) runMeta(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
@@ -410,22 +411,33 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 		defaultFileName string
 	)
 	normalizedTarget := normalizeSkillTarget(target)
+	var skill skills.Skill
 	switch normalizedTarget {
-	case "anx":
-		content = renderOpinionatedANXSkillMarkdown()
+	case "anx", "participant", "pm":
+		role := normalizedTarget
+		if role == "anx" {
+			role = "participant"
+		}
+		var err error
+		skill, err = skills.Get(role)
+		if err != nil {
+			return nil, errnorm.Wrap(errnorm.KindInternal, "skill_bundle_invalid", "invalid bundled skill", err)
+		}
+		content = skill.Content
 		defaultFileName = "SKILL.md"
 	default:
 		return nil, errnorm.Local("not_found", "unknown skill target")
 	}
 
 	data := map[string]any{
-		"target":        normalizedTarget,
-		"content":       content,
-		"default_file":  defaultFileName,
-		"source":        "bundled-agent-guide",
-		"guide_topic":   "agent-guide",
-		"skill_name":    agentGuideSkillName,
-		"skill_version": agentGuideSkillVersion,
+		"target":         normalizedTarget,
+		"content":        content,
+		"default_file":   defaultFileName,
+		"source":         "bundled-skill-catalog",
+		"guide_topic":    "agent-guide",
+		"skill_name":     skill.Name,
+		"skill_version":  skill.Version,
+		"content_sha256": skill.SHA256,
 	}
 	writtenPath, err := writeRenderedFile(content, writeFile.value, writeDir.value, defaultFileName)
 	if err != nil {
@@ -503,14 +515,16 @@ func (a *App) runInstallSkill(args []string) (*commandResult, error) {
 		"Next: read the installed skill, then run `anx workspace summary` before starting durable workspace work.",
 	}, "\n")
 	return &commandResult{Text: text, Data: map[string]any{
-		"text":          text,
-		"path":          writtenPath,
-		"content":       content,
-		"written_files": []string{writtenPath},
-		"source":        "bundled-agent-guide",
-		"guide_topic":   "agent-guide",
-		"skill_name":    agentGuideSkillName,
-		"skill_version": agentGuideSkillVersion,
+		"text":               text,
+		"path":               writtenPath,
+		"content":            content,
+		"written_files":      []string{writtenPath},
+		"source":             "bundled-skill-catalog",
+		"guide_topic":        "agent-guide",
+		"skill_name":         agentGuideSkillName,
+		"skill_version":      agentGuideSkillVersion,
+		"content_sha256":     skills.Digest([]byte(content)),
+		"session_activation": "unknown",
 	}}, nil
 }
 
@@ -559,10 +573,12 @@ Usage:
   anx meta skill <target> [--write-file <path> | --write-dir <dir>]
   anx meta skill --target <target> [--write-file <path> | --write-dir <dir>]
 
-Render the bundled opinionated ANX agent skill.
+Render a bundled portable ANX skill. This is a manual export, not session activation.
 
 Targets:
-  anx                    Render the generic opinionated ANX ` + "`SKILL.md`" + ` file.
+  anx                    Render the participant ` + "`SKILL.md`" + ` file.
+  participant            Lean participation guidance.
+  pm                     Richer guidance for an explicitly designated existing PM.
   cursor                 Compatibility alias for ` + "`anx`" + `.
 
 Options:
@@ -596,7 +612,8 @@ Usage:
   anx install skill <file>
   anx install skill --path <file> --force
 
-Writes a generic ` + "`SKILL.md`" + `-compatible Markdown file that teaches agents how to use ANX as the default durable tracker for topics, cards, docs, asks, and collaboration.
+Writes a generic ` + "`SKILL.md`" + `-compatible Markdown file that teaches source-aware ANX participation. This legacy export has no managed ownership marker.
+For safe ongoing refresh use ` + "`anx skills configure`" + `; --force here explicitly replaces the selected file only.
 
 Options:
   --path <file>          Destination file path.
@@ -605,5 +622,5 @@ Options:
 
 Examples:
   anx install skill --path ./SKILL.md
-  anx install skill ~/.codex/skills/anx-opinionated-onboarding/SKILL.md`)
+  anx install skill ./anx-participant/SKILL.md`)
 }

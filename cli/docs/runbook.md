@@ -100,10 +100,16 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v1`. Explicit skill
-installation reports that version; it does not prove an existing harness session
-loaded it. Automatic managed refresh and a richer existing-PM attachment flow
-remain later gates in the [adoption plan](../../docs/architecture/existing-agent-adoption.md).
+The bundled participant skill advertises `anx.participant.v2`; explicitly
+designated PMs can load the additional `anx.pm.v1` skill. Use `anx skills
+configure|status|verify --path <skill-directory> --role participant|pm` for
+versioned local ownership, clean refresh and read-only verification. Existing
+unmanaged or edited content is preserved. File verification never proves an
+existing session loaded the skill. Supported harness installation and auto-clean
+refresh compose with agentctl packs, not a second ANX harness catalog. See
+[managed skill sources and migration](../skills/README.md). Automatic enrollment
+setup, real harness activation and existing-PM endpoint connection remain later
+gates in the [adoption plan](../../docs/architecture/existing-agent-adoption.md).
 
 ## Runs from agentctl
 

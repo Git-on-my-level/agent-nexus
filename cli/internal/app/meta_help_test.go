@@ -834,7 +834,7 @@ func TestRunMetaHelpMentionsOpinionatedSkill(t *testing.T) {
 	t.Parallel()
 
 	output := runHelpCommand(t, "help", "meta")
-	if !strings.Contains(output, "meta skill      Render the bundled opinionated ANX agent skill.") {
+	if !strings.Contains(output, "meta skill      Render the bundled participant or PM skill.") {
 		t.Fatalf("expected opinionated skill wording output=%s", output)
 	}
 	if strings.Contains(output, "editor skill") {
@@ -846,10 +846,10 @@ func TestRunMetaSkillAnxRendersBundledSkill(t *testing.T) {
 	t.Parallel()
 
 	output := runHelpCommand(t, "debug", "meta", "skill", "anx")
-	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
+	if !strings.Contains(output, "name: anx-participant") {
 		t.Fatalf("expected skill frontmatter output=%s", output)
 	}
-	if !strings.Contains(output, "# Opinionated ANX onboarding for agents") {
+	if !strings.Contains(output, "# ANX participant") {
 		t.Fatalf("expected skill title output=%s", output)
 	}
 	if !strings.Contains(output, "## Daily loop") {
@@ -865,14 +865,14 @@ func TestRunMetaSkillCursorAliasWritesSkillFile(t *testing.T) {
 
 	writeDir := t.TempDir()
 	output := runHelpCommand(t, "debug", "meta", "skill", "cursor", "--write-dir", writeDir)
-	if !strings.Contains(output, "name: anx-opinionated-onboarding") {
+	if !strings.Contains(output, "name: anx-participant") {
 		t.Fatalf("expected rendered skill output=%s", output)
 	}
 	content, err := os.ReadFile(filepath.Join(writeDir, "SKILL.md"))
 	if err != nil {
 		t.Fatalf("read written skill: %v", err)
 	}
-	if !strings.Contains(string(content), "# Opinionated ANX onboarding for agents") {
+	if !strings.Contains(string(content), "# ANX participant") {
 		t.Fatalf("expected written skill title content=%s", string(content))
 	}
 	if !strings.Contains(string(content), "## Daily loop") {
@@ -895,7 +895,7 @@ func TestRunInstallSkillWritesSkillFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read written skill: %v", err)
 	}
-	if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+	if !strings.Contains(string(content), "name: anx-participant") {
 		t.Fatalf("expected written skill frontmatter content=%s", string(content))
 	}
 	if !strings.Contains(string(content), "## Daily loop") {
@@ -931,7 +931,7 @@ func TestRunInstallSkillAliasFormsWriteSkillFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read written skill: %v", err)
 			}
-			if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+			if !strings.Contains(string(content), "name: anx-participant") {
 				t.Fatalf("expected written skill frontmatter content=%s", string(content))
 			}
 		})
@@ -969,7 +969,7 @@ func TestRunInstallSkillRefusesOverwriteWithoutForce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read forced skill file: %v", err)
 	}
-	if !strings.Contains(string(content), "name: anx-opinionated-onboarding") {
+	if !strings.Contains(string(content), "name: anx-participant") {
 		t.Fatalf("expected forced skill content, got %s", string(content))
 	}
 }

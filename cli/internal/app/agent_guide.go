@@ -5,13 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"agent-nexus-cli/skills"
 )
 
-const agentGuideSkillName = "anx-opinionated-onboarding"
+const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v1"
+const agentGuideSkillVersion = "anx.participant.v2"
 
 type guideSection struct {
 	Title string
@@ -89,16 +91,16 @@ func agentGuideText() string {
 func init() {
 	localHelperTopics = append(localHelperTopics, localHelperTopic{
 		Path:        "meta skill",
-		Summary:     "Render the bundled opinionated ANX agent skill.",
+		Summary:     "Render the bundled participant or PM skill.",
 		JSONShape:   "`target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`",
-		Composition: "Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.",
+		Composition: "Pure local helper. Renders a canonical portable participant or PM skill and optionally writes an unmanaged export.",
 		Examples: []string{
 			"anx meta skill anx",
 			"anx meta skill anx --write-file ./SKILL.md",
 			"anx meta skill --target cursor --write-file ./SKILL.md",
 		},
 		Flags: []localHelperFlag{
-			{Name: "<target>", Description: "Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias."},
+			{Name: "<target>", Description: "Skill target to render. Use `participant` or `pm`; `anx` and legacy `cursor` export the participant skill."},
 			{Name: "--target <target>", Description: "Flag form of the skill target."},
 			{Name: "--write-file <path>", Description: "Write the rendered skill to this exact path."},
 			{Name: "--write-dir <dir>", Description: "Write the rendered skill into this directory using its default filename."},
@@ -122,19 +124,11 @@ func init() {
 }
 
 func renderOpinionatedANXSkillMarkdown() string {
-	var b strings.Builder
-	b.WriteString("---\n")
-	b.WriteString("name: ")
-	b.WriteString(agentGuideSkillName)
-	b.WriteString("\n")
-	b.WriteString("description: >-\n")
-	b.WriteString("  ")
-	b.WriteString(agentGuideSkillDescription)
-	b.WriteString("\n")
-	b.WriteString("---\n\n")
-	b.WriteString("Skill contract: " + agentGuideSkillVersion + ". Installation is not proof that an existing session loaded this version.\n\n")
-	b.WriteString(renderGuide("# Opinionated ANX onboarding for agents", "##"))
-	return b.String()
+	skill, err := skills.Get("participant")
+	if err != nil {
+		panic(err)
+	} // Embedded catalog consistency is a build/test invariant.
+	return skill.Content
 }
 
 func writeRenderedFile(content string, writeFile string, writeDir string, defaultFileName string) (string, error) {

@@ -204,7 +204,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `docs messages` (local-helper): List messages from a Document conversation.
 - `docs message` (local-helper): Post a message to a Document conversation without hand-authoring event JSON.
 - `docs reply` (local-helper): Reply to an existing Document message.
-- `meta skill` (local-helper): Render the bundled opinionated ANX agent skill.
+- `meta skill` (local-helper): Render the bundled participant or PM skill.
 - `install skill` (local-helper): Install the bundled opinionated ANX agent skill to a specific file path.
 - `bridge install` (local-helper): Install the host bridge runtime.
 - `bridge doctor` (local-helper): Check one enrolled-host bridge and its configured runtimes.
@@ -221,6 +221,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
+- `skills configure` (local-helper): Inspect or maintain versioned local ANX skill files.
+- `skills status` (local-helper): Inspect or maintain versioned local ANX skill files.
+- `skills verify` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
@@ -1135,7 +1138,7 @@ Core commands:
 Reference commands:
   meta docs       Print the bundled runtime help reference.
   meta doc        Print one bundled runtime help topic.
-  meta skill      Render the bundled opinionated ANX agent skill.
+  meta skill      Render the bundled participant or PM skill.
   meta commands   Inspect generated command metadata.
   meta concepts   Inspect generated concepts metadata.
   meta ops        Inspect operational metadata helpers.
@@ -7300,15 +7303,15 @@ Global flags:
 
 ## `meta skill`
 
-Render the bundled opinionated ANX agent skill.
+Render the bundled participant or PM skill.
 
 ```text
 Local Help: meta skill
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Render the bundled opinionated ANX agent skill.
-- Composition: Pure local helper. Renders the maintained opinionated ANX skill and optionally writes it to a chosen file or directory.
+- Summary: Render the bundled participant or PM skill.
+- Composition: Pure local helper. Renders a canonical portable participant or PM skill and optionally writes an unmanaged export.
 - JSON body: `target`, `content`, `default_file`, `written_files`, `guide_topic`, `skill_name`
 - Examples:
   - `anx debug meta skill anx`
@@ -7316,7 +7319,7 @@ Local Help: meta skill
   - `anx debug meta skill --target cursor --write-file ./SKILL.md`
 
 Flags:
-  <target>                     Skill target to render. Use `anx`; `cursor` is accepted as a compatibility alias.
+  <target>                     Skill target to render. Use `participant` or `pm`; `anx` and legacy `cursor` export the participant skill.
   --target <target>            Flag form of the skill target.
   --write-file <path>          Write the rendered skill to this exact path.
   --write-dir <dir>            Write the rendered skill into this directory using its default filename.
@@ -7340,7 +7343,8 @@ Usage:
   anx install skill <file>
   anx install skill --path <file> --force
 
-Writes a generic `SKILL.md`-compatible Markdown file that teaches agents how to use ANX as the default durable tracker for topics, cards, docs, asks, and collaboration.
+Writes a generic `SKILL.md`-compatible Markdown file that teaches source-aware ANX participation. This legacy export has no managed ownership marker.
+For safe ongoing refresh use `anx skills configure`; --force here explicitly replaces the selected file only.
 
 Options:
   --path <file>          Destination file path.
@@ -7349,7 +7353,7 @@ Options:
 
 Examples:
   anx install skill --path ./SKILL.md
-  anx install skill ~/.codex/skills/anx-opinionated-onboarding/SKILL.md
+  anx install skill ./anx-participant/SKILL.md
 ```
 
 ## `bridge install`
@@ -7753,6 +7757,93 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx import apply ... ; anx --json import apply ... ; anx import apply ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `skills configure`
+
+Inspect or maintain versioned local ANX skill files.
+
+```text
+Managed ANX skill primitives (local files only)
+
+Usage:
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
+unmanaged or edited files are preserved; there is no force or implicit adoption.
+Other files, shared instructions, credentials and harness settings are untouched.
+Dry-run and status perform no writes, network access or harness/history discovery.
+Verify checks the local version and bytes, not whether a harness/session loaded it.
+PM supplements the participant skill; configure both in separate directories.
+
+Status returns missing, unmanaged, current, outdated, drifted or conflict.
+Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
+and 1 for filesystem failures. Harness configuration and activation stay unknown.
+
+Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
+packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
+ANX source revision. ANX never edits that selection automatically. Arbitrary
+agents may consume the files manually; no supported-harness registry is required.
+```
+
+## `skills status`
+
+Inspect or maintain versioned local ANX skill files.
+
+```text
+Managed ANX skill primitives (local files only)
+
+Usage:
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
+unmanaged or edited files are preserved; there is no force or implicit adoption.
+Other files, shared instructions, credentials and harness settings are untouched.
+Dry-run and status perform no writes, network access or harness/history discovery.
+Verify checks the local version and bytes, not whether a harness/session loaded it.
+PM supplements the participant skill; configure both in separate directories.
+
+Status returns missing, unmanaged, current, outdated, drifted or conflict.
+Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
+and 1 for filesystem failures. Harness configuration and activation stay unknown.
+
+Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
+packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
+ANX source revision. ANX never edits that selection automatically. Arbitrary
+agents may consume the files manually; no supported-harness registry is required.
+```
+
+## `skills verify`
+
+Inspect or maintain versioned local ANX skill files.
+
+```text
+Managed ANX skill primitives (local files only)
+
+Usage:
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
+unmanaged or edited files are preserved; there is no force or implicit adoption.
+Other files, shared instructions, credentials and harness settings are untouched.
+Dry-run and status perform no writes, network access or harness/history discovery.
+Verify checks the local version and bytes, not whether a harness/session loaded it.
+PM supplements the participant skill; configure both in separate directories.
+
+Status returns missing, unmanaged, current, outdated, drifted or conflict.
+Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
+and 1 for filesystem failures. Harness configuration and activation stay unknown.
+
+Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
+packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
+ANX source revision. ANX never edits that selection automatically. Arbitrary
+agents may consume the files manually; no supported-harness registry is required.
 ```
 
 ## `pm serve`

@@ -46,6 +46,9 @@ checksum_file() {
   exit 1
 }
 
+# Refuse stale catalog/version/content before emitting any release artifact.
+( cd "${CLI_DIR}" && go test ./skills )
+
 rm -rf "${DIST_DIR}"
 mkdir -p "${DIST_DIR}"
 
@@ -70,13 +73,19 @@ for GOOS in linux darwin windows; do
         -o "${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" \
         ./cmd/anx )
 
+    # Preserve repository-relative Skill Hub paths in every release archive.
+    mkdir -p "${STAGE_DIR}/cli/skills"
+    cp "${CLI_DIR}/skills/"*.json "${STAGE_DIR}/cli/skills/"
+    cp -R "${CLI_DIR}/skills/anx-participant" "${CLI_DIR}/skills/anx-pm" "${STAGE_DIR}/cli/skills/"
+    cp "${CLI_DIR}/skills/README.md" "${STAGE_DIR}/cli/skills/"
+
     if [[ "${GOOS}" == "windows" ]]; then
       (
         cd "${STAGE_DIR}"
-        zip -q "../${TARGET}.zip" "${BIN_NAME}${BIN_EXT}"
+        zip -qr "../${TARGET}.zip" "${BIN_NAME}${BIN_EXT}" cli/skills
       )
     else
-      tar -C "${STAGE_DIR}" -czf "${DIST_DIR}/${TARGET}.tar.gz" "${BIN_NAME}${BIN_EXT}"
+      tar -C "${STAGE_DIR}" -czf "${DIST_DIR}/${TARGET}.tar.gz" "${BIN_NAME}${BIN_EXT}" cli/skills
     fi
 
     rm -rf "${STAGE_DIR}"

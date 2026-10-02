@@ -124,7 +124,7 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
@@ -208,7 +208,7 @@ func needsAgentIdentity(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "help", "version", "doctor", "config", "update", "install", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
+	case "help", "version", "doctor", "config", "update", "install", "skills", "bridge", "concepts", "primitives", "meta", "host", "runs", "auth", "api":
 		return false
 	}
 	return true

@@ -320,6 +320,12 @@ func parseHelp(content []byte) (HelpRegistry, error) {
 }
 
 func sideEffectClass(cmd Command) string {
+	if strings.HasPrefix(cmd.CLIPath, "skills ") {
+		if cmd.CLIPath == "skills configure" {
+			return "local_operational_write"
+		}
+		return "read_only"
+	}
 	if strings.EqualFold(cmd.Method, "GET") {
 		return "read_only"
 	}

@@ -106,6 +106,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "import":
 		result, name, err := a.runImportCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "skills":
+		result, name, err := a.runSkills(args[1:])
+		return name, result, err
 	case "install":
 		result, name, err := a.runInstallCommand(args[1:])
 		return name, result, err

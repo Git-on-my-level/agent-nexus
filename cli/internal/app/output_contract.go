@@ -18,6 +18,14 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "help" || parts[0] == "debug" && len(parts) > 1 && parts[1] == "meta" {
 		return "read_only"
 	}
+	if parts[0] == "skills" {
+		if len(parts) > 1 && parts[1] == "configure" {
+			// Conservative: a string does not retain quoted argv boundaries,
+			// and repeated bool flags use their last value in the real parser.
+			return "local_operational_write"
+		}
+		return "read_only"
+	}
 	if parts[0] == "api" {
 		return "external_side_effect"
 	}
