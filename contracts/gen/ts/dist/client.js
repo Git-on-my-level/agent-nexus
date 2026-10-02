@@ -343,6 +343,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "work.refresh.get",
             "work.refresh.request"
@@ -8933,6 +8935,147 @@ export const commandRegistry = [
         "ts_method": "secretsUpdate"
     },
     {
+        "command_id": "sessions.get",
+        "cli_path": "sessions get",
+        "group": "sessions",
+        "method": "GET",
+        "path": "/sessions/{session_id}",
+        "operation_id": "sessionsGet",
+        "summary": "Read your private native session",
+        "why": "Read your private native session without assigning, moving, or completing work.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `SessionResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "sessions_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.",
+        "path_params": [
+            "session_id"
+        ],
+        "adjacent_commands": [
+            "sessions.register"
+        ],
+        "go_method": "SessionsGet",
+        "ts_method": "sessionsGet"
+    },
+    {
+        "command_id": "sessions.register",
+        "cli_path": "sessions register",
+        "group": "sessions",
+        "method": "POST",
+        "path": "/sessions",
+        "operation_id": "sessionsRegister",
+        "summary": "Register or refresh a private native session",
+        "why": "Register or refresh a private native session without assigning, moving, or completing work.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `SessionResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "sessions_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "activity",
+                    "type": "string",
+                    "enum_values": [
+                        "active",
+                        "closed",
+                        "idle"
+                    ]
+                },
+                {
+                    "name": "capabilities.history",
+                    "type": "string",
+                    "enum_values": [
+                        "supported",
+                        "unknown",
+                        "unsupported"
+                    ]
+                },
+                {
+                    "name": "capabilities.logs",
+                    "type": "string",
+                    "enum_values": [
+                        "supported",
+                        "unknown",
+                        "unsupported"
+                    ]
+                },
+                {
+                    "name": "capabilities.resume",
+                    "type": "string",
+                    "enum_values": [
+                        "supported",
+                        "unknown",
+                        "unsupported"
+                    ]
+                },
+                {
+                    "name": "native_session_id",
+                    "type": "string"
+                },
+                {
+                    "name": "provider",
+                    "type": "string"
+                },
+                {
+                    "name": "sequence",
+                    "type": "integer"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "host_scope",
+                    "type": "string"
+                },
+                {
+                    "name": "native_session_id_kind",
+                    "type": "string",
+                    "enum_values": [
+                        "opaque",
+                        "provider_session_sha256"
+                    ]
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "sessions.get"
+        ],
+        "go_method": "SessionsRegister",
+        "ts_method": "sessionsRegister"
+    },
+    {
         "command_id": "threads.context",
         "cli_path": "threads context",
         "group": "threads",
@@ -9750,6 +9893,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -9889,6 +10034,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -9933,6 +10080,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -9975,6 +10124,8 @@ export const commandRegistry = [
             "work.get",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -10019,6 +10170,8 @@ export const commandRegistry = [
             "work.get",
             "work.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -10166,6 +10319,8 @@ export const commandRegistry = [
             "work.get",
             "work.list",
             "work.observations.list",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get",
@@ -10173,6 +10328,126 @@ export const commandRegistry = [
         ],
         "go_method": "WorkObservationsSubmit",
         "ts_method": "workObservationsSubmit"
+    },
+    {
+        "command_id": "work.participants.list",
+        "cli_path": "work participants list",
+        "group": "work",
+        "method": "GET",
+        "path": "/work/{card_ref}/participants",
+        "operation_id": "workParticipantsList",
+        "summary": "List task-scoped participation",
+        "description": "Ordered by task-scoped participant_id ascending. Opaque cursors are bound to this task. session_id is included only on the caller's own participations.",
+        "why": "List task-scoped participation without assigning, moving, or completing work.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `WorkParticipantListResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "sessions_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.",
+        "path_params": [
+            "card_ref"
+        ],
+        "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.participants.register",
+            "work.patch",
+            "agents.me.presence",
+            "work.refresh.get",
+            "work.refresh.request"
+        ],
+        "go_method": "WorkParticipantsList",
+        "ts_method": "workParticipantsList"
+    },
+    {
+        "command_id": "work.participants.register",
+        "cli_path": "work participants register",
+        "group": "work",
+        "method": "POST",
+        "path": "/work/{card_ref}/participants",
+        "operation_id": "workParticipantsRegister",
+        "summary": "Register or refresh nonlocking task participation",
+        "why": "Register or refresh nonlocking task participation without assigning, moving, or completing work.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `WorkParticipantResponse`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "forbidden",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "sessions_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "activity",
+                    "type": "string",
+                    "enum_values": [
+                        "active",
+                        "idle",
+                        "left"
+                    ]
+                },
+                {
+                    "name": "sequence",
+                    "type": "integer"
+                },
+                {
+                    "name": "session_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "card_ref"
+        ],
+        "adjacent_commands": [
+            "work.capabilities",
+            "work.create",
+            "work.get",
+            "work.list",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.participants.list",
+            "work.patch",
+            "agents.me.presence",
+            "work.refresh.get",
+            "work.refresh.request"
+        ],
+        "go_method": "WorkParticipantsRegister",
+        "ts_method": "workParticipantsRegister"
     },
     {
         "command_id": "work.patch",
@@ -10265,6 +10540,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "agents.me.presence",
             "work.refresh.get",
             "work.refresh.request"
@@ -10309,6 +10586,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.request"
@@ -10361,6 +10640,8 @@ export const commandRegistry = [
             "work.list",
             "work.observations.list",
             "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
             "work.patch",
             "agents.me.presence",
             "work.refresh.get"
@@ -10899,6 +11180,12 @@ export class AnxClient {
     secretsUpdate(pathParams, options = {}) {
         return this.invoke("secrets.update", pathParams, options);
     }
+    sessionsGet(pathParams, options = {}) {
+        return this.invoke("sessions.get", pathParams, options);
+    }
+    sessionsRegister(options = {}) {
+        return this.invoke("sessions.register", {}, options);
+    }
     threadsContext(pathParams, options = {}) {
         return this.invoke("threads.context", pathParams, options);
     }
@@ -10964,6 +11251,12 @@ export class AnxClient {
     }
     workObservationsSubmit(pathParams, options = {}) {
         return this.invoke("work.observations.submit", pathParams, options);
+    }
+    workParticipantsList(pathParams, options = {}) {
+        return this.invoke("work.participants.list", pathParams, options);
+    }
+    workParticipantsRegister(pathParams, options = {}) {
+        return this.invoke("work.participants.register", pathParams, options);
     }
     workPatch(pathParams, options = {}) {
         return this.invoke("work.patch", pathParams, options);

@@ -35,9 +35,12 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 		if len(parts) == 1 && parts[0] != "" {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPatch
 		}
-		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh") {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants") {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPost
 		}
+	}
+	if strings.HasSuffix(path, "/participants") {
+		return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, supported: valid}
 	}
 	return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: valid}
 }
@@ -82,6 +85,12 @@ func workLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return n, true
 }
 func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/work/"), "/")
+	if len(parts) >= 2 && parts[1] == "participants" {
+		// The participant handler rejects extra/trailing subpaths explicitly.
+		handleWorkParticipants(w, r, opts, parts[0])
+		return
+	}
 	store, ok := opts.primitiveStore.(WorkStore)
 	if !ok {
 		writeError(w, 503, "work_unavailable", "work store is not configured")
@@ -138,7 +147,7 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		writeJSON(w, 201, map[string]any{"work": publicWork(item)})
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	parts = strings.Split(strings.TrimPrefix(path, "/"), "/")
 	id, ok := resolveHTTPResourceID(w, r, opts, "card", parts[0], "card")
 	if !ok {
 		return

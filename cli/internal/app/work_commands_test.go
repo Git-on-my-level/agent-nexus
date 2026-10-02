@@ -31,6 +31,10 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 		{[]string{"work", "get", "first", "second"}, "invalid_args"},
 		{[]string{"work", "get", "../decisions"}, "invalid_request"},
 		{[]string{"work", "get", "id", "--work-id", "other"}, "invalid_request"},
+		{[]string{"sessions", "register"}, "invalid_request"},
+		{[]string{"sessions", "get", "../private"}, "invalid_request"},
+		{[]string{"work", "participants", "register", "card:launch"}, "invalid_request"},
+		{[]string{"work", "participants", "list", "card:launch", "--limit", "0"}, "invalid_request"},
 		{[]string{"work", "invent"}, "unknown_subcommand"},
 		{[]string{"work", "observations", "submit"}, "invalid_request"},
 		{[]string{"work", "observations", "submit", "--workspace-id", "other"}, "invalid_flags"},
@@ -58,7 +62,7 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 }
 
 func TestWorkHelpOffline(t *testing.T) {
-	for _, args := range [][]string{{"help", "work"}, {"work", "list", "--help"}, {"work", "observations", "submit", "--help"}} {
+	for _, args := range [][]string{{"help", "work"}, {"work", "list", "--help"}, {"work", "observations", "submit", "--help"}, {"sessions", "register", "--help"}, {"work", "participants", "register", "--help"}, {"host", "discover", "--help"}} {
 		payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--json"}, args...)))
 		raw, _ := json.Marshal(payload["result"])
 		if !strings.Contains(string(raw), "anx ") {
@@ -79,6 +83,10 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 		{[]string{"work", "refresh", "request", "card:launch"}, "POST", "/work/card:launch/refresh", "", `{}`, `{"refresh":{"state":"queued"}}`},
 		{[]string{"work", "refresh", "get", "card:launch"}, "GET", "/work/card:launch/refresh", "", "", `{"refresh":{"state":"failed","last_error":"unavailable"}}`},
 		{[]string{"work", "capabilities"}, "GET", "/work/capabilities", "", "", `{"capabilities":{"refresh":false}}`},
+		{[]string{"sessions", "register", "--from-file", "-"}, "POST", "/sessions", "", `{"provider":"custom","native_session_id":"opaque","sequence":1,"activity":"idle","capabilities":{"resume":"unknown","history":"unsupported","logs":"unknown"}}`, `{"session":{"session_id":"session-1","provider":"custom","activity":"idle","sequence":1}}`},
+		{[]string{"sessions", "get", "session-1"}, "GET", "/sessions/session-1", "", "", `{"session":{"session_id":"session-1","provider":"custom","activity":"idle","sequence":1}}`},
+		{[]string{"work", "participants", "register", "card:launch", "--from-file", "-"}, "POST", "/work/card:launch/participants", "", `{"session_id":"session-1","sequence":1,"activity":"active"}`, `{"participant":{"participant_id":"participant-1","agent_id":"agent-1","activity":"active","sequence":1}}`},
+		{[]string{"work", "participants", "list", "card:launch", "--limit", "2", "--cursor", "next+page"}, "GET", "/work/card:launch/participants", "cursor=next%2Bpage&limit=2", "", `{"participants":[{"participant_id":"participant-1","agent_id":"agent-1","activity":"idle","sequence":1}],"next_cursor":"page2"}`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			calls := 0
@@ -612,7 +620,7 @@ func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
 	}
 	for _, cmd := range meta.Commands {
 		path := strings.TrimSpace(cmd.CLIPath)
-		if !strings.HasPrefix(path, "pm ") && !strings.HasPrefix(path, "work ") {
+		if !strings.HasPrefix(path, "pm ") && !strings.HasPrefix(path, "work ") && !strings.HasPrefix(path, "sessions ") {
 			continue
 		}
 		runtimePath := runtimePathFromRegistryPath(path)

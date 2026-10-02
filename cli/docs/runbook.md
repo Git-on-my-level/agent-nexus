@@ -15,11 +15,95 @@ Interactive enrollment prints a user code and, when core has `ANX_PUBLIC_WEB_UI_
 
 Existing standalone agent profiles for the same workspace are adopted by default. `--plan` shows which profiles; repeat `--exclude <profile>` to leave one standalone. Successfully adopted local profile and key files are deleted.
 
-`--as <name>` or `ANX_AS` chooses a derived agent. Otherwise `anx` checks `agentctl run` context and then known harness markers. `anx auth whoami` shows the host, agent and resolution source. `anx host token --as <name>` prints only the short-lived bearer in text mode; JSON mode returns `{token, expires_at, agent: {id, handle}}` for the bridge. Protect its stdout as a secret. Use `--config-dir <absolute-path>` or `ANX_CONFIG_DIR` to locate enrolled hosts when `HOME` is absent.
+`--as <name>` or `ANX_AS` chooses a derived agent. Otherwise `anx` first consults
+the optional versioned `agentctl identity --json` report, then falls back to
+legacy `agentctl run` context and known harness markers. Runtime evidence suggests
+a name; it does not authenticate the principal or replace the enrolled host.
+`anx auth whoami` shows the host, agent and resolution source. `anx host token
+--as <name>` prints only the short-lived bearer in text mode; JSON mode returns
+`{token, expires_at, agent: {id, handle}}` for the bridge. Protect its stdout as a
+secret. Use `--config-dir <absolute-path>` or `ANX_CONFIG_DIR` to locate enrolled
+hosts when `HOME` is absent.
 
 The bridge uses host-signed `anx host bridge check-in --host-id <id> --instance-id <id> --ttl-seconds <n>` and `anx host bridge wake claim|complete|fail --host-id <id> --wakeup-id <id> --instance-id <id> [--error <text>]`. Its `[host].config_dir` must point to the same enrolled host directory used by `anx`.
 
 Use `anx host status`, `anx host list`, `anx host exclude <name>` and `anx host include <name>` to inspect or edit this host. Revocation is a human auth-admin action in the Access page.
+
+## Generic sessions and nonlocking task participation
+
+An already authenticated agent can use these commands without `agentctl`, a
+known harness, new credentials, or a dedicated execution runner. The stable
+principal, native provider conversation, and individual run attempt are different
+identities. This API registers metadata, not a new authenticated principal.
+
+Inspect optional local runtime evidence with `anx host discover --json`. It reads
+the `agentctl.identity.v1` contract when available, without registering a session,
+reading transcripts, or uploading anything. An unavailable/old provider leaves
+explicit registration usable. Installed harness availability does not establish
+resume, history, or log support. Unmanaged evidence is a claim, not a verified
+session identity. Keep any native correlation hash scoped to its enrolled host.
+
+For a generic provider, prepare `session.json` with an opaque stable conversation
+identifier. Reuse it for the same conversation and use a new one for fresh context:
+
+```json
+{
+  "provider": "custom-agent",
+  "native_session_id": "conversation-42",
+  "native_session_id_kind": "opaque",
+  "capabilities": {"resume": "unknown", "history": "unsupported", "logs": "unknown"},
+  "activity": "active",
+  "sequence": 1
+}
+```
+
+```bash
+anx --as reviewer sessions register --from-file session.json
+anx --as reviewer sessions get <session-id>
+```
+
+Enrolled agents get a server-bound host namespace; do not put a machine pathname
+or secret in `native_session_id`. Standalone principals supply an explicit opaque
+`host_scope`, which is recorded as a namespace rather than proof of another
+enrolled host. For agentctl correlation use its `native_session.id` and
+`native_session.id_kind=provider_session_sha256`, not the execution ID. Missing
+session evidence stays unknown; do not substitute a parent or guessed session.
+
+Then prepare `participation.json` with the returned `session_id`:
+
+```json
+{"session_id":"<session-id>","activity":"active","sequence":1}
+```
+
+```bash
+anx --as reviewer work participants register card:launch --from-file participation.json
+anx --as reviewer work participants list card:launch --limit 50
+```
+
+Participation never changes assignees, phase, rank, source ownership, or task
+completion. One session can join several tasks and a principal can have several
+simultaneous sessions. Session records are owner-only; task participant reads
+show task-scoped history without exposing native IDs, private session metadata,
+or links to unrelated tasks. A session link is not transcript access.
+
+Keep a monotonic sequence independently for each session and each task/session
+pair. Replay the same sequence and same payload on retry; retries preserve the
+original timestamps and do not prolong activity. Increment for new observations;
+conflicting replay or stale sequence returns conflict. Activity expires after
+120 seconds without a newer active observation, but history remains. Report idle
+or closed for a session, idle or left for a task participation, as appropriate.
+Closing a session is terminal and does not finish a task. An activity expiry is
+absence of a recent observation, not proof that a process died.
+
+Use `anx work context` to read evidence first. `anx work start` deliberately
+assigns and moves native work; it is not a registration shortcut. Project
+association should use clear configured evidence and ask when ambiguous. A
+successful run/session does not satisfy the task's acceptance criteria.
+
+The bundled participant skill advertises `anx.participant.v1`. Explicit skill
+installation reports that version; it does not prove an existing harness session
+loaded it. Automatic managed refresh and a richer existing-PM attachment flow
+remain later gates in the [adoption plan](../../docs/architecture/existing-agent-adoption.md).
 
 ## Runs from agentctl
 

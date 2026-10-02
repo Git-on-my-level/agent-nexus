@@ -2,6 +2,10 @@
 
 This document captures the durable product and architecture decisions that define Agent Nexus. These decisions form the stable boundary for all implementation work. When in doubt, this document is the authoritative source of product truth.
 
+The [existing-agent adoption plan](existing-agent-adoption.md) records the
+2026-10-02 product decisions and phased acceptance gates. It distinguishes the
+accepted target from behavior that still needs implementation and verification.
+
 ## Product Position
 
 ### Agent Nexus is a unified work tracker and conversational PM
@@ -18,6 +22,32 @@ native commitments and local annotations. External source systems such as
 GitHub and Multica retain authority over their own workflow fields. Source
 identity, not title matching, deduplicates imported commitments. Board layout
 never grants permission to mutate a source.
+
+### Adopt existing agents without owning their execution
+
+The first audience is people already operating multiple agents across harnesses,
+machines, and sources. They may use a hosted Nexus index/coordination service or
+self-host the workspace. Neither mode requires Nexus-owned agent execution
+infrastructure, including for the PM. The user selects an existing ordinary
+agent as PM and connects its existing communication entry point. That designation
+routes context and requests; it does not confer approval or source-write authority.
+
+Projects can keep native Nexus truth or project explicitly authoritative external
+sources. Both modes may coexist in one workspace. Source assignees remain source
+facts, and no mandatory project-owner role is required. Missing or conflicting
+ownership is resolved from evidence, then the PM, then the user when still unclear.
+
+The stable Nexus principal, a provider-scoped native conversation/session, and a
+single execution attempt are separate identities. Sessions and tasks have
+many-to-many, non-locking participation. Participating, observing, or finishing a
+session never implicitly assigns, moves, locks, or completes a task. Concurrent
+activity is a freshness-bounded observation, not permanent presence.
+
+Generic explicit registration works without a particular harness or runtime.
+`agentctl` is an optional first-class runtime provider for discovery, identity
+evidence, skills, and supported execution operations. Nexus owns project and task
+relationships. A provider reports unsupported or unknown capabilities honestly;
+an installed executable is not evidence that a live session can be resumed.
 
 ### Operator vocabulary and core vocabulary are different on purpose
 

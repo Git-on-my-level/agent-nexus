@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 181
+- Command count: 185
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -29,17 +29,18 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ref-edges | 1 |
 | runs | 3 |
 | secret | 6 |
+| sessions | 2 |
 | threads | 5 |
 | topics | 10 |
 | usage | 1 |
-| work | 10 |
+| work | 12 |
 
 ## Counts by Classification
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 66 |
-| exposed_write | 61 |
+| exposed_read | 68 |
+| exposed_write | 63 |
 | gated_admin | 21 |
 | gated_sensitive | 12 |
 | unsupported_bootstrap_auth | 9 |
@@ -52,7 +53,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 127 | exposed_read + exposed_write + adapted |
+| standalone default | 131 | exposed_read + exposed_write + adapted |
 | hosted default | 59 | explicit read-only private-app allowlist |
 | gated | 33 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -218,6 +219,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | secrets.reveal | secret | POST | /secrets/{secret_id}/reveal | gated_sensitive | secret value reveal is sensitive |
 | secrets.reveal-batch | secret | POST | /secrets/reveal-batch | gated_sensitive | secret value reveal is sensitive |
 | secrets.update | secret | PUT | /secrets/{secret_id} | gated_sensitive | secret payload write is sensitive |
+| sessions.get | sessions | GET | /sessions/{session_id} | exposed_read | Read only the authenticated agent's private session metadata; no transcript access or other task links. |
+| sessions.register | sessions | POST | /sessions | exposed_write | Register sequence-fenced metadata under an existing agent principal; never creates credentials or controls execution. |
 | threads.context | threads | GET | /threads/{thread_id}/context | exposed_read | bounded thread context projection |
 | threads.inspect | threads | GET | /threads/{thread_id} | exposed_read | thread diagnostic read |
 | threads.list | threads | GET | /threads | exposed_read | thread inventory read |
@@ -240,6 +243,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.list | work | GET | /work | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.list | work | GET | /work/{card_ref}/observations | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.submit | work | POST | /work/{card_ref}/observations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| work.participants.list | work | GET | /work/{card_ref}/participants | exposed_read | Read task-scoped participation after core privacy checks; other agents' session identifiers remain private. |
+| work.participants.register | work | POST | /work/{card_ref}/participants | exposed_write | Record sequence-fenced nonlocking participation for the caller's session; no task assignment, state change or completion. |
 | work.patch | work | PATCH | /work/{card_ref} | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.refresh.get | work | GET | /work/{card_ref}/refresh | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.refresh.request | work | POST | /work/{card_ref}/refresh | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |

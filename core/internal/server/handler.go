@@ -671,7 +671,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			if limit := requestBodyLimitForRequest(r.URL.Path, r.Method, requirement, opts.requestBodyLimits); limit > 0 {
 				r.Body = http.MaxBytesReader(w, r.Body, limit)
 			}
-			if !attachRunAttribution(w, r, opts) {
+			// Unsupported routes are rejected by their handlers. Do not create a
+			// provisional run before that rejection (or bypass read-only policy).
+			if requirement.supported && !attachRunAttribution(w, r, opts) {
 				return
 			}
 			handler(w, r)
@@ -724,6 +726,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		opts.pmHandler.ServeHTTP(w, r)
 	})
+
+	registerRoute("/sessions", sessionsRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSessions(w, r, opts) })
+	registerRoute("/sessions/", sessionsRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSessions(w, r, opts) })
 
 	registerRoute("/work", workRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleWork(w, r, opts) })
 	registerRoute("/work/", workRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleWork(w, r, opts) })

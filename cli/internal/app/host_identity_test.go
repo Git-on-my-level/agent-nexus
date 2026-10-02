@@ -77,6 +77,8 @@ func TestIdentityResolutionOrder(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			a := New()
+			// This table covers the direct fallback independently of locally installed providers.
+			a.runtimeIdentity = nil
 			a.hasOMPAncestor = func() bool { return true }
 			a.Getenv = func(k string) string { return tc.env[k] }
 			cfg := config.Resolved{As: tc.as, IdentitySource: tc.source}

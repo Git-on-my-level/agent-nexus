@@ -38,7 +38,7 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 - `GET /pm/bindings` honors `limit` (1–200, default 50) and a workspace/actor/resource-scoped keyset cursor. Continue with `next_cursor` while `has_more`; malformed or cross-scope cursors return `400 invalid_request`.
 - PM turn context, propose (`decisions`), complete, and fail operations return HTTP `409` with code `turn_closed` for an expired turn, with `error.details.turn_id`, `deadline`, and durable `status`. Open turns past their deadline are persisted as failed before returning: "This turn passed its deadline and was failed; nothing can be proposed or read for it. Ask again to start a new turn." Already-terminal turns also return `turn_closed` with a terminal-state message; matching complete/fail replays with the finishing lease token retain their successful response, including after the deadline.
 - All timestamps are ISO-8601 strings.
-- Objects MUST preserve unknown fields (additive evolution).
+- Objects MUST preserve unknown fields (additive evolution), except explicitly closed request schemas such as session registration and task participation, which reject unknown fields to keep runtime transcripts and credentials outside this surface.
 - `refs` values MUST be typed ref strings per `ref_format`.
 - Error responses use a stable envelope:
   - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
@@ -136,3 +136,75 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 
 - `work.annotate` proposal `instruction` must be a nonempty JSON object. Allowed keys are `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`, `start_at`, `due_at`, `relations`, and `executions`. Priority accepts `p0`, `p1`, `p2`, `p3`; dates accept an RFC 3339 timestamp (priority and dates also accept an empty string or null to clear). Blockers must be an array of strings; relations must be an array of objects with `kind` (`parent`, `child`, `depends_on`, `related`, `artifact`) and a nonempty string `ref` such as `card:<handle-or-id>`; executions must be an array of objects with nonempty string `authority` and `run_id`. Both proposal endpoints validate keys and canonical local value shapes before insertion; invalid input returns `400 invalid_request` with the key allowlist for unknown keys and accepted values or shapes for value errors.
 - `POST /pm/turns/{turn_id}/heartbeat` accepts `{"lease_token":"..."}` from the selected PM actor and returns `200 PMHeartbeatTurn` without the token. It renews `lease_expires_at` to `min(now + ANX_PM_LEASE_TTL, deadline)` under the claim write lock. Missing token returns `409 lease_required`; expired, released, or foreign token returns `409 lease_mismatch`; closed turn returns `409 turn_closed`. TTL defaults to `60s` (range `1s` to `10m`). Runners must renew at a cadence strictly less than TTL/2. Expiry makes the same open turn unclaimed/pending and reclaimable with a new token, preserving history; it does not fail the turn. Only reaching the turn deadline does that.
+
+## Generic sessions and nonlocking task participation
+
+An existing authenticated agent can register a native session through the generic
+session contract, without agentctl, a special runtime adapter, or a new auth grant.
+This does not enroll a new principal: host enrollment and existing token access
+remain prerequisites. The stable ANX `agent_id` and `actor_id` come from the bearer
+token. They are never supplied in session or participation request bodies.
+
+Three identities remain distinct:
+
+- The ANX agent principal is the stable authenticated identity.
+- A native session is a provider/host-scoped context. Its identity is the tuple of
+  authenticated agent, provider, host scope, and opaque native-session correlator.
+  Enrolled agents use their authenticated host ID; an optional supplied host ID or
+  slug must match. Existing standalone principals must supply a caller-reported
+  namespace, which conveys no verified host authority.
+- Existing `/runs` records identify execution attempts. Session registration
+  itself never changes task state or controls execution. The existing optional
+  run-attribution header retains its normal provisional-run behavior.
+
+Session registration uses `sequence` to order observations, starting at any
+nonnegative integer and increasing for each new report. The identity plus sequence
+is the retry key. An identical normalized request at the current sequence returns
+current read-time projection with the original `last_seen_at` and `expires_at`;
+it never extends the lease. Lower sequences, same-sequence changed payloads,
+identity-kind changes, or attempts to reopen a closed session return `409 conflict`.
+After a restart, read the current session to recover its sequence. Callers should
+persist sequence counters and serialize updates for a given session, rather than
+inventing newer numbers to replay old observations.
+
+`capabilities.resume`, `.history`, and `.logs` are all required and each explicitly
+reports `supported`, `unsupported`, or `unknown`. They are unverified runtime
+claims, never access grants. `native_session_id_kind=provider_session_sha256`
+preserves a provider-domain SHA256 correlator (`sha256:` plus 64 lowercase hex
+characters); `opaque` is the generic default. Prefer an opaque correlator over a raw
+native ID. Do not register an invented native ID when the runtime cannot discover
+one. Core never treats this identifier as a resume command, transcript address,
+credential, or filesystem path. Additional request fields, including transcript
+content, are rejected.
+
+Every fresh session report has a server-clock 120-second activity lease. Refresh
+with a new sequence before expiry (for example, every 30–60 seconds while actually
+active). Reads derive `stale` after expiry and set `active=false`; they do not mutate
+state or invent terminal outcomes. Explicit `closed` is terminal. Session detail
+reads are owner-only, and another principal receives `404` even when it knows the ID.
+There is intentionally no workspace-wide session listing.
+
+Task participation is a separate idempotent record for each `(card, session)`.
+Its own sequence and 120-second lease are independent of other tasks and sessions.
+Use `active`, `idle`, or `left` to report participation. A new task report renews
+only that task lease; a session heartbeat renews no task leases. Effective task
+activity requires both fresh leases and an active session. An idle session makes
+active participation idle; a closed session makes remaining participation closed;
+expired evidence is stale. Leaving can be reversed with a later report while the
+session remains open. A session can participate in many tasks and many sessions
+can participate in a task without a claim, lock, assignment, or wakeup.
+
+Participant list reads check the task, board, and project backing scopes and return
+only task-scoped participation metadata. A reader sees `session_id` only for its
+own sessions. Other sessions' provider/native IDs, host scope, capabilities, and
+other task links are not included. Pagination uses a task-bound opaque cursor,
+ordered by `participant_id` ascending, with a default limit of 50 and maximum 200.
+
+Participation never writes card phase, assignees, work version, source ownership,
+or source status; native and source-backed work follow the same rule. It also emits
+no synthetic timeline events or misleading task-activity timestamps. The first
+foundation does not change the legacy command-center `/agents` roster or `/runs`
+projection; clients should inspect sessions/participants for this activity signal.
+All routes remain subject to existing rate limits, request limits, revocation,
+and workspace read-only enforcement. Bearer authentication remains required in
+development mode. See the canonical OpenAPI for request/response envelopes.

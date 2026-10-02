@@ -419,12 +419,13 @@ func (a *App) runMetaSkill(args []string) (*commandResult, error) {
 	}
 
 	data := map[string]any{
-		"target":       normalizedTarget,
-		"content":      content,
-		"default_file": defaultFileName,
-		"source":       "bundled-agent-guide",
-		"guide_topic":  "agent-guide",
-		"skill_name":   agentGuideSkillName,
+		"target":        normalizedTarget,
+		"content":       content,
+		"default_file":  defaultFileName,
+		"source":        "bundled-agent-guide",
+		"guide_topic":   "agent-guide",
+		"skill_name":    agentGuideSkillName,
+		"skill_version": agentGuideSkillVersion,
 	}
 	writtenPath, err := writeRenderedFile(content, writeFile.value, writeDir.value, defaultFileName)
 	if err != nil {
@@ -509,6 +510,7 @@ func (a *App) runInstallSkill(args []string) (*commandResult, error) {
 		"source":        "bundled-agent-guide",
 		"guide_topic":   "agent-guide",
 		"skill_name":    agentGuideSkillName,
+		"skill_version": agentGuideSkillVersion,
 	}}, nil
 }
 

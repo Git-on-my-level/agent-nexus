@@ -92,7 +92,12 @@ func preflightKnownCommandShape(args []string) error {
 	}
 
 	switch root {
-	case "host", "runs":
+	case "host":
+		if len(args) > 2 && args[1] == "discover" && !hasHelpToken(args[2:]) {
+			return errnorm.Usage("invalid_args", "host discover takes no arguments")
+		}
+		return nil
+	case "runs":
 		return nil
 	case "api":
 		return preflightSubcommand(args[1:], apiSubcommandSpec)

@@ -39,6 +39,12 @@ func commandSideEffectClass(command string) string {
 	if command == "host enroll --plan" {
 		return "read_only"
 	}
+	if command == "host discover" {
+		return "read_only"
+	}
+	if command == "sessions register" || command == "work participants register" {
+		return "remote_coordination_write"
+	}
 	if parts[0] == "update" {
 		return "local_operational_write"
 	}
@@ -97,6 +103,11 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	var actions []output.NextAction
 	if command == "host enroll --plan" {
 		actions = append(actions, action("Enroll host", "anx", "host", "enroll"))
+	}
+	if command == "sessions register" {
+		if session := asMap(root["session"]); anyString(session["session_id"]) != "" {
+			actions = append(actions, action("Read session", "anx", "sessions", "get", anyString(session["session_id"])))
+		}
 	}
 	if command == "host enroll" {
 		actions = append(actions, action("Check host", "anx", "host", "status"))

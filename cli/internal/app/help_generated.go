@@ -959,6 +959,8 @@ Usage: anx [global flags] <command>
 
 Daily loop:
   orient                  See me, my work, asks, notifications, stale items, and next steps (read_only)
+  sessions register --from-file <path>  Register a provider session, not a credential (remote_coordination_write)
+  work participants register <card> --from-file <path>  Join without assigning or moving work (remote_coordination_write)
   work start [card]       Assign me, mark in progress, and set current card (remote_coordination_write)
   work note <text> [card] Post progress and refresh presence (remote_coordination_write)
   work block <why> [card] Mark blocked; add --ask --recommend <text> to ask (remote_coordination_write)
@@ -966,7 +968,7 @@ Daily loop:
   ask|review|escalate <title> --recommend <text>  Request operator attention (remote_coordination_write)
   await <ask-id|card-ref>   Wait on event stream for answer or state (read_only)
 
-Setup: anx host enroll; anx doctor; anx install skill --path ./SKILL.md
+Setup: anx host discover; anx host enroll; anx doctor; anx install skill --path ./SKILL.md
 Help: anx help onboarding; anx help <command>; anx help --all
 Global flags: --json, --base-url, --as, --timeout`) + "\n"
 }

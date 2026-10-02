@@ -9,7 +9,9 @@ import (
 
 const agentGuideSkillName = "anx-opinionated-onboarding"
 
-const agentGuideSkillDescription = "Use the Agent Nexus daily loop to orient, start work, report progress, ask an operator, await an answer, and finish with evidence."
+const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
+
+const agentGuideSkillVersion = "anx.participant.v1"
 
 type guideSection struct {
 	Title string
@@ -24,18 +26,28 @@ func agentGuideSections() []guideSection {
 	return []guideSection{
 		{Title: "Setup and identity", Lines: []string{
 			"- Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.",
-			"- Inside `agentctl run`, ANX uses the adapter context. Otherwise set `ANX_AS=<name>` or pass `--as <name>`; check the resolved handle and host in `anx orient`.",
+			"- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.",
+			"- `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.",
+		}},
+		{Title: "Participation and source authority", Lines: []string{
+			"- Keep the stable agent principal, provider/host-scoped native session, and each run attempt distinct. Register an already authenticated session with `anx sessions register --from-file session.json`; inspect exact fields with `anx help sessions register`.",
+			"- Use `anx work participants register card:<slug> --from-file participation.json` for nonlocking participation. Preserve sequence and identical payload on retry; increment sequence only for a new observation. This never assigns, moves, locks, or completes the task.",
+			"- Associate an existing project only from clear configured repository/source/task evidence. Ask when the project is new or ambiguous; skip trivial activity. Reading alone is not a reason to create a task or report progress.",
+			"- Native Nexus tasks and externally authoritative tasks can coexist. Keep source assignees and workflow fields intact; use an authorized source workflow for source-owned changes. A mandatory project owner is not required.",
+			"- Share only task-scoped facts and references. Do not upload raw transcripts, secrets, unrelated session history, or local paths as globally reachable links. A session reference grants no history access.",
 		}},
 		{Title: "Daily loop", Lines: []string{
 			"1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.",
-			"2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.",
-			"3. Run `anx work note \"What changed\"` after meaningful progress.",
-			"4. When blocked, run `anx work block \"Why\" --ask --recommend \"Preferred answer\"` or `anx ask \"Question\" --recommend \"Preferred answer\" [--alt \"Alternative\"]`. Use `anx review` for review and `anx escalate` for urgent intervention.",
+			"2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.",
+			"3. Post `anx cards message card:<slug> --body \"What changed and why\"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.",
+			"4. Report a blocker with `anx cards message card:<slug> --body \"Blocked: reason and next step\"` and, when a decision is needed, `anx ask \"Question\" --subject-ref card:<slug> --recommend \"Preferred answer\"`. These do not move source-owned task status. Use `anx work block \"Why\" card:<slug> --ask --recommend \"Preferred answer\"` only when deliberately changing an authorized Nexus-native task to blocked.",
 			"5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.",
-			"6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.",
+			"6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
 		}},
 		{Title: "Runs and output", Lines: []string{
 			"- Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.",
+			"- Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.",
+			"- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.",
 			"- Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.",
 			"- Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.",
 		}},
@@ -120,6 +132,7 @@ func renderOpinionatedANXSkillMarkdown() string {
 	b.WriteString(agentGuideSkillDescription)
 	b.WriteString("\n")
 	b.WriteString("---\n\n")
+	b.WriteString("Skill contract: " + agentGuideSkillVersion + ". Installation is not proof that an existing session loaded this version.\n\n")
 	b.WriteString(renderGuide("# Opinionated ANX onboarding for agents", "##"))
 	return b.String()
 }

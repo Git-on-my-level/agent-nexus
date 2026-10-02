@@ -66,6 +66,9 @@ func writeEnrollmentInstructions(progress io.Writer, start map[string]any) {
 func discoveredAdapters() []string {
 	known := map[string]string{"claude": "claude", "codex": "codex", "cursor": "cursor-agent", "omp": "omp"}
 	found := []string{}
+	if report, err := loadRuntimeIdentity(os.Getenv); err == nil {
+		return availableRuntimeAdapters(report)
+	}
 	if path, err := exec.LookPath("agentctl"); err == nil {
 		if out, err := exec.Command(path, "doctor", "--output", "json").Output(); err == nil {
 			var doc map[string]any
@@ -76,7 +79,7 @@ func discoveredAdapters() []string {
 						continue
 					}
 					name := agentctlName(anyString(item["name"]))
-					if _, ok := known[name]; ok {
+					if agentNamePattern.MatchString(name) {
 						found = append(found, name)
 					}
 				}
@@ -171,6 +174,11 @@ func (a *App) runHost(ctx context.Context, args []string, cfg config.Resolved) (
 		return nil, "host", errnorm.Usage("subcommand_required", "use anx host enroll|status|list|token|exclude|include")
 	}
 	switch args[0] {
+	case "discover":
+		if len(args) != 1 {
+			return nil, "host discover", errnorm.Usage("invalid_args", "host discover takes no arguments")
+		}
+		return a.discoverRuntime(), "host discover", nil
 	case "enroll":
 		r, e := a.hostEnroll(ctx, args[1:], cfg)
 		name := "host enroll"

@@ -135,6 +135,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns heartbeat` (command): Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `pm turns release` (command): Lease owner returns a claimed turn to the queue.
+- `sessions get` (command): Read your own registered provider session and bounded activity; does not expose conversation history.
+- `sessions register` (command): Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
 - `work create` (command): Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed.
 - `work get` (command): Read one work card, source authority, executions and current evidence.
@@ -143,6 +145,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work presence` (command): Set the current derived agent's card and progress note.
 - `work observations list` (command): Read append-only evidence for a work card, preserving pagination and uncertainty.
 - `work observations submit` (command): Submit an authenticated remote observation; preserve its idempotency key on retry.
+- `work participants list` (command): List task-scoped participation and bounded activity without private session details or unrelated task links.
+- `work participants register` (command): Record nonlocking task participation with session_id and monotonic sequence; never changes task assignees, phase or completion.
 - `work refresh get` (command): Read refresh state without queueing work.
 - `work refresh request` (command): Request a bounded refresh; queued is not a successful observation.
 - `secret list` (command): List secrets
@@ -220,6 +224,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 
@@ -337,22 +342,34 @@ Use Agent Nexus (`anx`) to keep your current task and its evidence visible to th
 Setup and identity
 
 - Enroll a host once per workspace and machine with `anx host enroll`. A human approves the enrollment. Other agents on that host use the same host enrollment.
-- Inside `agentctl run`, ANX uses the adapter context. Otherwise set `ANX_AS=<name>` or pass `--as <name>`; check the resolved handle and host in `anx orient`.
+- Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Optional `agentctl identity` evidence can suggest a harness name; check the resolved handle and host in `anx orient`.
+- `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
+
+
+Participation and source authority
+
+- Keep the stable agent principal, provider/host-scoped native session, and each run attempt distinct. Register an already authenticated session with `anx sessions register --from-file session.json`; inspect exact fields with `anx help sessions register`.
+- Use `anx work participants register card:<slug> --from-file participation.json` for nonlocking participation. Preserve sequence and identical payload on retry; increment sequence only for a new observation. This never assigns, moves, locks, or completes the task.
+- Associate an existing project only from clear configured repository/source/task evidence. Ask when the project is new or ambiguous; skip trivial activity. Reading alone is not a reason to create a task or report progress.
+- Native Nexus tasks and externally authoritative tasks can coexist. Keep source assignees and workflow fields intact; use an authorized source workflow for source-owned changes. A mandatory project owner is not required.
+- Share only task-scoped facts and references. Do not upload raw transcripts, secrets, unrelated session history, or local paths as globally reachable links. A session reference grants no history access.
 
 
 Daily loop
 
 1. Run `anx orient` to see your identity, assigned work, asks and answers, notifications, stale work, and next commands.
-2. Run `anx work start card:<slug>` to add yourself as assignee and mark the card in progress. Subsequent work verbs use that current card.
-3. Run `anx work note "What changed"` after meaningful progress.
-4. When blocked, run `anx work block "Why" --ask --recommend "Preferred answer"` or `anx ask "Question" --recommend "Preferred answer" [--alt "Alternative"]`. Use `anx review` for review and `anx escalate` for urgent intervention.
+2. Read `anx work context card:<slug>` and register participation when doing substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
+3. Post `anx cards message card:<slug> --body "What changed and why"` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
+4. Report a blocker with `anx cards message card:<slug> --body "Blocked: reason and next step"` and, when a decision is needed, `anx ask "Question" --subject-ref card:<slug> --recommend "Preferred answer"`. These do not move source-owned task status. Use `anx work block "Why" card:<slug> --ask --recommend "Preferred answer"` only when deliberately changing an authorized Nexus-native task to blocked.
 5. Run `anx await <ask-id>` when an answer gates the next step. It prints one terminal result with outcome. Exit 8 means timeout; exit 9 means rejected.
-6. Run `anx work done --evidence <url|event:ref|artifact:ref>` to resolve the current card and clear presence.
+6. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx work done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 
 
 Runs and output
 
 - Label agentctl work `anx.card.<card-slug>` so the run links to the card. A completed run does not complete the card.
+- Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
+- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
 - Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.
 - Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.
 ```
@@ -4328,6 +4345,88 @@ PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has
 Use --json for one machine-readable envelope.
 ```
 
+## `sessions get`
+
+Read your own registered provider session and bounded activity; does not expose conversation history.
+
+```text
+Generated Help: sessions get
+
+- Command ID: `sessions.get`
+- CLI path: `sessions get`
+- HTTP: `GET /sessions/{session_id}`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read your private native session without assigning, moving, or completing work.
+- Output: Returns `SessionResponse`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+- Adjacent commands: `sessions register`
+
+Inputs:
+  Required:
+  - path `session_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Read your own registered provider session and bounded activity; does not expose conversation history.
+
+Usage: anx sessions get <ref> (or --session-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `sessions register`
+
+Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
+
+```text
+Generated Help: sessions register
+
+- Command ID: `sessions.register`
+- CLI path: `sessions register`
+- HTTP: `POST /sessions`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Register or refresh a private native session without assigning, moving, or completing work.
+- Output: Returns `SessionResponse`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+- Adjacent commands: `sessions get`
+
+Inputs:
+  Required:
+  - body `activity` (string)
+  - body `capabilities.history` (string)
+  - body `capabilities.logs` (string)
+  - body `capabilities.resume` (string)
+  - body `native_session_id` (string)
+  - body `provider` (string)
+  - body `sequence` (integer)
+  Optional:
+  - body `host_scope` (string)
+  - body `native_session_id_kind` (string)
+  Enum values: activity: active, closed, idle; capabilities.history: supported, unknown, unsupported; capabilities.logs: supported, unknown, unsupported; capabilities.resume: supported, unknown, unsupported; native_session_id_kind: opaque, provider_session_sha256
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
+
+Usage: anx sessions register --from-file <path|->
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `work capabilities`
 
 Read capabilities actually advertised by the authenticated central API.
@@ -4346,7 +4445,7 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4377,7 +4476,7 @@ Generated Help: work create
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -4437,7 +4536,7 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -4472,7 +4571,7 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4511,7 +4610,7 @@ Generated Help: work patch
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -4561,7 +4660,7 @@ Generated Help: work presence
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
 - Concepts: `agents`, `cards`, `runs`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`
 
 Inputs:
   Optional:
@@ -4599,7 +4698,7 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -4636,7 +4735,7 @@ Generated Help: work observations submit
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
 
 Inputs:
   Required:
@@ -4681,6 +4780,84 @@ Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not re
 Use --json for one machine-readable envelope.
 ```
 
+## `work participants list`
+
+List task-scoped participation and bounded activity without private session details or unrelated task links.
+
+```text
+Generated Help: work participants list
+
+- Command ID: `work.participants.list`
+- CLI path: `work participants list`
+- HTTP: `GET /work/{card_ref}/participants`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: List task-scoped participation without assigning, moving, or completing work.
+- Output: Returns `WorkParticipantListResponse`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+List task-scoped participation and bounded activity without private session details or unrelated task links.
+
+Usage: anx work participants list <ref> (or --work-id <ref>)
+  --limit <value>
+  --cursor <value>
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `work participants register`
+
+Record nonlocking task participation with session_id and monotonic sequence; never changes task assignees, phase or completion.
+
+```text
+Generated Help: work participants register
+
+- Command ID: `work.participants.register`
+- CLI path: `work participants register`
+- HTTP: `POST /work/{card_ref}/participants`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Register or refresh nonlocking task participation without assigning, moving, or completing work.
+- Output: Returns `WorkParticipantResponse`.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `activity` (string)
+  - body `sequence` (integer)
+  - body `session_id` (string)
+  Enum values: activity: active, idle, left
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Record nonlocking task participation with session_id and monotonic sequence; never changes task assignees, phase or completion.
+
+Usage: anx work participants register <ref> (or --work-id <ref>) --from-file <path|->
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `work refresh get`
 
 Read refresh state without queueing work.
@@ -4699,7 +4876,7 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh request`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`
 
 Inputs:
   Required:
@@ -4734,7 +4911,7 @@ Generated Help: work refresh request
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work patch`, `work presence`, `work refresh get`
+- Adjacent commands: `work capabilities`, `work create`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`
 
 Inputs:
   Required:
@@ -7661,6 +7838,29 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `host discover`
+
+Inspect optional local runtime identity and installed harness evidence without registration or network requests.
+
+```text
+Local Help: host discover
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Inspect optional local runtime identity and installed harness evidence without registration or network requests.
+- Composition: Read-only local agentctl identity v1 evidence. No principal grant, task assignment, transcript read, or automatic upload. Installed availability is not a live-session capability.
+- JSON body: `provider`, `available`, `registration_requires_provider`, optional `identity` and `adapters`
+- Examples:
+  - `anx host discover`
+  - `anx host discover --json`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx host discover ... ; anx --json host discover ... ; anx host discover ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 

@@ -16,16 +16,17 @@ import (
 )
 
 type App struct {
-	Stdin          io.Reader
-	Stdout         io.Writer
-	Stderr         io.Writer
-	Getenv         func(string) string
-	UserHomeDir    func() (string, error)
-	ReadFile       func(string) ([]byte, error)
-	StdinIsTTY     func() bool
-	hasOMPAncestor func() bool
-	now            func() time.Time
-	pmTurns        *pmTurnMemory
+	Stdin           io.Reader
+	Stdout          io.Writer
+	Stderr          io.Writer
+	Getenv          func(string) string
+	UserHomeDir     func() (string, error)
+	ReadFile        func(string) ([]byte, error)
+	StdinIsTTY      func() bool
+	hasOMPAncestor  func() bool
+	now             func() time.Time
+	pmTurns         *pmTurnMemory
+	runtimeIdentity func() (*runtimeIdentityReport, error)
 }
 
 func (a *App) clockNow() time.Time {
@@ -91,6 +92,7 @@ func New() *App {
 		}
 		return (info.Mode() & os.ModeCharDevice) != 0
 	}
+	app.runtimeIdentity = func() (*runtimeIdentityReport, error) { return loadRuntimeIdentity(app.Getenv) }
 	return app
 }
 
@@ -122,7 +124,7 @@ func (a *App) Run(args []string) int {
 	if len(remaining) > 1 {
 		subPeek = remaining[1]
 	}
-	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" || cmdPeek == "install" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
