@@ -37,6 +37,31 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 		}
 		return cfg.As, cfg.IdentitySource, nil
 	}
+	// Runtime evidence can suggest a name, but never authenticates a principal.
+	// Explicit --as/ANX_AS above always wins; missing/old providers keep the direct path.
+	managedRuntimeEvidence := false
+	runtimeReportAvailable := false
+	if a.runtimeIdentity != nil {
+		if report, err := a.runtimeIdentity(); err == nil && report != nil {
+			runtimeReportAvailable = true
+			managedRuntimeEvidence = report.Execution.ID != nil
+			if report.Provider.ID != nil {
+				name := agentctlName(*report.Provider.ID)
+				if agentNamePattern.MatchString(name) && report.Provider.Confidence != "unknown" && !(report.Provider.Provenance == "native_environment" && a.ambiguousNativeHarness()) {
+					if (report.Provider.Provenance == "managed_environment" || report.Provider.Provenance == "execution_journal") && a.nativeHarnessConflicts(name) {
+						return "", "", errnorm.Usage("identity_unresolved", "runtime identity conflicts with inherited harness markers; pass --as <name> or set ANX_AS")
+					}
+					return name, "provider:agentctl", nil
+				}
+			}
+		}
+	}
+	managedContext := managedRuntimeEvidence || strings.TrimSpace(a.Getenv("AGENTCTL_EXECUTION_ID")) != "" || strings.TrimSpace(a.Getenv("AGENTCTL_ADAPTER")) != "" || strings.TrimSpace(a.Getenv("AGENTCTL_AUTHORITY")) != ""
+	if runtimeReportAvailable && managedContext {
+		// A supported provider may intentionally suppress inherited or conflicting
+		// context. Do not resurrect its rejected evidence through the legacy path.
+		return "", "", errnorm.Usage("identity_unresolved", "runtime could not establish the current managed identity; pass --as <name> or set ANX_AS")
+	}
 	// Verified with installed agentctl v0.11.1 on 2026-09-27 by running
 	// `agentctl run -- /bin/sh -c 'env'`: children receive ADAPTER,
 	// EXECUTION_ID, HOST_ID, LABELS and AUTHORITY with the AGENTCTL_ prefix.
@@ -45,7 +70,18 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 		if !agentNamePattern.MatchString(adapter) {
 			return "", "", errnorm.Usage("invalid_agent_name", "agentctl adapter cannot be used as an agent name; pass --as")
 		}
+		if a.nativeHarnessConflicts(adapter) {
+			return "", "", errnorm.Usage("identity_unresolved", "legacy runtime identity conflicts with inherited harness markers; pass --as <name> or set ANX_AS")
+		}
 		return adapter, "agentctl", nil
+	}
+	// Incomplete or unknown managed identity must not reuse a parent harness's
+	// inherited markers. Ask for an explicit principal rather than misattribute it.
+	if managedContext {
+		return "", "", errnorm.Usage("identity_unresolved", "managed runtime identity is incomplete; pass --as <name> or set ANX_AS")
+	}
+	if a.ambiguousNativeHarness() {
+		return "", "", errnorm.Usage("identity_unresolved", "multiple inherited harness markers are present; pass --as <name> or set ANX_AS")
 	}
 	// Observed in child tool shells of installed Claude Code 2.1.283 and Codex 0.156.0
 	// on 2026-09-27. CLAUDECODE=1 and CODEX_THREAD_ID are actual exported markers.
@@ -67,6 +103,26 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 		return "omp", "harness:omp", nil
 	}
 	return "", "", errnorm.WithDetails(errnorm.Usage("identity_unresolved", "cannot resolve agent identity; pass --as <name> or set ANX_AS"), map[string]any{"next_argv": []string{"anx", "--as", "codex", "auth", "whoami"}})
+}
+
+func (a *App) ambiguousNativeHarness() bool {
+	count := 0
+	if a.Getenv("CLAUDECODE") == "1" {
+		count++
+	}
+	if a.Getenv("CODEX_THREAD_ID") != "" {
+		count++
+	}
+	if a.Getenv("CURSOR_AGENT_COMPLETED_PATH") != "" {
+		count++
+	}
+	return count > 1
+}
+
+func (a *App) nativeHarnessConflicts(provider string) bool {
+	return a.Getenv("CLAUDECODE") == "1" && provider != "claude" ||
+		a.Getenv("CODEX_THREAD_ID") != "" && provider != "codex" ||
+		a.Getenv("CURSOR_AGENT_COMPLETED_PATH") != "" && provider != "cursor"
 }
 
 func ompAncestor() bool {

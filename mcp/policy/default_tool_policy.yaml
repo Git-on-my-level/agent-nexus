@@ -451,6 +451,12 @@ commands:
   "runs.upsert":
     classification: unsupported_other
     reason: "runs are reported by local launchers through anx runs ingest, not by MCP clients"
+  "sessions.get":
+    classification: exposed_read
+    reason: "Read only the authenticated agent's private session metadata; no transcript access or other task links."
+  "sessions.register":
+    classification: exposed_write
+    reason: "Register sequence-fenced metadata under an existing agent principal; never creates credentials or controls execution."
   "secrets.create":
     classification: gated_sensitive
     reason: "secret payload write is sensitive"
@@ -610,6 +616,12 @@ commands:
   "work.patch":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "work.participants.list":
+    classification: exposed_read
+    reason: "Read task-scoped participation after core privacy checks; other agents' session identifiers remain private."
+  "work.participants.register":
+    classification: exposed_write
+    reason: "Record sequence-fenced nonlocking participation for the caller's session; no task assignment, state change or completion."
   "work.refresh.get":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."

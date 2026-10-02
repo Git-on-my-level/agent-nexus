@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `22`
+- Groups: `23`
 
 ## `topics`
 
@@ -273,6 +273,13 @@ Generated from `contracts/anx-openapi.yaml`.
   - `secrets.reveal-batch` (`secret exec`)
   - `secrets.update` (`secret update`)
 
+## `sessions`
+
+- Commands: `2`
+- Command IDs:
+  - `sessions.get` (`sessions get`)
+  - `sessions.register` (`sessions register`)
+
 ## `usage`
 
 - Commands: `1`
@@ -281,7 +288,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `work`
 
-- Commands: `10`
+- Commands: `12`
 - Command IDs:
   - `agents.me.presence` (`work presence`)
   - `work.capabilities` (`work capabilities`)
@@ -290,6 +297,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.list` (`work list`)
   - `work.observations.list` (`work observations list`)
   - `work.observations.submit` (`work observations submit`)
+  - `work.participants.list` (`work participants list`)
+  - `work.participants.register` (`work participants register`)
   - `work.patch` (`work patch`)
   - `work.refresh.get` (`work refresh get`)
   - `work.refresh.request` (`work refresh request`)

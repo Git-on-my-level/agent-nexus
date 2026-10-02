@@ -110,7 +110,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `53`
+- Commands: `57`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -156,12 +156,16 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.release`
   - `runs.list`
   - `runs.upsert`
+  - `sessions.get`
+  - `sessions.register`
   - `work.capabilities`
   - `work.create`
   - `work.get`
   - `work.list`
   - `work.observations.list`
   - `work.observations.submit`
+  - `work.participants.list`
+  - `work.participants.register`
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`
@@ -227,7 +231,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `33`
+- Commands: `37`
 - Command IDs:
   - `pm.actions.acknowledge`
   - `pm.actions.get`
@@ -253,12 +257,16 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.turns.get`
   - `pm.turns.heartbeat`
   - `pm.turns.release`
+  - `sessions.get`
+  - `sessions.register`
   - `work.capabilities`
   - `work.create`
   - `work.get`
   - `work.list`
   - `work.observations.list`
   - `work.observations.submit`
+  - `work.participants.list`
+  - `work.participants.register`
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`

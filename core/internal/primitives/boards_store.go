@@ -2542,6 +2542,9 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 			return fmt.Errorf("delete card revision artifact: %w", err)
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM work_participants WHERE card_id = ?`, cardID); err != nil {
+		return fmt.Errorf("delete card participation: %w", err)
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM cards WHERE id = ? AND (archived_at IS NOT NULL OR trashed_at IS NOT NULL)`, cardID)
 	if err != nil {
 		return fmt.Errorf("delete card: %w", err)

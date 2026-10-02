@@ -211,6 +211,8 @@ export declare class AnxClient {
     secretsReveal(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     secretsRevealBatch(options?: RequestOptions): Promise<InvokeResult>;
     secretsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    sessionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    sessionsRegister(options?: RequestOptions): Promise<InvokeResult>;
     threadsContext(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsInspect(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     threadsList(options?: RequestOptions): Promise<InvokeResult>;
@@ -233,6 +235,8 @@ export declare class AnxClient {
     workList(options?: RequestOptions): Promise<InvokeResult>;
     workObservationsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workObservationsSubmit(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workParticipantsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workParticipantsRegister(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshRequest(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

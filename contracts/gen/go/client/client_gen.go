@@ -140,7 +140,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "cards", "runs"},
-		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "work.refresh.get", "work.refresh.request"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID: "agents.stream",
@@ -1933,6 +1933,29 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"secrets.create", "secrets.delete", "secrets.reveal-batch", "secrets.reveal", "secrets.list"},
 	},
 	{
+		CommandID:  "sessions.get",
+		CLIPath:    "sessions get",
+		Group:      "sessions",
+		Method:     "GET",
+		Path:       "/sessions/{session_id}",
+		PathParams: []string{"session_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"sessions.register"},
+	},
+	{
+		CommandID: "sessions.register",
+		CLIPath:   "sessions register",
+		Group:     "sessions",
+		Method:    "POST",
+		Path:      "/sessions",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"cards", "evidence"},
+		Adjacent:  []string{"sessions.get"},
+	},
+	{
 		CommandID:  "threads.context",
 		CLIPath:    "threads context",
 		Group:      "threads",
@@ -2128,7 +2151,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:  []string{"work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID: "work.create",
@@ -2139,7 +2162,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.capabilities", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:  []string{"work.capabilities", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.get",
@@ -2151,7 +2174,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID: "work.list",
@@ -2162,7 +2185,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.get", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.observations.list",
@@ -2174,7 +2197,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.observations.submit",
@@ -2186,7 +2209,31 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.participants.list",
+		CLIPath:    "work participants list",
+		Group:      "work",
+		Method:     "GET",
+		Path:       "/work/{card_ref}/participants",
+		PathParams: []string{"card_ref"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+	},
+	{
+		CommandID:  "work.participants.register",
+		CLIPath:    "work participants register",
+		Group:      "work",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/participants",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.patch",
@@ -2198,7 +2245,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "agents.me.presence", "work.refresh.get", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.refresh.get",
@@ -2210,7 +2257,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.request"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.request"},
 	},
 	{
 		CommandID:  "work.refresh.request",
@@ -2222,7 +2269,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.patch", "agents.me.presence", "work.refresh.get"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get"},
 	},
 }
 
@@ -2976,6 +3023,14 @@ func (c *Client) SecretsUpdate(ctx context.Context, pathParams map[string]string
 	return c.Invoke(ctx, "secrets.update", pathParams, opts)
 }
 
+func (c *Client) SessionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "sessions.get", pathParams, opts)
+}
+
+func (c *Client) SessionsRegister(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "sessions.register", nil, opts)
+}
+
 func (c *Client) ThreadsContext(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "threads.context", pathParams, opts)
 }
@@ -3062,6 +3117,14 @@ func (c *Client) WorkObservationsList(ctx context.Context, pathParams map[string
 
 func (c *Client) WorkObservationsSubmit(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "work.observations.submit", pathParams, opts)
+}
+
+func (c *Client) WorkParticipantsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.participants.list", pathParams, opts)
+}
+
+func (c *Client) WorkParticipantsRegister(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.participants.register", pathParams, opts)
 }
 
 func (c *Client) WorkPatch(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

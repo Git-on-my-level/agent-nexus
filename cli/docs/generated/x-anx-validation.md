@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `181`
+- Command operations: `185`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `163`
+- Missing recommended examples: `167`
 
 ## Baseline gap counts
 
@@ -279,6 +279,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - `secrets.reveal` `POST /secrets/{secret_id}/reveal`
 - `secrets.reveal-batch` `POST /secrets/reveal-batch`
 - `secrets.update` `PUT /secrets/{secret_id}`
+- `sessions.get` `GET /sessions/{session_id}`
+- `sessions.register` `POST /sessions`
 - `threads.context` `GET /threads/{thread_id}/context`
 - `threads.inspect` `GET /threads/{thread_id}`
 - `threads.list` `GET /threads`
@@ -301,6 +303,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - `work.list` `GET /work`
 - `work.observations.list` `GET /work/{card_ref}/observations`
 - `work.observations.submit` `POST /work/{card_ref}/observations`
+- `work.participants.list` `GET /work/{card_ref}/participants`
+- `work.participants.register` `POST /work/{card_ref}/participants`
 - `work.patch` `PATCH /work/{card_ref}`
 - `work.refresh.get` `GET /work/{card_ref}/refresh`
 - `work.refresh.request` `POST /work/{card_ref}/refresh`

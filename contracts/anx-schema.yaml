@@ -987,3 +987,25 @@ command_center:
     - Run state is monotonic. Unknown is provisional; terminal states are absorbing. A late running callback cannot replace completed.
     - Run attribution is resolved from the authenticated agent and its host; an unknown external run creates a provisional unknown-state run before recording the write.
     - Waiting on human takes precedence over working, and bridge online is separate from agent state.
+
+# Generic existing-agent participation metadata; not auth enrollment or orchestration.
+session_participation:
+  version: "1"
+  activity_lease_seconds: 120
+  session_identity: [authenticated_agent_id, provider, host_scope, native_session_id]
+  session_activities: [active, idle, closed]
+  participant_identity: [card_id, session_id]
+  participant_activities: [active, idle, left]
+  capability_states: [supported, unsupported, unknown]
+  required_capabilities: [resume, history, logs]
+  invariants:
+    - Existing authenticated agent principals register sessions without creating authentication grants or credentials.
+    - A session is a provider and host-scoped native context, independent of stable ANX principal and per-attempt run.
+    - Native identifiers are opaque correlation values; no transcript upload, resume target, or credential is accepted.
+    - Session details are owner-only; task reads expose only task-scoped participation and omit another principal's session ID.
+    - Session and task activity expire independently after 120 seconds using the server clock; activity is never a lock.
+    - Closed sessions are terminal; closing a session never changes task status, ownership, assignees, or source fields.
+    - Participant upserts are idempotent on card and session and never imply assignment, dispatch, or task completion.
+    - Native and source-owned tasks use the same nonlocking participation records and retain their existing authority.
+    - Per-record caller sequences order writes; identical retries do not extend leases, and stale or conflicting sequences fail.
+    - Enrolled host namespace is resolved from the authenticated agent; supplied host scope cannot impersonate another host.

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `181`
+- Commands: `185`
 
 ## `actors.create`
 
@@ -1968,6 +1968,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ secret }` (metadata only).
 - Agent notes: Only human principals may update secrets.
 
+## `sessions.get`
+
+- CLI path: `sessions get`
+- HTTP: `GET /sessions/{session_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read your private native session without assigning, moving, or completing work.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Output: Returns `SessionResponse`.
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+
+## `sessions.register`
+
+- CLI path: `sessions register`
+- HTTP: `POST /sessions`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Register or refresh a private native session without assigning, moving, or completing work.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Output: Returns `SessionResponse`.
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+
 ## `threads.context`
 
 - CLI path: `threads context`
@@ -2238,6 +2264,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkObservationResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.participants.list`
+
+- CLI path: `work participants list`
+- HTTP: `GET /work/{card_ref}/participants`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: List task-scoped participation without assigning, moving, or completing work.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Output: Returns `WorkParticipantListResponse`.
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
+
+## `work.participants.register`
+
+- CLI path: `work participants register`
+- HTTP: `POST /work/{card_ref}/participants`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Register or refresh nonlocking task participation without assigning, moving, or completing work.
+- Concepts: `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
+- Output: Returns `WorkParticipantResponse`.
+- Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
 
 ## `work.patch`
 

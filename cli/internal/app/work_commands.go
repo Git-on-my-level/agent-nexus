@@ -26,42 +26,46 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
-	"work presence":            {path: "/agents/me/presence", method: "PATCH", body: true, summary: "Set the current derived agent's card and progress note."},
-	"work list":                {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
-	"work get":                 {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
-	"work create":              {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
-	"work patch":               {path: "/work/{id}", method: "PATCH", idFlag: "work-id", body: true, summary: "Update work metadata with if_version; external status remains source-owned."},
-	"work context":             {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Compose work, a bounded observation page and refresh status using read-only requests.", filters: []string{"limit", "cursor"}},
-	"work freshness":           {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Inspect last observed, source activity and meaningful progress independently."},
-	"work refresh get":         {path: "/work/{id}/refresh", method: "GET", idFlag: "work-id", summary: "Read refresh state without queueing work."},
-	"work refresh request":     {path: "/work/{id}/refresh", method: "POST", idFlag: "work-id", summary: "Request a bounded refresh; queued is not a successful observation."},
-	"work capabilities":        {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
-	"work observations list":   {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
-	"work observations submit": {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
-	"pm context":               {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit", "cursor"}},
-	"pm conversations list":    {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
-	"pm conversations create":  {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
-	"pm conversations get":     {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
-	"pm conversations message": {path: "/pm/conversations/{id}/messages", method: "POST", idFlag: "conversation-id", body: true, summary: "Queue a PM message using request_key and text; an accepted turn is not a completed outcome."},
-	"pm decisions list":        {path: "/pm/decisions", method: "GET", summary: "List durable decisions with principal-bound pagination.", filters: []string{"limit", "cursor"}},
-	"pm decisions get":         {path: "/pm/decisions/{id}", method: "GET", idFlag: "decision-id", summary: "Read an instruction, authorization scope, revision and answer status."},
-	"pm decisions create":      {path: "/pm/decisions", method: "POST", body: true, summary: "Propose an instruction bound to work, scope and target_revision; never approves it."},
-	"pm decisions answer":      {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
-	"pm decisions dispatch":    {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
-	"pm actions list":          {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},
-	"pm bindings list":         {path: "/pm/bindings", method: "GET", summary: "List channel identity bindings for this workspace; an operator check, never a send.", filters: []string{"limit", "cursor"}},
-	"pm bindings create":       {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
-	"pm actions get":           {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
-	"pm actions reconcile":     {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
-	"pm actions acknowledge":   {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
-	"pm turns context":         {path: "/pm/turns/{id}/context", method: "POST", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
-	"pm turns claim":           {path: "/pm/turns/claim", method: "POST", optionalBody: true, summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
-	"pm turns fail":            {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
-	"pm turns propose":         {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
-	"pm turns complete":        {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
-	"pm turns release":         {path: "/pm/turns/{id}/release", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner returns a claimed turn to the queue."},
-	"pm turns heartbeat":       {path: "/pm/turns/{id}/heartbeat", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner renews a claimed turn's lease; renew at less than half the lease TTL."},
-	"pm turns get":             {path: "/pm/turns/{id}", method: "GET", idFlag: "turn-id", summary: "Read a PM conversation turn."},
+	"sessions register":          {path: "/sessions", method: "POST", body: true, summary: "Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work."},
+	"sessions get":               {path: "/sessions/{id}", method: "GET", idFlag: "session-id", summary: "Read your own registered provider session and bounded activity; does not expose conversation history."},
+	"work participants register": {path: "/work/{id}/participants", method: "POST", idFlag: "work-id", body: true, summary: "Record nonlocking task participation with session_id and monotonic sequence; never changes task assignees, phase or completion."},
+	"work participants list":     {path: "/work/{id}/participants", method: "GET", idFlag: "work-id", summary: "List task-scoped participation and bounded activity without private session details or unrelated task links.", filters: []string{"limit", "cursor"}},
+	"work presence":              {path: "/agents/me/presence", method: "PATCH", body: true, summary: "Set the current derived agent's card and progress note."},
+	"work list":                  {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
+	"work get":                   {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
+	"work create":                {path: "/work", method: "POST", body: true, summary: "Register a native commitment or canonical external source. Omitting board_ref uses the workspace default board, creating it if needed."},
+	"work patch":                 {path: "/work/{id}", method: "PATCH", idFlag: "work-id", body: true, summary: "Update work metadata with if_version; external status remains source-owned."},
+	"work context":               {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Compose work, a bounded observation page and refresh status using read-only requests.", filters: []string{"limit", "cursor"}},
+	"work freshness":             {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Inspect last observed, source activity and meaningful progress independently."},
+	"work refresh get":           {path: "/work/{id}/refresh", method: "GET", idFlag: "work-id", summary: "Read refresh state without queueing work."},
+	"work refresh request":       {path: "/work/{id}/refresh", method: "POST", idFlag: "work-id", summary: "Request a bounded refresh; queued is not a successful observation."},
+	"work capabilities":          {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
+	"work observations list":     {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
+	"work observations submit":   {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
+	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read bounded authorized PM context; partial coverage stays explicit.", filters: []string{"work-ref", "query", "limit", "cursor"}},
+	"pm conversations list":      {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
+	"pm conversations create":    {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
+	"pm conversations get":       {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
+	"pm conversations message":   {path: "/pm/conversations/{id}/messages", method: "POST", idFlag: "conversation-id", body: true, summary: "Queue a PM message using request_key and text; an accepted turn is not a completed outcome."},
+	"pm decisions list":          {path: "/pm/decisions", method: "GET", summary: "List durable decisions with principal-bound pagination.", filters: []string{"limit", "cursor"}},
+	"pm decisions get":           {path: "/pm/decisions/{id}", method: "GET", idFlag: "decision-id", summary: "Read an instruction, authorization scope, revision and answer status."},
+	"pm decisions create":        {path: "/pm/decisions", method: "POST", body: true, summary: "Propose an instruction bound to work, scope and target_revision; never approves it."},
+	"pm decisions answer":        {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
+	"pm decisions dispatch":      {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
+	"pm actions list":            {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},
+	"pm bindings list":           {path: "/pm/bindings", method: "GET", summary: "List channel identity bindings for this workspace; an operator check, never a send.", filters: []string{"limit", "cursor"}},
+	"pm bindings create":         {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
+	"pm actions get":             {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
+	"pm actions reconcile":       {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
+	"pm actions acknowledge":     {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
+	"pm turns context":           {path: "/pm/turns/{id}/context", method: "POST", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
+	"pm turns claim":             {path: "/pm/turns/claim", method: "POST", optionalBody: true, summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
+	"pm turns fail":              {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
+	"pm turns propose":           {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
+	"pm turns complete":          {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
+	"pm turns release":           {path: "/pm/turns/{id}/release", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner returns a claimed turn to the queue."},
+	"pm turns heartbeat":         {path: "/pm/turns/{id}/heartbeat", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner renews a claimed turn's lease; renew at less than half the lease TTL."},
+	"pm turns get":               {path: "/pm/turns/{id}", method: "GET", idFlag: "turn-id", summary: "Read a PM conversation turn."},
 }
 
 type parsedWorkCommand struct {
@@ -391,6 +395,21 @@ func workHelpText(topic string) (string, bool) {
 
 func formatWorkCommandText(name string, body any) string {
 	root := asMap(body)
+	if name == "sessions register" || name == "sessions get" {
+		session := asMap(root["session"])
+		return fmt.Sprintf("session id=%s provider=%s activity=%s sequence=%v last_seen_at=%s", anyString(session["session_id"]), anyString(session["provider"]), anyString(session["activity"]), session["sequence"], anyString(session["last_seen_at"]))
+	}
+	if name == "work participants register" {
+		return formatParticipantLine(asMap(root["participant"]))
+	}
+	if name == "work participants list" {
+		rows := asSlice(root["participants"])
+		lines := []string{fmt.Sprintf("participants count=%d", len(rows))}
+		for _, row := range rows {
+			lines = append(lines, formatParticipantLine(asMap(row)))
+		}
+		return strings.Join(appendPaginationLines(lines, root), "\n")
+	}
 	if name == "work list" {
 		rows, _ := root["work"].([]any)
 		lines := []string{fmt.Sprintf("Work: %d", len(rows))}
@@ -532,6 +551,10 @@ func formatWorkCommandText(name string, body any) string {
 		return strings.Join(lines, "\n")
 	}
 	return formatPrettyBody(body)
+}
+
+func formatParticipantLine(participant map[string]any) string {
+	return fmt.Sprintf("participant id=%s agent_id=%s activity=%s sequence=%v last_seen_at=%s", anyString(participant["participant_id"]), anyString(participant["agent_id"]), anyString(participant["activity"]), participant["sequence"], anyString(participant["last_seen_at"]))
 }
 
 func formatPMDecisionGetText(root map[string]any) string {

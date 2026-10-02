@@ -863,6 +863,28 @@ var migrations = []migration{
 			`CREATE INDEX human_attention_response_inbox ON human_attention_response_claims(inbox_item_id);`,
 		},
 	},
+	{
+		Version: 42,
+		Statements: []string{
+			`CREATE TABLE agent_sessions (
+				id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), actor_id TEXT NOT NULL,
+				provider TEXT NOT NULL, host_scope TEXT NOT NULL, native_session_id TEXT NOT NULL,
+				native_session_id_kind TEXT NOT NULL, capabilities_json TEXT NOT NULL,
+				activity TEXT NOT NULL CHECK(activity IN ('active','idle','closed')),
+				sequence INTEGER NOT NULL CHECK(sequence >= 0), request_json TEXT NOT NULL,
+				created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+				UNIQUE(agent_id, provider, host_scope, native_session_id)
+			);`,
+			`CREATE TABLE work_participants (
+				id TEXT PRIMARY KEY, card_id TEXT NOT NULL REFERENCES cards(id), session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+				activity TEXT NOT NULL CHECK(activity IN ('active','idle','left')),
+				sequence INTEGER NOT NULL CHECK(sequence >= 0), request_json TEXT NOT NULL,
+				created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+				UNIQUE(card_id,session_id)
+			);`,
+			`CREATE INDEX idx_work_participants_card_id ON work_participants(card_id,id);`,
+		},
+	},
 }
 
 func applyMigration40HostIdentity(ctx context.Context, tx *sql.Tx) error {

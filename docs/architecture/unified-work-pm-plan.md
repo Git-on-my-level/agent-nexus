@@ -3,6 +3,9 @@
 Status: accepted implementation direction; implementation and qualification in progress.
 This document states the target, not a claim that the features below already work.
 The **Rulings (2026-09-08)** section at the end supersedes any earlier line it conflicts with.
+The [existing-agent adoption decisions (2026-10-02)](existing-agent-adoption.md)
+supersede conflicting PM onboarding/runtime, mandatory-owner, and rollout-shape
+assumptions here. The existing source-authority and human-decision safeguards remain.
 
 ## Product decision
 

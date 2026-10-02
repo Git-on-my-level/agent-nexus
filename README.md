@@ -26,6 +26,7 @@ Hosted control-plane architecture and operations live in the private
 ## Architecture / Design Docs
 
 - **Foundation**: [docs/architecture/foundation.md](docs/architecture/foundation.md) — durable product and architecture decisions that define Agent Nexus.
+- **Existing-agent adoption**: [docs/architecture/existing-agent-adoption.md](docs/architecture/existing-agent-adoption.md) — accepted product decisions, ownership boundaries, staged rollout, and acceptance gates.
 - Module-level specs: [core/docs/anx-core-spec.md](core/docs/anx-core-spec.md), [web-ui/docs/anx-ui-spec.md](web-ui/docs/anx-ui-spec.md).
 
 ## Quickstart
