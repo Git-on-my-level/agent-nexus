@@ -35,6 +35,7 @@ const client = vi.hoisted(() =>
       "listWork",
       "getWork",
       "listWorkObservations",
+      "listWorkParticipants",
       "requestWorkRefresh",
       "getWorkCapabilities",
       "listBoards",
@@ -66,6 +67,12 @@ vi.mock("$app/stores", () => ({ page: { subscribe: state.subscribe } }));
 vi.mock("$lib/coreClient", () => ({ coreClient: client }));
 vi.mock("$lib/authSession", () => ({
   initializeAuthSession: vi.fn().mockResolvedValue({ actor_id: "human" }),
+  authenticatedAgent: {
+    subscribe: (fn) => {
+      fn({ actor_id: "human" });
+      return () => {};
+    },
+  },
 }));
 vi.mock("$app/navigation", () => ({
   goto: navigation.goto,
@@ -104,6 +111,10 @@ beforeEach(() => {
   navigation.guards.length = 0;
   state.route("/tasks");
   client.listWork.mockResolvedValue({ work: [], next_cursor: "" });
+  client.listWorkParticipants.mockResolvedValue({
+    participants: [],
+    next_cursor: "",
+  });
   client.listPmConversations.mockResolvedValue({ items: [] });
   client.listPmActions.mockResolvedValue({ items: [] });
   client.listPmDecisions.mockResolvedValue({ items: [] });

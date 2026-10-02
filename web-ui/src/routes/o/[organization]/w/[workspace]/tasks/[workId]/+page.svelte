@@ -20,6 +20,8 @@
     principalRegistry,
   } from "$lib/actorSession";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import EvidenceHandoff from "$lib/components/participation/EvidenceHandoff.svelte";
+  import TaskParticipation from "$lib/components/participation/TaskParticipation.svelte";
   import ReceiptSignal from "$lib/components/pm/ReceiptSignal.svelte";
   import {
     decisionPayload,
@@ -367,8 +369,16 @@
               </p>{/if}
           </section>
         {/if}
+        <TaskParticipation
+          tasks={[{ ref: work.ref || workId, title: work.title }]}
+          {workspaceHref}
+        />
         <section>
           <h2 class="ui-label">Evidence</h2>
+          <EvidenceHandoff
+            {observations}
+            unavailable={Boolean(evidenceError)}
+          />
           {#if nexusOwned && !lastCheckedAt && !observations.length}
             <p class="text-meta text-fg-muted">
               Created here — nothing to check

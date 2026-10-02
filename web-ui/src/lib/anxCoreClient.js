@@ -332,6 +332,11 @@ const adapterCommandTable = [
     true,
   ],
   [
+    "listWorkParticipants",
+    "work.participants.list",
+    (ref, filters) => pq(pathParams({ card_ref: ref }), filters),
+  ],
+  [
     "listWorkObservations",
     "work.observations.list",
     (ref, filters) => pq(pathParams({ card_ref: ref }), filters),

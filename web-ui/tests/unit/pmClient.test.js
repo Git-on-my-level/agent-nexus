@@ -33,6 +33,24 @@ describe("canonical work and PM client", () => {
     expect(url.searchParams.get("source")).toBe("github");
     expect(requests[0].init.method).toBe("GET");
   });
+  it("reads shared participation through the generated route with opaque pagination", async () => {
+    const { client, requests } = setup(200, {
+      participants: [],
+      next_cursor: "",
+    });
+    await client.listWorkParticipants("card:sample", {
+      cursor: "opaque+/=",
+      limit: 100,
+    });
+    expect(new URL(requests[0].url).pathname).toBe(
+      "/work/card%3Asample/participants",
+    );
+    expect(new URL(requests[0].url).searchParams.get("cursor")).toBe(
+      "opaque+/=",
+    );
+    expect(requests[0].init.method).toBe("GET");
+    expect(requests[0].init.body).toBeUndefined();
+  });
   it("encodes work references and keeps refresh queued rather than synthesizing evidence", async () => {
     const { client, requests } = setup(202, { refresh: { state: "queued" } });
     expect(await client.requestWorkRefresh("card:sample")).toEqual({
