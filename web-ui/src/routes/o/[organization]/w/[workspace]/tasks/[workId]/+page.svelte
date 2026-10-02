@@ -377,7 +377,7 @@
           <h2 class="ui-label">Evidence</h2>
           <EvidenceHandoff
             {observations}
-            unavailable={Boolean(evidenceError)}
+            unavailable={Boolean(evidenceError) && !observations.length}
           />
           {#if nexusOwned && !lastCheckedAt && !observations.length}
             <p class="text-meta text-fg-muted">
