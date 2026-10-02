@@ -100,6 +100,35 @@ The initial implementation inspection used OSS main `369dec2` and SaaS main
 
 ## Implementation slices and acceptance gates
 
+### v0.12.0 release acceptance ledger
+
+The first release combines the session/participation foundation, read-only
+participation views, and managed-skill primitives. It enables hosted auth,
+projection, and explicit session-participation dogfooding after the operator
+deploys the matching artifacts. It is one stage of this plan.
+
+| Area | In the v0.12.0 release scope | Remaining acceptance work |
+| --- | --- | --- |
+| Core and CLI | Authenticated arbitrary-provider registration, private session identity, sequence-fenced task participation, expiring activity, and source-owned task preservation | Live qualification against the deployed version with an approved agent/host and dedicated test work |
+| Hosted transport | Exact work/session/PM method-and-path forwarding; no bearer-only wake or new human approval authority | Matching SaaS release must pin the released OSS commit; verify serving versions and auth denial behavior after deployment |
+| Participation views | Task-scoped activity and bounded agent-detail coverage, privacy filtering, stale/unavailable states, and evidence context | Browser qualification on the final integrated revision; agent-detail counts remain partial task participation coverage, not a global session census |
+| Skills | Canonical participant/PM guidance, version/hash metadata, scoped configure/status/verify, drift-preserving owned refresh, and release pack contents | Real native-harness loading and activation; automatic enrollment-to-harness setup and live user configuration remain unverified |
+| Optional runtime provider | Versioned agentctl identity evidence and schema-v1 skill packs; explicit generic path remains available | Capabilities are evidence with limits; native resume/history and external contact must be verified separately for each provider |
+| Existing PM | Existing queue and human decision/action fences are retained; a richer PM skill is included | Existing-session attachment, recipient-pinned conversation privacy, requester-scoped reads, and honest pull status are a separate gated follow-on |
+| Project/source adoption | Native and externally authoritative tasks remain compatible with explicit participation | Consent-scoped local discovery, automatic unambiguous association, actual source-tool canaries, coverage/freshness reporting, and rich reconciled project overviews |
+| Rollout | Review, CI, release archives/checksums, and exact-image deployment prerequisites | Operator cloud deployment, serving-image verification, and live dogfooding; no cloud rollout is implied by publication |
+
+Installed skill bytes, configured harness delivery, and activation in an existing
+session are separate states. Recent pull/check-in activity must not be presented
+as verified external push connectivity. A guide for a source is not a verified
+connector, and a reported or completed run is not an accepted task outcome.
+
+Release compatibility must record the OSS tag and exact commit, the matching
+SaaS tag/commit and gitlink, and the immutable core image digest. The independently
+versioned agentctl v0.12.0 happens to share this release number; it is optional.
+Verify the actual artifacts and serving versions before marking rollout gates
+complete. The checkboxes below describe the full program, not just this release.
+
 Slices are independently reviewable. Passing one is not approval to release all
 of them or evidence that the later product experience is complete.
 
