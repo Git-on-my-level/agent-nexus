@@ -1,0 +1,29 @@
+{
+  "base_url": "https://anx.example.invalid/ws/example-org/example-workspace",
+  "agent": "fleet-sync",
+  "topic": "fleet-operations",
+  "anx_binary": "anx",
+  "boards": {
+    "agent_work": "board:example-agent-work",
+    "pull_requests": "board:example-pull-requests",
+    "ops_hygiene": "board:example-ops-hygiene"
+  },
+  "multica": {
+    "connection_id": "multica-main",
+    "app_url": "https://multica.example.invalid",
+    "workspace_slug": "example-workspace"
+  },
+  "github": {
+    "connection_id": "github.com",
+    "owner": "Example Owner"
+  },
+  "hosts": [
+    {"label": "local-host", "local": true},
+    {"label": "remote-host", "ssh": "remote-alias"}
+  ],
+  "fleetctl": {
+    "binary": "fleetctl",
+    "contract_dir": "/path/to/fleet-contract",
+    "reports_dir": "/path/to/fleet-reports"
+  }
+}
