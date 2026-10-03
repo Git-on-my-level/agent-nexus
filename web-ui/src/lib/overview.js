@@ -108,6 +108,18 @@ function sourceKey(work) {
   return String(work?.source?.authority ?? "").trim();
 }
 
+/** Blank phase is not the `unknown` phase. Core does not match `phase=unknown`. */
+function phaseKey(work) {
+  const phase = String(work?.phase ?? "").trim();
+  return phase || "none";
+}
+
+function matrixCellHref(source, phase) {
+  if (!source) return "";
+  if (phase === "none") return tasksQuery({ source });
+  return tasksQuery({ source, phase });
+}
+
 /**
  * Counts of deduped tasks by phase and source authority.
  * Rows follow the known source order, then any other authority.
@@ -122,7 +134,7 @@ export function workMatrix(records = []) {
   const counts = new Map();
   for (const work of list) {
     const source = sourceKey(work);
-    const phase = String(work?.phase || "unknown");
+    const phase = phaseKey(work);
     if (!seen.has(phase)) {
       phases.push(phase);
       seen.add(phase);
@@ -140,20 +152,20 @@ export function workMatrix(records = []) {
     return a.localeCompare(b);
   });
   return {
-    phases: phases.map((key) => ({ key, label: label(key) })),
+    phases: phases.map((key) => ({
+      key,
+      label: key === "none" ? "No phase" : label(key),
+    })),
     rows: sources.map((key) => {
       const row = counts.get(key) || new Map();
       const cells = phases.map((phase) => ({
         phase,
         count: row.get(phase) || 0,
-        href: tasksQuery({
-          source: key,
-          phase,
-        }),
+        href: matrixCellHref(key, phase),
       }));
       return {
         key,
-        label: key ? sourceLabel({ authority: key }) : "Authority unknown",
+        label: key ? sourceLabel({ authority: key }) : "No source",
         total: cells.reduce((sum, cell) => sum + cell.count, 0),
         cells,
       };

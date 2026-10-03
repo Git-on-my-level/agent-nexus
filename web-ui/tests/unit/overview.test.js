@@ -52,6 +52,7 @@ describe("overview work matrix", () => {
       }),
       task({ ref: "card:d", phase: "ready", source: { authority: "nexus" } }),
       task({ ref: "card:e", phase: "review", source: { authority: "" } }),
+      task({ ref: "card:f", phase: "", source: { authority: "github" } }),
     ]);
     expect(matrix.rows.map((row) => row.key)).toEqual([
       "nexus",
@@ -67,8 +68,23 @@ describe("overview work matrix", () => {
     });
     expect(github.cells.find((cell) => cell.phase === "blocked").count).toBe(0);
     expect(matrix.rows.find((row) => row.key === "multica").total).toBe(1);
-    expect(matrix.rows.find((row) => row.key === "").label).toBe(
-      "Authority unknown",
+    expect(matrix.rows.find((row) => row.key === "").label).toBe("No source");
+    expect(
+      matrix.rows
+        .find((row) => row.key === "")
+        .cells.every((cell) => cell.href === ""),
+    ).toBe(true);
+    const blank = github.cells.find((cell) => cell.phase === "none");
+    expect(blank).toEqual({
+      phase: "none",
+      count: 1,
+      href: "/tasks?source=github",
+    });
+    expect(matrix.phases.find((phase) => phase.key === "none").label).toBe(
+      "No phase",
+    );
+    expect(github.cells.find((cell) => cell.phase === "unknown").href).toBe(
+      "/tasks?source=github&phase=unknown",
     );
     expect(tasksQuery({ phase: "blocked" })).toBe("/tasks?phase=blocked");
   });

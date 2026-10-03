@@ -329,32 +329,40 @@
                 </tr>
               </thead>
               <tbody>
-                {#each model.work.matrix.rows as row (row.key || "unknown")}
+                {#each model.work.matrix.rows as row (row.key || "none")}
                   <tr
                     class="border-t border-line-subtle"
-                    data-overview-source={row.key || "unknown"}
+                    data-overview-source={row.key || "none"}
                   >
                     <th
                       class="whitespace-nowrap px-3 py-1.5 text-left font-medium text-fg"
                       scope="row">{row.label}</th
                     >
                     {#each row.cells as cell (cell.phase)}
+                      {@const cellClass = cell.count
+                        ? cell.phase === "blocked"
+                          ? "text-warn-text"
+                          : "text-fg"
+                        : "text-fg-subtle"}
+                      {@const cellText = formatPartialCount(
+                        cell.count,
+                        model.work.truncated,
+                      )}
                       <td class="px-2 py-1.5 text-right tabular-nums">
-                        <a
-                          class="hover:underline {cell.count
-                            ? cell.phase === 'blocked'
-                              ? 'text-warn-text'
-                              : 'text-fg'
-                            : 'text-fg-subtle'}"
-                          href={workspaceHref(cell.href)}
-                          data-overview-cell="{row.key ||
-                            'unknown'}:{cell.phase}"
-                          >{formatPartialCount(
-                            cell.count,
-                            model.work.truncated,
-                          )}</a
-                        >
-                        >
+                        {#if cell.href}
+                          <a
+                            class="hover:underline {cellClass}"
+                            href={workspaceHref(cell.href)}
+                            data-overview-cell="{row.key ||
+                              'none'}:{cell.phase}">{cellText}</a
+                          >
+                        {:else}
+                          <span
+                            class={cellClass}
+                            data-overview-cell="{row.key ||
+                              'none'}:{cell.phase}">{cellText}</span
+                          >
+                        {/if}
                       </td>
                     {/each}
                   </tr>
