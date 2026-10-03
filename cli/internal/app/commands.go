@@ -209,10 +209,12 @@ func (a *App) runVersion(cfg config.Resolved) (*commandResult, error) {
 }
 
 type doctorCheck struct {
-	Name       string `json:"name"`
-	OK         bool   `json:"ok"`
-	Message    string `json:"message"`
-	DurationMS int64  `json:"duration_ms"`
+	Name                  string `json:"name"`
+	OK                    bool   `json:"ok"`
+	Status                string `json:"status,omitempty"`
+	Message               string `json:"message"`
+	RecommendedCLIVersion string `json:"recommended_cli_version,omitempty"`
+	DurationMS            int64  `json:"duration_ms"`
 }
 
 func apiCallUsageText() string {

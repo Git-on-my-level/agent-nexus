@@ -15,10 +15,22 @@ Local annotations and source workflow fields have separate mutation paths.
   next actor/action, evidence, freshness and refresh lifecycle.
 - `PATCH /work/{card_ref}`: `{if_version,patch}` changes local annotations only.
   Native content/status changes use existing card revision/move APIs and their
-  completion evidence gate. External card revisions/moves/updates are rejected.
+  completion evidence gate. Operator revisions, moves, and content updates of
+  external cards are rejected.
 - `POST /work/{card_ref}/observations`: attributed, replay-safe observation.
   Exact replay returns the original; conflicting reuse returns 409. Client
   `status=verified` remains `verification=reported`, never independent proof.
+  When that observation becomes the latest good one (status other than `error`,
+  and newer by the existing source-sequence / observed-at order) for external
+  work, and `facts.phase` maps to a different board column, the card moves in
+  the same transaction. `cancelled` and `unknown` map to `backlog` unless the
+  board has that column. The move uses the board's rank allocator and emits
+  `card_moved`. `done` carries the observation's referenced evidence through
+  the completion gate (a live `artifact:` or `event:` ref, or a workspace event
+  recorded from URL evidence). Error observations, older observations, and
+  duplicate replays do not move the card. Native cards are unchanged. The move
+  does not bump `work_metadata.version`; a nonempty external `source.revision`
+  remains `decision_revision`.
 - `GET /work/{card_ref}/observations`: append-only evidence history.
 - `POST /work/{card_ref}/refresh`: returns 202 queued, coalescing active work.
   Queue acceptance does not mean that a source read succeeded.
@@ -295,7 +307,9 @@ Nexus-owned phase actions use the board move transaction with a work revision
 precondition. All board moves advance the work revision; board and work reads
 therefore share the same phase. Execution reads back the canonical phase and
 reconciliation records verification. Source-owned phase requests never mutate
-the projection. Without a source executor, dispatch returns 503 `unavailable`
+the projection. Accepted external observations are separate: they move the
+board card to the observed phase without changing the source-revision fence.
+Without a source executor, dispatch returns 503 `unavailable`
 with an explanation and leaves the approved pending action unchanged, including
 its revision and attempts. Action get/list/page responses derive `deliverable`
 from configured scope/source routing; clients should hide Deliver when false.

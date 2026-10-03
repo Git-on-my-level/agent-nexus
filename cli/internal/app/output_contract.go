@@ -212,7 +212,50 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 	return actions
 }
 
+func doctorVersionWarnings(value any) ([]output.Warning, []output.NextAction) {
+	root, _ := value.(map[string]any)
+	var warnings []output.Warning
+	var repairs []output.NextAction
+	for _, check := range doctorChecksOf(root["checks"]) {
+		if check.Status != "warn" || check.Name != "cli_version" {
+			continue
+		}
+		warnings = append(warnings, output.Warning{Code: "cli_version", Message: check.Message})
+		if version := strings.TrimSpace(check.RecommendedCLIVersion); version != "" {
+			repairs = append(repairs, action("Update CLI", "anx", "update", "--version", version))
+		}
+	}
+	if warnings == nil {
+		return []output.Warning{}, []output.NextAction{}
+	}
+	return warnings, repairs
+}
+
+func doctorChecksOf(raw any) []doctorCheck {
+	if typed, ok := raw.([]doctorCheck); ok {
+		return typed
+	}
+	items := asSlice(raw)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]doctorCheck, 0, len(items))
+	for _, item := range items {
+		check := asMap(item)
+		out = append(out, doctorCheck{
+			Name:                  anyString(check["name"]),
+			Status:                anyString(check["status"]),
+			Message:               anyString(check["message"]),
+			RecommendedCLIVersion: anyString(check["recommended_cli_version"]),
+		})
+	}
+	return out
+}
+
 func resultWarnings(command string, argv []string, value any) ([]output.Warning, []output.NextAction) {
+	if command == "doctor" {
+		return doctorVersionWarnings(value)
+	}
 	parts := strings.Fields(command)
 	if len(parts) == 0 || parts[len(parts)-1] != "list" && parts[len(parts)-1] != "search" {
 		return []output.Warning{}, []output.NextAction{}
@@ -342,6 +385,11 @@ func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction 
 		}
 		return []output.NextAction{action("Orient after rejection", "anx", "orient")}
 	case "cli_outdated":
+		if details, ok := err.Details.(map[string]any); ok {
+			if version := strings.TrimSpace(anyString(details["recommended_cli_version"])); version != "" {
+				return []output.NextAction{action("Update CLI", "anx", "update", "--version", version)}
+			}
+		}
 		return []output.NextAction{action("Update CLI", "anx", "update")}
 	case "unknown_command", "unknown_subcommand":
 		parts := strings.Fields(command)

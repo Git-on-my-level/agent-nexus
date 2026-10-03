@@ -385,6 +385,7 @@ Host enrollment and derived-agent identity resolution.
 Host identity
 
 Enroll once per workspace with anx host enroll. The owner-only host key lives below ~/.config/anx/hosts/<workspace-key>/.
+Enrollment stores that workspace core in host.json. When no --base-url or ANX_BASE_URL is set and exactly one host is enrolled, commands use that base URL (source bridge:auto-single).
 Use --as <name> or ANX_AS to select a derived agent; agentctl run context and verified harness detection are automatic. anx auth whoami reports the selected host, agent and resolution source.
 
 Old ~/.config/anx/profiles/*.json agent profiles are considered only for adoption during host enrollment. Use anx host enroll --plan to inspect them.

@@ -254,8 +254,199 @@ func TestWorkObservationPaginationSurvivesInsert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 {
-		t.Fatalf("routine polls created semantic events: %d", len(events))
+	moved := 0
+	for _, event := range events {
+		if event["type"] == "card_moved" {
+			moved++
+		}
+	}
+	// Registration, the first phase change, and that change's board move.
+	// Later identical polls must not add another move.
+	if len(events) != 3 || moved != 1 {
+		t.Fatalf("routine polls created semantic events: %d moved=%d", len(events), moved)
+	}
+}
+
+func TestWorkObservationMovesExternalBoardCard(t *testing.T) {
+	ctx := context.Background()
+	type step struct {
+		key      string
+		seq      int
+		status   string
+		phase    string
+		revision string
+		evidence bool
+		replay   bool
+	}
+	cases := []struct {
+		name         string
+		native       bool
+		createPhase  string
+		steps        []step
+		wantColumn   string
+		wantPhase    string
+		wantMoves    int
+		wantVersion  int64
+		wantDecision string
+		wantDone     bool
+	}{
+		{
+			name:        "review to in_progress",
+			createPhase: "review",
+			steps:       []step{{key: "move", seq: 2, status: "reported", phase: "in_progress", revision: "rev-2"}},
+			wantColumn:  "in_progress", wantPhase: "in_progress", wantMoves: 1, wantVersion: 1, wantDecision: "rev-2",
+		},
+		{
+			name:        "done with evidence",
+			createPhase: "review",
+			steps:       []step{{key: "done", seq: 3, status: "reported", phase: "done", revision: "rev-3", evidence: true}},
+			wantColumn:  "done", wantPhase: "done", wantMoves: 1, wantVersion: 1, wantDecision: "rev-3", wantDone: true,
+		},
+		{
+			name:        "error does not move",
+			createPhase: "review",
+			steps:       []step{{key: "err", seq: 4, status: "error", phase: "done", revision: "rev-4", evidence: true}},
+			wantColumn:  "review", wantPhase: "review", wantMoves: 0, wantVersion: 1, wantDecision: "rev-0",
+		},
+		{
+			name:        "older sequence does not move",
+			createPhase: "review",
+			steps: []step{
+				{key: "new", seq: 5, status: "reported", phase: "in_progress", revision: "rev-5"},
+				{key: "old", seq: 1, status: "reported", phase: "backlog", revision: "rev-1"},
+			},
+			wantColumn: "in_progress", wantPhase: "in_progress", wantMoves: 1, wantVersion: 1, wantDecision: "rev-5",
+		},
+		{
+			name:        "duplicate replay does not move twice",
+			createPhase: "review",
+			steps: []step{
+				{key: "once", seq: 6, status: "reported", phase: "blocked", revision: "rev-6"},
+				{key: "once", seq: 6, status: "reported", phase: "blocked", revision: "rev-6", replay: true},
+			},
+			wantColumn: "blocked", wantPhase: "blocked", wantMoves: 1, wantVersion: 1, wantDecision: "rev-6",
+		},
+		{
+			name:        "cancelled maps to backlog",
+			createPhase: "review",
+			steps:       []step{{key: "cancel", seq: 7, status: "reported", phase: "cancelled", revision: "rev-7"}},
+			wantColumn:  "backlog", wantPhase: "cancelled", wantMoves: 1, wantVersion: 1, wantDecision: "rev-7",
+		},
+		{
+			name:        "native card unaffected",
+			native:      true,
+			createPhase: "review",
+			steps:       []step{{key: "native", seq: 8, status: "reported", phase: "in_progress", revision: "rev-8"}},
+			wantColumn:  "review", wantPhase: "review", wantMoves: 0, wantVersion: 1, wantDecision: "1.1",
+		},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, boardID := newWorkTestStore(t)
+			occupantRank := ""
+			if tc.wantColumn == "in_progress" && !tc.native {
+				occupant, err := s.CreateWork(ctx, "actor-1", boardID, map[string]any{
+					"title": "Already working", "phase": "in_progress",
+					"source": map[string]any{"authority": "github", "connection_id": "c", "native_id": fmt.Sprintf("occupant-%d", i)},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				placed, err := s.GetBoardCard(ctx, boardID, occupant["id"].(string))
+				if err != nil {
+					t.Fatal(err)
+				}
+				occupantRank = placed["rank"].(string)
+			}
+			source := map[string]any{"authority": "github", "connection_id": "c", "native_id": fmt.Sprintf("native-%d", i), "revision": "rev-0"}
+			input := map[string]any{"title": tc.name, "phase": tc.createPhase, "source": source}
+			if tc.native {
+				input["source"] = map[string]any{"authority": "nexus"}
+			}
+			w, err := s.CreateWork(ctx, "actor-1", boardID, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := w["id"].(string)
+			var previous map[string]any
+			for _, step := range tc.steps {
+				body := previous
+				if !step.replay {
+					body = map[string]any{
+						"idempotency_key": step.key, "reader_id": "github", "reader_revision": "v1",
+						"observed_at": time.Now().UTC().Format(time.RFC3339Nano), "source_sequence": step.seq,
+						"status": step.status, "source_revision": step.revision,
+						"facts": map[string]any{"phase": step.phase},
+					}
+					if step.evidence {
+						body["evidence"] = []any{map[string]any{"url": "https://example.test/evidence", "kind": "issue"}}
+					}
+					if step.status == "error" {
+						body["error"] = map[string]any{"code": "boom", "message": "failed"}
+					}
+					previous = body
+				}
+				got, err := s.SubmitWorkObservation(ctx, "actor-1", id, body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if step.replay && got["duplicate"] != true {
+					t.Fatalf("expected replay: %#v", got["duplicate"])
+				}
+			}
+			card, err := s.GetBoardCard(ctx, boardID, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if card["column_key"] != tc.wantColumn {
+				t.Fatalf("column_key=%v want %s", card["column_key"], tc.wantColumn)
+			}
+			if tc.wantColumn == "in_progress" && occupantRank != "" && card["rank"].(string) <= occupantRank {
+				t.Fatalf("moved card rank %q is not after occupant %q", card["rank"], occupantRank)
+			}
+			current, err := s.GetWork(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if current["phase"] != tc.wantPhase || current["version"] != tc.wantVersion || current["decision_revision"] != tc.wantDecision {
+				t.Fatalf("work phase=%v version=%v decision=%v", current["phase"], current["version"], current["decision_revision"])
+			}
+			if tc.wantDone {
+				if current["resolution"] != "done" {
+					t.Fatalf("resolution=%v", current["resolution"])
+				}
+				switch refs := current["resolution_refs"].(type) {
+				case []any:
+					if len(refs) == 0 {
+						t.Fatal("done move dropped completion evidence")
+					}
+				case []string:
+					if len(refs) == 0 {
+						t.Fatal("done move dropped completion evidence")
+					}
+				default:
+					t.Fatalf("done move dropped completion evidence: %#v", current["resolution_refs"])
+				}
+			}
+			events, err := s.ListEventsByThread(ctx, w["thread_id"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			moved := 0
+			for _, event := range events {
+				if event["type"] != "card_moved" {
+					continue
+				}
+				moved++
+				payload, _ := event["payload"].(map[string]any)
+				if payload["column_key"] != tc.wantColumn {
+					t.Fatalf("card_moved column=%v want %s", payload["column_key"], tc.wantColumn)
+				}
+			}
+			if moved != tc.wantMoves {
+				t.Fatalf("card_moved count=%d want %d", moved, tc.wantMoves)
+			}
+		})
 	}
 }
 
@@ -427,5 +618,36 @@ func TestCreateWorkRejectedRequestLeavesNoDefaultBoard(t *testing.T) {
 	}
 	if len(boards) != 0 {
 		t.Fatalf("a rejected work.create provisioned a board: %v", boards)
+	}
+}
+
+func TestWorkObservationOnArchivedExternalCardIsAcceptedWithoutMove(t *testing.T) {
+	ctx := context.Background()
+	s, boardID := newWorkTestStore(t)
+	w, err := s.CreateWork(ctx, "actor-1", boardID, map[string]any{
+		"title": "archived external", "phase": "review",
+		"source": map[string]any{"authority": "github", "connection_id": "c", "native_id": "archived-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := w["id"].(string)
+	if _, err = s.ArchiveBoardCard(ctx, "actor-1", boardID, id, primitives.RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.SubmitWorkObservation(ctx, "actor-1", id, map[string]any{
+		"idempotency_key": "after-archive", "reader_id": "github", "reader_revision": "v1",
+		"observed_at": time.Now().UTC().Format(time.RFC3339Nano), "source_sequence": 2,
+		"status": "reported", "source_revision": "rev-2", "facts": map[string]any{"phase": "in_progress"},
+	})
+	if err != nil {
+		t.Fatalf("observation on archived card rejected: %v", err)
+	}
+	current, err := s.GetWork(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current["phase"] != "in_progress" {
+		t.Fatalf("projected phase=%v", current["phase"])
 	}
 }

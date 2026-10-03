@@ -152,6 +152,7 @@ func (a *App) Run(args []string) int {
 			return a.renderError(resolveMachineCommandIdentity(configErrorCommand), jsonMode, wrapped)
 		}
 	}
+	resolved = a.applySingleHostBaseURL(resolved)
 	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
 		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
 			if _, hostErr := a.resolvedHost(resolved); hostErr == nil {
