@@ -205,7 +205,7 @@ describe("Onboarding workspace page — form submission", () => {
     expect(callBody.organization_id).toBe("org1");
 
     await waitFor(() => {
-      expect(mockGoto).toHaveBeenCalledWith("/o/acme/w/main/inbox", {
+      expect(mockGoto).toHaveBeenCalledWith("/o/acme/w/main/overview", {
         replaceState: true,
       });
     });

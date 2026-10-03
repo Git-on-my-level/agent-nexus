@@ -1,12 +1,19 @@
 /**
- * Primary navigation: Inbox (the only attention surface), Agents (presence:
- * who is working, waiting or stale), then the product primitives Tasks and
- * Docs. The PM conversation is an action ("Ask PM" in the sidebar header and the
+ * Primary navigation: Overview (workspace home; it summarizes and links,
+ * it does not take attention actions), Inbox (the only attention surface),
+ * Agents (presence: who is working, waiting or stale), then Tasks and Docs.
+ * The PM conversation is an action ("Ask PM" in the sidebar header and the
  * mobile bottom bar), not a destination category. Settings (Access, Secrets,
  * Integrations) and Diagnostics (Audit, Threads) live in the account menu in
  * the sidebar footer and in the mobile More hub.
  */
 export const navigationItems = [
+  {
+    label: "Overview",
+    href: "/overview",
+    icon: "overview",
+    hint: "Workspace home",
+  },
   {
     label: "Inbox",
     href: "/inbox",
@@ -98,7 +105,7 @@ const SHELL_CONTENT_RULES = [
     maxWidth: "56rem",
   },
   {
-    match: /^\/(tasks|inbox|integrations)(\/|$)/,
+    match: /^\/(overview|tasks|inbox|integrations)(\/|$)/,
     mode: "fluid",
     maxWidth: "112rem",
   },

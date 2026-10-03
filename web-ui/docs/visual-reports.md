@@ -86,6 +86,18 @@ Command spellings and transport behavior come from
 ordinary HTTP equivalents remain `POST /docs`, `GET /docs/{document_id}`, and
 `POST /docs/{document_id}/revisions`; no shared contract changes are required.
 
+## Workspace Overview
+
+The workspace Overview lists documents whose current text parses as a
+recognized valid visual report (`parseVisualReport` returns a report) and
+renders the preferred one inline. It scans the 50 most recently updated
+active documents. Among valid reports, newest `updated_at` wins. A document
+opts to be preferred by a title that starts with `Dashboard` or
+`Fleet Dashboard` (the match is case-insensitive and stops at a word
+boundary, so `Dashboard notes` qualifies and `Dashboarding` does not).
+Preferred reports sort ahead of newer reports that do not opt in. This is a
+title convention only; it is not a tag, a new document kind, or a core field.
+
 ## Version 1 shape
 
 All properties shown below are required except the artifact's optional `url`.

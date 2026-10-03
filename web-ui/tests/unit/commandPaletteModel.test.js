@@ -65,6 +65,7 @@ describe("command palette model", () => {
     expect(
       commands.map((c) => [c.label, (c.shortcut || []).join(" ")]),
     ).toEqual([
+      ["Overview", "G O"],
       ["Inbox", "G I"],
       ["Agents", "G A"],
       ["Tasks", "G T"],

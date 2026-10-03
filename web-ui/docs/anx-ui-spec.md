@@ -99,7 +99,7 @@ The Tasks table and board cards name the board only when more than one board is 
 
 **Domain note:** Operator vocabulary and core vocabulary are deliberately different. The boundary between them is the typed ref.
 
-- **Operator-facing nouns are Inbox, Agents, Tasks and Docs, plus Hosts and People inside Access.** A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards). An **Agent** is a derived principal on a host, shown by what it is doing; the Agents view is presence, not a second attention queue.
+- **Operator-facing nouns are Overview, Inbox, Agents, Tasks and Docs, plus Hosts and People inside Access.** **Overview** is the workspace home: it summarizes what needs the operator, work in flight, agent presence, and visual reports, and it links into those surfaces. It is not an attention surface and it introduces no actions. A **Task** is the operator's unit of work (`work.list` / `work.get` projected over cards). An **Agent** is a derived principal on a host, shown by what it is doing; the Agents view is presence, not a second attention queue.
 - **Core primitives — topic, board, card, thread, artifact — are not operator nouns.** They are the durable model that agents address by typed ref (`topic:`, `card:`, `board:`, `document:` — the contract's prefixes, per `contracts/anx-schema.yaml` → `ref_format`; `doc:` is a CLI target shorthand only and is rejected inside a ref) through the CLI and generated clients. The UI renders them, but never asks an operator to think in them.
 - A **thread** is infrastructure: a durable append-only event timeline that backs topics, cards, boards and documents, and resolves packet subjects. It is never an operator-facing noun.
 - A **topic** is the core discussion/context primitive built on a thread. It has **no operator destination**; it appears only as a ref-type label (e.g. in `RefLink` or an Events filter) and as the detail rendering of its backing thread.
@@ -108,12 +108,13 @@ The practical rule: if an operator has to learn a word to use the product, it be
 
 ---
 
-## 2. Core UX model: Inbox, Agents, Tasks, Docs
+## 2. Core UX model: Overview, Inbox, Agents, Tasks, Docs
 
 ### 2.1 Primary navigation
 
-The primary navigation units are **Inbox**, **Agents**, **Tasks**, and
-**Docs**, in that order, in the sidebar and in the mobile bottom bar. Inbox
+The primary navigation units are **Overview**, **Inbox**, **Agents**,
+**Tasks**, and **Docs**, in that order, in the sidebar and in the mobile
+bottom bar. Overview is first because it is the workspace home. Inbox
 shows its Needs you count; Agents shows how many agents are working (nothing at
 zero). Agents is presence: who is working, waiting on a human, idle or stale.
 It never answers an ask; a waiting agent's row links into the Inbox. Ask PM is
@@ -121,6 +122,18 @@ an action in the shell, not a nav category. The account menu in the sidebar
 footer and the `/more` hub group the secondary destinations under two labels:
 **Settings** (Access, Secrets, Integrations) and **Diagnostics** (Audit,
 Threads). Sign out is the last item of the account menu.
+
+Overview (`/overview`) summarizes four existing reads and links into them. It
+does not answer an ask, move a task, or edit a document. **Needs you** is the
+Inbox count and its first rows. **Work at a glance** counts `GET /work` by
+phase and source, plus blocked tasks, tasks whose next actor is a person, and
+freshness (stale, unknown, error); each count links to Tasks with the matching
+query (`source`, `phase`, `freshness`, and `human=1` for a person as next
+actor). **Agents** counts working, waiting, and stale and links to the roster.
+**Reports** lists documents whose current content is a valid visual report
+(`parseVisualReport`), newest first, and renders the selected one. A document
+whose title starts with `Dashboard` or `Fleet Dashboard` is preferred. A failed
+read is unavailable; it is never shown as zero or healthy.
 
 Tasks is the operator projection over work (`work.list` / `work.get`), shown as
 table or board. Boards and cards remain the backing store; they are not
@@ -177,7 +190,7 @@ Mutable fields are interpretive and versioned through events. The timeline is du
 
 ### 3.0 Workspace root and Events
 
-The workspace root redirects to Inbox. There is no Home unread-feed destination. Agents (§3.8) is a presence view, not a home.
+The workspace root redirects to Overview. There is no Home unread-feed destination. Inbox remains the only attention surface. Agents (§3.8) is a presence view, not a home.
 
 Events ("Audit") is the full workspace event browser under Diagnostics. It reads `GET /events`,
 supports URL/shareable filter intent for type, group, backing scope, topic, actor,
@@ -299,12 +312,12 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is keyboard-first and takes actions, not only searches. Rows are grouped, in this order:
 
 1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref, Ask PM about this task. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
-2. **Go to:** Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination.
+2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination.
 3. **Search results:** tasks (one row per source item) and docs, from two characters on.
 
 Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through `applyTaskPhaseMove`, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
 
-Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then I/A/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G I/T/D and ⌘K alongside the page's own keys.
+Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then O/I/A/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G O/I/A/T/D and ⌘K alongside the page's own keys.
 
 ### 3.7 Access management
 

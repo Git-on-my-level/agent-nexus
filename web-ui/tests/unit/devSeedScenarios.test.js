@@ -19,7 +19,7 @@ describe("dev seed scenarios", () => {
     const seed = scenario.getSeedData();
     expect(seed.topics).toHaveLength(4);
     expect(seed.boards).toHaveLength(3);
-    expect(seed.documents).toHaveLength(5);
+    expect(seed.documents).toHaveLength(6);
     expect(seed.cards.length).toBeGreaterThanOrEqual(10);
   });
 
@@ -142,7 +142,7 @@ describe("dev seed scenarios", () => {
     });
     expect(seed.topics).toHaveLength(4);
     expect(seed.boards).toHaveLength(3);
-    expect(seed.documents).toHaveLength(5);
+    expect(seed.documents).toHaveLength(6);
     expect(
       seed.documents.every((document) =>
         String(document.backing_thread_id ?? "").startsWith("thread-gds-doc-"),

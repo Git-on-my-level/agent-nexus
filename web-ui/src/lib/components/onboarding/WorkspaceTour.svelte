@@ -113,7 +113,7 @@
   );
 
   function shouldOfferTourPath(/** @type {string} */ path) {
-    return path === "/inbox";
+    return path === "/overview" || path === "/inbox";
   }
 
   function finishTour() {
@@ -203,7 +203,7 @@
     }
 
     if (!shouldOfferTourPath(relPath)) {
-      const dest = workspacePath(organizationSlug, workspaceSlug, "/inbox");
+      const dest = workspacePath(organizationSlug, workspaceSlug, "/overview");
       void goto(dest, { replaceState: true, noScroll: false });
       return;
     }
@@ -237,7 +237,7 @@
     if (tourOpen) return;
     pendingReplay = true;
     if (!shouldOfferTourPath(relPath)) {
-      const dest = workspacePath(organizationSlug, workspaceSlug, "/inbox");
+      const dest = workspacePath(organizationSlug, workspaceSlug, "/overview");
       void goto(dest, { replaceState: false, noScroll: false });
     }
   });

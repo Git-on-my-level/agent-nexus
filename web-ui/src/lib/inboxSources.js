@@ -22,33 +22,35 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
  * Everything the Inbox classifies, fetched in parallel. Each source settles
  * on its own so one failing list does not blank the others.
  *
- * @param {{ withHistory?: boolean }} [options] `withHistory: false` skips the
- *   Handled and Watching-only sources (completed items, unread updates); the
- *   sidebar count needs only what can land in Needs you.
+ * @param {{ withHistory?: boolean, client?: object }} [options]
+ *   `withHistory: false` skips the Handled and Watching-only sources
+ *   (completed items, unread updates); the sidebar count needs only what
+ *   can land in Needs you. `client` defaults to the browser core client;
+ *   a server load passes its own.
  * @returns {Promise<PromiseSettledResult<any>[]>} decisions, actions, work,
  *   open items, completed items, unread updates (the last two resolve to
  *   empty lists when skipped)
  */
-export function loadInboxSources({ withHistory = true } = {}) {
+export function loadInboxSources({
+  withHistory = true,
+  client = coreClient,
+} = {}) {
   const skipped = Promise.resolve(null);
   return Promise.allSettled([
     listAllPages(
-      (cursor) => coreClient.listPmDecisions({ limit: 50, cursor }),
+      (cursor) => client.listPmDecisions({ limit: 50, cursor }),
       "items",
     ),
     listAllPages(
-      (cursor) => coreClient.listPmActions({ limit: 50, cursor }),
+      (cursor) => client.listPmActions({ limit: 50, cursor }),
       "items",
     ),
-    listAllPages(
-      (cursor) => coreClient.listWork({ limit: 50, cursor }),
-      "work",
-    ),
-    coreClient.listInboxItems({ status: "open", limit: 50 }),
+    listAllPages((cursor) => client.listWork({ limit: 50, cursor }), "work"),
+    client.listInboxItems({ status: "open", limit: 50 }),
     withHistory
-      ? coreClient.listInboxItems({ status: "completed", limit: 50 })
+      ? client.listInboxItems({ status: "completed", limit: 50 })
       : skipped,
-    withHistory ? coreClient.getHomeUnread() : skipped,
+    withHistory ? client.getHomeUnread() : skipped,
   ]);
 }
 

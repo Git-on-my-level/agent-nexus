@@ -1,1 +1,3 @@
-<p class="py-10 text-center text-meta text-fg-muted">Redirecting to Inbox…</p>
+<p class="py-10 text-center text-meta text-fg-muted">
+  Redirecting to Overview…
+</p>

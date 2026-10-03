@@ -8,7 +8,7 @@ export function load(event) {
     workspacePath(
       event.params.organization,
       event.params.workspace,
-      `/inbox${event.url.search}`,
+      `/overview${event.url.search}`,
     ),
   );
 }
