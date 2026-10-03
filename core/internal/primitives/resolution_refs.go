@@ -20,6 +20,37 @@ func (s *Store) ResolveResolutionRef(ctx context.Context, ref string) (Resolutio
 	return resolveResolutionRef(ctx, s.db, ref)
 }
 
+// CanonicalResolutionRefID resolves a typed ref to the canonical resource id
+// used by Get* lookups, following the same handle and alias fallbacks as live
+// resolution. Visibility checks must resolve before reading; ref values may be
+// handles rather than ids.
+func (s *Store) CanonicalResolutionRefID(ctx context.Context, ref string) (string, string, error) {
+	kind, value, ok := normalizeTypedRef(ref)
+	if !ok {
+		return "", "", ErrInvalidResourceRef
+	}
+	if resourceTables[kind] == "" && kind != "document_revision" && kind != "card_revision" {
+		return kind, "", nil
+	}
+	resolved, err := resolveResourceByTypedValue(ctx, s.db, kind, value)
+	if errors.Is(err, ErrNotFound) && resourceTables[kind] != "" {
+		var id string
+		err = s.db.QueryRowContext(ctx, `SELECT resource_id FROM resource_handle_aliases WHERE resource_type=? AND alias_handle=?`, kind, value).Scan(&id)
+		if err == nil {
+			resolved, err = resolveResourceByTypedValue(ctx, s.db, kind, id)
+		}
+	}
+	if err != nil {
+		// Absent resources normalize to ErrNotFound; the alias probe can leave
+		// a raw sql.ErrNoRows behind.
+		if errors.Is(err, sql.ErrNoRows) {
+			return kind, "", ErrNotFound
+		}
+		return kind, "", err
+	}
+	return kind, resolved.ID, nil
+}
+
 func resolveResolutionRef(ctx context.Context, q queryRower, ref string) (ResolutionRef, error) {
 	kind, value, ok := normalizeTypedRef(ref)
 	out := ResolutionRef{Ref: ref, Kind: kind}

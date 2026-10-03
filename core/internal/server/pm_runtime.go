@@ -309,6 +309,13 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 			return pm.ResolutionRef{}, pm.ErrForbidden
 		}
 		resolved, err := store.ResolveResolutionRef(ctx, ref)
+		if err != nil {
+			return pm.ResolutionRef{}, err
+		}
+		// Decision summaries inherit the requesting actor's resource
+		// visibility. Decisions are workspace-readable while the conversations
+		// behind their evidence may not be; see pm_decision_visibility.go.
+		resolved.TitleOrSummary = redactedDecisionSummary(ctx, store, cfg.PM.AgentActorID, resolved)
 		return pm.ResolutionRef{Ref: resolved.Ref, Kind: resolved.Kind, TitleOrSummary: resolved.TitleOrSummary, Exists: resolved.Exists}, err
 	}
 	service, err := pm.NewService(ps, cfg.PM, deps)
