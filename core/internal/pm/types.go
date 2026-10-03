@@ -360,6 +360,9 @@ type DispatchRequest struct {
 // Reconcile is read-only.
 type Dependencies struct {
 	// DecisionWork reads one live snapshot; ErrNotFound includes trashed/archived work.
+	// ResolveResolution must apply the requesting principal's resource visibility
+	// to any projected summary: decisions are workspace-readable while their
+	// evidence may not be.
 	DecisionWork      func(context.Context, Principal, string) (DecisionWork, error)
 	ResolveResolution func(context.Context, Principal, string) (ResolutionRef, error)
 	Authorize         func(context.Context, Principal, string, string) error
