@@ -420,6 +420,14 @@
                   ? "tasks have a person as next actor"
                   : "task has a person as next actor"}
               </a>
+              {#if model.work.human.incomplete}
+                <p
+                  class="mt-1 text-micro text-warn-text"
+                  data-overview-human-partial
+                >
+                  Next-actor count may be incomplete.
+                </p>
+              {/if}
               {#if model.work.human.items.length}
                 <ul class="mt-1 space-y-0.5">
                   {#each model.work.human.items as item (item.key)}

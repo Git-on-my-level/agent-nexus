@@ -15,6 +15,7 @@
     lookupActorDisplayName,
     principalRegistry,
     replaceActorRegistry,
+    setActorDirectoryIncomplete,
     selectedActorId,
     shouldShowActorGate,
   } from "$lib/actorSession";
@@ -471,11 +472,19 @@
       const response = await coreClient.listActors();
       const actors = response.actors ?? [];
       replaceActorRegistry(actors, workspaceSlug);
+      setActorDirectoryIncomplete(
+        Boolean(
+          String(response?.next_cursor ?? "").trim() ||
+          response?.has_more === true,
+        ),
+        workspaceSlug,
+      );
       return actors;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       actorError = `Failed to load actors: ${reason}`;
       replaceActorRegistry([], workspaceSlug);
+      setActorDirectoryIncomplete(true, workspaceSlug);
       return [];
     } finally {
       loadingActors = false;

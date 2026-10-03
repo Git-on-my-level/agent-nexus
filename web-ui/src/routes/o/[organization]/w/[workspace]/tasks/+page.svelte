@@ -27,7 +27,12 @@
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
-  import { actorRegistry, principalRegistry } from "$lib/actorSession";
+  import {
+    actorDirectoryIncomplete,
+    actorRegistry,
+    principalDirectoryIncomplete,
+    principalRegistry,
+  } from "$lib/actorSession";
   import { navIconPath } from "$lib/icons.js";
   import {
     humanActorIdSet,
@@ -152,6 +157,9 @@
   // next actor is a person; this page reads enough rows to apply it locally.
   let humanOnly = $derived($page.url.searchParams.get("human") === "1");
   let humanIds = $derived(humanActorIdSet($actorRegistry, $principalRegistry));
+  let peopleIncomplete = $derived(
+    $actorDirectoryIncomplete || $principalDirectoryIncomplete,
+  );
   // One row per source item: a GitHub issue read through two connections is
   // one task to the operator. The folded rows stay reachable from the kept
   // task's page.
@@ -761,6 +769,11 @@
   {#if humanOnly}
     <p class="text-micro text-fg-muted" data-task-human-filter>
       Showing tasks whose next actor is a person.
+      {#if peopleIncomplete}
+        <span class="text-warn-text" data-task-human-partial
+          >Next-actor count may be incomplete.</span
+        >
+      {/if}
       <a class="ui-prose-link" href={queryHref({ human: "" })}>Clear</a>
     </p>
   {/if}
@@ -965,7 +978,7 @@
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
       Loading tasks…
     </p>
-  {:else if !error && !records.length}
+  {:else if !error && !visible.length}
     <section class="py-14 text-center">
       <h2 class="text-subtitle font-semibold text-fg">
         {activeFilters ? "No matching tasks" : "Nothing tracked yet"}
@@ -983,7 +996,7 @@
         >{activeFilters ? "Clear filters" : "Create task"}</a
       >
     </section>
-  {:else if records.length}
+  {:else if visible.length}
     <WorkViews
       records={visible}
       {view}

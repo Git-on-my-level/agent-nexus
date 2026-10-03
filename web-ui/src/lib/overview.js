@@ -81,6 +81,42 @@ export function humanActorIdSet(actors = [], principals = []) {
   return ids;
 }
 
+function directoryPageIncomplete(value) {
+  if (!value || typeof value !== "object") return false;
+  return Boolean(
+    String(value.next_cursor ?? "").trim() || value.has_more === true,
+  );
+}
+
+/**
+ * People used to decide "next actor is a person". A failed or paged-out
+ * read is still usable, but the count must say it may be short.
+ *
+ * @param {PromiseSettledResult<{ actors?: object[] }>|undefined} actorsResult
+ * @param {PromiseSettledResult<{ principals?: object[] }>|undefined} principalsResult
+ */
+export function settleHumanDirectory(actorsResult, principalsResult) {
+  const actorsRejected = actorsResult?.status === "rejected";
+  const principalsRejected = principalsResult?.status === "rejected";
+  if (actorsRejected && principalsRejected) {
+    throw actorsResult.reason instanceof Error
+      ? actorsResult.reason
+      : new Error("People could not be loaded.");
+  }
+  const incomplete =
+    actorsRejected ||
+    principalsRejected ||
+    directoryPageIncomplete(actorsResult?.value) ||
+    directoryPageIncomplete(principalsResult?.value);
+  return {
+    ids: humanActorIdSet(
+      actorsRejected ? [] : actorsResult?.value?.actors || [],
+      principalsRejected ? [] : principalsResult?.value?.principals || [],
+    ),
+    incomplete,
+  };
+}
+
 export function isHumanNextActor(work, humanIds) {
   const raw = String(work?.next_actor ?? "").trim();
   if (!raw || !humanIds) return false;
@@ -329,25 +365,14 @@ async function loadHumanIds(client) {
     client.listPrincipals?.({ limit: 200 }) ??
       Promise.resolve({ principals: [] }),
   ]);
-  if (
-    actorsResult.status === "rejected" &&
-    principalsResult.status === "rejected"
-  ) {
-    throw actorsResult.reason;
-  }
-  return humanActorIdSet(
-    actorsResult.status === "fulfilled" ? actorsResult.value?.actors || [] : [],
-    principalsResult.status === "fulfilled"
-      ? principalsResult.value?.principals || []
-      : [],
-  );
+  return settleHumanDirectory(actorsResult, principalsResult);
 }
 
 async function loadWork(client, now) {
   const [{ work, truncated }, humanIds] = await Promise.all([
     listWorkPages((query) => client.listWork(query)),
     loadHumanIds(client).then(
-      (ids) => ({ status: "ok", ids }),
+      (directory) => ({ status: "ok", ...directory }),
       (error) => ({
         status: "unavailable",
         message: sectionMessage(error, "People could not be loaded."),
@@ -361,6 +386,7 @@ async function loadWork(client, now) {
     humanIds.status === "ok"
       ? {
           status: "ok",
+          incomplete: Boolean(humanIds.incomplete),
           count: records.filter((item) => isHumanNextActor(item, humanIds.ids))
             .length,
           href: tasksQuery({ human: "1" }),

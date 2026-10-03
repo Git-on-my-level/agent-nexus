@@ -13,6 +13,7 @@ import {
   needsYouFromSources,
   orderDocumentsForReportScan,
   selectVisualReports,
+  settleHumanDirectory,
   tasksQuery,
   workMatrix,
 } from "../../src/lib/overview.js";
@@ -153,6 +154,48 @@ describe("overview next actor", () => {
     expect(isHumanNextActor(task({ next_actor: "actor-jordan" }), null)).toBe(
       false,
     );
+  });
+
+  it("marks a partial or failed people read instead of treating it as complete", () => {
+    const full = settleHumanDirectory(
+      {
+        status: "fulfilled",
+        value: { actors: [{ id: "actor-jordan", tags: ["human"] }] },
+      },
+      {
+        status: "fulfilled",
+        value: {
+          principals: [{ actor_id: "actor-pat", principal_kind: "human" }],
+        },
+      },
+    );
+    expect(full.incomplete).toBe(false);
+    expect([...full.ids].sort()).toEqual(["actor-jordan", "actor-pat"]);
+
+    const paged = settleHumanDirectory(
+      { status: "fulfilled", value: { actors: [], next_cursor: "more" } },
+      { status: "fulfilled", value: { principals: [] } },
+    );
+    expect(paged.incomplete).toBe(true);
+
+    const oneFailed = settleHumanDirectory(
+      { status: "rejected", reason: new Error("actors down") },
+      {
+        status: "fulfilled",
+        value: {
+          principals: [{ actor_id: "actor-pat", principal_kind: "human" }],
+        },
+      },
+    );
+    expect(oneFailed.incomplete).toBe(true);
+    expect(oneFailed.ids.has("actor-pat")).toBe(true);
+
+    expect(() =>
+      settleHumanDirectory(
+        { status: "rejected", reason: new Error("actors down") },
+        { status: "rejected", reason: new Error("principals down") },
+      ),
+    ).toThrow(/actors down/);
   });
 });
 

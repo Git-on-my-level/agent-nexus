@@ -18,6 +18,7 @@ import {
   initializeActorSession,
   replaceActorRegistry,
   replacePrincipalRegistry,
+  setPrincipalDirectoryIncomplete,
   selectedActorId,
 } from "$lib/actorSession";
 import { listAllPrincipals } from "$lib/authPrincipals";
@@ -418,8 +419,10 @@ export async function refreshWorkspacePrincipals({
       mergePrincipals(principals, seeded),
       workspaceSlug,
     );
+    setPrincipalDirectoryIncomplete(false, workspaceSlug);
   } catch {
     replacePrincipalRegistry(seeded, workspaceSlug);
+    setPrincipalDirectoryIncomplete(true, workspaceSlug);
   }
 }
 
