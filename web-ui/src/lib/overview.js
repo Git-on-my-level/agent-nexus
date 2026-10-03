@@ -23,6 +23,24 @@ import { parseVisualReport } from "$lib/visualReports.js";
 /** `GET /work` page size (contract maximum) and how many rows Overview will read. */
 export const WORK_PAGE_LIMIT = 200;
 export const WORK_ROW_CAP = 2000;
+/** Full `human=1` rescans follow live events at most this often. */
+export const HUMAN_LIVE_REFRESH_MS = 10_000;
+
+/**
+ * Delay before the next full human-filter rescan. `0` means run now.
+ * @param {number} now
+ * @param {number} lastAt
+ * @param {number} [interval]
+ */
+export function humanLiveRefreshDelay(
+  now,
+  lastAt,
+  interval = HUMAN_LIVE_REFRESH_MS,
+) {
+  const elapsed = Number(now) - Number(lastAt || 0);
+  if (!Number.isFinite(elapsed) || elapsed >= interval) return 0;
+  return interval - elapsed;
+}
 /** Most recently updated documents considered for a visual report. */
 export const DOC_SCAN_CAP = 20;
 export const PREVIEW_LIMIT = 5;

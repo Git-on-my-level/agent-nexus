@@ -36,6 +36,7 @@
   import { navIconPath } from "$lib/icons.js";
   import {
     humanActorIdSet,
+    humanLiveRefreshDelay,
     isHumanNextActor,
     WORK_PAGE_LIMIT,
     WORK_ROW_CAP,
@@ -622,22 +623,45 @@
     }, 30_000);
     // Tasks change under the operator (agents move cards, readers report);
     // the list follows the event stream instead of offering a Reload button.
+    let lastHumanLiveRefresh = 0;
+    let humanLiveTimer = 0;
+    function refreshFromLiveEvent() {
+      // A drag or an evidence prompt in progress keeps its rows still.
+      if (!loaded || evidenceFor) return;
+      const scanAll = $page.url.searchParams.get("human") === "1";
+      if (!scanAll) {
+        void load(false, filters, { live: true });
+        return;
+      }
+      const delay = humanLiveRefreshDelay(Date.now(), lastHumanLiveRefresh);
+      if (delay === 0) {
+        if (humanLiveTimer) {
+          clearTimeout(humanLiveTimer);
+          humanLiveTimer = 0;
+        }
+        lastHumanLiveRefresh = Date.now();
+        void load(false, filters, { live: true, scanAll: true });
+        return;
+      }
+      if (humanLiveTimer) return;
+      humanLiveTimer = setTimeout(() => {
+        humanLiveTimer = 0;
+        lastHumanLiveRefresh = Date.now();
+        if (!loaded || evidenceFor) return;
+        if ($page.url.searchParams.get("human") !== "1") return;
+        void load(false, filters, { live: true, scanAll: true });
+      }, delay);
+    }
     const stopLive = liveWorkspaceEvents({
       client: coreClient,
       types: TASK_LIST_EVENT_TYPES,
-      onChange: () => {
-        // A drag or an evidence prompt in progress keeps its rows still.
-        if (!loaded || evidenceFor) return;
-        void load(false, filters, {
-          live: true,
-          scanAll: $page.url.searchParams.get("human") === "1",
-        });
-      },
+      onChange: refreshFromLiveEvent,
     });
     return () => {
       disposed = true;
       requestId++;
       clearInterval(timer);
+      clearTimeout(humanLiveTimer);
       stopLive();
     };
   });
