@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { getGameDevStudioSeedData } from "../../scripts/game-dev-studio-seed-data.mjs";
 import {
+  collectVisualReports,
+  DOC_SCAN_CAP,
   freshnessBuckets,
   humanActorIdSet,
   isHumanNextActor,
   isPreferredDashboardTitle,
   listWorkPages,
   needsYouFromSources,
+  orderDocumentsForReportScan,
   selectVisualReports,
   tasksQuery,
   workMatrix,
@@ -172,6 +175,66 @@ describe("overview report selection", () => {
     expect(
       selectVisualReports([older, newer]).map((entry) => entry.id),
     ).toEqual(["newer", "older"]);
+  });
+
+  it("reads a preferred dashboard first and stops once one report is valid", async () => {
+    expect(DOC_SCAN_CAP).toBe(20);
+    const documents = [
+      {
+        id: "notes",
+        title: "Weekly notes",
+        updated_at: "2026-10-04T00:00:00Z",
+      },
+      {
+        id: "fleet",
+        title: "Fleet Dashboard",
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+      {
+        id: "other",
+        title: "Launch notes",
+        updated_at: "2026-10-03T00:00:00Z",
+      },
+    ];
+    expect(orderDocumentsForReportScan(documents).map((doc) => doc.id)).toEqual(
+      ["fleet", "notes", "other"],
+    );
+    const reads = [];
+    const scanned = await collectVisualReports(documents, async (doc) => {
+      reads.push(doc.id);
+      return doc.id === "fleet"
+        ? { id: doc.id, title: doc.title, report: { title: "Fleet" } }
+        : { id: doc.id, title: doc.title, report: null };
+    });
+    expect(reads).toEqual(["fleet"]);
+    expect(scanned.reports.map((entry) => entry.id)).toEqual(["fleet"]);
+    expect(scanned.pending.map((doc) => doc.id)).toEqual(["notes", "other"]);
+    expect(scanned.scanned).toBe(1);
+  });
+
+  it("keeps reading when the preferred document is not a report", async () => {
+    const documents = [
+      {
+        id: "fleet",
+        title: "Dashboard notes",
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+      {
+        id: "notes",
+        title: "Weekly notes",
+        updated_at: "2026-10-04T00:00:00Z",
+      },
+    ];
+    const reads = [];
+    const scanned = await collectVisualReports(documents, async (doc) => {
+      reads.push(doc.id);
+      return doc.id === "notes"
+        ? { id: doc.id, title: doc.title, report: { title: "Weekly" } }
+        : { id: doc.id, title: doc.title, report: null };
+    });
+    expect(reads).toEqual(["fleet", "notes"]);
+    expect(scanned.reports.map((entry) => entry.id)).toEqual(["notes"]);
+    expect(scanned.pending).toEqual([]);
   });
 });
 

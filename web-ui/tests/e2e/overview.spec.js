@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { installWorkspaceApi } from "../helpers/workspaceApiMock.js";
+import { deferred, installWorkspaceApi } from "../helpers/workspaceApiMock.js";
 
 const OVERVIEW = "/o/local/w/local/overview";
 const OBSERVED = "2026-10-04T12:00:00.000Z";
@@ -185,6 +185,28 @@ async function installOverview(page, { failWork = false } = {}) {
   });
   return api;
 }
+
+test("shows the loading skeleton until overview data arrives", async ({
+  page,
+}) => {
+  const api = await installOverview(page);
+  const gate = deferred();
+  api.hold.work = gate;
+  await page.goto(OVERVIEW);
+
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toBeVisible();
+  await expect(page.locator("[data-overview-section='work']")).toHaveCount(0);
+
+  gate.resolve();
+  await expect(
+    page.getByRole("link", { name: "Approve the parry window" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Loading overview" }),
+  ).toHaveCount(0);
+});
 
 test("overview summarizes needs you, work, agents, and the preferred report", async ({
   page,

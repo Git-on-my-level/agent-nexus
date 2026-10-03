@@ -23,8 +23,8 @@ import { parseVisualReport } from "$lib/visualReports.js";
 /** `GET /work` page size (contract maximum) and how many rows Overview will read. */
 export const WORK_PAGE_LIMIT = 200;
 export const WORK_ROW_CAP = 2000;
-/** Most recently updated documents scanned for a visual report. */
-export const DOC_SCAN_CAP = 50;
+/** Most recently updated documents considered for a visual report. */
+export const DOC_SCAN_CAP = 20;
 export const PREVIEW_LIMIT = 5;
 
 const SOURCE_ORDER = ["nexus", "github", "multica", "git", "ssh_git"];
@@ -407,6 +407,93 @@ async function mapPool(items, limit, fn) {
   return out;
 }
 
+/**
+ * Preferred dashboard titles first, then newest. The inline view reads in
+ * this order and stops at the first valid report.
+ *
+ * @param {object[]} documents
+ */
+export function orderDocumentsForReportScan(documents = []) {
+  return [...(Array.isArray(documents) ? documents : [])].sort((a, b) => {
+    const prefer =
+      Number(isPreferredDashboardTitle(b?.title)) -
+      Number(isPreferredDashboardTitle(a?.title));
+    if (prefer) return prefer;
+    const aMs = Date.parse(a?.updated_at ?? "");
+    const bMs = Date.parse(b?.updated_at ?? "");
+    const aTime = Number.isFinite(aMs) ? aMs : Number.NEGATIVE_INFINITY;
+    const bTime = Number.isFinite(bMs) ? bMs : Number.NEGATIVE_INFINITY;
+    if (aTime !== bTime) return bTime - aTime;
+    return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+  });
+}
+
+async function readReportDocument(client, doc) {
+  const id = String(doc?.id ?? "").trim();
+  if (!id) return { error: new Error("Document has no id.") };
+  try {
+    const got = await client.getDocument(id);
+    const content = got?.revision?.content;
+    const parsed = parseVisualReport(
+      typeof content === "string" ? content : "",
+    );
+    const document = got?.document ?? doc;
+    return {
+      id,
+      title: String(document?.title ?? doc?.title ?? ""),
+      updated_at: document?.updated_at || doc?.updated_at || "",
+      segment:
+        resourceRouteSegment(document, "document") ||
+        resourceRouteSegment(doc, "document") ||
+        id,
+      report: parsed.report,
+    };
+  } catch (error) {
+    return { error };
+  }
+}
+
+/**
+ * Read until one visual report is found. Documents not yet read stay in
+ * `pending` for the report selector.
+ *
+ * @param {object[]} documents
+ * @param {(doc: object) => Promise<object>} read
+ */
+export async function collectVisualReports(documents, read) {
+  const ordered = orderDocumentsForReportScan(documents);
+  let scanned = 0;
+  let failures = 0;
+  /** @type {object|null} */
+  let found = null;
+  const pending = [];
+  for (const doc of ordered) {
+    if (found) {
+      pending.push(doc);
+      continue;
+    }
+    scanned += 1;
+    const entry = await read(doc);
+    if (entry?.error) {
+      failures += 1;
+      continue;
+    }
+    if (entry?.report) found = entry;
+  }
+  return {
+    reports: found ? [found] : [],
+    pending,
+    scanned,
+    failures,
+  };
+}
+
+function reportReadFailure(failures) {
+  return failures === 1
+    ? "A document could not be read."
+    : `${failures} documents could not be read.`;
+}
+
 async function loadReports(client) {
   const listed = await client.listDocuments({
     state: ["active"],
@@ -419,48 +506,41 @@ async function loadReports(client) {
     0,
     DOC_SCAN_CAP,
   );
-  const truncated = Boolean(listed?.next_cursor);
-  const reads = await mapPool(documents, 6, async (doc) => {
-    const id = String(doc?.id ?? "").trim();
-    if (!id) return { error: new Error("Document has no id.") };
-    try {
-      const got = await client.getDocument(id);
-      const content = got?.revision?.content;
-      const parsed = parseVisualReport(
-        typeof content === "string" ? content : "",
-      );
-      const document = got?.document ?? doc;
-      return {
-        id,
-        title: String(document?.title ?? doc?.title ?? ""),
-        updated_at: document?.updated_at || doc?.updated_at || "",
-        segment:
-          resourceRouteSegment(document, "document") ||
-          resourceRouteSegment(doc, "document") ||
-          id,
-        report: parsed.report,
-      };
-    } catch (error) {
-      return { error };
-    }
-  });
-  const failures = reads.filter((entry) => entry?.error).length;
-  const reports = selectVisualReports(reads.filter((entry) => entry?.report));
-  if (failures && reports.length === 0) {
-    throw new Error(
-      failures === 1
-        ? "A document could not be read."
-        : `${failures} documents could not be read.`,
-    );
+  const scan = await collectVisualReports(documents, (doc) =>
+    readReportDocument(client, doc),
+  );
+  if (scan.failures && scan.reports.length === 0) {
+    throw new Error(reportReadFailure(scan.failures));
   }
   return {
     status: "ok",
-    reports,
-    truncated,
-    scanned: documents.length,
-    warning: failures
+    reports: scan.reports,
+    pending: scan.pending,
+    truncated: Boolean(listed?.next_cursor),
+    scanned: scan.scanned,
+    warning: scan.failures
       ? "Some documents could not be read, so this list may be incomplete."
       : "",
+  };
+}
+
+/** Read the documents skipped on the first paint, once the selector opens. */
+export async function loadPendingReports(client, pending = [], existing = []) {
+  const reads = await mapPool(Array.isArray(pending) ? pending : [], 6, (doc) =>
+    readReportDocument(client, doc),
+  );
+  let failures = 0;
+  const found = [];
+  for (const entry of reads) {
+    if (entry?.error) failures += 1;
+    else if (entry?.report) found.push(entry);
+  }
+  return {
+    reports: selectVisualReports([
+      ...(Array.isArray(existing) ? existing : []),
+      ...found,
+    ]),
+    failures,
   };
 }
 

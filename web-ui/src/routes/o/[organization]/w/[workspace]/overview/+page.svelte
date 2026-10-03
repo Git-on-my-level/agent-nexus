@@ -4,7 +4,11 @@
   import { page } from "$app/stores";
 
   import { coreClient } from "$lib/coreClient";
-  import { loadOverview } from "$lib/overview.js";
+  import {
+    DOC_SCAN_CAP,
+    loadOverview,
+    loadPendingReports,
+  } from "$lib/overview.js";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
@@ -13,12 +17,12 @@
   import Skeleton from "$lib/components/state/Skeleton.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
 
-  let { data } = $props();
-
-  // Client refresh replaces the server payload. Until it lands, render the load result.
+  // The server load stays empty so the skeleton is the first paint.
+  // The browser is the only business loader, matching Tasks and Inbox.
   let fetched = $state(null);
-  let model = $derived(fetched ?? data.overview);
+  let model = $derived(fetched);
   let refreshing = $state(false);
+  let loadingMoreReports = $state(false);
 
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
@@ -84,6 +88,35 @@
     if (!id || id === first?.id) url.searchParams.delete("dashboard");
     else url.searchParams.set("dashboard", id);
     void goto(url, { keepFocus: true, noScroll: true, replaceState: true });
+  }
+
+  async function loadMoreReports() {
+    const section = fetched?.reports;
+    const pending = section?.status === "ok" ? section.pending : null;
+    if (!pending?.length || loadingMoreReports) return;
+    const id = request;
+    loadingMoreReports = true;
+    try {
+      const more = await loadPendingReports(
+        coreClient,
+        pending,
+        section.reports,
+      );
+      if (id !== request || !fetched?.reports) return;
+      fetched = {
+        ...fetched,
+        reports: {
+          ...fetched.reports,
+          reports: more.reports,
+          pending: [],
+          warning: more.failures
+            ? "Some documents could not be read, so this list may be incomplete."
+            : fetched.reports.warning,
+        },
+      };
+    } finally {
+      if (id === request) loadingMoreReports = false;
+    }
   }
 
   onMount(() => {
@@ -415,18 +448,27 @@
         <h2 id="overview-reports" class="text-subtitle text-fg">Reports</h2>
         {#if model.reports.status === "ok" && selectedReport}
           <div class="flex flex-wrap items-center gap-2">
-            {#if reports.length > 1}
+            {#if reports.length > 1 || model.reports.pending?.length}
               <label class="flex items-center gap-2 text-micro text-fg-muted">
                 Report
                 <select
                   class="ui-input w-auto"
                   aria-label="Report"
                   value={selectedReport.id}
+                  onfocus={() => void loadMoreReports()}
+                  onpointerdown={() => void loadMoreReports()}
                   onchange={(event) => selectReport(event.currentTarget.value)}
                 >
                   {#each reports as entry (entry.id)}
                     <option value={entry.id}>{entry.title || entry.id}</option>
                   {/each}
+                  {#if model.reports.pending?.length}
+                    <option disabled value="">
+                      {loadingMoreReports
+                        ? "Loading reports…"
+                        : "Other reports"}
+                    </option>
+                  {/if}
                 </select>
               </label>
             {/if}
@@ -461,7 +503,8 @@
         {/if}
         {#if model.reports.truncated}
           <p class="px-3 pt-2 text-micro text-fg-muted">
-            Scanned the 50 most recently updated documents.
+            Scanned the {DOC_SCAN_CAP.toLocaleString("en-US")} most recently updated
+            documents.
           </p>
         {/if}
         <div class="px-1 py-2" data-overview-report={selectedReport.id}>
