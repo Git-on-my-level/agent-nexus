@@ -21,6 +21,8 @@ python3 adapters/fleet-sync/fleet_sync.py --quiet
 
 `fleetctl.ssh` runs `fleetctl status` on that host instead of the machine where the adapter is installed. The hub's contract and reports directories are the authority; a laptop copy of `~/.fleetctl/reports` is a replica and goes stale. `prometheus.ssh` is the same host. The alerts query is `curl -s -m 10` of the configured localhost URL, executed over ssh. Both ssh commands have a process timeout, and the whole run stops within five minutes.
 
+`~/` in a remote config value is not expanded on the remote host. A path is passed through as a single quoted argument unless it is exactly `$HOME` followed by slash-separated path segments, which the remote shell expands. Write `$HOME/...` when the path should live in the remote home directory.
+
 `node_bin` is the Node binary used to validate the visual report. Set it to a stable interpreter. An fnm shim on `PATH` is not stable in a non-interactive job. A copy installed outside the git checkout needs `repo_root` pointing at a checkout that contains `web-ui/scripts/validate-visual-report.mjs`. Running from the repository itself finds that script next to the adapter.
 
 ## Identity and observations
@@ -43,7 +45,9 @@ Host-local sources do not get a `sources` entry. The visual-report schema requir
 
 Prometheus firing alerts are cards on the ops board (`authority` `prometheus`). Pending alerts are counted on the dashboard and do not become cards. A failed Prometheus or fleetctl read is an unavailable panel. It is not reported as zero alerts or a healthy fleet.
 
-The "Needs <operator> now" panel is a short ranked brief: counts, and at most three examples per line. The name comes from `operator_name` in config and defaults to Operator. The per-item tables stay on the other tabs. "Decisions waiting" is the open inbox count. "Decisions for <operator>" adds red CI, requested changes, and paused watchdogs. The red-CI line names how many recently updated pull requests were checked, because CI is not fetched for every open pull request. Multica reviews older than 72 hours are "Aging reviews" and are not added into that decision count. Loose-end cards are listed and not registered again.
+The "Needs <operator> now" panel is a short ranked brief: counts, and at most three examples per line. Examples are identifiers (an issue key or `repo#n`) or a full title. A title is never cut mid-word. Loose ends are counts only: how many cards are on the decisions board, and how many are waiting on the operator, with a pointer to the Loose ends table. The name comes from `operator_name` in config and defaults to Operator. The per-item tables stay on the other tabs. "Decisions waiting" is the open inbox count. "Decisions for <operator>" adds red CI, requested changes, and paused watchdogs. The red-CI line names how many recently updated pull requests were checked, because CI is not fetched for every open pull request. Multica reviews older than 72 hours are "Aging reviews" and are not added into that decision count. Loose-end cards are listed and not registered again.
+
+A headline count taken from an incomplete read is shown with a trailing `+` and the detail says the count is a lower bound. `unknown` still means the source was not read, which is not zero.
 
 ## Unattended run
 

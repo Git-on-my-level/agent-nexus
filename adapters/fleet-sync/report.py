@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from project import MULTICA_PHASE, github_phase
@@ -166,21 +166,27 @@ def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dic
     firing = snapshot["prometheus_firing"]
     pending = snapshot["prometheus_pending"]
 
-    def metric(label, key, value, detail, tone):
+    def metric(label, key, value, detail, tone, *partial_reads):
+        partial = _partial_count(value, partial_reads)
+        if partial:
+            detail = detail.rstrip()
+            if not detail.endswith("."):
+                detail += "."
+            detail += " Incomplete read; this count is a lower bound."
         trend, trend_label = _trend(history, key)
-        return _metric(label, value, detail, tone, trend, trend_label)
+        return _metric(label, value, detail, tone, trend, trend_label, partial=partial)
 
     first = _panel(
         "overview-now", "metric-strip", "What the fleet is showing",
         {"items": [
             metric(f"Decisions for {operator}", "decisions_for_operator", decisions,
                    "Inbox asks, red CI on recently checked pull requests, requested changes, and paused watchdogs. Aging reviews are separate.",
-                   _tone(decisions)),
-            metric("Decisions waiting", "decisions_waiting", waiting, "Open ANX inbox asks", _tone(waiting)),
-            metric("Aging reviews", "aging_reviews", aging, "Multica in_review older than 72h", _tone(aging)),
-            metric("Open pull requests", "open_prs", open_prs, "Authored by the workspace user", "neutral"),
-            metric("Stuck agent runs", "stuck_runs", stuck, "Nonterminal, unreachable or unknown, idle over 24h", _tone(stuck)),
-            metric("Cron problems", "cron_problems", problems, "Paused with no reason, error, or missing workdir", _tone(problems)),
+                   _tone(decisions), github, reads.get("nexus"), hermes),
+            metric("Decisions waiting", "decisions_waiting", waiting, "Open ANX inbox asks", _tone(waiting), reads.get("nexus")),
+            metric("Aging reviews", "aging_reviews", aging, "Multica in_review older than 72h", _tone(aging), multica),
+            metric("Open pull requests", "open_prs", open_prs, "Authored by the workspace user", "neutral", github),
+            metric("Stuck agent runs", "stuck_runs", stuck, "Nonterminal, unreachable or unknown, idle over 24h", _tone(stuck), agentctl),
+            metric("Cron problems", "cron_problems", problems, "Paused with no reason, error, or missing workdir", _tone(problems), hermes),
         ]},
         _fresh(multica, github, hermes, agentctl, reads.get("nexus")),
         _earliest(multica, github, hermes, agentctl, reads.get("nexus")),
@@ -189,12 +195,12 @@ def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dic
     second = _panel(
         "overview-fleetctl", "metric-strip", "Fleetctl and Prometheus",
         {"items": [
-            metric("Host-action root causes", "fleetctl_causes", causes, "fleetctl host-action queue", _tone(causes)),
-            metric("Reporting", "fleetctl_reporting", _inventory(fleet, "reporting"), _reporting_detail(fleet), "neutral"),
-            metric("Mute", "fleetctl_mute", _inventory(fleet, "mute"), "Hosts muted", _tone(_inventory(fleet, "mute"))),
-            metric("Asleep", "fleetctl_asleep", _inventory(fleet, "asleep"), "Hosts asleep", "neutral"),
-            metric("Firing alerts", "prometheus_firing", firing, "Prometheus alerts in firing state", _tone(firing)),
-            metric("Pending alerts", "prometheus_pending", pending, "Counted only. Pending is not a card and not zero when unread.", "neutral"),
+            metric("Host-action root causes", "fleetctl_causes", causes, "fleetctl host-action queue", _tone(causes), fleet),
+            metric("Reporting", "fleetctl_reporting", _inventory(fleet, "reporting"), _reporting_detail(fleet), "neutral", fleet),
+            metric("Mute", "fleetctl_mute", _inventory(fleet, "mute"), "Hosts muted", _tone(_inventory(fleet, "mute")), fleet),
+            metric("Asleep", "fleetctl_asleep", _inventory(fleet, "asleep"), "Hosts asleep", "neutral", fleet),
+            metric("Firing alerts", "prometheus_firing", firing, "Prometheus alerts in firing state", _tone(firing), prometheus),
+            metric("Pending alerts", "prometheus_pending", pending, "Counted only. Pending is not a card and not zero when unread.", "neutral", prometheus),
         ]},
         _fresh(fleet, prometheus),
         _earliest(fleet, prometheus),
@@ -218,9 +224,10 @@ def _callout(reads: dict, now: datetime, operator: str) -> dict:
     else:
         text = "\n".join(lines)
         tone = "critical" if any(not line.startswith("Unavailable:") for line in lines) else "warning"
+    text = _clip_text(text, 4000)
     return _panel(
         "needs-operator", "callout", f"Needs {operator} now",
-        {"tone": tone, "label": "Operator attention", "text": text[:4000]},
+        {"tone": tone, "label": "Operator attention", "text": text},
         "unavailable" if failed else "current",
         _earliest(*[read for read in reads.values() if read]),
         [],
@@ -228,23 +235,26 @@ def _callout(reads: dict, now: datetime, operator: str) -> dict:
 
 
 def _brief_lines(reads: dict, now: datetime, operator: str) -> list[str]:
-    """Ranked attention lines. Each names a count and at most three examples. Zeros are omitted."""
+    """Ranked attention lines. Each names a count and at most three examples. Zeros are omitted.
+
+    Titles are kept whole or cut on a word boundary. Loose ends are counts only.
+    """
     lines = []
     inbox = _inbox_items(reads)
     if inbox is not None and inbox:
         oldest = min(inbox, key=lambda item: item.get("created_at") or "9999")
         age = _age(oldest.get("created_at"), now)
-        shown = oldest["title"][:80]
+        shown = _phrase(oldest.get("title") or "", 80) or str(oldest.get("id") or "an inbox item")
         if age != "unknown":
             shown = f"{shown} ({age})"
         lines.append(f"{len(inbox)} decisions waiting in your ANX Inbox — oldest: {shown}")
     loose = _loose_items(reads)
     if loose is not None and loose:
         owned = [item for item in loose if str(item.get("next_actor") or "").lower() == operator.lower()]
-        examples = ", ".join(item["title"][:48] for item in (owned or loose)[:3])
+        noun = "loose end" if len(loose) == 1 else "loose ends"
         lines.append(
-            f"{len(loose)} loose ends on the decisions board — {len(owned)} next actor {operator} "
-            f"({examples}) — triage, don't read each"
+            f"{len(loose)} {noun} on the decisions board — {len(owned)} waiting on {operator} "
+            "(see Loose ends tab/table)"
         )
     red, changes = _pr_attention(reads, now)
     if red is not None and (red or changes):
@@ -266,7 +276,7 @@ def _brief_lines(reads: dict, now: datetime, operator: str) -> list[str]:
         )
     firing = _firing_items(reads)
     if firing is not None and firing:
-        examples = ", ".join(item.get("title") or item["native_id"] for item in firing[:3])
+        examples = ", ".join(_alert_example(item) for item in firing[:3])
         lines.append(f"Prometheus: {len(firing)} firing (critical first): {examples}")
     watchdogs = _watchdogs(reads)
     if watchdogs is not None and watchdogs:
@@ -384,6 +394,7 @@ def _review_table(read, now, add_source, aggregate) -> dict:
 def _repo_chart(read: dict | None) -> dict:
     if not read or not read.get("ok"):
         categories, data = ["Pull requests"], [None]
+        caption = "Closed pull requests are excluded."
     else:
         counts: dict[str, int] = {}
         for item in read.get("items") or []:
@@ -391,18 +402,25 @@ def _repo_chart(read: dict | None) -> dict:
                 continue
             counts[item.get("repo") or "unknown"] = counts.get(item.get("repo") or "unknown", 0) + 1
         ranked = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
-        head, tail = ranked[:24], ranked[24:]
-        categories = [name for name, _ in head] or ["No open pull requests"]
-        data = [count for _, count in head] or [0]
+        head, tail = ranked[:12], ranked[12:]
+        bars = list(head)
         if tail:
-            categories.append("other repos")
-            data.append(sum(count for _, count in tail))
+            label = f"Other ({len(tail)} repos)"
+            if label in {name for name, _ in bars}:
+                label = f"Other ({len(tail)} more repos)"
+            bars.append((label, sum(count for _, count in tail)))
+            bars.sort(key=lambda pair: (-pair[1], pair[0]))
+        if not bars:
+            bars = [("No open pull requests", 0)]
+        categories = [name for name, _ in bars]
+        data = [count for _, count in bars]
+        caption = "Closed pull requests are excluded. Largest bars are at the top. At most 12 repositories are named; the rest are one bar."
     return _chart(
         "prs-by-repo", "Open pull requests by repository",
-        {"caption": "Closed pull requests are excluded.", "palette": "ocean",
+        {"caption": caption, "palette": "ocean",
          "option": {
-             "xAxis": {"type": "category", "data": categories},
-             "yAxis": {"type": "value", "name": "Pull requests"},
+             "xAxis": {"type": "value", "name": "Pull requests"},
+             "yAxis": {"type": "category", "data": categories, "inverse": True},
              "series": [{"type": "bar", "name": "Open", "data": data}],
          }},
         _fresh(read), _earliest(read),
@@ -441,8 +459,12 @@ def _pr_table(read, now, add_source, aggregate) -> dict:
     rows, cited = [], []
     if read and read.get("ok"):
         chosen = [item for item in read.get("items") or [] if not item.get("terminal") and not item.get("is_draft")]
-        chosen.sort(key=lambda item: (item.get("ci") != "red", item.get("updated_at") or ""))
-        for item in chosen[:120]:
+        chosen.sort(key=lambda item: (item.get("native_id") or ""))
+        chosen.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        chosen.sort(key=_pr_attention_rank)
+        shown = chosen[:30]
+        hidden_stale = sum(1 for item in chosen[30:] if _stale_pull(item, now))
+        for item in shown:
             sid = None
             if item.get("ci") == "red":
                 sid = add_source(
@@ -462,6 +484,18 @@ def _pr_table(read, now, add_source, aggregate) -> dict:
                     str(item.get("url") or ""),
                 ],
                 "source_ids": source_ids,
+            })
+        if hidden_stale:
+            rows.append({
+                "cells": [
+                    "",
+                    "",
+                    f"{hidden_stale} more stale PRs (no update in 30 days) — on board Fleet · Pull requests, Backlog",
+                    "",
+                    "",
+                    "",
+                ],
+                "source_ids": [],
             })
     if aggregate and aggregate not in cited:
         cited.insert(0, aggregate)
@@ -516,21 +550,28 @@ def _cron_chart(read: dict | None) -> dict:
 
 
 def _problem_table(read: dict | None) -> dict:
-    rows = []
+    entries = []
     for host in ((read or {}).get("meta") or {}).get("hosts") or []:
         if not host.get("ok"):
             continue
+        label = str(host.get("label") or "")
         for row in host.get("rows") or []:
-            if not row.get("problems"):
+            problems = [str(problem) for problem in row.get("problems") or []]
+            if not problems:
                 continue
-            rows.append({"cells": [
-                str(host.get("label") or ""),
-                str(row.get("name") or row.get("id") or ""),
-                ",".join(row.get("problems") or []),
-                str(row.get("last_status") or "unknown"),
-                str(row.get("schedule") or ""),
-            ], "source_ids": []})
-    rows = rows[:200]
+            entries.append((problems, label, row))
+    entries.sort(key=lambda item: (
+        _problem_rank(item[0]),
+        item[1],
+        str(item[2].get("name") or item[2].get("id") or ""),
+    ))
+    rows = [{"cells": [
+        label,
+        str(row.get("name") or row.get("id") or ""),
+        ",".join(problems),
+        str(row.get("last_status") or "unknown"),
+        str(row.get("schedule") or ""),
+    ], "source_ids": []} for problems, label, row in entries[:200]]
     return _table(
         "cron-problems", "Cron problems",
         ["Host", "Job", "Problems", "Last status", "Schedule"], rows, [],
@@ -682,6 +723,65 @@ def _unavailable_panels(reads: list[dict]) -> list[dict]:
             "unavailable", read.get("observed_at"), [],
         ))
     return panels
+
+
+def _problem_rank(problems: list[str]) -> int:
+    if "error" in problems:
+        return 0
+    if "missing-workdir" in problems:
+        return 1
+    if "paused-no-reason" in problems:
+        return 2
+    return 3
+
+
+def _pr_attention_rank(item: dict) -> int:
+    ci = item.get("ci")
+    if ci == "red":
+        return 0
+    if ci == "pending":
+        return 1
+    return 2
+
+
+def _stale_pull(item: dict, now: datetime) -> bool:
+    stamp = _parse(item.get("updated_at"))
+    return stamp is not None and now - stamp > timedelta(days=30)
+
+
+def _partial_count(value, reads) -> bool:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return any(bool(read and read.get("ok") and read.get("complete") is False) for read in reads)
+
+
+def _phrase(text: str, limit: int) -> str:
+    """Join words that fit in limit. Never returns a word cut in half."""
+    kept = []
+    for word in str(text or "").split():
+        candidate = " ".join([*kept, word])
+        if len(candidate) > limit:
+            break
+        kept.append(word)
+    return " ".join(kept)
+
+
+def _alert_example(item: dict) -> str:
+    title = str(item.get("title") or "").strip()
+    if title:
+        return _phrase(title, 80) or str(item.get("native_id") or "alert")
+    return str(item.get("native_id") or "alert")
+
+
+def _clip_text(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit]
+    for separator in ("\n", " "):
+        index = clipped.rfind(separator)
+        if index > 0:
+            return clipped[:index]
+    return clipped
 
 
 def _cron_bucket(problems: list[str]) -> str | None:
@@ -920,8 +1020,14 @@ def _inventory(read: dict | None, key: str) -> int | None:
 
 
 def _metric(label: str, value: int | None, detail: str, tone: str,
-            trend: list[int] | None = None, trend_label: str | None = None) -> dict:
-    item = {"label": label, "value": "unknown" if value is None else str(value), "detail": detail, "tone": tone}
+            trend: list[int] | None = None, trend_label: str | None = None, partial: bool = False) -> dict:
+    if value is None:
+        shown = "unknown"
+    elif partial:
+        shown = f"{value}+"
+    else:
+        shown = str(value)
+    item = {"label": label, "value": shown, "detail": detail, "tone": tone}
     if trend and trend_label and len(trend) >= 2:
         item["trend"] = trend
         item["trend_label"] = trend_label
