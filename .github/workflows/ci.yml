@@ -218,8 +218,6 @@ jobs:
         run: pnpm -C web-ui exec playwright install chromium
 
       - name: Render visual report examples and browser checks
-        env:
-          PLAYWRIGHT_PREVIEW: "1"
         run: pnpm -C web-ui exec playwright test tests/e2e/visual-reports.spec.js --project=default --retries=0 --max-failures=1 --output=test-results/visual-reports
 
       - name: Upload visual report examples
