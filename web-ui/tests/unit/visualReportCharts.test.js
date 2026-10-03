@@ -132,6 +132,95 @@ describe("bounded ECharts report vocabulary", () => {
     expectInvalid(data);
   });
 
+  it("supports reference lines, bounded value axes and literal label formats", () => {
+    const data = chart("bar");
+    data.option.yAxis = {
+      type: "value",
+      min: -10,
+      max: 20,
+      axisLabel: { formatter: "{value}%" },
+    };
+    data.option.series[0].markLine = { data: [{ name: "Target", yAxis: 10 }] };
+    expect(validateReportChart(data)).toEqual([]);
+    const option = buildReportChartOption(data);
+    expect(option.yAxis[0]).toMatchObject({ min: -10, max: 20 });
+    expect(option.yAxis[0].axisLabel.formatter).toBe("{value}%");
+    expect(option.series[0].markLine.silent).toBe(true);
+    expect(option.series[0].markLine.data).toEqual([
+      { name: "Target", yAxis: 10 },
+    ]);
+    expect(option.series[0].markLine.data[0]).not.toBe(
+      data.option.series[0].markLine.data[0],
+    );
+    expect(reportChartRows(data).rows.at(-1)).toEqual([
+      "Observed",
+      "Reference: Target",
+      "",
+      "10",
+      "",
+    ]);
+    const scaled = chart("scatter");
+    scaled.option.yAxis.scale = true;
+    expect(buildReportChartOption(scaled).yAxis[0].scale).toBe(true);
+
+    for (const mutate of [
+      (d) => (d.option.series[0].markLine.data[0].xAxis = "Mon"),
+      (d) => (d.option.series[0].markLine = { data: [{ name: "No value" }] }),
+      (d) => (d.option.series[0].markLine.data[0].lineStyle = {}),
+      (d) => (d.option.yAxis.axisLabel.formatter = "{value}{a}"),
+      (d) => (d.option.yAxis.axisLabel.formatter = "<b>{value}</b>"),
+      (d) => (d.option.yAxis.axisLabel.formatter = "value"),
+      (d) => (d.option.yAxis.min = 30),
+      (d) => (d.option.xAxis.min = 0),
+      (d) => (d.option.xAxis.axisLabel = { formatter: "{value}" }),
+    ]) {
+      const invalid = structuredClone(data);
+      mutate(invalid);
+      expectInvalid(invalid);
+    }
+    const categoryLine = chart("line");
+    categoryLine.option.series[0].markLine = {
+      data: [{ name: "Day", xAxis: 1 }],
+    };
+    expectInvalid(categoryLine);
+  });
+
+  it("hides redundant single-series legends unless the author asks for one", () => {
+    expect(buildReportChartOption(chart("line")).legend.show).toBe(false);
+    const explicit = chart("line");
+    explicit.option.legend = { show: true };
+    expect(buildReportChartOption(explicit).legend.show).toBe(true);
+    expect(buildReportChartOption(pie()).legend.show).toBe(true);
+    const mixed = fromExample("bar");
+    delete mixed.option.legend;
+    expect(buildReportChartOption(mixed).legend.show).toBe(true);
+    expect(buildReportChartOption(mixed).tooltip.trigger).toBe("axis");
+  });
+
+  it("colors graph nodes by declared categories and rejects unknown ones", () => {
+    const data = fromExample("graph");
+    expect(validateReportChart(data)).toEqual([]);
+    const option = buildReportChartOption(data);
+    expect(option.series[0].categories).toEqual([
+      { name: "Stage" },
+      { name: "Project" },
+    ]);
+    expect(option.series[0].data[1].category).toBe(1);
+    expect(option.legend.show).toBe(true);
+    expect(reportChartRows(data).rows[1][1]).toBe("Atlas (Project)");
+    for (const mutate of [
+      (d) => (d.option.series[0].data[0].category = 2),
+      (d) => (d.option.series[0].data[0].category = "Stage"),
+      (d) => (d.option.series[0].categories = [{ name: "A" }, { name: "A" }]),
+      (d) => (d.option.series[0].categories[0].itemStyle = {}),
+      (d) => delete d.option.series[0].categories,
+    ]) {
+      const invalid = structuredClone(data);
+      mutate(invalid);
+      expectInvalid(invalid);
+    }
+  });
+
   it("treats numeric category labels literally instead of category indices", () => {
     const data = chart();
     data.option.xAxis.data = [10, 20];
@@ -471,7 +560,8 @@ describe("real SVG rendering", () => {
             expect(value).toBeGreaterThanOrEqual(-1e-8);
           }
           expect(x + dx).toBeLessThanOrEqual(300 * 0.97 - 112 + 1e-8);
-          expect(y + dy).toBeLessThanOrEqual(280 * 0.72 + 1e-8);
+          // Single-series charts omit the legend, so the plot reclaims its band.
+          expect(y + dy).toBeLessThanOrEqual(280 * 0.82 + 1e-8);
         }
       } finally {
         instance.dispose();

@@ -17,6 +17,8 @@ export const REPORT_CHART_LIMITS = Object.freeze({
   nodes: 120,
   links: 240,
   depth: 5,
+  categories: 12,
+  markLines: 6,
   label: 200,
   caption: 2000,
   magnitude: 1e12,
@@ -38,6 +40,14 @@ export const REPORT_CHART_PALETTES = Object.freeze({
   ],
 });
 const CARTESIAN = ["line", "bar", "scatter", "heatmap"];
+// Literal axis label decoration such as "{value}%" or "$ {value}". ECharts
+// interpolates only {value}; braces and markup characters are rejected.
+const AXIS_FORMAT = /^[^{}<>]{0,12}\{value\}[^{}<>]{0,12}$/;
+const epochMilliseconds = (value) =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  (value === 0 || Math.abs(value) >= REPORT_CHART_LIMITS.minNonzeroMagnitude) &&
+  Math.abs(value) <= 8.64e15;
 const number = (value) =>
   typeof value === "number" &&
   Number.isFinite(value) &&
@@ -147,7 +157,16 @@ export function validateReportChart(data, path = "data") {
             axis,
             at,
             ["type"],
-            ["name", "data", "position", "inverse", "axisLabel"],
+            [
+              "name",
+              "data",
+              "position",
+              "inverse",
+              "axisLabel",
+              "min",
+              "max",
+              "scale",
+            ],
           )
         )
           return;
@@ -173,16 +192,40 @@ export function validateReportChart(data, path = "data") {
           values.forEach((v, j) => category(v, `${at}.data[${j}]`));
           if (new Set(values.map(String)).size !== values.length)
             add(`${at}.data`, "category labels must be unique");
-        } else if (axis.data !== undefined)
-          add(`${at}.data`, "only category axes accept data");
+          if (["min", "max", "scale"].some((key) => axis[key] !== undefined))
+            add(at, "category axes do not accept min, max or scale");
+        } else {
+          if (axis.data !== undefined)
+            add(`${at}.data`, "only category axes accept data");
+          const bound = (v, p) => {
+            if (axis.type === "time" ? !epochMilliseconds(v) : !number(v))
+              add(p, "must be a finite number in the supported range");
+          };
+          optional(axis, at, "min", bound);
+          optional(axis, at, "max", bound);
+          optional(axis, at, "scale", boolean);
+          if (number(axis.min) && number(axis.max) && axis.min >= axis.max)
+            add(at, "min must be smaller than max");
+        }
         if (
           axis.axisLabel !== undefined &&
-          object(axis.axisLabel, `${at}.axisLabel`, [], ["show", "rotate"])
+          object(
+            axis.axisLabel,
+            `${at}.axisLabel`,
+            [],
+            ["show", "rotate", "formatter"],
+          )
         ) {
           optional(axis.axisLabel, `${at}.axisLabel`, "show", boolean);
           optional(axis.axisLabel, `${at}.axisLabel`, "rotate", (v, p) =>
             numeric(v, p, -90, 90),
           );
+          optional(axis.axisLabel, `${at}.axisLabel`, "formatter", (v, p) => {
+            if (axis.type !== "value")
+              add(p, "label formats are supported on value axes only");
+            else if (typeof v !== "string" || !AXIS_FORMAT.test(v))
+              add(p, "must be literal text around a single {value}");
+          });
         }
       },
     );
@@ -212,12 +255,13 @@ export function validateReportChart(data, path = "data") {
           "step",
           "areaStyle",
           "symbolSize",
+          "markLine",
         ],
-        bar: ["xAxisIndex", "yAxisIndex", "stack", "barWidth"],
-        scatter: ["xAxisIndex", "yAxisIndex", "symbolSize"],
+        bar: ["xAxisIndex", "yAxisIndex", "stack", "barWidth", "markLine"],
+        scatter: ["xAxisIndex", "yAxisIndex", "symbolSize", "markLine"],
         pie: ["radius", "center", "roseType"],
         heatmap: ["xAxisIndex", "yAxisIndex"],
-        graph: ["layout", "links", "symbolSize"],
+        graph: ["layout", "links", "symbolSize", "categories"],
         sankey: ["links", "orient"],
         treemap: [],
       }[item.type] ?? [];
@@ -263,13 +307,7 @@ export function validateReportChart(data, path = "data") {
           )
             add(p, "must match a category label");
         } else if (axis?.type === "time") {
-          if (
-            typeof value !== "number" ||
-            !Number.isFinite(value) ||
-            (value !== 0 &&
-              Math.abs(value) < REPORT_CHART_LIMITS.minNonzeroMagnitude) ||
-            Math.abs(value) > 8.64e15
-          )
+          if (!epochMilliseconds(value))
             add(p, "time coordinates must be valid epoch milliseconds");
         } else numeric(value, p);
       };
@@ -320,6 +358,33 @@ export function validateReportChart(data, path = "data") {
         if (item.stack !== undefined && categoryCount !== 1)
           add(at, "stacked series require exactly one category axis");
       }
+      if (
+        item.markLine !== undefined &&
+        object(item.markLine, `${at}.markLine`, ["data"])
+      )
+        array(
+          item.markLine.data,
+          `${at}.markLine.data`,
+          REPORT_CHART_LIMITS.markLines,
+          1,
+        ).forEach((line, j) => {
+          const p = `${at}.markLine.data[${j}]`;
+          if (!object(line, p, ["name"], ["xAxis", "yAxis"])) return;
+          text(line.name, `${p}.name`);
+          const dimensions = ["xAxis", "yAxis"].filter(
+            (key) => line[key] !== undefined,
+          );
+          if (dimensions.length !== 1) {
+            add(p, "reference lines require exactly one of xAxis or yAxis");
+            return;
+          }
+          const axis = selected[dimensions[0] === "xAxis" ? 0 : 1];
+          if (axis?.type === "value") numeric(line[dimensions[0]], p);
+          else if (axis?.type === "time") {
+            if (!epochMilliseconds(line[dimensions[0]]))
+              add(p, "time coordinates must be valid epoch milliseconds");
+          } else add(p, "reference lines require a value or time axis");
+        });
     } else if (item.type === "pie") {
       points.forEach((point, j) => {
         const p = `${at}.data[${j}]`;
@@ -350,6 +415,24 @@ export function validateReportChart(data, path = "data") {
     } else if (item.type === "graph" || item.type === "sankey") {
       const graph = item.type === "graph";
       if (graph) enumeration(item.layout, `${at}.layout`, ["circular", "none"]);
+      const categories =
+        graph && item.categories !== undefined
+          ? array(
+              item.categories,
+              `${at}.categories`,
+              REPORT_CHART_LIMITS.categories,
+              1,
+            )
+          : [];
+      const categoryNames = new Set();
+      categories.forEach((entry, j) => {
+        const p = `${at}.categories[${j}]`;
+        if (!object(entry, p, ["name"])) return;
+        text(entry.name, `${p}.name`);
+        if (categoryNames.has(entry.name))
+          add(p, "category names must be unique");
+        categoryNames.add(entry.name);
+      });
       optional(item, at, "orient", (v, p) =>
         enumeration(v, p, ["horizontal", "vertical"]),
       );
@@ -361,7 +444,7 @@ export function validateReportChart(data, path = "data") {
             point,
             p,
             graph ? ["id", "name"] : ["name"],
-            graph ? ["value", "x", "y", "symbolSize"] : [],
+            graph ? ["value", "x", "y", "symbolSize", "category"] : [],
           )
         )
           return;
@@ -374,6 +457,10 @@ export function validateReportChart(data, path = "data") {
         optional(point, p, "symbolSize", (v, q) => numeric(v, q, 2, 40));
         optional(point, p, "x", numeric);
         optional(point, p, "y", numeric);
+        optional(point, p, "category", (v, q) => {
+          if (!Number.isInteger(v) || v < 0 || v >= categories.length)
+            add(q, "must index a declared category");
+        });
         if (
           graph &&
           item.layout === "none" &&
@@ -510,8 +597,22 @@ export function buildReportChartOption(data, appearance = {}) {
       theme[key] = appearance[key];
   }
   const colors = [...REPORT_CHART_PALETTES[data.palette ?? "ocean"]];
+  const first = input.series[0];
+  // A single-series legend repeats the panel title; show one only when it
+  // distinguishes something, unless the author explicitly asks.
+  const legendShown =
+    input.legend?.show ??
+    (input.series.length > 1 ||
+      first.type === "pie" ||
+      (first.type === "graph" && first.categories !== undefined));
+  const axisTooltip = input.series.some(
+    (series) =>
+      ["line", "bar"].includes(series.type) &&
+      !series.data.some((point) => Array.isArray(point)),
+  );
+  const horizontal = axes(input.yAxis)[0]?.type === "category";
   const chartAxis = (axis, index) => ({
-    ...pick(axis, ["type", "name", "position", "inverse"]),
+    ...pick(axis, ["type", "name", "position", "inverse", "min", "max"]),
     ...(axis.data ? { data: axis.data.map(String) } : {}),
     position: axis.position,
     nameLocation: "middle",
@@ -525,13 +626,13 @@ export function buildReportChartOption(data, appearance = {}) {
       hideOverlap: true,
       width: 110,
       overflow: "truncate",
-      ...pick(axis.axisLabel ?? {}, ["show", "rotate"]),
+      ...pick(axis.axisLabel ?? {}, ["show", "rotate", "formatter"]),
     },
     splitLine: {
       show: axis.type !== "category" && index === 0,
       lineStyle: { color: theme.line, type: "dashed" },
     },
-    scale: false,
+    scale: axis.scale === true,
   });
   const option = {
     animation: false,
@@ -541,7 +642,11 @@ export function buildReportChartOption(data, appearance = {}) {
     textStyle: { fontFamily: "Inter, sans-serif", color: theme.fg },
     aria: { enabled: true, decal: { show: false } },
     tooltip: {
-      trigger: "item",
+      trigger: axisTooltip ? "axis" : "item",
+      axisPointer: {
+        type: "shadow",
+        shadowStyle: { color: "rgba(255, 255, 255, 0.04)" },
+      },
       renderMode: "richText",
       confine: true,
       backgroundColor: theme.panel,
@@ -549,7 +654,7 @@ export function buildReportChartOption(data, appearance = {}) {
       textStyle: { color: theme.fg, fontSize: 12 },
     },
     legend: {
-      show: input.legend?.show !== false,
+      show: legendShown,
       type: "scroll",
       bottom: 0,
       textStyle: { color: theme.muted, fontSize: 11 },
@@ -562,7 +667,7 @@ export function buildReportChartOption(data, appearance = {}) {
     grid: {
       top: 28,
       right: 44,
-      bottom: 78,
+      bottom: legendShown ? 78 : 52,
       left: 52,
       outerBoundsMode: "same",
       outerBoundsContain: "all",
@@ -582,6 +687,25 @@ export function buildReportChartOption(data, appearance = {}) {
             "barWidth",
           ]),
         );
+        if (series.markLine)
+          base.markLine = {
+            silent: true,
+            symbol: ["none", "none"],
+            lineStyle: { color: theme.muted, type: "dashed", width: 1 },
+            label: {
+              color: theme.muted,
+              fontSize: 10,
+              formatter: "{b}",
+              position: "insideEndTop",
+              backgroundColor: theme.panel,
+              padding: [2, 4],
+              borderRadius: 3,
+            },
+            data: series.markLine.data.map((line) =>
+              pick(line, ["name", "xAxis", "yAxis"]),
+            ),
+          };
+        if (input.series.length > 1) base.emphasis = { focus: "series" };
         base.data = series.data.map((point) => {
           if (!Array.isArray(point)) return point;
           if (series.type === "heatmap") return [...point];
@@ -602,7 +726,13 @@ export function buildReportChartOption(data, appearance = {}) {
           base.lineStyle = { width: 2.5 };
           if (series.areaStyle) base.areaStyle = { opacity: 0.17 };
         }
-        if (series.type === "bar") base.barMaxWidth = 44;
+        if (series.type === "bar") {
+          base.barMaxWidth = 44;
+          if (!series.stack)
+            base.itemStyle = {
+              borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0],
+            };
+        }
         if (series.type === "scatter") base.symbolSize = series.symbolSize ?? 9;
         if (series.type === "heatmap") {
           base.data = base.data.filter((point) => point[2] !== null);
@@ -615,6 +745,9 @@ export function buildReportChartOption(data, appearance = {}) {
             show: series.data.length <= 60,
             color: theme.fg,
             fontSize: 10,
+            // A soft shadow keeps values legible on both ends of the ramp.
+            textShadowColor: "rgba(0, 0, 0, 0.7)",
+            textShadowBlur: 3,
           };
         }
       } else if (series.type === "pie") {
@@ -634,12 +767,29 @@ export function buildReportChartOption(data, appearance = {}) {
           fontSize: 11,
           width: 95,
           overflow: "truncate",
+          formatter: "{b}  {d}%",
         };
-        base.itemStyle = { borderColor: theme.panel, borderWidth: 3 };
+        base.itemStyle = {
+          borderColor: theme.panel,
+          borderWidth: 3,
+          borderRadius: 4,
+        };
       } else if (series.type === "graph") {
         base.data = series.data.map((node) => ({
-          ...pick(node, ["id", "name", "value", "x", "y", "symbolSize"]),
+          ...pick(node, [
+            "id",
+            "name",
+            "value",
+            "x",
+            "y",
+            "symbolSize",
+            "category",
+          ]),
         }));
+        if (series.categories)
+          base.categories = series.categories.map((entry) => ({
+            name: entry.name,
+          }));
         base.links = series.links.map((link) =>
           pick(link, ["source", "target", "value"]),
         );
@@ -649,7 +799,12 @@ export function buildReportChartOption(data, appearance = {}) {
         base.draggable = false;
         base.edgeSymbol = ["none", "arrow"];
         base.edgeSymbolSize = 7;
-        base.lineStyle = { color: "#818cf8", opacity: 0.65, curveness: 0.12 };
+        base.lineStyle = { color: theme.muted, opacity: 0.45, curveness: 0.12 };
+        base.itemStyle = { borderColor: theme.panel, borderWidth: 2 };
+        base.emphasis = {
+          focus: "adjacency",
+          lineStyle: { color: theme.fg, opacity: 0.8, width: 2 },
+        };
         base.label = {
           show: true,
           position: "right",
@@ -660,7 +815,7 @@ export function buildReportChartOption(data, appearance = {}) {
         };
         base.labelLayout = { hideOverlap: true };
         base.top = "14%";
-        base.bottom = "20%";
+        base.bottom = legendShown ? "20%" : "10%";
         base.left = "14%";
         base.right = 128;
       } else if (series.type === "sankey") {
@@ -675,7 +830,9 @@ export function buildReportChartOption(data, appearance = {}) {
         // exceed the entire plot height and make ECharts emit negative sizes.
         base.nodeWidth = Math.min(16, 120 / series.data.length);
         base.nodeGap = Math.min(18, 60 / series.data.length);
-        base.lineStyle = { color: "source", opacity: 0.25, curveness: 0.5 };
+        base.lineStyle = { color: "gradient", opacity: 0.32, curveness: 0.5 };
+        base.itemStyle = { borderWidth: 0, borderRadius: 2 };
+        base.emphasis = { focus: "adjacency", lineStyle: { opacity: 0.6 } };
         base.label = {
           color: theme.fg,
           fontSize: 11,
@@ -685,23 +842,43 @@ export function buildReportChartOption(data, appearance = {}) {
         base.left = "3%";
         base.right = 112;
         base.top = "10%";
-        base.bottom = "18%";
+        base.bottom = legendShown ? "18%" : "8%";
       } else if (series.type === "treemap") {
         base.data = series.data.map(treeCopy);
         base.roam = false;
         base.nodeClick = false;
         base.breadcrumb = { show: false };
         base.top = 10;
-        base.bottom = 38;
+        base.bottom = legendShown ? 38 : 4;
         base.left = 0;
         base.right = 0;
-        base.label = { color: theme.bg, fontSize: 12, overflow: "truncate" };
-        base.upperLabel = { show: true, height: 24, color: theme.fg };
+        base.label = { color: theme.fg, fontSize: 12, overflow: "truncate" };
+        base.upperLabel = {
+          show: true,
+          height: 24,
+          color: theme.fg,
+          fontWeight: 600,
+        };
         base.itemStyle = {
           borderColor: theme.panel,
           borderWidth: 2,
           gapWidth: 3,
+          borderRadius: 3,
         };
+        // Each branch keeps its palette hue; siblings step through translucent
+        // tints so light labels stay readable and hierarchy stays visible.
+        base.levels = [
+          { itemStyle: { borderWidth: 0, gapWidth: 6 } },
+          {
+            colorAlpha: [0.55, 0.85],
+            itemStyle: {
+              borderColor: theme.panel,
+              borderWidth: 3,
+              gapWidth: 3,
+            },
+          },
+          { colorAlpha: [0.45, 0.8], itemStyle: { gapWidth: 2 } },
+        ];
       }
       return base;
     }),
@@ -721,10 +898,15 @@ export function buildReportChartOption(data, appearance = {}) {
       left: "center",
       bottom: 0,
       calculable: false,
-      textStyle: { color: theme.muted },
+      itemWidth: 10,
+      itemHeight: 160,
+      text: [String(max === min ? min + 1 : max), String(min)],
+      textGap: 8,
+      textStyle: { color: theme.muted, fontSize: 10 },
       inRange: { color: ["#24334d", colors[1], colors[0]] },
     };
     option.legend.show = false;
+    option.grid.bottom = 78;
   }
   return option;
 }
@@ -760,7 +942,9 @@ export function reportChartRows(data) {
       series.data.forEach((node) =>
         rows.push([
           series.name,
-          node.name,
+          node.category === undefined
+            ? node.name
+            : `${node.name} (${series.categories[node.category].name})`,
           node.x === undefined ? "" : display(node.x),
           node.y === undefined ? "" : display(node.y),
           node.value === undefined ? "" : display(node.value),
@@ -813,6 +997,14 @@ export function reportChartRows(data) {
           ]);
       });
     }
+    for (const line of series.markLine?.data ?? [])
+      rows.push([
+        series.name,
+        `Reference: ${line.name}`,
+        line.xAxis === undefined ? "" : display(line.xAxis),
+        line.yAxis === undefined ? "" : display(line.yAxis),
+        "",
+      ]);
   }
   return { columns, rows };
 }

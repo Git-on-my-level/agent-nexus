@@ -406,6 +406,22 @@ components. For example:
 }
 ```
 
+Further expressive options, all validated and rebuilt by the renderer:
+
+- Value axes accept numeric `min`, `max` and `scale: true` (fit the data rather
+  than forcing zero), and `axisLabel.formatter` as literal text around one
+  `{value}`, such as `"{value}%"` or `"{value} h"`. Time axes accept epoch
+  millisecond `min`/`max`. Category axes accept none of these.
+- Line, bar and scatter series accept `markLine: { "data": [{ "name": "Target",
+"yAxis": 50 }] }` with 1–6 named reference lines. Each line sets exactly one of
+  `xAxis`/`yAxis` on a value or time axis. Reference lines are listed in the
+  chart's data table and are silent (no interaction).
+- Graph series accept up to 12 `categories` (`[{ "name": "Stage" }]`); nodes
+  reference one by zero-based `category` index. Categories color nodes and
+  appear in the legend.
+- The legend defaults to visible only when it distinguishes something: several
+  series, a pie, or graph categories. Set `legend.show` to override.
+
 The renderer rebuilds accepted options from a strict allowlist, owns all styling,
 uses local SVG rendering, fixes rich-text tooltips, and disables animation.
 Unknown fields reject the report with bounded diagnostics rather than silently

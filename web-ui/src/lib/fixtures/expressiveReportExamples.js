@@ -67,6 +67,7 @@ swarmObservatoryReport.panels = [
         detail: "Down from 6.8 min in prior window",
         trend: [6.8, 7.1, 6.4, 5.3, 5.8, 4.7, 4.2],
         trend_label: "Median minutes · last 7 days",
+        tone: "positive",
       },
     ],
   }),
@@ -175,6 +176,7 @@ swarmObservatoryReport.panels = [
           name: "Remaining",
           data: [112, 105, 109, 98, 84, 68, 42],
           smooth: true,
+          markLine: { data: [{ name: "Backlog target", yAxis: 50 }] },
         },
       ],
     },
@@ -305,13 +307,19 @@ portfolioReviewReport.panels = [
     "quality-frontier",
     "Quality versus cycle time",
     {
-      xAxis: { type: "value", name: "Cycle time (hours)" },
-      yAxis: { type: "value", name: "Quality score / 100" },
+      xAxis: {
+        type: "value",
+        name: "Cycle time",
+        scale: true,
+        axisLabel: { formatter: "{value} h" },
+      },
+      yAxis: { type: "value", name: "Quality score", min: 60, max: 100 },
       legend: { show: true },
       series: [
         {
           type: "scatter",
           name: "Atlas",
+          symbolSize: 12,
           data: [
             [6.2, 78],
             [5.9, 82],
@@ -322,6 +330,8 @@ portfolioReviewReport.panels = [
         {
           type: "scatter",
           name: "Beacon",
+          symbolSize: 12,
+          markLine: { data: [{ name: "Quality bar", yAxis: 85 }] },
           data: [
             [3.4, 80],
             [3.2, 86],
@@ -332,6 +342,7 @@ portfolioReviewReport.panels = [
         {
           type: "scatter",
           name: "Cedar",
+          symbolSize: 12,
           data: [
             [4.2, 72],
             [4.7, 76],
@@ -385,13 +396,19 @@ portfolioReviewReport.panels = [
           type: "graph",
           name: "Illustrative dependency graph",
           layout: "circular",
+          categories: [{ name: "Stage" }, { name: "Project" }],
           data: [
-            { id: "research", name: "Research", symbolSize: 30 },
-            { id: "atlas", name: "Atlas", symbolSize: 37 },
-            { id: "beacon", name: "Beacon", symbolSize: 29 },
-            { id: "cedar", name: "Cedar", symbolSize: 26 },
-            { id: "verification", name: "Verification", symbolSize: 35 },
-            { id: "delivery", name: "Delivery", symbolSize: 25 },
+            { id: "research", name: "Research", symbolSize: 30, category: 0 },
+            { id: "atlas", name: "Atlas", symbolSize: 37, category: 1 },
+            { id: "beacon", name: "Beacon", symbolSize: 29, category: 1 },
+            { id: "cedar", name: "Cedar", symbolSize: 26, category: 1 },
+            {
+              id: "verification",
+              name: "Verification",
+              symbolSize: 35,
+              category: 0,
+            },
+            { id: "delivery", name: "Delivery", symbolSize: 25, category: 0 },
           ],
           links: [
             { source: "research", target: "atlas" },

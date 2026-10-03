@@ -74,9 +74,12 @@
       <p class="report-eyebrow">{typeLabels[panel.type]}</p>
       <h3 class="mt-1 text-meta font-semibold text-fg">{panel.title}</h3>
     </div>
-    <span class="report-state" class:report-state-warn={freshness === "stale"}
-      >{stateLabels[freshness]}</span
-    >
+    {#if freshness !== "current"}
+      <!-- Current is the expected state; only call out evidence that needs care. -->
+      <span class="report-state" class:report-state-warn={freshness === "stale"}
+        >{stateLabels[freshness]}</span
+      >
+    {/if}
   </header>
 
   <div class="report-panel-body">
@@ -235,33 +238,33 @@
   </div>
 
   <footer class="report-panel-footer">
-    <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="report-provenance">
       <ActorLabel
         label={panel.author}
         seed={panel.author}
         size="xs"
         nameClass="text-micro text-fg-muted"
-      /><span class="text-micro text-fg-muted"
+      />
+      <span class="report-provenance-tag" data-provenance={panel.provenance}
         >{provenanceLabels[panel.provenance]}</span
       >
-    </div>
-    <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
       <p class="text-micro text-fg-muted">
-        Observed <time datetime={panel.observed_at ?? undefined}
+        {freshness === "current" ? "Current · " : ""}Observed
+        <time datetime={panel.observed_at ?? undefined}
           >{date(panel.observed_at)}</time
         >
       </p>
-      <button
-        type="button"
-        class="report-evidence-button"
-        aria-expanded={evidenceOpen}
-        aria-controls={`report-evidence-${panel.id}`}
-        onclick={() => oninspect(panel.id)}
-        >Inspect evidence <span aria-hidden="true"
-          >{evidenceOpen ? "−" : "+"}</span
-        ></button
-      >
     </div>
+    <button
+      type="button"
+      class="report-evidence-button"
+      aria-expanded={evidenceOpen}
+      aria-controls={`report-evidence-${panel.id}`}
+      onclick={() => oninspect(panel.id)}
+      >Inspect evidence <span aria-hidden="true"
+        >{evidenceOpen ? "−" : "+"}</span
+      ></button
+    >
   </footer>
   {#if evidenceOpen}
     <div id={`report-evidence-${panel.id}`} class="report-evidence-detail">
@@ -376,8 +379,36 @@
     white-space: pre-line;
   }
   .report-panel-footer {
-    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 16px;
+    padding: 10px 16px;
     border-top: 1px solid var(--line-subtle);
+  }
+  .report-provenance {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+  }
+  .report-provenance-tag {
+    font-size: 10px;
+    line-height: 1.4;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+  .report-provenance-tag[data-provenance="illustrative"] {
+    border-style: dashed;
+  }
+  .report-provenance-tag[data-provenance="verified"] {
+    border-color: var(--accent-solid);
+    color: var(--accent-text);
   }
   .report-evidence-button {
     font-size: 11px;

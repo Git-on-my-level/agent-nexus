@@ -1,5 +1,6 @@
 // Only these audited chart modules are registered. There is no custom-series,
 // dataset-transform, graphic, image, toolbox/dataView, or external map support.
+// Mark lines are limited to validated, silent reference values.
 import { init, use } from "echarts/core";
 import {
   BarChart,
@@ -15,6 +16,7 @@ import {
   AriaComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TooltipComponent,
   VisualMapComponent,
 } from "echarts/components";
@@ -33,6 +35,7 @@ use([
   AriaComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
   TooltipComponent,
   VisualMapComponent,
   LabelLayout,

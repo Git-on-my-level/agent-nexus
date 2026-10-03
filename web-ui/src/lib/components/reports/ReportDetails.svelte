@@ -4,13 +4,13 @@
     const minimum = Math.min(...values);
     const maximum = Math.max(...values);
     const range = maximum - minimum || 1;
-    return values
-      .map(
-        (value, i) =>
-          `${(i / (values.length - 1)) * 160},${36 - ((value - minimum) / range) * 30}`,
-      )
-      .join(" ");
+    return values.map((value, i) => [
+      (i / (values.length - 1)) * 160,
+      36 - ((value - minimum) / range) * 30,
+    ]);
   }
+  const line = (points) => points.map((point) => point.join(",")).join(" ");
+  const area = (points) => `0,39 ${line(points)} 160,39`;
 </script>
 
 {#if panel.type === "callout"}
@@ -33,6 +33,7 @@
         <strong class="metric-value">{item.value}</strong>
         <p class="metric-detail">{item.detail}</p>
         {#if item.trend}
+          {@const points = sparkline(item.trend)}
           <svg
             viewBox="0 0 160 42"
             role="img"
@@ -40,11 +41,24 @@
           >
             <title>{item.trend_label}</title>
             <line x1="0" x2="160" y1="39" y2="39" stroke="var(--line)" />
+            <polygon
+              points={area(points)}
+              fill="currentColor"
+              fill-opacity="0.1"
+            />
             <polyline
-              points={sparkline(item.trend)}
+              points={line(points)}
               fill="none"
               stroke="currentColor"
               stroke-width="2"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+            <circle
+              cx={points.at(-1)[0]}
+              cy={points.at(-1)[1]}
+              r="3"
+              fill="currentColor"
             />
           </svg>
           <p class="trend-label">{item.trend_label}</p>
@@ -145,7 +159,15 @@
     margin-top: 12px;
     color: var(--accent-text);
   }
-  .metric[data-tone="negative"] svg {
+  .metric svg {
+    overflow: visible;
+  }
+  .metric[data-tone="positive"] svg,
+  .metric[data-tone="positive"] .metric-detail {
+    color: var(--ok-text);
+  }
+  .metric[data-tone="negative"] svg,
+  .metric[data-tone="negative"] .metric-detail {
     color: var(--warn-text);
   }
   .trend-label {
