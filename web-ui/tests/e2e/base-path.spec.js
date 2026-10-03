@@ -53,10 +53,10 @@ test("preserves a configured mount prefix in redirects and generated links", asy
   await page.goto(appPath("/"));
 
   await expect(page).toHaveURL(
-    new RegExp(`${APP_BASE_PATH}/o/local/w/local/inbox/?$`),
+    new RegExp(`${APP_BASE_PATH}/o/local/w/local/overview/?$`),
   );
   await expect(
-    page.getByRole("heading", { name: "Inbox", exact: true }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
 
   await expect(

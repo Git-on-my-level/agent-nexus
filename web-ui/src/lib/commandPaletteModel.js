@@ -111,6 +111,7 @@ export function rankCommands(commands, query) {
 
 /** "Go to" destinations. Shortcuts listed here are the ones the palette binds. */
 export const GO_TO_SHORTCUTS = {
+  o: "/overview",
   i: "/inbox",
   a: "/agents",
   t: "/tasks",
@@ -119,6 +120,15 @@ export const GO_TO_SHORTCUTS = {
 
 export function goToCommands({ settingsGroups = [], go, mod = "⌘" }) {
   const commands = [
+    {
+      id: "go:overview",
+      group: "Go to",
+      label: "Overview",
+      keywords: ["home", "dashboard", "fleet"],
+      shortcut: ["G", "O"],
+      icon: "overview",
+      run: () => go("/overview"),
+    },
     {
       id: "go:inbox",
       group: "Go to",

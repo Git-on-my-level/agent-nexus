@@ -187,7 +187,8 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector("text=Enroll the machine your agents run on");
+      await page.waitForSelector("text=No tasks yet.");
     },
   },
   {
@@ -195,7 +196,10 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-recent",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector(
+        "[data-overview-report='doc-fleet-dashboard']",
+      );
+      await page.waitForSelector("text=Approve rollback wording");
     },
   },
   {
@@ -203,7 +207,9 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector("text=Nothing is waiting on you.");
+      await page.waitForSelector("text=No tasks yet.");
+      await page.waitForSelector("text=No visual report in the latest documents.");
     },
   },
   {
@@ -367,6 +373,7 @@ function parseCliArgs(argv) {
     thresholdRatio: DEFAULT_THRESHOLD_RATIO,
     outDir: QA_CURRENT_DIR,
     json: false,
+    sceneNames: [],
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -397,6 +404,10 @@ function parseCliArgs(argv) {
       case "--json":
         options.json = true;
         break;
+      case "--scene":
+        options.sceneNames.push(String(args[index + 1] ?? ""));
+        index += 1;
+        break;
       case "--help":
       case "-h":
         printUsage();
@@ -426,6 +437,7 @@ Options:
   --port <port>         Preview server port (default: ${DEFAULT_PORT})
   --threshold <ratio>   Max differing-pixel ratio before failing (default: ${DEFAULT_THRESHOLD_RATIO}; some scenes override)
   --json                Emit machine-readable JSON summary
+  --scene <name>        Capture or diff one scene (repeatable). Baseline updates only those files.
 `.trim(),
   );
 }
@@ -479,6 +491,124 @@ function qaHoursAgo(hours) {
   return new Date(
     Date.parse(QA_FIXED_NOW_ISO) - hours * 60 * 60 * 1000,
   ).toISOString();
+}
+
+function overviewFleetDocument() {
+  return {
+    id: "doc-fleet-dashboard",
+    title: "Fleet Dashboard",
+    state: "active",
+    thread_id: "thread-launch-war-room",
+    head_revision_number: 1,
+    updated_at: qaHoursAgo(2),
+    updated_by: "actor-jordan-human",
+  };
+}
+
+function overviewVisualReport() {
+  return {
+    kind: "anx.visual-report",
+    schema_version: 1,
+    title: "Fleet Dashboard",
+    summary: "A snapshot of work in flight. It does not establish that the fleet is healthy.",
+    generated_at: QA_FIXED_NOW_ISO,
+    projects: [
+      {
+        id: "studio",
+        title: "Studio",
+        summary: "Launch checklist and rollback wording.",
+        outcome: "Snapshot only",
+      },
+    ],
+    sources: [],
+    panels: [
+      {
+        id: "note",
+        project_id: "studio",
+        type: "explanation",
+        title: "Evidence boundary",
+        author: "QA",
+        provenance: "reported",
+        observed_at: null,
+        freshness: "unavailable",
+        source_ids: [],
+        data: {
+          text: "No live observation is attached. This does not establish health.",
+        },
+      },
+    ],
+  };
+}
+
+function overviewFleetDetail() {
+  const document = overviewFleetDocument();
+  return {
+    document: {
+      ...document,
+      summary: "Snapshot of work in flight.",
+      subject_ref: "",
+      created_at: document.updated_at,
+      created_by: document.updated_by,
+    },
+    revision: {
+      revision_id: "rev-doc-fleet-dashboard-1",
+      document_id: document.id,
+      revision_number: 1,
+      content_type: "text",
+      content_hash: "sha256-qa-fleet",
+      revision_hash: "revhash-qa-fleet",
+      created_at: document.updated_at,
+      created_by: document.updated_by,
+      content: JSON.stringify(overviewVisualReport()),
+    },
+  };
+}
+
+function overviewPopulatedWork() {
+  return [
+    {
+      ref: "card:launch-checklist",
+      title: "Finalize launch checklist",
+      phase: "in_progress",
+      source: { authority: "github", native_id: "100" },
+      updated_at: qaHoursAgo(2),
+      next_actor: "actor-zara-ops",
+      freshness: {
+        status: "fresh",
+        last_observed_at: QA_FIXED_NOW_ISO,
+        stale_after_seconds: 86_400,
+      },
+    },
+    {
+      ref: "card:rollback-wording",
+      title: "Approve rollback wording",
+      phase: "blocked",
+      source: { authority: "github", native_id: "101" },
+      updated_at: qaHoursAgo(5),
+      next_actor: "actor-jordan-human",
+      freshness: {
+        status: "stale",
+        last_observed_at: qaHoursAgo(48),
+        stale_after_seconds: 3600,
+      },
+    },
+    {
+      ref: "card:cutover-note",
+      title: "Record the cutover decision",
+      phase: "ready",
+      source: { authority: "nexus" },
+      updated_at: qaHoursAgo(8),
+      freshness: { status: "unknown" },
+    },
+  ];
+}
+
+function overviewFirstRunInboxItem() {
+  return {
+    ...QA_INBOX_POPULATED[0],
+    id: "inbox-first-run",
+    title: "Enroll the machine your agents run on",
+  };
 }
 
 function qaDocumentDetail(documentId) {
@@ -605,25 +735,75 @@ function qaDocumentDetailTimeline(threadId) {
 function createWorkspaceScenario(mode) {
   switch (mode) {
     case "home-empty":
-      return { inboxState: "populated", askState: "ok", homeState: "empty" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "empty",
+        overviewState: "empty",
+      };
     case "home-recent":
-      return { inboxState: "populated", askState: "ok", homeState: "recent" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "recent",
+        overviewState: "populated",
+      };
     case "home-first-run":
-      return { inboxState: "populated", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "first-run",
+      };
     case "inbox-empty":
-      return { inboxState: "empty", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "empty",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
     case "inbox-populated":
-      return { inboxState: "populated", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
     case "inbox-loading":
-      return { inboxState: "loading", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "loading",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
     case "inbox-error":
-      return { inboxState: "error", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "error",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
     case "capture-ui":
-      return { inboxState: "populated", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
     case "capture-degraded":
-      return { inboxState: "populated", askState: "error", homeState: "all" };
+      return {
+        inboxState: "populated",
+        askState: "error",
+        homeState: "all",
+        overviewState: "default",
+      };
     default:
-      return { inboxState: "populated", askState: "ok", homeState: "all" };
+      return {
+        inboxState: "populated",
+        askState: "ok",
+        homeState: "all",
+        overviewState: "default",
+      };
   }
 }
 
@@ -1193,7 +1373,12 @@ async function handleWorkspaceApiRoute(
   }
 
   if (pathname === "/agents" && request.method() === "GET") {
-    await route.fulfill(jsonResponse(200, { agents: QA_AGENTS }));
+    const agents =
+      scenario.overviewState === "empty" ||
+      scenario.overviewState === "first-run"
+        ? []
+        : QA_AGENTS;
+    await route.fulfill(jsonResponse(200, { agents }));
     return;
   }
 
@@ -1288,10 +1473,14 @@ async function handleWorkspaceApiRoute(
       return;
     }
     const status = url.searchParams.get("status") || "open";
-    const items =
-      scenario.inboxState === "populated" && status !== "completed"
-        ? QA_INBOX_POPULATED
-        : [];
+    let items = [];
+    if (scenario.overviewState === "first-run" && status !== "completed") {
+      items = [overviewFirstRunInboxItem()];
+    } else if (scenario.overviewState === "empty") {
+      items = [];
+    } else if (scenario.inboxState === "populated" && status !== "completed") {
+      items = QA_INBOX_POPULATED;
+    }
     await route.fulfill(
       jsonResponse(200, {
         items,
@@ -1302,7 +1491,9 @@ async function handleWorkspaceApiRoute(
   }
 
   if (pathname === "/work" && request.method() === "GET") {
-    await route.fulfill(jsonResponse(200, { work: [], next_cursor: "" }));
+    const work =
+      scenario.overviewState === "populated" ? overviewPopulatedWork() : [];
+    await route.fulfill(jsonResponse(200, { work, next_cursor: "" }));
     return;
   }
 
@@ -1369,7 +1560,14 @@ async function handleWorkspaceApiRoute(
   }
 
   if (pathname === "/docs" && request.method() === "GET") {
-    const items = filterByQuery(QA_DOCUMENTS, url.searchParams.get("q"), [
+    const source =
+      scenario.overviewState === "populated"
+        ? [overviewFleetDocument(), ...QA_DOCUMENTS]
+        : scenario.overviewState === "empty" ||
+            scenario.overviewState === "first-run"
+          ? []
+          : QA_DOCUMENTS;
+    const items = filterByQuery(source, url.searchParams.get("q"), [
       "id",
       "title",
       "labels",
@@ -1384,7 +1582,12 @@ async function handleWorkspaceApiRoute(
 
   const documentMatch = pathname.match(/^\/docs\/([^/]+)$/);
   if (documentMatch && request.method() === "GET") {
-    const detail = qaDocumentDetail(decodeURIComponent(documentMatch[1]));
+    const documentId = decodeURIComponent(documentMatch[1]);
+    if (documentId === "doc-fleet-dashboard") {
+      await route.fulfill(jsonResponse(200, overviewFleetDetail()));
+      return;
+    }
+    const detail = qaDocumentDetail(documentId);
     if (!detail) {
       await route.fulfill(
         jsonResponse(404, { error: { message: "not found" } }),
@@ -1505,9 +1708,24 @@ async function captureScene(browser, baseUrl, scene, outDir) {
   }
 }
 
-async function captureAllScenes({ outDir, port }) {
+function scenesForNames(sceneNames) {
+  if (!sceneNames?.length) return QA_SCENES;
+  const wanted = new Set(sceneNames);
+  const scenes = QA_SCENES.filter((scene) => wanted.has(scene.name));
+  const known = new Set(scenes.map((scene) => scene.name));
+  const missing = sceneNames.filter((name) => !known.has(name));
+  if (missing.length) {
+    throw new Error(`Unknown QA scene: ${missing.join(", ")}`);
+  }
+  return scenes;
+}
+
+async function captureAllScenes({ outDir, port, sceneNames }) {
+  const scenes = scenesForNames(sceneNames);
   await ensureBuild();
-  await rm(outDir, { recursive: true, force: true });
+  if (!sceneNames?.length) {
+    await rm(outDir, { recursive: true, force: true });
+  }
   await mkdir(outDir, { recursive: true });
 
   const core = await startMockCoreServer();
@@ -1520,7 +1738,7 @@ async function captureAllScenes({ outDir, port }) {
 
   try {
     const results = [];
-    for (const scene of QA_SCENES) {
+    for (const scene of scenes) {
       results.push(await captureScene(browser, preview.baseUrl, scene, outDir));
     }
     return results;
@@ -1586,10 +1804,12 @@ async function diffPngFiles(baselinePath, currentPath, diffPath) {
 }
 
 export async function runQaVisualCommand(options) {
+  const sceneNames = options.sceneNames?.filter(Boolean) ?? [];
   if (options.mode === "baseline") {
     const results = await captureAllScenes({
       outDir: options.outDir,
       port: options.port,
+      sceneNames,
     });
     const summary = {
       mode: "baseline",
@@ -1610,6 +1830,7 @@ export async function runQaVisualCommand(options) {
   const captures = await captureAllScenes({
     outDir: options.outDir,
     port: options.port,
+    sceneNames,
   });
 
   await rm(QA_DIFF_DIR, { recursive: true, force: true });
@@ -1627,7 +1848,7 @@ export async function runQaVisualCommand(options) {
     }
   }
 
-  for (const scene of QA_SCENES) {
+  for (const scene of scenesForNames(sceneNames)) {
     const baselinePath = path.join(QA_BASELINE_DIR, `${scene.name}.png`);
     const currentPath = path.join(options.outDir, `${scene.name}.png`);
     const diffPath = path.join(QA_DIFF_DIR, `${scene.name}.diff.png`);

@@ -155,6 +155,73 @@ const topics = [
   },
 ];
 
+function fleetDashboardReport(generatedAt, summary) {
+  return JSON.stringify({
+    kind: "anx.visual-report",
+    schema_version: 1,
+    title: "Fleet Dashboard",
+    summary,
+    generated_at: generatedAt,
+    projects: [
+      {
+        id: "studio",
+        title: "Moonshot Tactics",
+        summary:
+          "Seeded snapshot for the workspace Overview. It is not a live read of the studio.",
+        outcome: "Snapshot only",
+      },
+    ],
+    sources: [
+      {
+        id: "seed",
+        label: "Dev seed",
+        url: "https://example.com/anx/fleet-dashboard",
+        observed_at: generatedAt,
+        kind: "seed",
+      },
+    ],
+    panels: [
+      {
+        id: "status",
+        project_id: "studio",
+        type: "metric-strip",
+        title: "Seeded studio snapshot",
+        author: "Dev seed",
+        provenance: "reported",
+        observed_at: generatedAt,
+        freshness: "current",
+        source_ids: ["seed"],
+        data: {
+          items: [
+            {
+              label: "Slice",
+              value: "In progress",
+              detail: "Combat and hub are the demo path.",
+            },
+            {
+              label: "Launch",
+              value: "Open",
+              detail: "QA checklist is not signed off.",
+            },
+          ],
+        },
+      },
+      {
+        id: "note",
+        project_id: "studio",
+        type: "explanation",
+        title: "What this report is",
+        author: "Dev seed",
+        provenance: "reported",
+        observed_at: generatedAt,
+        freshness: "current",
+        source_ids: ["seed"],
+        data: { text: summary },
+      },
+    ],
+  });
+}
+
 const documents = [
   {
     id: "gds-studio-brief",
@@ -264,6 +331,24 @@ const documents = [
         "Smoke pass includes ultrawide, controller reconnect, retry after failed combat encounter, and branch-reset from the trailer checkpoint.",
         "Community assets: store capsule, short trailer, feature bullets, known-issues note, and fallback support copy for demo-day build rollback.",
       ].join("\n"),
+    ],
+  },
+  {
+    id: "gds-fleet-dashboard",
+    title: "Fleet Dashboard",
+    slug: "fleet-dashboard",
+    backing_thread_id: "thread-gds-doc-fleet",
+    topic_ref: "gds-launch",
+    created_by: "actor-gds-producer",
+    revisions: [
+      fleetDashboardReport(
+        "2026-10-03T12:00:00Z",
+        "Earlier seeded snapshot. Publication of this document does not establish that the studio is healthy.",
+      ),
+      fleetDashboardReport(
+        "2026-10-04T12:00:00Z",
+        "Current seeded snapshot for Overview. It reports the demo slice as in progress and does not establish fleet health.",
+      ),
     ],
   },
 ];

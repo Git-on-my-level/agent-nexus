@@ -48,7 +48,7 @@
    * cards.patch, pm decisions), exactly as the page controls do.
    *
    * The palette also owns the global letter shortcuts it advertises, so a
-   * shortcut shown here is always one that works: G then I/T/D anywhere, and
+   * shortcut shown here is always one that works: G then O/I/A/T/D anywhere, and
    * on a task M (move), A (assign), O (open source); on a doc E (edit).
    * None of them fire while typing or while a dialog is open.
    */

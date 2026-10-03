@@ -27,7 +27,20 @@
     workFreshness,
     workKey,
   } from "$lib/pm/presentation.js";
+  import {
+    actorDirectoryIncomplete,
+    actorRegistry,
+    principalDirectoryIncomplete,
+    principalRegistry,
+  } from "$lib/actorSession";
   import { navIconPath } from "$lib/icons.js";
+  import {
+    humanActorIdSet,
+    humanLiveRefreshDelay,
+    isHumanNextActor,
+    WORK_PAGE_LIMIT,
+    WORK_ROW_CAP,
+  } from "$lib/overview.js";
   import { formatShortcut } from "$lib/keyboardHints.js";
   import { openCommandPalette } from "$lib/stores/commandPalette.js";
   import {
@@ -141,16 +154,29 @@
     ),
   );
   let filterKey = $derived(JSON.stringify(filters));
+  // `human=1` is not a core filter. Overview links here for tasks whose
+  // next actor is a person; this page reads enough rows to apply it locally.
+  let humanOnly = $derived($page.url.searchParams.get("human") === "1");
+  let humanIds = $derived(humanActorIdSet($actorRegistry, $principalRegistry));
+  let peopleIncomplete = $derived(
+    $actorDirectoryIncomplete || $principalDirectoryIncomplete,
+  );
   // One row per source item: a GitHub issue read through two connections is
   // one task to the operator. The folded rows stay reachable from the kept
   // task's page.
-  let visible = $derived(dedupeWorkBySource(records).records);
+  let visible = $derived.by(() => {
+    const rows = dedupeWorkBySource(records).records;
+    if (!humanOnly) return rows;
+    return rows.filter((work) => isHumanNextActor(work, humanIds));
+  });
   // Done and Cancelled fold under a toggle unless the operator asked for them.
   let showClosed = $derived(
     $page.url.searchParams.get("closed") === "1" ||
       CLOSED_PHASES.has(filters.phase),
   );
-  let activeFilters = $derived(Object.values(filters).some(Boolean));
+  let activeFilters = $derived(
+    humanOnly || Object.values(filters).some(Boolean),
+  );
   let blockedCount = $derived(
     visible.filter((work) => work.phase === "blocked").length,
   );
@@ -185,7 +211,7 @@
   let filterCount = $derived(
     ["source", "phase", "freshness", "project_ref", "owner"].filter(
       (key) => filters[key],
-    ).length,
+    ).length + (humanOnly ? 1 : 0),
   );
   let actions = $state([]);
   let requestedDecisions = $derived(
@@ -197,7 +223,9 @@
   });
   $effect(() => {
     const key = filterKey;
-    if (loaded) void load(false, JSON.parse(key));
+    // Re-read when the person filter is toggled; it is not part of `filters`.
+    const person = humanOnly;
+    if (loaded) void load(false, JSON.parse(key), { scanAll: person });
   });
 
   function queryHref(changes) {
@@ -212,11 +240,44 @@
     void goto(queryHref({ [key]: value }), { keepFocus: true, noScroll: true });
   }
   const PAGE_SIZE = 50;
-  async function load(append = false, query = filters, { live = false } = {}) {
+  async function load(
+    append = false,
+    query = filters,
+    { live = false, scanAll = false } = {},
+  ) {
     const id = ++requestId;
     loading = true;
     if (!live) error = "";
     try {
+      if (scanAll && !append) {
+        const rows = [];
+        let cursor = "";
+        while (rows.length < WORK_ROW_CAP) {
+          const result = await coreClient.listWork({
+            ...query,
+            limit: Math.min(WORK_PAGE_LIMIT, WORK_ROW_CAP - rows.length),
+            cursor: cursor || undefined,
+          });
+          if (id !== requestId) return;
+          if (!Array.isArray(result.work))
+            throw new Error(
+              "The workspace returned an invalid work list. Reload to try again.",
+            );
+          rows.push(...result.work);
+          cursor = result.next_cursor || "";
+          if (!cursor) break;
+        }
+        if (id !== requestId) return;
+        const capped = rows.slice(0, WORK_ROW_CAP);
+        records = [
+          ...new Map(capped.map((work) => [workKey(work), work])).values(),
+        ];
+        nextCursor = cursor && rows.length >= WORK_ROW_CAP ? cursor : "";
+        error = "";
+        if (!decisionsLoaded) void loadDecisions();
+        if (!boardsLoaded) void loadBoards();
+        return;
+      }
       const result = await coreClient.listWork({
         ...query,
         // A live re-read keeps as many rows as the operator already paged in.
@@ -562,19 +623,45 @@
     }, 30_000);
     // Tasks change under the operator (agents move cards, readers report);
     // the list follows the event stream instead of offering a Reload button.
+    let lastHumanLiveRefresh = 0;
+    let humanLiveTimer = 0;
+    function refreshFromLiveEvent() {
+      // A drag or an evidence prompt in progress keeps its rows still.
+      if (!loaded || evidenceFor) return;
+      const scanAll = $page.url.searchParams.get("human") === "1";
+      if (!scanAll) {
+        void load(false, filters, { live: true });
+        return;
+      }
+      const delay = humanLiveRefreshDelay(Date.now(), lastHumanLiveRefresh);
+      if (delay === 0) {
+        if (humanLiveTimer) {
+          clearTimeout(humanLiveTimer);
+          humanLiveTimer = 0;
+        }
+        lastHumanLiveRefresh = Date.now();
+        void load(false, filters, { live: true, scanAll: true });
+        return;
+      }
+      if (humanLiveTimer) return;
+      humanLiveTimer = setTimeout(() => {
+        humanLiveTimer = 0;
+        lastHumanLiveRefresh = Date.now();
+        if (!loaded || evidenceFor) return;
+        if ($page.url.searchParams.get("human") !== "1") return;
+        void load(false, filters, { live: true, scanAll: true });
+      }, delay);
+    }
     const stopLive = liveWorkspaceEvents({
       client: coreClient,
       types: TASK_LIST_EVENT_TYPES,
-      onChange: () => {
-        // A drag or an evidence prompt in progress keeps its rows still.
-        if (!loaded || evidenceFor) return;
-        void load(false, filters, { live: true });
-      },
+      onChange: refreshFromLiveEvent,
     });
     return () => {
       disposed = true;
       requestId++;
       clearInterval(timer);
+      clearTimeout(humanLiveTimer);
       stopLive();
     };
   });
@@ -592,7 +679,7 @@
     ["Move focused task to the previous or next phase (board)", ["←", "→"]],
     ["Board view", ["B"]],
     ["Table view", ["T"]],
-    ["Go to Inbox, Agents, Tasks or Docs", ["G", "I A T D"]],
+    ["Go to Overview, Inbox, Agents, Tasks or Docs", ["G", "O I A T D"]],
     ["Commands and search", [formatShortcut("K")]],
     ["Shortcut help", ["?"]],
     ["Close this help", ["Esc"]],
@@ -702,6 +789,18 @@
       >
     </nav>
   </div>
+
+  {#if humanOnly}
+    <p class="text-micro text-fg-muted" data-task-human-filter>
+      Showing tasks whose next actor is a person.
+      {#if peopleIncomplete}
+        <span class="text-warn-text" data-task-human-partial
+          >Next-actor count may be incomplete.</span
+        >
+      {/if}
+      <a class="ui-prose-link" href={queryHref({ human: "" })}>Clear</a>
+    </p>
+  {/if}
 
   <!--
     One disclosure, not four control rows. Source, Status, Freshness and the
@@ -903,7 +1002,7 @@
     <p class="py-10 text-center text-meta text-fg-muted" role="status">
       Loading tasks…
     </p>
-  {:else if !error && !records.length}
+  {:else if !error && !visible.length}
     <section class="py-14 text-center">
       <h2 class="text-subtitle font-semibold text-fg">
         {activeFilters ? "No matching tasks" : "Nothing tracked yet"}
@@ -921,7 +1020,7 @@
         >{activeFilters ? "Clear filters" : "Create task"}</a
       >
     </section>
-  {:else if records.length}
+  {:else if visible.length}
     <WorkViews
       records={visible}
       {view}

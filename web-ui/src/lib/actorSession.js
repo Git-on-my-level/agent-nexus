@@ -17,6 +17,9 @@ export const actorSessionReady = writable(false);
 export const selectedActorId = writable("");
 export const actorRegistry = writable([]);
 export const principalRegistry = writable([]);
+/** True when the actor or principal list stopped early or failed. */
+export const actorDirectoryIncomplete = writable(false);
+export const principalDirectoryIncomplete = writable(false);
 /**
  * Agent roster summaries (`GET /agents`) for the current workspace. A derived
  * agent is named by its host relation ("codex on m5-mbp") wherever the UI
@@ -33,6 +36,8 @@ function createEmptyActorState() {
     actorRegistry: [],
     principalRegistry: [],
     agentRegistry: [],
+    actorDirectoryIncomplete: false,
+    principalDirectoryIncomplete: false,
   };
 }
 
@@ -52,6 +57,8 @@ function syncCurrentWorkspaceStores(workspaceSlug = getCurrentWorkspaceSlug()) {
   actorRegistry.set([...state.actorRegistry]);
   principalRegistry.set([...state.principalRegistry]);
   agentRegistry.set([...state.agentRegistry]);
+  actorDirectoryIncomplete.set(Boolean(state.actorDirectoryIncomplete));
+  principalDirectoryIncomplete.set(Boolean(state.principalDirectoryIncomplete));
   return state;
 }
 
@@ -163,6 +170,24 @@ export function replaceActorRegistry(
   state.actorRegistry = [...(actors ?? [])];
   syncCurrentWorkspaceStores(workspaceSlug);
   return state.actorRegistry;
+}
+
+export function setActorDirectoryIncomplete(
+  incomplete,
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  const state = ensureActorState(workspaceSlug);
+  state.actorDirectoryIncomplete = Boolean(incomplete);
+  syncCurrentWorkspaceStores(workspaceSlug);
+}
+
+export function setPrincipalDirectoryIncomplete(
+  incomplete,
+  workspaceSlug = getCurrentWorkspaceSlug(),
+) {
+  const state = ensureActorState(workspaceSlug);
+  state.principalDirectoryIncomplete = Boolean(incomplete);
+  syncCurrentWorkspaceStores(workspaceSlug);
 }
 
 export function replacePrincipalRegistry(

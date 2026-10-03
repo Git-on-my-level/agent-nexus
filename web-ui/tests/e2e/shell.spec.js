@@ -18,7 +18,7 @@ test("blocks shell with actor gate when no actor is selected", async ({
   await expect(page.getByRole("link", { name: "Inbox" })).toHaveCount(0);
 });
 
-test("registers actor, unlocks shell, and opens Inbox", async ({ page }) => {
+test("registers actor, unlocks shell, and opens Overview", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -27,9 +27,9 @@ test("registers actor, unlocks shell, and opens Inbox", async ({ page }) => {
   await page.getByLabel("Display name").fill("E2E User");
   await page.getByRole("button", { name: "Create and continue" }).click();
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/inbox/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview/);
   await expect(
-    page.getByRole("heading", { name: "Inbox", exact: true }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Tasks", exact: true }).first(),
@@ -39,7 +39,7 @@ test("registers actor, unlocks shell, and opens Inbox", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("workspace root routes to Inbox", async ({ page }) => {
+test("workspace root routes to Overview", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -47,17 +47,14 @@ test("workspace root routes to Inbox", async ({ page }) => {
   await page.goto(WS_HOME);
   await unlockShellWithActor(page, `Inbox User ${Date.now()}`);
 
-  await expect(page).toHaveURL(/\/o\/local\/w\/local\/inbox/);
+  await expect(page).toHaveURL(/\/o\/local\/w\/local\/overview/);
   await expect(
-    page.getByRole("heading", { name: "Inbox", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("navigation", { name: "Inbox mailbox" }),
+    page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
 });
 
 test("mobile bottom navigation switches workspace routes", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -75,14 +72,43 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
     page.getByRole("heading", { name: "Tasks", exact: true }),
   ).toBeVisible();
 
-  // Search left the bottom bar: the bar carries the three primitives, Ask PM
-  // and More. Workspace search is ⌘K plus a button in each list header.
+  // Search left the bottom bar: the bar carries Overview, the product
+  // surfaces, Ask PM and More. Workspace search is ⌘K plus a button in
+  // each list header.
   await expect(
     bottomNav.getByRole("button", { name: "Search workspace" }),
   ).toHaveCount(0);
-  for (const name of ["Inbox", "Tasks", "Docs", "Ask PM", "More"]) {
+  for (const name of [
+    "Overview",
+    "Inbox",
+    "Agents",
+    "Tasks",
+    "Docs",
+    "Ask PM",
+    "More",
+  ]) {
     await expect(bottomNav.getByRole("link", { name })).toBeVisible();
   }
+  const crowded = await bottomNav
+    .locator(".shell-bottom-nav-item")
+    .evaluateAll((els) =>
+      els
+        .map((el) => {
+          const label = el.querySelector(":scope > span:last-of-type");
+          return {
+            text: (label?.textContent || el.textContent || "")
+              .replace(/\s+/g, " ")
+              .trim(),
+            itemOverflow: el.scrollWidth > el.clientWidth + 1,
+            labelWrapped: label
+              ? label.scrollHeight > label.clientHeight + 1 ||
+                label.getClientRects().length > 1
+              : false,
+          };
+        })
+        .filter((item) => item.itemOverflow || item.labelWrapped),
+    );
+  expect(crowded).toEqual([]);
 
   await page.getByRole("button", { name: "Search workspace" }).click();
   await expect(

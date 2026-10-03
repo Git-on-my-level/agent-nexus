@@ -45,7 +45,7 @@ export function workspaceCreateRedirectHref(org, workspace) {
   const status = String(workspace?.status ?? "").toLowerCase();
   const orgSlug = workspace?.organization_slug ?? org?.slug;
   if (status === "ready" && orgSlug && workspace?.slug) {
-    return workspacePath(orgSlug, workspace.slug, "/inbox");
+    return workspacePath(orgSlug, workspace.slug, "/overview");
   }
   return workspaceCreatedDashboardHref(org?.id, workspace);
 }

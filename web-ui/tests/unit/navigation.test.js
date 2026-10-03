@@ -12,6 +12,7 @@ import {
 describe("navigation model", () => {
   it("includes expected primary nav labels", () => {
     expect(navigationItems.map((item) => item.label)).toEqual([
+      "Overview",
       "Inbox",
       "Agents",
       "Tasks",
@@ -41,6 +42,7 @@ describe("navigation model", () => {
   });
 
   it("detects known routes", () => {
+    expect(isKnownSection("/overview")).toBe(true);
     expect(isKnownSection("/inbox")).toBe(true);
     expect(isKnownSection("/tasks")).toBe(true);
     expect(isKnownSection("/docs")).toBe(true);
@@ -67,6 +69,7 @@ describe("navigation model", () => {
     expect(isMoreHubActivePath("/access")).toBe(true);
     expect(isMoreHubActivePath("/secrets")).toBe(true);
     expect(isMoreHubActivePath("/events")).toBe(true);
+    expect(isMoreHubActivePath("/overview")).toBe(false);
     expect(isMoreHubActivePath("/inbox")).toBe(false);
     expect(isMoreHubActivePath("/tasks")).toBe(false);
   });
