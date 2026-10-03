@@ -288,7 +288,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution and agentctl checks. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. Use `--as <name>` when no harness or agentctl context can be detected. If the host was revoked, ask a human auth-admin to enroll a replacement. A bare invocation with no `--base-url` and no `ANX_BASE_URL` uses the single enrolled host's `host.json` base URL.
 
 ### Version mismatch
 
@@ -296,6 +296,7 @@ Symptoms:
 
 - server returns `cli_outdated`
 - commands fail before mutation with compatibility errors
+- `anx doctor` fails with `cli_outdated` when this CLI is below `min_cli_version`, and warns when it is below `recommended_cli_version` (`anx update --version <recommended>`)
 
 Actions:
 

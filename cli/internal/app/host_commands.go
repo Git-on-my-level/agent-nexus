@@ -506,5 +506,82 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 	} else {
 		add("core_health", false, clientErr.Error())
 	}
-	return &commandResult{Data: map[string]any{"base_url": cfg.BaseURL, "checks": checks}}, nil
+	var versionErr *errnorm.Error
+	if clientErr == nil {
+		versionErr = cliVersionDoctorCheck(ctx, client, func(check doctorCheck) {
+			checks = append(checks, check)
+		})
+	} else {
+		checks = append(checks, doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: "core client unavailable"})
+	}
+	data := map[string]any{"base_url": cfg.BaseURL, "checks": checks}
+	if versionErr != nil {
+		details, _ := versionErr.Details.(map[string]any)
+		if details == nil {
+			details = map[string]any{}
+		}
+		details["base_url"] = cfg.BaseURL
+		details["checks"] = checks
+		versionErr.Details = details
+		return nil, versionErr
+	}
+	return &commandResult{Data: data}, nil
+}
+
+// cliVersionDoctorCheck fails when this CLI is below handshake min_cli_version
+// and warns when it is below recommended_cli_version. /meta/handshake is
+// exempt from the server's own outdated rejection, so doctor can still read it.
+func cliVersionDoctorCheck(ctx context.Context, client *httpclient.Client, add func(doctorCheck)) *errnorm.Error {
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/meta/handshake"})
+	if err != nil {
+		add(doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: "handshake unreachable: " + err.Error()})
+		return nil
+	}
+	if resp.StatusCode != 200 {
+		add(doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: fmt.Sprintf("handshake HTTP %d", resp.StatusCode)})
+		return nil
+	}
+	var body map[string]any
+	if err = json.Unmarshal(resp.Body, &body); err != nil {
+		add(doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: "handshake response is not JSON"})
+		return nil
+	}
+	minVersion := strings.TrimSpace(anyString(body["min_cli_version"]))
+	recommended := strings.TrimSpace(anyString(body["recommended_cli_version"]))
+	current := normalizeReleaseTag(httpclient.CLIVersion)
+	if minVersion == "" {
+		add(doctorCheck{Name: "cli_version", OK: true, Status: "pass", Message: "core did not advertise a minimum CLI version"})
+		return nil
+	}
+	belowMin, cmpErr := compareSemanticVersions(current, minVersion)
+	if cmpErr != nil {
+		add(doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: "cannot compare CLI version to " + minVersion})
+		return nil
+	}
+	target := recommended
+	if target == "" {
+		target = minVersion
+	}
+	tag := normalizeReleaseTag(target)
+	if belowMin < 0 {
+		message := fmt.Sprintf("CLI %s is below minimum %s", current, normalizeReleaseTag(minVersion))
+		add(doctorCheck{Name: "cli_version", OK: false, Status: "fail", Message: message, RecommendedCLIVersion: tag})
+		outdated := errnorm.Local("cli_outdated", message+"; run anx update --version "+tag)
+		outdated.Hint = "Run `anx update --version " + tag + "`."
+		return errnorm.WithDetails(outdated, map[string]any{
+			"cli_version":             current,
+			"min_cli_version":         normalizeReleaseTag(minVersion),
+			"recommended_cli_version": tag,
+		})
+	}
+	if recommended != "" {
+		belowRecommended, recErr := compareSemanticVersions(current, recommended)
+		if recErr == nil && belowRecommended < 0 {
+			message := fmt.Sprintf("CLI %s is below recommended %s", current, tag)
+			add(doctorCheck{Name: "cli_version", OK: true, Status: "warn", Message: message, RecommendedCLIVersion: tag})
+			return nil
+		}
+	}
+	add(doctorCheck{Name: "cli_version", OK: true, Status: "pass", Message: fmt.Sprintf("CLI %s meets minimum %s", current, normalizeReleaseTag(minVersion))})
+	return nil
 }
