@@ -153,9 +153,8 @@ for (const viewport of [
     await expectCleanLayout(page, "visual report overview", {
       scrollPositions: ["top", "bottom"],
     });
-    await saveScreenshot(report, testInfo, `report-overview-${viewport.width}`);
     // The ANX shell owns the scroll container, not necessarily window.
-    // Restore the actual first screen after full-height component capture.
+    // Capture visible viewports rather than a tall element clipped by that shell.
     await report.evaluate((element) => {
       for (let node = element; node; node = node.parentElement) {
         node.scrollTop = 0;
@@ -168,6 +167,24 @@ for (const viewport of [
       path: sourcePath,
       contentType: "application/json",
     });
+
+    for (const type of [
+      "milestone-timeline",
+      "dependency-diagram",
+      "metric-chart",
+      "artifact-preview",
+    ]) {
+      const panel = example.panels.find((item) => item.type === type);
+      await panelRegion(report, panel).evaluate((element) =>
+        element.scrollIntoView({ block: "start", behavior: "instant" }),
+      );
+      const path = testInfo.outputPath(`report-${type}-${viewport.width}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      await testInfo.attach(`report-${type}-${viewport.width}`, {
+        path,
+        contentType: "image/png",
+      });
+    }
 
     const evidencePanel = example.panels.find(
       (panel) => panel.type === "evidence-table" && panel.source_ids.length,
@@ -187,11 +204,25 @@ for (const viewport of [
       ).toHaveAttribute("href", source.url);
     }
     await expectCleanLayout(page, "visual report evidence expanded");
-    await saveScreenshot(
-      evidenceRegion,
-      testInfo,
-      `report-evidence-${viewport.width}`,
-    );
+    if (viewport.width >= 900) {
+      await saveScreenshot(
+        evidenceRegion,
+        testInfo,
+        `report-evidence-${viewport.width}`,
+      );
+    } else {
+      await evidenceRegion
+        .getByRole("heading", { name: "Source evidence" })
+        .evaluate((element) =>
+          element.scrollIntoView({ block: "start", behavior: "instant" }),
+        );
+      const path = testInfo.outputPath(`report-evidence-${viewport.width}.png`);
+      await page.screenshot({ path, animations: "disabled" });
+      await testInfo.attach(`report-evidence-${viewport.width}`, {
+        path,
+        contentType: "image/png",
+      });
+    }
 
     await page.goBack();
     await expectQuery(page, { reportEvidence: null });
