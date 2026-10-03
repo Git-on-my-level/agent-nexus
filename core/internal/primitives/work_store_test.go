@@ -620,3 +620,34 @@ func TestCreateWorkRejectedRequestLeavesNoDefaultBoard(t *testing.T) {
 		t.Fatalf("a rejected work.create provisioned a board: %v", boards)
 	}
 }
+
+func TestWorkObservationOnArchivedExternalCardIsAcceptedWithoutMove(t *testing.T) {
+	ctx := context.Background()
+	s, boardID := newWorkTestStore(t)
+	w, err := s.CreateWork(ctx, "actor-1", boardID, map[string]any{
+		"title": "archived external", "phase": "review",
+		"source": map[string]any{"authority": "github", "connection_id": "c", "native_id": "archived-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := w["id"].(string)
+	if _, err = s.ArchiveBoardCard(ctx, "actor-1", boardID, id, primitives.RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.SubmitWorkObservation(ctx, "actor-1", id, map[string]any{
+		"idempotency_key": "after-archive", "reader_id": "github", "reader_revision": "v1",
+		"observed_at": time.Now().UTC().Format(time.RFC3339Nano), "source_sequence": 2,
+		"status": "reported", "source_revision": "rev-2", "facts": map[string]any{"phase": "in_progress"},
+	})
+	if err != nil {
+		t.Fatalf("observation on archived card rejected: %v", err)
+	}
+	current, err := s.GetWork(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current["phase"] != "in_progress" {
+		t.Fatalf("projected phase=%v", current["phase"])
+	}
+}

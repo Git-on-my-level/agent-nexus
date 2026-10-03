@@ -1017,10 +1017,9 @@ func (s *Store) moveExternalWorkForObservation(ctx context.Context, tx *sql.Tx, 
 	if err != nil {
 		return err
 	}
-	if err = ensureBoardCardMutable(cardRow); err != nil {
-		return err
-	}
-	if cardRow.ColumnKey == column {
+	// An archived or trashed card keeps its column. The observation is still
+	// accepted as evidence; a sync must not fail because a human archived it.
+	if ensureBoardCardMutable(cardRow) != nil || cardRow.ColumnKey == column {
 		return nil
 	}
 	fromColumn := cardRow.ColumnKey
