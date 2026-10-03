@@ -4,6 +4,10 @@ import { dirname } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import {
+  swarmObservatoryReport,
+  portfolioReviewReport,
+} from "../../src/lib/fixtures/expressiveReportExamples.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 import { expectCleanLayout } from "../helpers/layoutAudit.js";
 import {
@@ -554,5 +558,257 @@ test("report controls support keyboard interaction and scoped accessibility chec
   await page.keyboard.press("Space");
   await expect(source).not.toHaveAttribute("open", "");
   await expect(disclosure).toBeFocused();
+  expectReadOnly(state);
+});
+
+for (const [scenario, example] of [
+  ["swarm", swarmObservatoryReport],
+  ["portfolio", portfolioReviewReport],
+]) {
+  for (const viewport of [
+    { width: 1440, height: 1100 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`expressive ${scenario} report @ ${viewport.width}`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      await page.setViewportSize(viewport);
+      const state = await installReportDocument(page, structuredClone(example));
+      await page.goto(DOC_PATH);
+      const report = reportRegion(page);
+      await expect(
+        report.getByRole("heading", { name: example.title, exact: true }),
+      ).toBeVisible();
+      await expect(report).toContainText("Illustrative scenario");
+      const firstChart = report
+        .locator("[data-report-panel]")
+        .filter({ has: page.locator("[data-report-chart]") })
+        .first();
+      await expect(firstChart.locator("svg").first()).toBeVisible();
+      await saveScreenshot(
+        page,
+        testInfo,
+        `${scenario}-overview-${viewport.width}`,
+      );
+      await firstChart.scrollIntoViewIfNeeded();
+      await saveScreenshot(
+        page,
+        testInfo,
+        `${scenario}-composition-${viewport.width}`,
+      );
+      const chartDataDisclosure = firstChart.locator("summary", {
+        hasText: "View chart data",
+      });
+      await chartDataDisclosure.click();
+      await expect(firstChart.getByRole("table")).toBeVisible();
+      await expectCleanLayout(
+        page,
+        `${scenario} expanded chart data ${viewport.width}`,
+      );
+      await expectNoClippedContent(
+        page,
+        `${scenario} expanded chart data ${viewport.width}`,
+      );
+      const expandedChartAccessibility = await new AxeBuilder({ page })
+        .include('[aria-label="Visual report"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      expect(expandedChartAccessibility.violations).toEqual([]);
+      await chartDataDisclosure.click();
+      await expect(firstChart.getByRole("table")).toBeHidden();
+      await expectCleanLayout(
+        page,
+        `${scenario} composition ${viewport.width}`,
+        { scrollPositions: ["top", "bottom"] },
+      );
+      for (const id of scenario === "swarm"
+        ? ["capacity-map", "throughput"]
+        : ["quality-frontier", "mix-chart", "dependency-orbit"]) {
+        const chartPanel = report.locator(`[data-report-panel="${id}"]`);
+        await chartPanel.scrollIntoViewIfNeeded();
+        await expect(chartPanel.locator("svg").first()).toBeVisible();
+        await saveScreenshot(
+          page,
+          testInfo,
+          `${scenario}-${id}-${viewport.width}`,
+        );
+      }
+      if (scenario === "swarm") {
+        const decision = report.getByRole("tab", {
+          name: "Decision brief",
+          exact: true,
+        });
+        await decision.focus();
+        await page.keyboard.press("Enter");
+        await expectQuery(page, { "reportTab.swarm-detail": "decision" });
+        await expect(
+          report.locator('[data-report-panel="rationale"]'),
+        ).toBeVisible();
+        await expect(
+          report.locator('[data-report-panel="capacity-map"]'),
+        ).toHaveCount(0);
+        await page.reload();
+        await expect(
+          report.getByRole("tab", { name: "Decision brief", exact: true }),
+        ).toHaveAttribute("aria-selected", "true");
+        await saveScreenshot(
+          page,
+          testInfo,
+          `swarm-decision-${viewport.width}`,
+        );
+        await report
+          .getByRole("tab", { name: "Capacity & flow", exact: true })
+          .click();
+        await page.goBack();
+        await expect(
+          report.getByRole("tab", { name: "Decision brief", exact: true }),
+        ).toHaveAttribute("aria-selected", "true");
+      } else {
+        await report
+          .getByText("Methodology & evidence boundaries", { exact: true })
+          .click();
+        await expect(
+          report.locator('[data-report-panel="methodology"]'),
+        ).toBeVisible();
+        await report
+          .getByText("Methodology & evidence boundaries", { exact: true })
+          .click();
+        await expect(
+          report.locator('[data-report-panel="methodology"]'),
+        ).toHaveCount(0);
+      }
+      const accessibility = await new AxeBuilder({ page })
+        .include('[aria-label="Visual report"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .analyze();
+      expect(accessibility.violations).toEqual([]);
+      expectReadOnly(state);
+      const jsonPath = testInfo.outputPath(`${scenario}-report.json`);
+      await writeFile(jsonPath, JSON.stringify(example, null, 2), "utf8");
+      await testInfo.attach(`${scenario}-source`, {
+        path: jsonPath,
+        contentType: "application/json",
+      });
+    });
+  }
+}
+
+test("composed report preserves keyboard, nested evidence, and filtered tab state", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const example = cloneExample();
+  const release = example.panels.find((item) => item.id === "rollout-summary");
+  const illustrative = example.panels.find(
+    (item) => item.id === "example-metrics",
+  );
+  example.layout = {
+    type: "tabs",
+    id: "project-detail",
+    items: [
+      {
+        id: "release",
+        label: "Release evidence",
+        children: [{ type: "panel", panel_id: release.id }],
+      },
+      {
+        id: "example",
+        label: "Example evidence",
+        children: [
+          {
+            type: "disclosure",
+            title: "Illustrative detail",
+            children: [{ type: "panel", panel_id: illustrative.id }],
+          },
+        ],
+      },
+    ],
+  };
+  const state = await installReportDocument(page, example);
+  await page.goto(
+    `${DOC_PATH}?reportEvidence=${illustrative.id}&preserved=yes`,
+  );
+  const report = reportRegion(page);
+  const releaseTab = report.getByRole("tab", {
+    name: "Release evidence",
+    exact: true,
+  });
+  const exampleTab = report.getByRole("tab", {
+    name: "Example evidence",
+    exact: true,
+  });
+  const disclosure = report.locator("details").filter({
+    has: page.locator("summary", { hasText: "Illustrative detail" }),
+  });
+  const examplePanel = panelRegion(report, illustrative);
+  await expect(exampleTab).toHaveAttribute("aria-selected", "true");
+  await expect(disclosure).toHaveAttribute("open", "");
+  await expect(
+    examplePanel.getByRole("button", { name: "Inspect evidence" }),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  await exampleTab.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(releaseTab).toBeFocused();
+  await expect(releaseTab).toHaveAttribute("aria-selected", "true");
+  await expectQuery(page, {
+    "reportTab.project-detail": "release",
+    reportEvidence: illustrative.id,
+    preserved: "yes",
+  });
+  await expect(examplePanel).toHaveCount(0);
+  await page.keyboard.press("End");
+  await expect(exampleTab).toBeFocused();
+  await expect(exampleTab).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(releaseTab).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(exampleTab).toBeFocused();
+  await expectQuery(page, { "reportTab.project-detail": "example" });
+  await page.reload();
+  await expect(exampleTab).toHaveAttribute("aria-selected", "true");
+  await expect(disclosure).toHaveAttribute("open", "");
+
+  await report.getByRole("button", { name: example.projects[0].title }).click();
+  await expectQuery(page, {
+    reportProject: release.project_id,
+    reportEvidence: null,
+    "reportTab.project-detail": "example",
+  });
+  await expect(exampleTab).toHaveCount(0);
+  await expect(releaseTab).toHaveAttribute("aria-selected", "true");
+  await report
+    .getByRole("button", { name: "All projects", exact: true })
+    .click();
+  await expect(exampleTab).toHaveAttribute("aria-selected", "true");
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  await expect(examplePanel).toHaveCount(0);
+  await disclosure.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(examplePanel).toBeVisible();
+  const inspect = examplePanel.getByRole("button", {
+    name: "Inspect evidence",
+  });
+  await inspect.click();
+  await expectQuery(page, { reportEvidence: illustrative.id });
+  await page.goBack();
+  await expect(inspect).toHaveAttribute("aria-expanded", "false");
+  await page.goForward();
+  await expect(inspect).toHaveAttribute("aria-expanded", "true");
+
+  await report
+    .getByRole("combobox", { name: "Filter by freshness" })
+    .selectOption("unavailable");
+  await expect(report.locator('[data-report-layout="tabs"]')).toHaveCount(0);
+  await report
+    .getByRole("combobox", { name: "Filter by freshness" })
+    .selectOption("all");
+  await expect(exampleTab).toHaveAttribute("aria-selected", "true");
+  const accessibility = await new AxeBuilder({ page })
+    .include('[aria-label="Visual report"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
   expectReadOnly(state);
 });

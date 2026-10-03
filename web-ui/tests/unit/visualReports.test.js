@@ -64,7 +64,7 @@ describe("visual report document parser", () => {
       errors: [],
     });
     expect(new Set(result.report.panels.map((panel) => panel.type))).toEqual(
-      new Set(VISUAL_REPORT_TYPES),
+      new Set(VISUAL_REPORT_TYPES.slice(0, 6)),
     );
     expect(parse(result.report)).toEqual(result);
   });

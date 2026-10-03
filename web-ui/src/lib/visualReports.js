@@ -1,3 +1,6 @@
+import { validateReportLayout } from "./visualReportLayout.js";
+import { validateReportChart } from "./visualReportCharts.js";
+
 // A presentation-only format carried in existing core document revisions.
 // Never interpret report strings as markup, code, component names, or fetch URLs.
 export const VISUAL_REPORT_KIND = "anx.visual-report";
@@ -9,6 +12,10 @@ export const VISUAL_REPORT_TYPES = Object.freeze([
   "dependency-diagram",
   "metric-chart",
   "artifact-preview",
+  "chart",
+  "metric-strip",
+  "callout",
+  "comparison",
 ]);
 export const VISUAL_REPORT_LIMITS = Object.freeze({
   bytes: 128 * 1024,
@@ -208,16 +215,21 @@ function validateReport(report) {
   };
 
   if (
-    !record(report, "report", [
-      "kind",
-      "schema_version",
-      "title",
-      "summary",
-      "generated_at",
-      "projects",
-      "sources",
-      "panels",
-    ])
+    !record(
+      report,
+      "report",
+      [
+        "kind",
+        "schema_version",
+        "title",
+        "summary",
+        "generated_at",
+        "projects",
+        "sources",
+        "panels",
+      ],
+      ["layout"],
+    )
   )
     return errors;
   if (report.kind !== VISUAL_REPORT_KIND)
@@ -274,26 +286,43 @@ function validateReport(report) {
     });
   };
   const panels = array(report.panels, "panels", VISUAL_REPORT_LIMITS.panels, 1);
-  unique(panels, "panels");
+  const panelIds = unique(panels, "panels");
+  if (report.layout !== undefined) {
+    for (const error of validateReportLayout(report.layout, panelIds))
+      add("layout", error);
+  }
   panels.forEach((panel, index) => {
     const path = `panels[${index}]`;
     if (
-      !record(panel, path, [
-        "id",
-        "project_id",
-        "type",
-        "title",
-        "author",
-        "provenance",
-        "observed_at",
-        "freshness",
-        "source_ids",
-        "data",
-      ])
+      !record(
+        panel,
+        path,
+        [
+          "id",
+          "project_id",
+          "type",
+          "title",
+          "author",
+          "provenance",
+          "observed_at",
+          "freshness",
+          "source_ids",
+          "data",
+        ],
+        ["appearance", "density"],
+      )
     )
       return;
     if (!projectIds.has(panel.project_id))
       add(`${path}.project_id`, "references a missing project");
+    if (panel.appearance !== undefined)
+      enumeration(panel.appearance, `${path}.appearance`, [
+        "plain",
+        "soft",
+        "outlined",
+      ]);
+    if (panel.density !== undefined)
+      enumeration(panel.density, `${path}.density`, ["compact", "comfortable"]);
     string(panel.title, `${path}.title`);
     string(panel.author, `${path}.author`);
     enumeration(panel.type, `${path}.type`, VISUAL_REPORT_TYPES);
@@ -317,6 +346,114 @@ function validateReport(report) {
     const data = panel.data;
     const dataPath = `${path}.data`;
     switch (panel.type) {
+      case "chart":
+        for (const error of validateReportChart(data)) add(dataPath, error);
+        break;
+      case "callout":
+        if (!record(data, dataPath, ["tone", "text"], ["label"])) break;
+        enumeration(data.tone, `${dataPath}.tone`, [
+          "info",
+          "success",
+          "warning",
+          "critical",
+        ]);
+        string(data.text, `${dataPath}.text`, VISUAL_REPORT_LIMITS.text);
+        if (data.label !== undefined) string(data.label, `${dataPath}.label`);
+        break;
+      case "metric-strip":
+        if (!record(data, dataPath, ["items"])) break;
+        array(data.items, `${dataPath}.items`, 6, 1).forEach(
+          (item, itemIndex) => {
+            const itemPath = `${dataPath}.items[${itemIndex}]`;
+            if (
+              !record(
+                item,
+                itemPath,
+                ["label", "value", "detail"],
+                ["trend", "trend_label", "tone"],
+              )
+            )
+              return;
+            string(item.label, `${itemPath}.label`);
+            string(item.value, `${itemPath}.value`, 80);
+            string(
+              item.detail,
+              `${itemPath}.detail`,
+              VISUAL_REPORT_LIMITS.cell,
+              true,
+            );
+            if (item.tone !== undefined)
+              enumeration(item.tone, `${itemPath}.tone`, [
+                "neutral",
+                "positive",
+                "negative",
+              ]);
+            if (item.trend !== undefined) {
+              array(item.trend, `${itemPath}.trend`, 50, 2).forEach((value) => {
+                if (
+                  typeof value !== "number" ||
+                  !Number.isFinite(value) ||
+                  Math.abs(value) > 1e12
+                )
+                  add(
+                    `${itemPath}.trend`,
+                    "must contain finite numbers within ±1e12",
+                  );
+              });
+              string(item.trend_label, `${itemPath}.trend_label`);
+            } else if (item.trend_label !== undefined)
+              add(itemPath, "trend_label requires trend values");
+          },
+        );
+        break;
+      case "comparison":
+        if (!record(data, dataPath, ["items"])) break;
+        array(data.items, `${dataPath}.items`, 4, 2).forEach(
+          (item, itemIndex) => {
+            const itemPath = `${dataPath}.items[${itemIndex}]`;
+            if (
+              !record(item, itemPath, [
+                "title",
+                "summary",
+                "verdict",
+                "attributes",
+              ])
+            )
+              return;
+            string(item.title, `${itemPath}.title`);
+            string(
+              item.summary,
+              `${itemPath}.summary`,
+              VISUAL_REPORT_LIMITS.cell,
+            );
+            enumeration(item.verdict, `${itemPath}.verdict`, [
+              "recommended",
+              "neutral",
+              "caution",
+            ]);
+            array(item.attributes, `${itemPath}.attributes`, 10, 1).forEach(
+              (attribute, index) => {
+                if (
+                  !record(attribute, `${itemPath}.attributes[${index}]`, [
+                    "label",
+                    "value",
+                  ])
+                )
+                  return;
+                string(
+                  attribute.label,
+                  `${itemPath}.attributes[${index}].label`,
+                );
+                string(
+                  attribute.value,
+                  `${itemPath}.attributes[${index}].value`,
+                  VISUAL_REPORT_LIMITS.cell,
+                );
+              },
+            );
+          },
+        );
+        break;
       case "explanation":
         if (record(data, dataPath, ["text"]))
           string(data.text, `${dataPath}.text`, VISUAL_REPORT_LIMITS.text);

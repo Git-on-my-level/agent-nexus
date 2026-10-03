@@ -1,4 +1,6 @@
 <script>
+  import ReportChart from "./ReportChart.svelte";
+  import ReportDetails from "./ReportDetails.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import { safeReportUrl } from "$lib/visualReports.js";
 
@@ -10,6 +12,10 @@
     oninspect,
   } = $props();
   const typeLabels = {
+    chart: "Visualization",
+    "metric-strip": "Measures",
+    callout: "Decision note",
+    comparison: "Comparison",
     explanation: "Context",
     "evidence-table": "Evidence",
     "milestone-timeline": "Milestones",
@@ -60,16 +66,15 @@
   class="report-panel"
   aria-label={panel.title}
   data-report-panel={panel.id}
+  data-appearance={panel.appearance ?? "outlined"}
+  data-density={panel.density ?? "comfortable"}
 >
   <header class="report-panel-header">
     <div class="min-w-0">
       <p class="report-eyebrow">{typeLabels[panel.type]}</p>
       <h3 class="mt-1 text-meta font-semibold text-fg">{panel.title}</h3>
     </div>
-    <span
-      class="report-state"
-      class:report-state-warn={freshness === "stale"}
-      class:report-state-ok={freshness === "current"}
+    <span class="report-state" class:report-state-warn={freshness === "stale"}
       >{stateLabels[freshness]}</span
     >
   </header>
@@ -90,7 +95,11 @@
           Historical evidence. Refresh the source before acting.
         </p>
       {/if}
-      {#if panel.type === "explanation"}
+      {#if panel.type === "chart"}
+        <ReportChart data={panel.data} title={panel.title} />
+      {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
+        <ReportDetails {panel} />
+      {:else if panel.type === "explanation"}
         <p class="report-explanation">{panel.data.text}</p>
       {:else if panel.type === "evidence-table"}
         <!-- Keyboard access is required for horizontally scrollable tables. -->
@@ -300,6 +309,32 @@
     background: var(--panel);
     overflow-wrap: anywhere;
   }
+  .report-panel[data-appearance="plain"] {
+    border-color: transparent;
+    background: transparent;
+  }
+  .report-panel[data-appearance="plain"] .report-panel-header {
+    border-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .report-panel[data-appearance="plain"] .report-panel-body {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .report-panel[data-appearance="plain"] .report-panel-footer {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .report-panel[data-appearance="soft"] {
+    background: var(--bg-soft);
+    border-color: var(--line-subtle);
+  }
+  .report-panel[data-density="compact"] .report-panel-header,
+  .report-panel[data-density="compact"] .report-panel-body,
+  .report-panel[data-density="compact"] .report-panel-footer {
+    padding: 10px 12px;
+  }
   .report-panel-header {
     display: flex;
     flex-wrap: wrap;
@@ -328,10 +363,6 @@
   .report-state-warn {
     color: var(--warn-text);
     border-color: var(--warn);
-  }
-  .report-state-ok {
-    color: var(--accent-text);
-    border-color: var(--accent-solid);
   }
   .report-panel-body {
     padding: 16px;

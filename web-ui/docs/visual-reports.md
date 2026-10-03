@@ -338,3 +338,103 @@ freshness, project separation, and fixture round-tripping. Browser coverage
 exercises the existing document-read rendering path, evidence/source inspection,
 filters, malformed content, and narrow layouts. Full module verification remains
 `make -C web-ui check` from the repository root.
+
+## Expressive composition
+
+Agents can choose a layout independently from the evidence-bearing panels. Omit
+`layout` for the original two-column report. A layout is a bounded tree with these
+nodes (every node accepts optional `span: 1..4` for direct grid children):
+
+- `panel`: `{ "type": "panel", "panel_id": "existing-panel-id" }`
+- `stack`: `{ "type": "stack", "children": [...] }`
+- `grid`: `{ "type": "grid", "columns": 2, "children": [...] }`; 2, 3 or 4 columns
+- `section`: `{ "type": "section", "title": "Heading", "description": "Optional context", "children": [...] }`
+- `tabs`: `{ "type": "tabs", "id": "views", "items": [{ "id": "overview", "label": "Overview", "children": [...] }] }`
+- `disclosure`: `{ "type": "disclosure", "title": "Details", "open": false, "children": [...] }`
+
+At most 100 nodes, 6 nesting levels, 32 children per container and 8 tabs per group
+are accepted. Panel references and tab-group IDs are unique. Referenced panels
+must exist; unreferenced panels are appended so layout cannot silently omit
+stored evidence. Grids collapse to reading order on narrow screens. Empty nodes
+and tabs are removed by project/freshness filters. Tab selection is recorded in
+`reportTab.<group-id>` so reload and Back/Forward work. Evidence deep links can
+select the relevant tab and open its disclosure. No styles, component names,
+actions, expressions, raw markup or executable callbacks can be supplied.
+
+Panels also accept optional app-owned `appearance` tokens (`plain`, `soft`,
+`outlined`) and `density` tokens (`compact`, `comfortable`). These vary hierarchy
+and spacing without arbitrary CSS. Evidence metadata remains visible in every
+surface style. Legacy reports retain their original appearance.
+
+### Additional expressive panels
+
+`metric-strip` accepts 1–6 `items`, each with `label`, string `value`, and `detail`.
+Optional `tone` is `neutral`, `positive` or `negative`. Optional `trend` is 2–50
+finite numeric observations and requires a descriptive `trend_label`. The
+sparkline exposes all values as its accessible description; its magnitude is
+relative to its own range, not comparable between metrics.
+
+`callout` accepts `tone` (`info`, `success`, `warning`, `critical`), literal `text`,
+and an optional `label`. A tone communicates the author's emphasis, not verified
+health. `comparison` accepts 2–4 `items` with `title`, `summary`, `verdict`
+(`recommended`, `neutral`, `caution`) and 1–10 `attributes` containing string
+`label` and `value`. Recommendations remain authored claims.
+
+### Chart grammar
+
+`chart` uses a strict, data-only subset of Apache ECharts rather than executable
+chart code. Its data contains `option`, optional literal `caption` and optional
+`palette` (`ocean`, `forest`, `sunset`, `categorical`). Registered chart families
+include mixed Cartesian line/area/bar/scatter, pie/donut, heatmap, graph, Sankey
+and treemap. Line `areaStyle: {}`, named `stack`, step/smooth lines, horizontal
+category axes, multiple series and paired axes compose without bespoke chart
+components. For example:
+
+```json
+{
+  "caption": "Illustrative throughput; null means unknown.",
+  "palette": "forest",
+  "option": {
+    "xAxis": { "type": "category", "data": ["Mon", "Tue", "Wed"] },
+    "yAxis": { "type": "value", "name": "Questions" },
+    "legend": { "show": true },
+    "series": [
+      { "type": "bar", "name": "Resolved", "data": [12, 18, 21] },
+      { "type": "line", "name": "Remaining", "data": [30, null, 14] }
+    ]
+  }
+}
+```
+
+The renderer rebuilds accepted options from a strict allowlist, owns all styling,
+uses local SVG rendering, fixes rich-text tooltips, and disables animation.
+Unknown fields reject the report with bounded diagnostics rather than silently
+ignoring intent. There are no external images, script expressions, dataset
+transforms, HTML tooltips, data-view HTML, user callbacks or remote data loaders.
+Charts have readable data-table alternatives and preserve unavailable values.
+Metric values must be zero or have absolute magnitude from `1e-100` through
+`1e12`; nonzero subnormal values are rejected before rendering. Time coordinates
+use finite epoch milliseconds within the JavaScript Date range, with the same
+nonzero lower bound.
+Sankey charts require at least one positive flow; use a callout/table for a
+no-flow observation. Treemap internal nodes derive their area from children and
+must not supply an explicit `value`. Scalar Cartesian values require exactly
+one category axis; use explicit coordinate pairs with two numeric/time axes.
+ECharts options outside this documented subset are deliberately unsupported.
+
+Use the exact field whitelist and limits in `src/lib/visualReportCharts.js` and
+validate before publishing. The two complete synthetic report examples in
+`src/lib/fixtures/expressiveReportExamples.js` demonstrate a swarm observatory
+(flow, capacity heatmap, mixed throughput, tabbed decision) and portfolio review
+(treemap, scatter, stacked work mix, dependency graph, comparison, methodology).
+They contain no live workspace observations or private data. Browser dogfood
+round-trips each JSON through the existing document read path and captures real
+1440px and 390px renders, with keyboard/history, layout, accessibility and
+no-network checks.
+
+Library rationale: ECharts provides operational flow and hierarchy charts along
+with Cartesian composition, without requiring React in the Svelte UI. Its
+[feature overview](https://echarts.apache.org/en/feature.html) and
+[security guidance](https://echarts.apache.org/handbook/en/best-practices/security/)
+inform the application-owned adapter. JSON by itself is not a security boundary;
+the strict whitelist, bounds and option reconstruction are.

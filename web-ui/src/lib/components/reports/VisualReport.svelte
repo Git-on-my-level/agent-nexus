@@ -4,6 +4,8 @@
   import { onMount } from "svelte";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
+  import ReportLayout from "./ReportLayout.svelte";
+  import { layoutPanelIds } from "./reportLayout.js";
 
   let { report } = $props();
   let now = $state(Date.now());
@@ -34,6 +36,20 @@
         (freshness === "all" || getPanelFreshness(panel, now) === freshness),
     ),
   );
+  let panelsById = $derived(new Map(panels.map((panel) => [panel.id, panel])));
+  let referencedPanels = $derived(layoutPanelIds(report.layout));
+  let remainingPanels = $derived(
+    report.layout
+      ? panels.filter((panel) => !referencedPanels.has(panel.id))
+      : panels,
+  );
+  let tabSelections = $derived(
+    new Map(
+      [...$page.url.searchParams.entries()]
+        .filter(([key]) => key.startsWith("reportTab."))
+        .map(([key, value]) => [key.slice("reportTab.".length), value]),
+    ),
+  );
   let staleCount = $derived(
     report.panels.filter((panel) => getPanelFreshness(panel, now) === "stale")
       .length,
@@ -41,10 +57,15 @@
 
   function setFilter(key, value) {
     const url = new URL($page.url);
-    if (!value || value === "all") url.searchParams.delete(key);
+    if (!value || (value === "all" && !key.startsWith("reportTab.")))
+      url.searchParams.delete(key);
     else url.searchParams.set(key, value);
-    if (key !== "reportEvidence") url.searchParams.delete("reportEvidence");
+    if (key === "reportProject" || key === "reportFreshness")
+      url.searchParams.delete("reportEvidence");
     void goto(url, { noScroll: true, keepFocus: true });
+  }
+  function inspectPanel(id) {
+    setFilter("reportEvidence", evidence === id ? "" : id);
   }
   onMount(() => {
     const timer = window.setInterval(() => {
@@ -75,24 +96,26 @@
     </div>
   </header>
 
-  <div class="report-projects" aria-label="Project overview">
-    {#each report.projects as item}
-      <button
-        type="button"
-        class="report-project"
-        class:report-project-selected={project === item.id}
-        aria-pressed={project === item.id}
-        onclick={() =>
-          setFilter("reportProject", project === item.id ? "all" : item.id)}
-      >
-        <span class="report-project-name"
-          >{item.title}<span aria-hidden="true">↗</span></span
-        ><strong>{item.outcome}</strong><span class="report-project-summary"
-          >{item.summary}</span
+  {#if !report.layout || report.projects.length > 1}
+    <div class="report-projects" aria-label="Project overview">
+      {#each report.projects as item}
+        <button
+          type="button"
+          class="report-project"
+          class:report-project-selected={project === item.id}
+          aria-pressed={project === item.id}
+          onclick={() =>
+            setFilter("reportProject", project === item.id ? "all" : item.id)}
         >
-      </button>
-    {/each}
-  </div>
+          <span class="report-project-name"
+            >{item.title}<span aria-hidden="true">↗</span></span
+          ><strong>{item.outcome}</strong><span class="report-project-summary"
+            >{item.summary}</span
+          >
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <div class="report-toolbar">
     <div class="flex flex-wrap items-center gap-3">
@@ -124,18 +147,31 @@
   </div>
 
   {#if panels.length}
-    <div class="report-grid">
-      {#each panels as panel (panel.id)}
-        <VisualReportPanel
-          {panel}
-          sources={report.sources}
-          freshness={getPanelFreshness(panel, now)}
-          evidenceOpen={evidence === panel.id}
-          oninspect={(id) =>
-            setFilter("reportEvidence", evidence === id ? "" : id)}
-        />
-      {/each}
-    </div>
+    {#if report.layout}
+      <ReportLayout
+        node={report.layout}
+        {panelsById}
+        sources={report.sources}
+        {now}
+        {evidence}
+        {tabSelections}
+        oninspect={inspectPanel}
+        ontab={(id, value) => setFilter(`reportTab.${id}`, value)}
+      />
+    {/if}
+    {#if remainingPanels.length}
+      <div class="report-grid" class:report-layout-remainder={report.layout}>
+        {#each remainingPanels as panel (panel.id)}
+          <VisualReportPanel
+            {panel}
+            sources={report.sources}
+            freshness={getPanelFreshness(panel, now)}
+            evidenceOpen={evidence === panel.id}
+            oninspect={inspectPanel}
+          />
+        {/each}
+      </div>
+    {/if}
   {:else}
     <div class="report-empty">
       <h3>No panels match these filters</h3>
@@ -152,6 +188,7 @@
 
 <style>
   .visual-report {
+    container: visual-report / inline-size;
     min-width: 0;
     overflow-wrap: anywhere;
     color: var(--fg);
@@ -288,6 +325,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
     align-items: start;
+  }
+  .report-layout-remainder {
+    margin-top: 24px;
   }
   .report-footnote {
     text-align: center;
