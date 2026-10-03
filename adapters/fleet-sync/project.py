@@ -50,6 +50,8 @@ def plan_reads(reads: list[dict], known: dict, config: dict, *, now: datetime) -
             plans.extend(_agentctl(read, known, config, now))
         elif name == "fleetctl":
             plans.extend(_fleetctl(read, known, config, now))
+        elif name == "prometheus":
+            plans.extend(_prometheus(read, known, config, now))
     return plans
 
 
@@ -331,6 +333,32 @@ def _fleetctl(read: dict, known: dict, config: dict, now: datetime) -> list[dict
         for native_id, card in _known_for(known, "fleetctl", "fleet").items():
             if native_id not in seen:
                 plans.append(_finish(_absent("fleetctl", "fleet", native_id, board, card, "fleetctl", now), known))
+    return _stamp(plans, read)
+
+
+def _prometheus(read: dict, known: dict, config: dict, now: datetime) -> list[dict]:
+    if not read.get("ok"):
+        return []
+    connection = str((config.get("prometheus") or {}).get("connection_id") or "prometheus")
+    board = config["boards"]["ops_hygiene"]
+    plans = []
+    seen = set()
+    for item in read.get("items") or []:
+        host = item.get("host") or "unknown"
+        summary = f"severity {item.get('severity') or 'unknown'}; firing on {host}"
+        plans.append(_finish(_card(
+            "prometheus", connection, item["native_id"], board,
+            item.get("title") or item["native_id"], summary, host or "prometheus", "blocked",
+            item.get("severity") or "firing", None, [],
+            {"severity": item.get("severity"), "host": host, "state": "firing"},
+        ), known))
+        seen.add(item["native_id"])
+    if read.get("complete"):
+        for native_id, card in _known_for(known, "prometheus", connection).items():
+            if native_id not in seen:
+                plans.append(_finish(_absent(
+                    "prometheus", connection, native_id, board, card, "prometheus", now,
+                ), known))
     return _stamp(plans, read)
 
 

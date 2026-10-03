@@ -22,6 +22,17 @@ class AnxClient:
         self.agent = agent
         self.runner = runner or Runner()
 
+    def inbox_list(self) -> dict:
+        # Human attention queue. `debug inbox list` is the installed CLI path for inbox.list.
+        # Open is the server default. This is a read; it does not respond.
+        return self._call(["debug", "inbox", "list"], timeout=60)
+
+    def observations(self, ref: str, *, limit: int = 50, cursor: str = "") -> dict:
+        args = ["work", "observations", "list", ref, "--limit", str(limit)]
+        if cursor:
+            args.extend(["--cursor", cursor])
+        return self._call(args, timeout=45)
+
     def work_list(self, source: str) -> list[dict]:
         cards = []
         cursor = ""

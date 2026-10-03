@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from .run import HostExec
+
+_SAFE = re.compile(r"^[A-Za-z0-9_./$~:-]+$")
 
 QUEUE_NAMES = ("host-action", "observability", "intent", "contract")
 
@@ -38,6 +41,7 @@ def parse_status(payload: Any) -> dict:
             })
     inventory = payload.get("inventory") if isinstance(payload.get("inventory"), dict) else {}
     states = {"reporting": 0, "mute": 0, "asleep": 0}
+    other: dict[str, int] = {}
     by_host = {}
     for host in inventory.get("hosts") or []:
         if not isinstance(host, dict):
@@ -48,7 +52,9 @@ def parse_status(payload: Any) -> dict:
             by_host[name] = state or None
         if state in states:
             states[state] += 1
-    return {"queues": queues, "causes": causes, "inventory": states, "hosts": by_host}
+        elif state:
+            other[state] = other.get(state, 0) + 1
+    return {"queues": queues, "causes": causes, "inventory": states, "other_states": other, "hosts": by_host}
 
 
 def read_fleetctl(exec_: HostExec, config: dict, *, now: datetime) -> dict:
@@ -59,10 +65,16 @@ def read_fleetctl(exec_: HostExec, config: dict, *, now: datetime) -> dict:
     reports = str(fleet.get("reports_dir") or "")
     if not contract or not reports:
         return _fail(observed, "fleetctl contract_dir and reports_dir are required")
-    result = exec_.runner(
-        [binary, "status", "--contract", contract, "--reports", reports, "--format", "json", "--all"],
-        timeout=40,
-    )
+    alias = str(fleet.get("ssh") or "").strip()
+    argv = [binary, "status", "--contract", contract, "--reports", reports, "--format", "json", "--all"]
+    if alias:
+        if not _SAFE.match(binary) or not _SAFE.match(contract) or not _SAFE.match(reports):
+            return _fail(observed, "fleetctl ssh paths must be single tokens")
+        # Remote ssh runs the argv through the login shell, which expands $HOME.
+        # The subprocess timeout is the hard kill if that session hangs.
+        result = exec_.run({"ssh": alias}, argv, timeout=40)
+    else:
+        result = exec_.runner(argv, timeout=40)
     if not result.ok:
         return _fail(observed, result.error or "fleetctl status failed")
     try:
@@ -77,7 +89,12 @@ def read_fleetctl(exec_: HostExec, config: dict, *, now: datetime) -> dict:
         "error": None,
         "items": parsed["causes"],
         "present_ids": [item["native_id"] for item in parsed["causes"]],
-        "meta": {"queues": parsed["queues"], "inventory": parsed["inventory"], "hosts": parsed["hosts"]},
+        "meta": {
+            "queues": parsed["queues"],
+            "inventory": parsed["inventory"],
+            "other_states": parsed["other_states"],
+            "hosts": parsed["hosts"],
+        },
     }
 
 
@@ -90,5 +107,10 @@ def _fail(observed: str, error: str) -> dict:
         "error": error[:500],
         "items": [],
         "present_ids": [],
-        "meta": {"queues": {}, "inventory": {"reporting": None, "mute": None, "asleep": None}, "hosts": {}},
+        "meta": {
+            "queues": {},
+            "inventory": {"reporting": None, "mute": None, "asleep": None},
+            "other_states": {},
+            "hosts": {},
+        },
     }

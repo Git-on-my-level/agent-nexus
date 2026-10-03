@@ -18,8 +18,10 @@ from readers.fleetctl import read_fleetctl
 from readers.github import read_github
 from readers.hermes import read_hermes
 from readers.multica import read_multica
-from readers.run import HostExec
-from report import build_report, changed_besides_generated_at
+from readers.nexus import read_nexus
+from readers.prometheus import read_prometheus
+from readers.run import Budget, BudgetRunner, HostExec, Runner
+from report import build_report, changed_besides_generated_at, headline_snapshot, record_history
 
 READERS = {
     "multica": read_multica,
@@ -27,6 +29,8 @@ READERS = {
     "hermes": read_hermes,
     "agentctl": read_agentctl,
     "fleetctl": read_fleetctl,
+    "prometheus": read_prometheus,
+    "nexus": read_nexus,
 }
 DEFAULT_CONFIG = Path.home() / ".config" / "anx-fleet-sync" / "config.json"
 DEFAULT_STATE = Path.home() / ".local" / "state" / "anx-fleet-sync" / "state.json"
@@ -39,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", default=str(DEFAULT_STATE))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only", default="")
+    parser.add_argument("--quiet", action="store_true", help="print nothing on success; one line per reader failure")
     args = parser.parse_args(argv)
     try:
         config = load_config(args.config)
@@ -47,19 +52,28 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    reads = collect(config, selected, now)
-    state = {} if args.dry_run else load_state(args.state)
-    known = cards_from_state(state)
+    runner = BudgetRunner(Runner(), Budget())
+    reads = collect(config, selected, now, runner)
+    state = load_state(args.state)
+    known = {} if args.dry_run else cards_from_state(state)
     if not args.dry_run:
-        client = AnxClient(config.get("anx_binary") or "anx", config["base_url"], config["agent"])
+        client = AnxClient(config.get("anx_binary") or "anx", config["base_url"], config["agent"], runner=runner)
         merge_known(client, known, selected)
     else:
         client = None
     plans = plan_reads(reads, known, config, now=now)
     generated_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    report = build_report(reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [])
-    valid, diagnostics = validate_report(report)
+    snapshot = headline_snapshot({read["name"]: read for read in reads}, now)
+    shown_history = record_history(list(state.get("history") or []), at=generated_at, metrics=snapshot)
+    report = build_report(
+        reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [], history=shown_history,
+    )
+    node_bin = node_binary(config)
+    validator = validator_script(config)
+    valid, diagnostics = validate_report(report, node_bin, validator)
     if args.dry_run:
+        if args.quiet:
+            return _quiet_status(reads, valid=valid, diagnostics=diagnostics, errors=[])
         json.dump({
             "dry_run": True,
             "adapter_version": ADAPTER_VERSION,
@@ -72,27 +86,27 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0 if valid else 1
     if not valid:
-        print(json.dumps({"valid": False, "errors": diagnostics}), file=sys.stderr)
+        if args.quiet:
+            print("report failed validation: " + "; ".join(diagnostics[:4]), file=sys.stderr)
+        else:
+            print(json.dumps({"valid": False, "errors": diagnostics}), file=sys.stderr)
         return 1
     assert client is not None
+    state["history"] = shown_history
     summary = apply_plans(client, plans, known)
     summary["readers"] = [_reader_summary(read) for read in reads]
     try:
-        summary.update(publish(client, config, state, report))
+        summary.update(publish(client, config, state, report, node_bin, validator))
     except (AnxError, OSError, ValueError) as exc:
         summary["errors"].append(str(exc)[:300])
         save_state(args.state, state, known)
-        json.dump(summary, sys.stdout, indent=2)
-        sys.stdout.write("\n")
-        return 1
+        return _finish(summary, reads, quiet=args.quiet)
     save_state(args.state, state, known)
-    json.dump(summary, sys.stdout, indent=2)
-    sys.stdout.write("\n")
-    return 1 if summary["errors"] else 0
+    return _finish(summary, reads, quiet=args.quiet)
 
 
-def collect(config: dict, selected: list[str], now: datetime) -> list[dict]:
-    host_exec = HostExec()
+def collect(config: dict, selected: list[str], now: datetime, runner: Runner | None = None) -> list[dict]:
+    host_exec = HostExec(runner)
     reads = []
     for name in selected:
         reads.append(READERS[name](host_exec, config, now=now))
@@ -126,16 +140,71 @@ def apply_plans(client: AnxClient, plans: list[dict], known: dict) -> dict:
                 "owner": plan["owner"],
             }
         except AnxError as exc:
+            if exc.code == "conflict" and ref and observation_already_recorded(client, ref, plan["digest"]):
+                summary["already_recorded"] = summary.get("already_recorded", 0) + 1
+                known[key] = {"ref": ref, "digest": plan["digest"], "title": plan["title"], "owner": plan["owner"]}
+                continue
             if exc.code == "conflict":
                 summary["conflicts"] += 1
-                if ref:
-                    known[key] = {"ref": ref, "digest": plan["digest"], "title": plan["title"], "owner": plan["owner"]}
-                continue
             summary["errors"].append(f"{plan['authority']} {plan['native_id']}: {exc.message}")
+    if summary.get("already_recorded"):
+        print(
+            f"observation already recorded for {summary['already_recorded']} unchanged fact digest(s)",
+            file=sys.stderr,
+        )
     return summary
 
 
-def publish(client: AnxClient, config: dict, state: dict, report: dict) -> dict:
+def observation_already_recorded(client: AnxClient, ref: str, digest: str) -> bool:
+    """True when a stored observation already uses this facts digest as its idempotency key."""
+    cursor = ""
+    for _ in range(4):
+        try:
+            page = client.observations(ref, cursor=cursor)
+        except AnxError:
+            return False
+        observations = page.get("observations") if isinstance(page, dict) else None
+        if not isinstance(observations, list):
+            return False
+        for observation in observations:
+            if isinstance(observation, dict) and observation.get("idempotency_key") == digest:
+                return True
+        cursor = str(page.get("next_cursor") or "")
+        if not cursor:
+            return False
+    return False
+
+
+def _finish(summary: dict, reads: list[dict], *, quiet: bool) -> int:
+    failures = _failure_lines(reads)
+    errors = list(summary.get("errors") or [])
+    if quiet:
+        for line in failures:
+            print(line, file=sys.stderr)
+        for err in errors:
+            print(err, file=sys.stderr)
+        return 1 if failures or errors else 0
+    json.dump(summary, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    return 1 if errors else 0
+
+
+def _quiet_status(reads: list[dict], *, valid: bool, diagnostics: list[str], errors: list[str]) -> int:
+    if not valid:
+        print("report failed validation: " + "; ".join(diagnostics[:4]), file=sys.stderr)
+    for line in _failure_lines(reads):
+        print(line, file=sys.stderr)
+    for err in errors:
+        print(err, file=sys.stderr)
+    failed = (not valid) or bool(_failure_lines(reads)) or bool(errors)
+    return 1 if failed else 0
+
+
+def _failure_lines(reads: list[dict]) -> list[str]:
+    return [f"{read['name']}: {read.get('error') or 'unavailable'}" for read in reads if not read.get("ok")]
+
+
+def publish(client: AnxClient, config: dict, state: dict, report: dict, node_bin: str, validator: Path) -> dict:
     ref = state.get("dashboard_ref") or find_dashboard(client.docs_list())
     with tempfile.TemporaryDirectory() as directory:
         path = str(Path(directory) / "fleet-dashboard.json")
@@ -154,7 +223,7 @@ def publish(client: AnxClient, config: dict, state: dict, report: dict) -> dict:
                 client.docs_revise(ref, path)
                 revised = True
         readback = client.docs_content(ref)
-    valid, diagnostics = validate_text(readback)
+    valid, diagnostics = validate_text(readback, node_bin=node_bin, validator=validator)
     if not valid:
         raise ValueError("dashboard readback failed validation: " + "; ".join(diagnostics[:8]))
     state["dashboard_ref"] = ref
@@ -175,6 +244,8 @@ def merge_known(client: AnxClient, known: dict, selected: list[str]) -> None:
         "hermes": ["hermes-cron"],
         "agentctl": ["agentctl"],
         "fleetctl": ["fleetctl"],
+        "prometheus": ["prometheus"],
+        "nexus": [],
     }
     wanted = {authority for name in selected for authority in authorities[name]}
     for authority in sorted(wanted):
@@ -192,6 +263,10 @@ def merge_known(client: AnxClient, known: dict, selected: list[str]) -> None:
             key = (authority, str(connection_id), str(native_id))
             current = known.get(key, {})
             current.setdefault("digest", None)
+            if not current.get("digest"):
+                latest = card.get("latest_observation")
+                if isinstance(latest, dict) and isinstance(latest.get("idempotency_key"), str) and latest["idempotency_key"]:
+                    current["digest"] = latest["idempotency_key"]
             current["ref"] = card.get("ref") or current.get("ref")
             current["title"] = card.get("title") or current.get("title")
             current["owner"] = card.get("owner") or current.get("owner")
@@ -316,6 +391,7 @@ def save_state(path: str, state: dict, known: dict) -> None:
     payload = {
         "version": 1,
         "dashboard_ref": state.get("dashboard_ref"),
+        "history": state.get("history") or [],
         "cards": [
             {"authority": key[0], "connection_id": key[1], "native_id": key[2], **value}
             for key, value in sorted(known.items())
@@ -327,19 +403,33 @@ def save_state(path: str, state: dict, known: dict) -> None:
     temporary.replace(file)
 
 
-def validate_report(report: dict) -> tuple[bool, list[str]]:
+def node_binary(config: dict) -> str:
+    return str(Path(str(config.get("node_bin") or "node")).expanduser())
+
+
+def validator_script(config: dict | None = None) -> Path:
+    checkout = Path(__file__).resolve().parents[2] / "web-ui" / "scripts" / "validate-visual-report.mjs"
+    if checkout.is_file():
+        return checkout
+    root = str((config or {}).get("repo_root") or "")
+    if root:
+        return Path(root).expanduser() / "web-ui" / "scripts" / "validate-visual-report.mjs"
+    return checkout
+
+
+def validate_report(report: dict, node_bin: str = "node", validator: Path | None = None) -> tuple[bool, list[str]]:
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
         json.dump(report, handle)
         path = handle.name
     try:
-        return validate_text(Path(path).read_text(encoding="utf-8"), path)
+        return validate_text(Path(path).read_text(encoding="utf-8"), path, node_bin=node_bin, validator=validator)
     finally:
         os.unlink(path)
 
 
-def validate_text(content: str, path: str | None = None) -> tuple[bool, list[str]]:
-    repo = Path(__file__).resolve().parents[2]
-    validator = repo / "web-ui" / "scripts" / "validate-visual-report.mjs"
+def validate_text(content: str, path: str | None = None, node_bin: str = "node",
+                  validator: Path | None = None) -> tuple[bool, list[str]]:
+    validator = validator or validator_script()
     if path is None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
             handle.write(content)
@@ -347,13 +437,17 @@ def validate_text(content: str, path: str | None = None) -> tuple[bool, list[str
             owned = True
     else:
         owned = False
+    if not validator.is_file():
+        if owned:
+            os.unlink(path)
+        return False, [f"visual report validator not found at {validator}"]
     try:
         completed = subprocess.run(
-            ["node", str(validator), path],
+            [node_bin, str(validator), path],
             capture_output=True, text=True, timeout=30, shell=False,
         )
     except FileNotFoundError:
-        return False, ["node is not installed; the report was not validated"]
+        return False, [f"{node_bin} is not installed; the report was not validated"]
     except subprocess.TimeoutExpired:
         return False, ["visual report validation timed out"]
     finally:

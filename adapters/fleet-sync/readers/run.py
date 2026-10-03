@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from dataclasses import dataclass
 
 REMOTE_PATH = "PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin"
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=10")
+# Whole fleet-sync run, including ssh reads and ANX writes. Per-command
+# timeouts are capped by whatever budget remains so a hung ssh cannot
+# outlive this.
+RUN_BUDGET_SECONDS = 270
 
 
 @dataclass
@@ -50,6 +55,34 @@ class Runner:
             completed.stderr,
             error,
         )
+
+
+class Budget:
+    """Monotonic deadline. timeout() returns None once less than a second remains."""
+
+    def __init__(self, seconds: float = RUN_BUDGET_SECONDS, *, now=time.monotonic):
+        self.deadline = now() + seconds
+        self._now = now
+
+    def timeout(self, requested: float) -> float | None:
+        left = self.deadline - self._now()
+        if left < 1:
+            return None
+        return min(float(requested), left)
+
+
+class BudgetRunner:
+    """Cap every command by the run budget. A missed deadline is a failed read, not a hang."""
+
+    def __init__(self, inner: Runner, budget: Budget):
+        self.inner = inner
+        self.budget = budget
+
+    def __call__(self, argv: list[str], *, timeout: float, input_text: str | None = None) -> RunResult:
+        capped = self.budget.timeout(timeout)
+        if capped is None:
+            return RunResult(False, list(argv), 124, "", "", "run budget exhausted")
+        return self.inner(argv, timeout=capped, input_text=input_text)
 
 
 def ssh_argv(alias: str, remote_argv: list[str]) -> list[str]:
