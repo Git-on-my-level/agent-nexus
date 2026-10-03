@@ -930,6 +930,15 @@ func (s *Store) submitWorkObservation(ctx context.Context, actor, identifier, to
 	if _, err = tx.ExecContext(ctx, `UPDATE work_metadata SET latest_observation_id=?,latest_attempt_id=?,refresh_json=?,updated_at=?,updated_by=? WHERE card_id=?`, oldGoodID, oldAttemptID, workJSON(refresh), o["received_at"], actor, id); err != nil {
 		return nil, err
 	}
+	// Only the observation that becomes the latest good evidence may move the
+	// card. Error, stale, and duplicate observations leave the board column.
+	// The external source revision stays the decision fence: this does not
+	// bump work_metadata.version.
+	if goodNew && status != "error" {
+		if err = s.moveExternalWorkForObservation(ctx, tx, actor, card, id, facts, o["evidence"]); err != nil {
+			return nil, err
+		}
+	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -977,6 +986,192 @@ func (s *Store) RequestWorkRefresh(ctx context.Context, actor, identifier string
 		return nil, err
 	}
 	return refresh, nil
+}
+
+// moveExternalWorkForObservation places an external card in the column named
+// by the latest good observation. Native cards stay on the board-move API.
+// cancelled and unknown follow creation and land in backlog unless that board
+// actually has the named column. done carries the observation's evidence
+// through the same completion gate as MoveBoardCard.
+func (s *Store) moveExternalWorkForObservation(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, cardID string, facts map[string]any, evidence any) error {
+	phase := workString(facts["phase"])
+	if phase == "" {
+		return nil
+	}
+	var authority string
+	if err := tx.QueryRowContext(ctx, `SELECT authority FROM work_metadata WHERE card_id=?`, cardID).Scan(&authority); err != nil {
+		return err
+	}
+	if authority == "" || authority == "nexus" {
+		return nil
+	}
+	boardID := workString(card["board_id"])
+	column, err := observedWorkColumn(ctx, tx, boardID, phase)
+	if err != nil {
+		return err
+	}
+	if column == "" {
+		return nil
+	}
+	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, cardID, true)
+	if err != nil {
+		return err
+	}
+	if err = ensureBoardCardMutable(cardRow); err != nil {
+		return err
+	}
+	if cardRow.ColumnKey == column {
+		return nil
+	}
+	fromColumn := cardRow.ColumnKey
+	input := MoveBoardCardInput{ColumnKey: column}
+	if column == "done" {
+		refs, refErr := observationCompletionRefs(ctx, tx, actor, card, evidence)
+		if refErr != nil {
+			return refErr
+		}
+		if len(refs) == 0 {
+			return workInvalid("completion requires referenced evidence")
+		}
+		done := "done"
+		input.Resolution = &done
+		input.ResolutionRefs = &refs
+	}
+	rank, err := s.allocateBoardCardRank(ctx, tx, boardID, column, "", "", cardID)
+	if err != nil {
+		return err
+	}
+	nextResolution, nextResolutionRefsJSON, updateCard, err := resolveBoardCardMoveResolution(cardRow, column, input)
+	if err != nil {
+		return err
+	}
+	if column == "done" {
+		var refs []string
+		if err = json.Unmarshal([]byte(nextResolutionRefsJSON), &refs); err != nil {
+			return err
+		}
+		if err = validateResolutionRefs(ctx, tx, refs); err != nil {
+			return err
+		}
+	}
+	if err = upsertBoardCardRefEdge(ctx, tx, boardID, cardID, column, rank); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if updateCard {
+		if _, err = tx.ExecContext(ctx, `UPDATE cards SET column_key=?, rank=?, resolution=?, resolution_refs_json=?, updated_at=?, updated_by=? WHERE id=?`, column, rank, nullableString(nextResolution), nextResolutionRefsJSON, now, actor, cardID); err != nil {
+			return err
+		}
+	} else if _, err = tx.ExecContext(ctx, `UPDATE cards SET column_key=?, rank=?, updated_at=?, updated_by=? WHERE id=?`, column, rank, now, actor, cardID); err != nil {
+		return err
+	}
+	boardRow, err := loadBoardRow(ctx, tx, boardID)
+	if err != nil {
+		return err
+	}
+	if _, err = touchBoardRow(ctx, tx, boardRow, actor); err != nil {
+		return err
+	}
+	title := workString(card["title"])
+	if title == "" {
+		title = cardRow.Title
+	}
+	_, err = insertWorkEventRef(ctx, tx, actor, card, "card_moved", "Card moved: "+title, map[string]any{
+		"title":            title,
+		"summary":          workString(card["summary"]),
+		"from_column_key":  fromColumn,
+		"column_key":       column,
+		"before_card_id":   nil,
+		"after_card_id":    nil,
+		"before_thread_id": nil,
+		"after_thread_id":  nil,
+	})
+	return err
+}
+
+func observedWorkColumn(ctx context.Context, q queryRower, boardID, phase string) (string, error) {
+	has, err := boardHasColumn(ctx, q, boardID, phase)
+	if err != nil {
+		return "", err
+	}
+	if has {
+		return phase, nil
+	}
+	if phase == "cancelled" || phase == "unknown" {
+		return "backlog", nil
+	}
+	if err = validateBoardColumnKey(phase); err != nil {
+		return "", invalidBoardRequestError(err)
+	}
+	return phase, nil
+}
+
+func boardHasColumn(ctx context.Context, q queryRower, boardID, key string) (bool, error) {
+	var raw string
+	err := q.QueryRowContext(ctx, `SELECT COALESCE(column_schema_json,'') FROM boards WHERE id=?`, boardID).Scan(&raw)
+	if err != nil {
+		return false, err
+	}
+	items, err := decodeBoardColumnSchema(raw)
+	if err != nil {
+		return false, err
+	}
+	for _, item := range items {
+		if workString(item["key"]) == key {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func observationEvidenceItems(evidence any) []map[string]any {
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		return nil
+	}
+	var items []map[string]any
+	if json.Unmarshal(raw, &items) != nil {
+		return nil
+	}
+	return items
+}
+
+// observationCompletionRefs reuses live artifact or event refs from the
+// observation. URL-only source evidence is recorded as a workspace event so
+// the board done gate still has a resolution ref.
+func observationCompletionRefs(ctx context.Context, tx *sql.Tx, actor string, card map[string]any, evidence any) ([]string, error) {
+	items := observationEvidenceItems(evidence)
+	var typed []string
+	for _, item := range items {
+		for _, key := range []string{"ref", "url"} {
+			value := workString(item[key])
+			prefix, _, ok := normalizeTypedRef(value)
+			if !ok || (prefix != "artifact" && prefix != "event") {
+				continue
+			}
+			typed = append(typed, value)
+		}
+	}
+	typed = uniqueSortedStrings(typed)
+	if len(typed) > 0 {
+		if err := validateResolutionRefs(ctx, tx, typed); err == nil {
+			return typed, nil
+		}
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	ref, err := insertWorkEventRef(ctx, tx, actor, card, "completion_evidence", "External completion evidence", map[string]any{
+		"evidence":  items,
+		"knowledge": "reported",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if ref == "" {
+		return nil, workInvalid("completion requires referenced evidence")
+	}
+	return []string{ref}, nil
 }
 
 // ensureNativeWorkMutation prevents the legacy card surface from silently
