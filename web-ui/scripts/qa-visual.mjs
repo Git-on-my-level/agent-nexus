@@ -187,7 +187,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-first-run",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector('h1:has-text("Overview")');
     },
   },
   {
@@ -195,7 +195,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-recent",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector('h1:has-text("Overview")');
     },
   },
   {
@@ -203,7 +203,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local",
     workspaceMode: "home-empty",
     waitFor: async (page) => {
-      await page.waitForSelector('h1:has-text("Inbox")');
+      await page.waitForSelector('h1:has-text("Overview")');
     },
   },
   {
