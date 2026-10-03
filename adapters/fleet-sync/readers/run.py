@@ -22,8 +22,10 @@ _PATH_SCRIPT = (
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=10")
 # No leading dash: an alias must not be read as an ssh option.
 _ALIAS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@:-]{0,127}$")
-# Config values that become remote arguments. No whitespace or shell syntax.
-_REMOTE_TOKEN = re.compile(r"^[A-Za-z0-9_./:@~+-][A-Za-z0-9_./:@~+-]*$")
+# Config values that become remote arguments. No whitespace, shell syntax,
+# or a leading dash (that would look like a flag). ~/ is a token, not an
+# expansion; only a $HOME/... path is expanded remotely.
+_REMOTE_TOKEN = re.compile(r"^[A-Za-z0-9_./:@~+][A-Za-z0-9_./:@~+-]*$")
 _HOME_PATH = re.compile(r"^\$HOME(?:/[A-Za-z0-9._~-]+)*$")
 # Whole fleet-sync run, including ssh reads and ANX writes. Per-command
 # timeouts are capped by whatever budget remains so a hung ssh cannot
@@ -107,8 +109,13 @@ def valid_ssh_alias(alias: str) -> bool:
 
 
 def valid_remote_config(value: str) -> bool:
-    """True for a remote path or token. $HOME is allowed only as a path prefix."""
+    """True for a remote path or token. $HOME is allowed only as a path prefix.
+
+    A value that starts with `-` is rejected so it cannot be read as a flag.
+    """
     text = value or ""
+    if text.startswith("-"):
+        return False
     return bool(_REMOTE_TOKEN.fullmatch(text) or _HOME_PATH.fullmatch(text))
 
 

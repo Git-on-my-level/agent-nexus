@@ -120,6 +120,43 @@ class StateTests(unittest.TestCase):
         self.assertNotIn(("github", "github.com", "example/repo#1"), known)
         self.assertIn(("github", "github.com", "example/repo#2"), known)
 
+    def test_open_phase_records_seen_at(self):
+        now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+        plan = {
+            "action": "skip", "authority": "github", "connection_id": "github.com",
+            "native_id": "example/repo#3", "title": "example/repo#3", "owner": "Operator",
+            "digest": "d", "reader_id": "fleet-sync/github", "observed_at": "2026-10-04T00:00:00Z",
+            "facts": {"phase": "review", "title": "example/repo#3"}, "evidence": [],
+        }
+        known = {("github", "github.com", "example/repo#3"): {
+            "ref": "card:3", "digest": "d", "title": "t", "owner": "Operator", "phase": "review",
+        }}
+        apply_plans(_Ok(), [plan], known, now=now)
+        self.assertEqual(known[("github", "github.com", "example/repo#3")]["seen_at"], "2026-10-04T00:00:00Z")
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "state.json")
+            save_state(path, {}, known, now=now)
+            loaded = cards_from_state(json.loads(Path(path).read_text(encoding="utf-8")))
+        self.assertEqual(loaded[("github", "github.com", "example/repo#3")]["seen_at"], "2026-10-04T00:00:00Z")
+        self.assertEqual(loaded[("github", "github.com", "example/repo#3")]["phase"], "review")
+
+    def test_merge_copies_terminal_phase_and_open_seen_at(self):
+        cards = [{
+            "ref": "card:done", "title": "done", "owner": "Operator", "phase": "done",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "latest_observation": {"observed_at": "2026-10-01T00:00:00Z"},
+            "source": {"authority": "github", "connection_id": "github.com", "native_id": "aaa/repo#1"},
+        }, {
+            "ref": "card:open", "title": "open", "owner": "Operator", "phase": "review",
+            "updated_at": "2026-10-03T00:00:00Z",
+            "source": {"authority": "github", "connection_id": "github.com", "native_id": "example/repo#9"},
+        }]
+        known = {}
+        merge_known(_Lister(cards), known, ["github"], now=datetime(2026, 10, 4, tzinfo=timezone.utc))
+        self.assertEqual(known[("github", "github.com", "aaa/repo#1")]["phase"], "done")
+        self.assertNotIn("seen_at", known[("github", "github.com", "aaa/repo#1")])
+        self.assertEqual(known[("github", "github.com", "example/repo#9")]["seen_at"], "2026-10-03T00:00:00Z")
+
 
 class QuietTests(unittest.TestCase):
     def test_reader_failure_is_one_line_and_nonzero(self):

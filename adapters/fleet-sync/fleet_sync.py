@@ -278,11 +278,17 @@ def merge_known(client: AnxClient, known: dict, selected: list[str], *, now: dat
                 continue
             current = known.get(key, {})
             current.setdefault("digest", None)
-            if str(card.get("phase") or "") == "done":
+            listed = str(card.get("phase") or "")
+            if listed in {"done", "cancelled"}:
+                current["phase"] = listed
+            if listed == "done":
                 stamp = _done_stamp(card)
                 if stamp and _stamp_before(stamp, current.get("done_at")):
                     current["done_at"] = stamp
-                    current["phase"] = "done"
+            elif listed not in {"cancelled"}:
+                seen = _normalize_stamp(card.get("updated_at"))
+                if seen and (not current.get("seen_at") or _stamp_before(current["seen_at"], seen)):
+                    current["seen_at"] = seen
             if not current.get("digest"):
                 latest = card.get("latest_observation")
                 if isinstance(latest, dict) and isinstance(latest.get("idempotency_key"), str) and latest["idempotency_key"]:
@@ -389,6 +395,8 @@ def _note_phase(known: dict, plan: dict, now: datetime) -> None:
         current.setdefault("done_at", _format_stamp(now))
     else:
         current.pop("done_at", None)
+    if phase not in {"done", "cancelled"}:
+        current["seen_at"] = _format_stamp(now)
 
 
 def prune_cards(known: dict, *, now: datetime) -> None:
@@ -442,6 +450,8 @@ def _state_card(key: tuple, value: dict) -> dict:
         entry["phase"] = value["phase"]
     if value.get("done_at"):
         entry["done_at"] = value["done_at"]
+    if value.get("seen_at"):
+        entry["seen_at"] = value["seen_at"]
     return entry
 
 
@@ -496,6 +506,8 @@ def cards_from_state(state: dict) -> dict:
                 entry["phase"] = card["phase"]
             if isinstance(card.get("done_at"), str):
                 entry["done_at"] = card["done_at"]
+            if isinstance(card.get("seen_at"), str):
+                entry["seen_at"] = card["seen_at"]
             known[(authority, connection, native)] = entry
     return known
 

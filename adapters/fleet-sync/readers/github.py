@@ -155,6 +155,11 @@ def confirm_disappeared(runner, read: dict, known: dict, *, connection_id: str) 
     Search can lag. A pull request that left the search result is closed only
     when its live state is CLOSED or MERGED. A failed view, an open state, or
     a miss beyond the bound leaves the card alone.
+
+    Cards whose last projected phase is done or cancelled are not viewed.
+    Those stay in the cache for 30 days and would otherwise fill this cap
+    ahead of a pull request that just left the open list. The remaining
+    misses are viewed most-recently-seen first.
     """
     meta = read.setdefault("meta", {})
     if not isinstance(meta, dict):
@@ -164,11 +169,7 @@ def confirm_disappeared(runner, read: dict, known: dict, *, connection_id: str) 
     if not read.get("ok") or not read.get("complete"):
         return
     present = {item.get("native_id") for item in read.get("items") or []}
-    missing = sorted(
-        native_id
-        for (authority, connection, native_id) in known
-        if authority == "github" and connection == connection_id and native_id not in present
-    )
+    missing = _open_misses(known, present, connection_id)
     confirmed = []
     for native_id in missing[:ABSENCE_CONFIRM_LIMIT]:
         url = github_pr_url(native_id)
@@ -188,6 +189,29 @@ def confirm_disappeared(runner, read: dict, known: dict, *, connection_id: str) 
             confirmed.append(native_id)
     meta["confirmed_closed"] = confirmed
     meta["absence_checked"] = min(len(missing), ABSENCE_CONFIRM_LIMIT)
+
+
+def _open_misses(known: dict, present: set, connection_id: str) -> list[str]:
+    """GitHub cards absent from this read, excluding already-terminal phases.
+
+    Most recently seen open cards come first. A missing seen_at sorts last
+    so a pull request we projected on the previous run is confirmed before
+    an older miss. native_id is only the tie break.
+    """
+    ranked = []
+    for key, card in known.items():
+        if not isinstance(key, tuple) or len(key) != 3:
+            continue
+        authority, connection, native_id = key
+        if authority != "github" or connection != connection_id or native_id in present:
+            continue
+        info = card if isinstance(card, dict) else {}
+        if str(info.get("phase") or "").lower() in {"done", "cancelled"}:
+            continue
+        ranked.append((str(info.get("seen_at") or ""), str(native_id)))
+    ranked.sort(key=lambda pair: pair[1])
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
+    return [native_id for _, native_id in ranked]
 
 
 def _attach_ci(exec_: HostExec, pulls: list[dict], now: datetime) -> int:

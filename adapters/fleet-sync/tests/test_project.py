@@ -15,7 +15,7 @@ from readers.hermes import _DIR_SCRIPT, job_problems, parse_incidents, parse_job
 from readers.multica import host_label, issue_url, normalize_issue, parse_issues, signals
 from readers.nexus import normalize_inbox, normalize_loose, on_board
 from readers.prometheus import alert_native_id, alert_title, host_from_instance, parse_alerts, read_prometheus, valid_alerts_url
-from readers.run import Budget, BudgetRunner, HostExec, RunResult, ssh_argv
+from readers.run import Budget, BudgetRunner, HostExec, RunResult, ssh_argv, valid_remote_config
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
 CONFIG = {
@@ -156,6 +156,46 @@ class GitHubTests(unittest.TestCase):
         confirm_disappeared(_Runner(handler), read, cards, connection_id="github.com")
         self.assertEqual(read["meta"]["confirmed_closed"], ["example/repo#9"])
         self.assertEqual(read["meta"]["absence_checked"], 2)
+
+    def test_closure_confirmation_skips_done_and_prefers_recent_open(self):
+        calls = []
+
+        def handler(argv, timeout):
+            calls.append(argv)
+            return RunResult(True, argv, 0, json.dumps({"state": "CLOSED"}), "", None)
+
+        read = _read("github", [{"native_id": "example/repo#99", "title": "stay"}])
+        cards = {
+            ("github", "github.com", "example/repo#99"): {
+                "ref": "card:99", "phase": "review", "seen_at": "2026-10-04T00:00:00Z",
+            },
+            ("github", "github.com", "aaa/cancel#1"): {"ref": "card:c", "phase": "cancelled"},
+        }
+        for index in range(20):
+            cards[("github", "github.com", f"aaa/done#{index + 1}")] = {"ref": f"done:{index}", "phase": "done"}
+        for index in range(21):
+            cards[("github", "github.com", f"example/repo#{index + 1}")] = {
+                "ref": f"card:{index}", "phase": "review",
+                "seen_at": f"2026-08-{index + 1:02d}T00:00:00Z",
+            }
+        confirm_disappeared(_Runner(handler), read, cards, connection_id="github.com")
+        viewed = [argv[argv.index("view") + 1] for argv in calls]
+        self.assertEqual(viewed[0], "https://github.com/example/repo/pull/21")
+        self.assertEqual(len(viewed), 20)
+        self.assertNotIn("https://github.com/example/repo/pull/1", viewed)
+        self.assertNotIn("https://github.com/example/repo/pull/99", viewed)
+        self.assertFalse(any("aaa/" in url for url in viewed))
+        self.assertEqual(read["meta"]["confirmed_closed"][0], "example/repo#21")
+        self.assertEqual(read["meta"]["absence_checked"], 20)
+
+    def test_remote_config_rejects_a_leading_dash(self):
+        self.assertFalse(valid_remote_config("-rf"))
+        self.assertFalse(valid_remote_config("--contract"))
+        self.assertFalse(valid_remote_config(""))
+        self.assertTrue(valid_remote_config("/opt/fleetctl/contract"))
+        self.assertTrue(valid_remote_config("fleet-ctl"))
+        self.assertTrue(valid_remote_config("$HOME/.fleetctl/reports"))
+        self.assertTrue(valid_remote_config("~/not-expanded"))
 
     def test_ci_checked_counts_recent_pulls_only(self):
         def handler(argv, timeout):
