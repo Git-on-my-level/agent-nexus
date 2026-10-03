@@ -8,6 +8,8 @@
   import CopyButton from "$lib/components/CopyButton.svelte";
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
+  import VisualReport from "$lib/components/reports/VisualReport.svelte";
+  import { parseVisualReport } from "$lib/visualReports.js";
   import DocumentMarkdownEditor from "$lib/components/DocumentMarkdownEditor.svelte";
   import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
@@ -211,9 +213,12 @@
     selectedRevision?.content ?? headRevision?.content ?? "",
   );
   let displayedRevision = $derived(selectedRevision ?? headRevision);
+  let visualReport = $derived(parseVisualReport(displayedContent));
   /** Outline (H1-H3) for the table-of-contents; only shown for longer docs. */
   let docOutline = $derived(extractDocumentOutline(displayedContent));
-  let showOutline = $derived(!editOpen && docOutline.length >= 3);
+  let showOutline = $derived(
+    !editOpen && !visualReport.recognized && docOutline.length >= 3,
+  );
   /** Unsaved-content indicator for the editor footer. */
   let editorDirty = $derived(
     editOpen && editDraft.content !== (headRevision?.content ?? ""),
@@ -1701,12 +1706,47 @@
                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                 <div
                   bind:this={docBodyMarkdownRoot}
-                  class="js-doc-markdown-body mx-auto max-w-[46rem]"
+                  class="js-doc-markdown-body mx-auto {visualReport.recognized
+                    ? 'w-full'
+                    : 'max-w-[46rem]'}"
                   role="region"
                   aria-label="Document body"
                   onmouseup={refreshStashedDocSelection}
                 >
-                  {#if displayedContent}
+                  {#if visualReport.recognized}
+                    {#if visualReport.report}
+                      <VisualReport report={visualReport.report} />
+                    {:else}
+                      <div
+                        class="rounded-md border border-warn/30 bg-warn-soft p-4"
+                        role="status"
+                      >
+                        <h2 class="text-meta font-semibold text-warn-text">
+                          Report cannot be rendered
+                        </h2>
+                        <p class="mt-2 text-meta text-fg-muted">
+                          This document has an invalid or unsupported visual
+                          report. Its source remains available below.
+                        </p>
+                        <ul
+                          class="mt-2 list-inside list-disc text-micro text-fg-muted"
+                        >
+                          {#each visualReport.errors as error}<li>
+                              {error}
+                            </li>{/each}
+                        </ul>
+                      </div>
+                    {/if}
+                    <details
+                      class="mt-5 rounded-md border border-line bg-bg-soft p-3"
+                    >
+                      <summary class="cursor-pointer text-micro text-fg-muted"
+                        >View report source</summary
+                      >
+                      <pre
+                        class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-micro text-fg-muted">{displayedContent}</pre>
+                    </details>
+                  {:else if displayedContent}
                     <MarkdownRenderer
                       source={displayedContent}
                       class="markdown-rendered--doc text-fg"

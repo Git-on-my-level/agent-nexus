@@ -3,6 +3,13 @@
 This runbook covers local integration and production-like serving for the
 workspace-aware `anx-ui`.
 
+## Agent-authored visual reports
+
+Agents can save a versioned, data-only visual report in an ordinary document
+revision. The existing Docs reader renders the supported panels and keeps the
+source inspectable. See [Visual report authoring](visual-reports.md) for the
+format, validation, CLI commands, public dogfood example, and evidence boundaries.
+
 ## Configuration
 
 ### Core-backed Playwright (optional)
