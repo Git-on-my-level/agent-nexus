@@ -54,7 +54,7 @@ test("workspace root routes to Overview", async ({ page }) => {
 });
 
 test("mobile bottom navigation switches workspace routes", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
@@ -89,6 +89,26 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   ]) {
     await expect(bottomNav.getByRole("link", { name })).toBeVisible();
   }
+  const crowded = await bottomNav
+    .locator(".shell-bottom-nav-item")
+    .evaluateAll((els) =>
+      els
+        .map((el) => {
+          const label = el.querySelector(":scope > span:last-of-type");
+          return {
+            text: (label?.textContent || el.textContent || "")
+              .replace(/\s+/g, " ")
+              .trim(),
+            itemOverflow: el.scrollWidth > el.clientWidth + 1,
+            labelWrapped: label
+              ? label.scrollHeight > label.clientHeight + 1 ||
+                label.getClientRects().length > 1
+              : false,
+          };
+        })
+        .filter((item) => item.itemOverflow || item.labelWrapped),
+    );
+  expect(crowded).toEqual([]);
 
   await page.getByRole("button", { name: "Search workspace" }).click();
   await expect(

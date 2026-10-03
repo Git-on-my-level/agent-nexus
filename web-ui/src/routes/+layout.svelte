@@ -593,6 +593,8 @@
   /** @param {string} href */
   function dataTourForNav(href) {
     switch (String(href)) {
+      case "/overview":
+        return "overview";
       case "/inbox":
         return "inbox";
       case "/agents":

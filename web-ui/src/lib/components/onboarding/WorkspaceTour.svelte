@@ -67,43 +67,49 @@
             placement: "center",
             eyebrow: "60-second tour",
             title: welcomeTitle,
-            body: "Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work. PM is the conversation surface for decisions that need follow-through.",
+            body: "Overview is the workspace home. Inbox is where agents wait on you, Agents shows what each one is doing, and Tasks and Docs hold the work. PM is the conversation surface for decisions that need follow-through.",
             primaryLabel: "Take the tour →",
             skipLabel: "Maybe later",
           },
           {
+            selector: '[data-tour="overview"]',
+            eyebrow: "1 of 7 · Overview",
+            title: "Overview is the workspace home",
+            body: "What needs you, what is in flight, who is working, and which report is current. It links into those surfaces.",
+          },
+          {
             selector: '[data-tour="inbox"]',
-            eyebrow: "1 of 6 · Inbox",
+            eyebrow: "2 of 7 · Inbox",
             title: "Inbox is the only attention surface",
             body: "Decisions that need an answer, blocked tasks, and items that require a response land here.",
           },
           {
             selector: '[data-tour="agents"]',
-            eyebrow: "2 of 6 · Agents",
+            eyebrow: "3 of 7 · Agents",
             title: "Agents shows who is doing what",
             body: "Every agent on your machines, grouped by working, waiting on you, idle and stale, with its task, last note and run time. Asks still get answered in the Inbox.",
           },
           {
             selector: '[data-tour="tasks"]',
-            eyebrow: "3 of 6 · Tasks",
+            eyebrow: "4 of 7 · Tasks",
             title: "Tasks is the work board",
             body: "Table and board over the same records. Drag a task created here to change phase. A task that lives in another tracker opens a decision instead of mutating the source.",
           },
           {
             selector: '[data-tour="docs"]',
-            eyebrow: "4 of 6 · Docs",
+            eyebrow: "5 of 7 · Docs",
             title: "Docs is shared knowledge",
             body: "Versioned documents with first-class comments. Use them for meta knowledge and what other hosts cannot see.",
           },
           {
             selector: '[data-tour="pm"]',
-            eyebrow: "5 of 6 · PM",
+            eyebrow: "6 of 7 · PM",
             title: "PM is the conversation",
             body: "Ask what needs a decision, then follow the receipt. The PM runs through the existing agent harnesses.",
           },
           {
             selector: '[data-tour="access"]',
-            eyebrow: "6 of 6 · Access",
+            eyebrow: "7 of 7 · Access",
             title: "Enroll the machine your agents run on",
             body: "Run anx host enroll on it once and approve it here; every agent on that machine can then work in this workspace. Access also holds people and invites.",
             ctaLabel: "Enroll a machine →",
@@ -224,7 +230,8 @@
 
   // Replay-on-demand: the Home page exposes a "Take the tour" button that
   // bumps replayTourSignal. Force the tour open regardless of the
-  // workspaceTourSeen flag. The tour is anchored to Inbox landmarks.
+  // workspaceTourSeen flag. Steps anchor to the primary nav, starting
+  // at Overview.
   let lastReplaySignal = $state(0);
   let pendingReplay = $state(false);
 
