@@ -36,13 +36,14 @@ def _reads():
                 "ci": "red", "updated_at": "2026-10-04T01:00:00Z", "created_at": "2026-09-01T00:00:00Z",
                 "terminal": False, "review_decision": "CHANGES_REQUESTED",
             }],
-            "meta": {},
+            "meta": {"ci_checked": 1},
         },
         {
             "name": "hermes", "ok": False, "complete": False, "observed_at": "2026-10-04T11:06:00Z",
-            "error": "remote-host: ssh remote-host failed: timed out", "items": [],
+            "error": "remote-host: ssh remote-host failed: token=sekritvalue", "items": [],
             "meta": {"hosts": [{
-                "label": "remote-host", "ok": False, "error": "ssh remote-host failed: timed out",
+                "label": "remote-host", "ok": False, "complete": False,
+                "error": "ssh remote-host failed: token=sekritvalue",
                 "jobs": None, "rows": [],
             }]},
         },
@@ -78,6 +79,13 @@ class ReportTests(unittest.TestCase):
         unavailable = next(panel for panel in report["panels"] if panel["id"] == "unavailable-hermes")
         self.assertEqual(unavailable["freshness"], "unavailable")
         self.assertIn("hermes", unavailable["data"]["text"])
+        self.assertIn("[redacted]", unavailable["data"]["text"])
+        self.assertNotIn("sekritvalue", unavailable["data"]["text"])
+        cron_chart = next(panel for panel in report["panels"] if panel["id"] == "cron-health")
+        self.assertIn("Not fully checked: remote-host", cron_chart["data"]["caption"])
+        self.assertIn("remote-host (partial)", cron_chart["data"]["option"]["xAxis"]["data"])
+        prs = next(panel for panel in report["panels"] if panel["id"] == "pr-ci")
+        self.assertIn("CI checked for 1 recently updated PRs", prs["title"])
         strip = next(panel for panel in report["panels"] if panel["id"] == "overview-now")
         cron = next(item for item in strip["data"]["items"] if item["label"] == "Cron problems")
         self.assertEqual(cron["value"], "unknown")
@@ -111,16 +119,16 @@ class ReportTests(unittest.TestCase):
             _reads(), generated_at="2026-10-04T12:00:00Z", now=NOW,
             hosts=[{"label": "local-host", "local": True}],
         )
-        callout = next(panel for panel in report["panels"] if panel["id"] == "needs-david")
+        callout = next(panel for panel in report["panels"] if panel["id"] == "needs-operator")
         lines = callout["data"]["text"].splitlines()
         self.assertLessEqual(len(lines), 8)
         self.assertTrue(any("older than 72h" in line and "triage, don't read each" in line for line in lines))
-        self.assertTrue(any("red CI" in line for line in lines))
+        self.assertTrue(any("red CI" in line and "CI checked for 1 recently updated PRs" in line for line in lines))
         self.assertNotIn("Prometheus: 0", callout["data"]["text"])
         self.assertIn("Unavailable:", callout["data"]["text"])
         strip = next(panel for panel in report["panels"] if panel["id"] == "overview-now")
         values = {item["label"]: item["value"] for item in strip["data"]["items"]}
-        self.assertEqual(values["Decisions for David"], "unknown")
+        self.assertEqual(values["Decisions for Operator"], "unknown")
         self.assertEqual(values["Aging reviews"], "1")
         self.assertNotIn("trend", strip["data"]["items"][0])
         firing = next(panel for panel in report["panels"] if panel["id"] == "overview-fleetctl")
@@ -134,7 +142,7 @@ class ReportTests(unittest.TestCase):
         reads[2] = {
             "name": "hermes", "ok": True, "complete": True, "observed_at": "2026-10-04T11:06:00Z",
             "items": [], "meta": {"hosts": [{
-                "label": "local-host", "ok": True, "rows": [
+                "label": "local-host", "ok": True, "complete": True, "rows": [
                     {"id": "job-1", "name": "safety-watchdog", "watchdog": True, "paused": True, "problems": ["paused-no-reason"]},
                 ],
             }]},
@@ -142,10 +150,10 @@ class ReportTests(unittest.TestCase):
         reads.append({
             "name": "prometheus", "ok": True, "complete": True, "observed_at": "2026-10-04T11:09:00Z",
             "items": [
-                {"native_id": "FilesystemAlmostFull/abc", "title": "FilesystemAlmostFull on omi-pr-review-bot (/)",
-                 "severity": "critical", "host": "omi-pr-review-bot"},
-                {"native_id": "MacMemoryPressure/def", "title": "MacMemoryPressure on m4-air",
-                 "severity": "warning", "host": "m4-air"},
+                {"native_id": "FilesystemAlmostFull/abc", "title": "FilesystemAlmostFull on hub-a (/)",
+                 "severity": "critical", "host": "hub-a"},
+                {"native_id": "MacMemoryPressure/def", "title": "MacMemoryPressure on hub-b",
+                 "severity": "warning", "host": "hub-b"},
             ],
             "meta": {"pending": 3, "firing": 2},
         })
@@ -153,7 +161,7 @@ class ReportTests(unittest.TestCase):
             "name": "nexus", "ok": True, "complete": True, "observed_at": "2026-10-04T11:10:00Z",
             "items": [{
                 "ref": "card:one", "title": "Decide the thing", "phase": "blocked",
-                "next_actor": "David", "next_action": "Answer it",
+                "next_actor": "Ada", "next_action": "Answer it",
             }],
             "meta": {
                 "inbox_ok": True, "board_ok": True,
@@ -163,7 +171,7 @@ class ReportTests(unittest.TestCase):
                 ],
                 "loose_ends": [{
                     "ref": "card:one", "title": "Decide the thing", "phase": "blocked",
-                    "next_actor": "David", "next_action": "Answer it",
+                    "next_actor": "Ada", "next_action": "Answer it",
                 }],
             },
         })
@@ -172,27 +180,28 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(snapshot["decisions_waiting"], 2)
         self.assertEqual(snapshot["aging_reviews"], 1)
         # Inbox 2 + red CI 1 + requested changes 0 (the red PR is not counted twice) + 1 watchdog.
-        self.assertEqual(snapshot["decisions_for_david"], 4)
+        self.assertEqual(snapshot["decisions_for_operator"], 4)
         self.assertEqual(snapshot["prometheus_firing"], 2)
         self.assertEqual(snapshot["prometheus_pending"], 3)
         history = record_history([], at="2026-10-04T11:00:00Z", metrics=snapshot)
-        report = build_report(reads, generated_at="2026-10-04T12:00:00Z", now=NOW, hosts=[], history=history)
+        report = build_report(reads, generated_at="2026-10-04T12:00:00Z", now=NOW, hosts=[], history=history, operator="Ada")
         item = next(panel for panel in report["panels"] if panel["id"] == "overview-now")["data"]["items"][0]
         self.assertNotIn("trend", item)
         history = record_history(history, at="2026-10-04T12:00:00Z", metrics=snapshot)
         self.assertEqual(len(history), 2)
-        report = build_report(reads, generated_at="2026-10-04T12:00:00Z", now=NOW, hosts=[], history=history)
+        report = build_report(reads, generated_at="2026-10-04T12:00:00Z", now=NOW, hosts=[], history=history, operator="Ada")
         item = next(item for item in next(panel for panel in report["panels"] if panel["id"] == "overview-now")["data"]["items"]
-                    if item["label"] == "Decisions for David")
+                    if item["label"] == "Decisions for Ada")
         self.assertEqual(item["trend"], [4, 4])
         self.assertIn("2026-10-04T11:00:00Z", item["trend_label"])
-        callout = next(panel for panel in report["panels"] if panel["id"] == "needs-david")["data"]["text"]
+        callout = next(panel for panel in report["panels"] if panel["id"] == "needs-operator")["data"]["text"]
         self.assertLessEqual(len(callout.splitlines()), 8)
         self.assertIn("2 decisions waiting in your ANX Inbox — oldest: Older ask", callout)
-        self.assertIn("Prometheus: 2 firing (critical first): FilesystemAlmostFull on omi-pr-review-bot (/)", callout)
+        self.assertIn("1 loose ends on the decisions board — 1 next actor Ada", callout)
+        self.assertIn("Prometheus: 2 firing (critical first): FilesystemAlmostFull on hub-a (/)", callout)
         self.assertIn("Paused safety watchdogs: 1 — safety-watchdog on local-host", callout)
         loose = next(panel for panel in report["panels"] if panel["id"] == "loose-ends")
-        self.assertEqual(loose["data"]["rows"][0]["cells"][2], "David")
+        self.assertEqual(loose["data"]["rows"][0]["cells"][2], "Ada")
         history = record_history([{"at": f"2026-10-03T00:{index:02d}:00Z", "metrics": {"decisions_waiting": index}} for index in range(60)],
                                  at="2026-10-04T12:00:00Z", metrics={"decisions_waiting": 2})
         self.assertEqual(len(history), 50)

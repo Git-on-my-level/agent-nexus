@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from anx_client import AnxClient, AnxError
+from project import operator_name
 from readers.run import HostExec
 
 OPEN_PHASES = {"backlog", "ready", "in_progress", "blocked", "review", "unknown"}
@@ -65,7 +66,7 @@ def read_nexus(exec_: HostExec, config: dict, *, now: datetime) -> dict:
         runner=exec_.runner,
     )
     inbox, inbox_error = _inbox(client)
-    loose, board_error = _loose_ends(client, board)
+    loose, board_error = _loose_ends(client, board, operator_name(config))
     errors = [item for item in (inbox_error, board_error) if item]
     return {
         "name": "nexus",
@@ -98,7 +99,7 @@ def _inbox(client: AnxClient) -> tuple[list[dict], str | None]:
     return items, None
 
 
-def _loose_ends(client: AnxClient, board: str) -> tuple[list[dict], str | None]:
+def _loose_ends(client: AnxClient, board: str, operator: str) -> tuple[list[dict], str | None]:
     if not board:
         return [], "nexus.loose_ends_board is required"
     try:
@@ -113,7 +114,7 @@ def _loose_ends(client: AnxClient, board: str) -> tuple[list[dict], str | None]:
         if item:
             chosen.append(item)
     chosen.sort(key=lambda item: (
-        0 if item["next_actor"].lower() == "david" else 1,
+        0 if item["next_actor"].lower() == operator.lower() else 1,
         {"blocked": 0, "review": 1, "in_progress": 2, "ready": 3, "backlog": 4}.get(item["phase"], 5),
         item["title"],
     ))

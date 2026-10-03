@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .run import HostExec
+
+_PR_ID = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]{0,9}$")
+ABSENCE_CONFIRM_LIMIT = 20
 
 SEARCH_FIELDS = "repository,number,title,url,updatedAt,createdAt,isDraft,state"
 CI_FIELDS = "statusCheckRollup,reviewDecision,mergeable,isDraft"
@@ -98,7 +102,7 @@ def read_github(exec_: HostExec, config: dict, *, now: datetime) -> dict:
                 recent_closed.append(pr)
         for pr in open_prs:
             pr["terminal"] = False
-        _attach_ci(exec_, open_prs, now)
+        checked = _attach_ci(exec_, open_prs, now)
         items = open_prs + recent_closed
         complete = len(open_prs) < 200
         return {
@@ -109,7 +113,7 @@ def read_github(exec_: HostExec, config: dict, *, now: datetime) -> dict:
             "error": None,
             "items": items,
             "present_ids": [item["native_id"] for item in items],
-            "meta": {"open_truncated": not complete},
+            "meta": {"open_truncated": not complete, "ci_checked": checked, "confirmed_closed": []},
         }
     except (RuntimeError, ValueError, OSError) as exc:
         return {
@@ -138,7 +142,55 @@ def _search(exec_: HostExec, state: str) -> list[dict]:
     return parse_search(payload)
 
 
-def _attach_ci(exec_: HostExec, pulls: list[dict], now: datetime) -> None:
+def github_pr_url(native_id: str) -> str | None:
+    if not isinstance(native_id, str) or len(native_id) > 200 or not _PR_ID.fullmatch(native_id):
+        return None
+    repo, number = native_id.rsplit("#", 1)
+    return f"https://github.com/{repo}/pull/{number}"
+
+
+def confirm_disappeared(runner, read: dict, known: dict, *, connection_id: str) -> None:
+    """Confirm search misses with `gh pr view` before a card may be closed.
+
+    Search can lag. A pull request that left the search result is closed only
+    when its live state is CLOSED or MERGED. A failed view, an open state, or
+    a miss beyond the bound leaves the card alone.
+    """
+    meta = read.setdefault("meta", {})
+    if not isinstance(meta, dict):
+        meta = {}
+        read["meta"] = meta
+    meta["confirmed_closed"] = []
+    if not read.get("ok") or not read.get("complete"):
+        return
+    present = {item.get("native_id") for item in read.get("items") or []}
+    missing = sorted(
+        native_id
+        for (authority, connection, native_id) in known
+        if authority == "github" and connection == connection_id and native_id not in present
+    )
+    confirmed = []
+    for native_id in missing[:ABSENCE_CONFIRM_LIMIT]:
+        url = github_pr_url(native_id)
+        if not url:
+            continue
+        result = runner(["gh", "pr", "view", url, "--json", "state"], timeout=20)
+        if not result.ok:
+            if result.error and "budget" in result.error:
+                break
+            continue
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            continue
+        state = str(payload.get("state") or "").upper()
+        if state in {"CLOSED", "MERGED"}:
+            confirmed.append(native_id)
+    meta["confirmed_closed"] = confirmed
+    meta["absence_checked"] = min(len(missing), ABSENCE_CONFIRM_LIMIT)
+
+
+def _attach_ci(exec_: HostExec, pulls: list[dict], now: datetime) -> int:
     candidates = []
     for pr in pulls:
         updated = _parse_time(pr.get("updated_at"))
@@ -162,8 +214,9 @@ def _attach_ci(exec_: HostExec, pulls: list[dict], now: datetime) -> None:
         return pr, classify_ci(payload.get("statusCheckRollup")), decision if isinstance(decision, str) else None
 
     if not selected:
-        return
+        return 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         for pr, ci, decision in pool.map(view, selected):
             pr["ci"] = ci
             pr["review_decision"] = decision
+    return len(selected)

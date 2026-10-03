@@ -1,4 +1,5 @@
 import json
+import shlex
 import sys
 import unittest
 from datetime import datetime, timezone
@@ -6,15 +7,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from project import github_phase, observation_digest, plan_reads
+from project import github_phase, observation_digest, operator_name, plan_reads
 from readers.agentctl import count_runs, parse_envelope
-from readers.fleetctl import parse_status
-from readers.github import classify_ci, parse_search
-from readers.hermes import job_problems, parse_incidents, parse_jobs, project_job, scrub
+from readers.fleetctl import parse_status, read_fleetctl, withheld_reason
+from readers.github import classify_ci, confirm_disappeared, github_pr_url, parse_search, read_github
+from readers.hermes import _DIR_SCRIPT, job_problems, parse_incidents, parse_jobs, project_job, read_hermes, scrub
 from readers.multica import host_label, issue_url, normalize_issue, parse_issues, signals
 from readers.nexus import normalize_inbox, normalize_loose, on_board
-from readers.prometheus import alert_native_id, alert_title, host_from_instance, parse_alerts
-from readers.run import Budget, BudgetRunner, HostExec, RunResult
+from readers.prometheus import alert_native_id, alert_title, host_from_instance, parse_alerts, read_prometheus, valid_alerts_url
+from readers.run import Budget, BudgetRunner, HostExec, RunResult, ssh_argv
 
 NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
 CONFIG = {
@@ -24,7 +25,8 @@ CONFIG = {
         "ops_hygiene": "board:ops",
     },
     "multica": {"connection_id": "multica-main"},
-    "github": {"connection_id": "github.com", "owner": "David"},
+    "github": {"connection_id": "github.com", "owner": "Example Owner"},
+    "operator_name": "Ada",
 }
 
 
@@ -46,7 +48,7 @@ class MulticaTests(unittest.TestCase):
         self.assertFalse(open_truncated)
 
     def test_host_and_signals(self):
-        self.assertEqual(host_label("M5 MBP Devin (Fusion)"), "M5 MBP")
+        self.assertEqual(host_label("Example Host Devin (Fusion)"), "Example Host")
         self.assertEqual(signals("reply OK smoke", "SCA-1"), ["reply-ok", "smoke"])
         self.assertEqual(signals("production deploy", "SCA-2"), [])
 
@@ -58,7 +60,7 @@ class MulticaTests(unittest.TestCase):
             "status": "in_review",
             "updated_at": "2026-10-01T00:00:00Z",
             "assignee_id": "agent-1",
-        }, {"agent-1": {"name": "M5 MBP Devin (x)", "host": "M5 MBP"}},
+        }, {"agent-1": {"name": "Example Agent (x)", "host": "Example Agent"}},
             app_url="https://multica.example.invalid", slug="acme", now=NOW)
         plans = plan_reads([_read("multica", [issue])], {}, CONFIG, now=NOW)
         self.assertEqual(plans[0]["facts"]["phase"], "review")
@@ -117,7 +119,68 @@ class GitHubTests(unittest.TestCase):
         }])], {}, CONFIG, now=NOW)
         self.assertEqual(plans[0]["facts"]["phase"], "backlog")
         self.assertIn("stale", plans[0]["facts"]["summary"])
-        self.assertEqual(plans[0]["owner"], "David")
+        self.assertEqual(plans[0]["owner"], "Example Owner")
+        nameless = {**CONFIG, "github": {"connection_id": "github.com"}}
+        again = plan_reads([_read("github", [{
+            "native_id": "example/repo#4", "title": "Fix", "url": "https://github.com/example/repo/pull/4",
+            "state": "OPEN", "is_draft": False, "ci": "unknown", "updated_at": "2026-10-03T00:00:00Z",
+            "terminal": False, "repo": "example/repo",
+        }])], {}, nameless, now=NOW)
+        self.assertEqual(again[0]["owner"], "Ada")
+        self.assertEqual(operator_name({}), "Operator")
+
+    def test_search_miss_does_not_close_until_view_confirms(self):
+        known = {("github", "github.com", "example/repo#9"): {"ref": "card:1", "digest": None, "title": "old", "owner": "Example Owner"}}
+        self.assertEqual(plan_reads([_read("github", [])], known, CONFIG, now=NOW), [])
+        confirmed = _read("github", [], meta={"confirmed_closed": ["example/repo#9"]})
+        plans = plan_reads([confirmed], known, CONFIG, now=NOW)
+        self.assertEqual(plans[0]["facts"]["phase"], "done")
+        self.assertEqual(plans[0]["reason"], "absent")
+        self.assertIsNone(github_pr_url("not a pr"))
+        self.assertEqual(github_pr_url("example/repo#9"), "https://github.com/example/repo/pull/9")
+
+        def handler(argv, timeout):
+            url = argv[argv.index("view") + 1]
+            state = "MERGED" if url.endswith("/9") else "OPEN"
+            if url.endswith("/8"):
+                return RunResult(False, argv, 1, "", "", "timed out")
+            return RunResult(True, argv, 0, json.dumps({"state": state}), "", None)
+
+        read = _read("github", [{"native_id": "example/repo#4", "title": "stay"}])
+        cards = {
+            ("github", "github.com", "example/repo#4"): {"ref": "card:4"},
+            ("github", "github.com", "example/repo#8"): {"ref": "card:8"},
+            ("github", "github.com", "example/repo#9"): {"ref": "card:9"},
+            ("multica", "multica-main", "issue-1"): {"ref": "card:m"},
+        }
+        confirm_disappeared(_Runner(handler), read, cards, connection_id="github.com")
+        self.assertEqual(read["meta"]["confirmed_closed"], ["example/repo#9"])
+        self.assertEqual(read["meta"]["absence_checked"], 2)
+
+    def test_ci_checked_counts_recent_pulls_only(self):
+        def handler(argv, timeout):
+            if "search" in argv and "open" in argv:
+                return RunResult(True, argv, 0, json.dumps([{
+                    "repository": {"nameWithOwner": "example/repo"},
+                    "number": 4, "title": "Fix", "url": "https://github.com/example/repo/pull/4",
+                    "state": "OPEN", "isDraft": False,
+                    "updatedAt": "2026-10-04T00:00:00Z", "createdAt": "2026-10-01T00:00:00Z",
+                }, {
+                    "repository": {"nameWithOwner": "example/repo"},
+                    "number": 5, "title": "Old", "url": "https://github.com/example/repo/pull/5",
+                    "state": "OPEN", "isDraft": False,
+                    "updatedAt": "2026-08-01T00:00:00Z", "createdAt": "2026-07-01T00:00:00Z",
+                }]), "", None)
+            if "search" in argv:
+                return RunResult(True, argv, 0, "[]", "", None)
+            if "view" in argv:
+                return RunResult(True, argv, 0, json.dumps({"statusCheckRollup": [{"conclusion": "FAILURE", "status": "COMPLETED"}]}), "", None)
+            return RunResult(False, argv, 1, "", "", "unexpected")
+
+        read = read_github(HostExec(_Runner(handler)), {}, now=NOW)
+        self.assertEqual(read["meta"]["ci_checked"], 1)
+        self.assertEqual(read["items"][0]["ci"], "red")
+        self.assertEqual(read["items"][1]["ci"], "unknown")
 
 
 class HermesTests(unittest.TestCase):
@@ -159,6 +222,46 @@ class HermesTests(unittest.TestCase):
         plans = plan_reads([read], known, CONFIG, now=NOW)
         self.assertEqual(plans[0]["facts"]["phase"], "done")
         self.assertEqual(plans[0]["reason"], "cleared")
+
+    def test_unrecognized_incidents_are_not_an_empty_list(self):
+        self.assertEqual(parse_incidents(""), [])
+        self.assertEqual(parse_incidents("No cron failure incidents recorded.\n  (filtered by state 'alerted')\n"), [])
+        self.assertEqual(parse_incidents("\x1b[2mNo cron failure incidents recorded.\x1b[0m\n"), [])
+        with self.assertRaises(ValueError):
+            parse_incidents("usage: hermes cron incidents\nunexpected table\n")
+
+    def test_partial_host_marks_the_read_incomplete_and_does_not_close(self):
+        jobs = {"jobs": [{
+            "id": "job-1", "name": "watchdog", "enabled": True, "state": "ok",
+            "last_status": "ok", "workdir": "/tmp/example",
+        }]}
+
+        def handler(argv, timeout):
+            if argv[:1] == ["cat"]:
+                return RunResult(True, argv, 0, json.dumps(jobs), "", None)
+            if argv[:3] == ["hermes", "cron", "incidents"]:
+                return RunResult(True, argv, 0, "not the incident format\n", "", None)
+            if argv[:2] == ["sh", "-c"]:
+                return RunResult(False, argv, 1, "", "", "syntax error near do")
+            return RunResult(False, argv, 1, "", "", "unexpected")
+
+        read = read_hermes(HostExec(_Runner(handler)), {"hosts": [{"label": "host-a", "local": True}]}, now=NOW)
+        self.assertTrue(read["ok"], read.get("error"))
+        self.assertFalse(read["complete"])
+        self.assertEqual(read["meta"]["unchecked_hosts"], ["host-a"])
+        self.assertFalse(read["meta"]["hosts"][0]["complete"])
+        known = {("hermes-cron", "host-a", "job-1"): {"ref": "card:1", "digest": None, "title": "watchdog", "owner": "host-a"}}
+        self.assertEqual(plan_reads([read], known, CONFIG, now=NOW), [])
+
+    def test_remote_workdir_script_is_one_quoted_argument(self):
+        argv = ssh_argv("host-a", ["sh", "-c", _DIR_SCRIPT])
+        parts = shlex.split(argv[-1])
+        self.assertEqual(parts[4:7], ["sh", "-c", _DIR_SCRIPT])
+        self.assertIn('PATH="$HOME/.local/bin:', parts[2])
+        home = ssh_argv("hub-1", ["cat", "$HOME/.hermes/cron/jobs.json"])
+        self.assertIn('"$HOME/.hermes/cron/jobs.json"', home[-1])
+        with self.assertRaises(ValueError):
+            ssh_argv("-oProxyCommand=id", ["true"])
 
     def test_incomplete_host_does_not_close(self):
         host = {"label": "local-host", "ok": True, "complete": False, "jobs": 1, "job_ids": [], "items": [], "rows": []}
@@ -229,6 +332,20 @@ class FleetctlTests(unittest.TestCase):
         actions = {plan["native_id"]: plan["action"] for plan in again}
         self.assertEqual(actions["host/mute"], "skip")
         self.assertEqual(actions["gone"], "observe")
+        blocked = _read("fleetctl", parsed["causes"], complete=False, meta={**parsed, "withheld": "1 untrusted reports"})
+        self.assertEqual(
+            [plan["native_id"] for plan in plan_reads([blocked], known, CONFIG, now=NOW)],
+            ["host/mute"],
+        )
+
+    def test_untrusted_or_caveat_blocks_closure(self):
+        self.assertIsNone(withheld_reason({"queues": [{"queue": "host-action", "caveat": ""}], "inventory": {"untrusted": 0}}))
+        self.assertEqual(withheld_reason({"inventory": {"untrusted": 2}}), "2 untrusted reports")
+        self.assertEqual(withheld_reason({"trust": {"untrusted": 1}}), "1 untrusted reports")
+        caveat = withheld_reason({"queues": [{"queue": "host-action", "caveat": "1 withheld as untrusted"}]})
+        self.assertIn("withheld", caveat)
+        # A mute host is trusted:false without being an untrusted report.
+        self.assertIsNone(withheld_reason({"inventory": {"untrusted": 0, "hosts": [{"host": "host-a", "trusted": False}]}}))
 
     def test_digest_ignores_clock(self):
         item = {"native_id": "host/mute", "priority": "high", "hosts": ["a"], "terminal": False}
@@ -252,29 +369,40 @@ class FleetctlTests(unittest.TestCase):
 
         def handler(argv, timeout):
             calls.append((argv, timeout))
-            if argv[-1:] == ["/usr/bin/true"]:
+            if _ssh_command(argv) == ["/usr/bin/true"]:
                 return RunResult(True, argv, 0, "", "", None)
             self.assertLessEqual(timeout, 40)
             return RunResult(True, argv, 0, json.dumps({
-                "queues": [{"queue": "host-action", "root_cause_count": 0, "root_causes": []}],
-                "inventory": {"hosts": []},
+                "queues": [{"queue": "host-action", "root_cause_count": 0, "root_causes": [], "caveat": "2 withheld as untrusted"}],
+                "inventory": {"hosts": [], "untrusted": 2},
+                "trust": {"untrusted": 2},
             }), "", None)
 
-        from readers.fleetctl import read_fleetctl
         read = read_fleetctl(HostExec(_Runner(handler)), {
             "fleetctl": {
                 "binary": "/usr/local/bin/fleetctl",
-                "ssh": "metrics-01",
+                "ssh": "hub-1",
                 "contract_dir": "/opt/fleetctl/contract",
                 "reports_dir": "$HOME/.fleetctl/reports",
             },
         }, now=NOW)
         self.assertTrue(read["ok"])
-        remote = [argv for argv, _ in calls if "status" in argv][0]
+        self.assertFalse(read["complete"])
+        self.assertIn("untrusted", read["meta"]["withheld"])
+        remote = [argv for argv, _ in calls if "status" in argv[-1]][0]
         self.assertEqual(remote[:3], ["ssh", "-o", "BatchMode=yes"])
-        self.assertIn("metrics-01", remote)
-        self.assertIn("/usr/local/bin/fleetctl", remote)
-        self.assertIn("$HOME/.fleetctl/reports", remote)
+        self.assertIn("hub-1", remote)
+        self.assertIn("/usr/local/bin/fleetctl", remote[-1])
+        self.assertIn('"$HOME/.fleetctl/reports"', remote[-1])
+        rejected = read_fleetctl(HostExec(_Runner(handler)), {
+            "fleetctl": {
+                "binary": "/usr/local/bin/fleetctl",
+                "ssh": "-oProxyCommand=id",
+                "contract_dir": "/opt/fleetctl/contract",
+                "reports_dir": "$HOME/.fleetctl/reports;touch /tmp/x",
+            },
+        }, now=NOW)
+        self.assertFalse(rejected["ok"])
 
 
 class PrometheusTests(unittest.TestCase):
@@ -282,16 +410,16 @@ class PrometheusTests(unittest.TestCase):
         labels = {
             "alertname": "FilesystemAlmostFull",
             "device": "/dev/sda1",
-            "instance": "omi-pr-review-bot.tail76ea03.ts.net:9100",
+            "instance": "hub-a.example.ts.net:9100",
             "mountpoint": "/",
             "severity": "warning",
         }
         self.assertEqual(
-            host_from_instance(labels["instance"], ".tail76ea03.ts.net"),
-            "omi-pr-review-bot",
+            host_from_instance(labels["instance"], ".example.ts.net"),
+            "hub-a",
         )
-        self.assertEqual(alert_title("FilesystemAlmostFull", "omi-pr-review-bot", labels),
-                         "FilesystemAlmostFull on omi-pr-review-bot (/)")
+        self.assertEqual(alert_title("FilesystemAlmostFull", "hub-a", labels),
+                         "FilesystemAlmostFull on hub-a (/)")
         first = alert_native_id("FilesystemAlmostFull", labels)
         self.assertEqual(first, alert_native_id("FilesystemAlmostFull", dict(reversed(list(labels.items())))))
         parsed = parse_alerts({
@@ -299,20 +427,20 @@ class PrometheusTests(unittest.TestCase):
             "data": {"alerts": [
                 {"state": "firing", "labels": labels},
                 {"state": "pending", "labels": {**labels, "mountpoint": "/var"}},
-                {"state": "firing", "labels": {**labels, "alertname": "MacMemoryPressure", "instance": "m4-air.tail76ea03.ts.net:9100", "severity": "critical"}},
+                {"state": "firing", "labels": {**labels, "alertname": "MacMemoryPressure", "instance": "hub-b.example.ts.net:9100", "severity": "critical"}},
             ]},
-        }, suffix=".tail76ea03.ts.net")
+        }, suffix=".example.ts.net")
         self.assertEqual(parsed["pending"], 1)
         self.assertEqual([item["severity"] for item in parsed["firing"]], ["critical", "warning"])
-        config = {**CONFIG, "prometheus": {"connection_id": "metrics-01"}}
+        config = {**CONFIG, "prometheus": {"connection_id": "hub-1"}}
         plans = plan_reads([_read("prometheus", parsed["firing"], meta={"pending": 1})], {}, config, now=NOW)
         self.assertEqual(len(plans), 2)
         self.assertEqual(plans[0]["authority"], "prometheus")
-        self.assertEqual(plans[0]["connection_id"], "metrics-01")
+        self.assertEqual(plans[0]["connection_id"], "hub-1")
         self.assertEqual(plans[0]["facts"]["phase"], "blocked")
-        known = {("prometheus", "metrics-01", item["native_id"]): {"ref": "card:1", "digest": None, "title": "old", "owner": "h"}
+        known = {("prometheus", "hub-1", item["native_id"]): {"ref": "card:1", "digest": None, "title": "old", "owner": "h"}
                  for item in parsed["firing"]}
-        known[("prometheus", "metrics-01", "gone")] = {"ref": "card:9", "digest": None, "title": "gone", "owner": "h"}
+        known[("prometheus", "hub-1", "gone")] = {"ref": "card:9", "digest": None, "title": "gone", "owner": "h"}
         closed = plan_reads([_read("prometheus", [], meta={"pending": 1})], known, config, now=NOW)
         self.assertEqual({plan["native_id"] for plan in closed}, {item["native_id"] for item in parsed["firing"]} | {"gone"})
         self.assertTrue(all(plan["facts"]["phase"] == "done" and plan["evidence"][0]["ref"] for plan in closed))
@@ -323,23 +451,30 @@ class PrometheusTests(unittest.TestCase):
 
         def handler(argv, timeout):
             calls.append((argv, timeout))
-            if argv[-1:] == ["/usr/bin/true"]:
+            if _ssh_command(argv) == ["/usr/bin/true"]:
                 return RunResult(True, argv, 0, "", "", None)
             return RunResult(True, argv, 0, json.dumps({"status": "success", "data": {"alerts": []}}), "", None)
 
-        from readers.prometheus import read_prometheus
         read = read_prometheus(HostExec(_Runner(handler)), {
-            "prometheus": {"ssh": "metrics-01", "alerts_url": "http://127.0.0.1:9090/api/v1/alerts",
-                           "instance_suffix": ".tail76ea03.ts.net"},
+            "prometheus": {"ssh": "hub-1", "alerts_url": "http://127.0.0.1:9090/api/v1/alerts",
+                           "instance_suffix": ".example.ts.net"},
         }, now=NOW)
         self.assertTrue(read["ok"])
         self.assertEqual(read["meta"]["pending"], 0)
         self.assertEqual(read["items"], [])
-        remote = [argv for argv, timeout in calls if "curl" in argv]
-        self.assertEqual(remote[0][remote[0].index("curl"):], ["curl", "-s", "-m", "10", "http://127.0.0.1:9090/api/v1/alerts"])
+        remote = [argv for argv, timeout in calls if "curl" in argv[-1]]
+        self.assertEqual(_ssh_command(remote[0]), ["curl", "-s", "-m", "10", "http://127.0.0.1:9090/api/v1/alerts"])
+        quoted = ssh_argv("hub-1", ["curl", "http://127.0.0.1:9090/api/v1/alerts?x=1&y=2"])
+        self.assertIn("'http://127.0.0.1:9090/api/v1/alerts?x=1&y=2'", quoted[-1])
+        self.assertFalse(valid_alerts_url("http://127.0.0.1:9090/api/v1/alerts?x=1&y=2"))
+        self.assertFalse(valid_alerts_url("http://example.test/alerts"))
         self.assertLessEqual(calls[-1][1], 25)
+        injected = read_prometheus(HostExec(_Runner(handler)), {
+            "prometheus": {"ssh": "hub-1", "alerts_url": "http://169.254.169.254/latest/meta-data"},
+        }, now=NOW)
+        self.assertFalse(injected["ok"])
         failed = read_prometheus(HostExec(_Runner(lambda argv, timeout: RunResult(False, argv, 1, "", "", "timed out"))), {
-            "prometheus": {"ssh": "metrics-01"},
+            "prometheus": {"ssh": "hub-1"},
         }, now=NOW)
         self.assertFalse(failed["ok"])
         self.assertIsNone(failed["meta"]["firing"])
@@ -347,15 +482,15 @@ class PrometheusTests(unittest.TestCase):
 
 class NexusReadTests(unittest.TestCase):
     def test_inbox_and_loose_ends_are_not_projected_as_new_cards(self):
-        self.assertEqual(issue_url("https://multica.example.invalid", "scaling-forever", "abc"),
-                         "https://multica.example.invalid/scaling-forever/issues/abc")
+        self.assertEqual(issue_url("https://multica.example.invalid", "example-workspace", "abc"),
+                         "https://multica.example.invalid/example-workspace/issues/abc")
         inbox = normalize_inbox({"id": "in-1", "title": "Ratify the rulings", "kind": "ask", "created_at": "2026-10-01T00:00:00Z"})
         loose = normalize_loose({
             "ref": "card:one", "title": "Decide: Ratify the rulings", "phase": "blocked",
-            "next_actor": "David", "next_action": "Answer the inbox item", "board_ref": "board:fleet-loose-ends-decisions",
+            "next_actor": "Ada", "next_action": "Answer the inbox item", "board_ref": "board:example-loose-ends",
         })
-        self.assertTrue(on_board({"board_ref": "board:fleet-loose-ends-decisions"}, "board:fleet-loose-ends-decisions"))
-        self.assertIsNone(normalize_loose({"title": "Finished", "phase": "done", "next_actor": "David"}))
+        self.assertTrue(on_board({"board_ref": "board:example-loose-ends"}, "board:example-loose-ends"))
+        self.assertIsNone(normalize_loose({"title": "Finished", "phase": "done", "next_actor": "Ada"}))
         read = _read("nexus", [], meta={"inbox_ok": True, "board_ok": True, "inbox": [inbox], "loose_ends": [loose]})
         self.assertEqual(plan_reads([read], {}, CONFIG, now=NOW), [])
 
@@ -371,7 +506,7 @@ class NexusReadTests(unittest.TestCase):
             if "list" in argv and "work" in argv:
                 return RunResult(True, argv, 0, json.dumps({"ok": True, "result": {"work": [{
                     "ref": "card:one", "title": "Loose", "phase": "ready", "board_ref": "board:example",
-                    "next_actor": "David", "next_action": "Decide",
+                    "next_actor": "Ada", "next_action": "Decide",
                 }]}}), "", None)
             return RunResult(False, argv, 1, "", "", "unexpected command")
 
@@ -384,7 +519,7 @@ class NexusReadTests(unittest.TestCase):
         }, now=NOW)
         self.assertTrue(read["ok"], read.get("error"))
         self.assertEqual(read["meta"]["inbox"][0]["title"], "Ask")
-        self.assertEqual(read["items"][0]["next_actor"], "David")
+        self.assertEqual(read["items"][0]["next_actor"], "Ada")
         text = [" ".join(argv) for argv in calls]
         self.assertTrue(any("debug inbox list" in item for item in text))
         self.assertTrue(any("work list" in item and "--source nexus" in item for item in text))
@@ -408,6 +543,12 @@ class BudgetTests(unittest.TestCase):
         missed = runner(["true"], timeout=40)
         self.assertFalse(missed.ok)
         self.assertIn("budget", missed.error)
+
+
+def _ssh_command(argv: list[str]) -> list[str]:
+    if not argv or argv[0] != "ssh":
+        return list(argv)
+    return shlex.split(argv[-1])[4:]
 
 
 class _Runner:

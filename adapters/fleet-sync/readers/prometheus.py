@@ -7,13 +7,18 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
-from .run import HostExec
+from .run import HostExec, valid_ssh_alias
 
 SEVERITY_RANK = {"critical": 0, "error": 1, "warning": 2, "info": 3, "none": 4}
 CHART_SEVERITIES = ("critical", "warning", "info", "other")
 _DISPLAY = ("mountpoint", "apfs_container", "name", "device", "path", "volume", "service")
-_SAFE = re.compile(r"^[A-Za-z0-9_./:%?&=~.-]+$")
+# Localhost only. Query strings and userinfo are rejected so `&` and `?`
+# cannot be smuggled into the remote shell even before quoting.
+_ALERTS_URL = re.compile(
+    r"^http://(?:127\.0\.0\.1|localhost)(?::[0-9]{1,5})?(?:/[A-Za-z0-9._~/-]*)?$"
+)
 
 
 def identifying_labels(labels: dict) -> dict[str, str]:
@@ -107,6 +112,18 @@ def parse_alerts(payload: Any, *, suffix: str) -> dict:
     return {"firing": firing, "pending": pending}
 
 
+def valid_alerts_url(url: str) -> bool:
+    if not _ALERTS_URL.fullmatch(url or ""):
+        return False
+    parts = urlsplit(url)
+    host = parts.hostname
+    if parts.scheme != "http" or host not in {"127.0.0.1", "localhost"}:
+        return False
+    if parts.username or parts.password or parts.query or parts.fragment:
+        return False
+    return True
+
+
 def read_prometheus(exec_: HostExec, config: dict, *, now: datetime) -> dict:
     observed = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     prom = config.get("prometheus") or {}
@@ -115,8 +132,8 @@ def read_prometheus(exec_: HostExec, config: dict, *, now: datetime) -> dict:
     suffix = str(prom.get("instance_suffix") or "")
     if not alias:
         return _fail(observed, "prometheus ssh host is required")
-    if not _SAFE.match(url):
-        return _fail(observed, "prometheus alerts_url must be a single http(s) token")
+    if not valid_ssh_alias(alias) or not valid_alerts_url(url):
+        return _fail(observed, "prometheus ssh alias must be a strict token and alerts_url must be http://127.0.0.1 or localhost")
     # curl -m 10 is the remote limit. The ssh process timeout is the hard kill.
     result = exec_.run({"ssh": alias}, ["curl", "-s", "-m", "10", url], timeout=25)
     if not result.ok:

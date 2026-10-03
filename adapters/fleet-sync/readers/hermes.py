@@ -25,6 +25,8 @@ _DIR_SCRIPT = (
     "done"
 )
 _INCIDENT = re.compile(r"^  (\S+)\s+(alerted|detected)\s*$", re.MULTILINE)
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_EMPTY_INCIDENTS = "No cron failure incidents recorded."
 
 
 def scrub(value: Any, limit: int = 200) -> str:
@@ -81,11 +83,22 @@ def parse_jobs(payload: Any) -> list[dict]:
 
 
 def parse_incidents(text: str) -> list[dict]:
+    """Parse `hermes cron incidents` text.
+
+    Empty output and the known empty sentence are zero incidents. Any other
+    text that does not match the incident header is an unrecognized format:
+    the caller must treat the read as incomplete instead of as an empty list.
+    """
+    raw = _ANSI.sub("", text or "")
     incidents = []
-    matches = list(_INCIDENT.finditer(text or ""))
+    matches = list(_INCIDENT.finditer(raw))
+    if not matches:
+        if not raw.strip() or _EMPTY_INCIDENTS in raw:
+            return []
+        raise ValueError("hermes cron incidents output was not recognized")
     for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        block = text[match.end():end]
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+        block = raw[match.end():end]
         job = re.search(r"^\s+Job:\s+(\S+)\s*$", block, re.MULTILINE)
         kind = re.search(r"^\s+Type:\s+(\S+)\s*$", block, re.MULTILINE)
         error = re.search(r"^\s+Error:\s+(.*)$", block, re.MULTILINE)
@@ -118,15 +131,20 @@ def read_hermes(exec_: HostExec, config: dict, *, now: datetime) -> dict:
             errors.append(f"{label}: {snapshot['error']}")
     if not hosts:
         errors.append("no hosts configured")
+    unchecked = [host.get("label") or "host" for host in hosts if not host.get("complete")]
     return {
         "name": "hermes",
         "ok": bool(hosts) and not errors,
-        "complete": bool(hosts) and not errors,
+        "complete": bool(hosts) and not errors and not unchecked,
         "observed_at": observed,
         "error": "; ".join(errors)[:500] if errors else None,
         "items": items,
         "present_ids": present,
-        "meta": {"hosts": hosts, "partial": any_ok and bool(errors)},
+        "meta": {
+            "hosts": hosts,
+            "partial": any_ok and (bool(errors) or bool(unchecked)),
+            "unchecked_hosts": unchecked,
+        },
     }
 
 
@@ -143,13 +161,18 @@ def _read_host(exec_: HostExec, host: dict, label: str) -> dict:
         except json.JSONDecodeError as exc:
             raise ValueError("jobs.json is not valid JSON") from exc
         incidents = []
+        incidents_complete = True
         for state in ("alerted", "detected"):
             result = exec_.run(host, ["hermes", "cron", "incidents", "--state", state], timeout=25)
             if not result.ok:
                 if _missing_tool(result):
                     return _host_fail(label, "hermes is not installed")
                 return _host_fail(label, result.error or f"hermes cron incidents --state {state} failed")
-            incidents.extend(parse_incidents(result.stdout))
+            try:
+                incidents.extend(parse_incidents(result.stdout))
+            except ValueError:
+                # Unrecognized text is not an empty incident list.
+                incidents_complete = False
         missing, dirs_checked = _missing_workdirs(exec_, host, jobs)
         job_ids = {job["id"] for job in jobs}
         items = []
@@ -185,7 +208,7 @@ def _read_host(exec_: HostExec, host: dict, label: str) -> dict:
         return {
             "label": label,
             "ok": True,
-            "complete": dirs_checked,
+            "complete": dirs_checked and incidents_complete,
             "error": None,
             "jobs": len(jobs),
             "rows": rows,

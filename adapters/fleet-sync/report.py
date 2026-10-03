@@ -8,13 +8,15 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from project import MULTICA_PHASE, github_phase
+from readers.hermes import scrub
 
 OPEN_PHASES = ("backlog", "ready", "in_progress", "blocked", "review")
 _ID = re.compile(r"[^A-Za-z0-9._:-]+")
 
 
 def build_report(reads: list[dict], *, generated_at: str, now: datetime, hosts: list[dict],
-                 history: list[dict] | None = None) -> dict:
+                 history: list[dict] | None = None, operator: str = "Operator") -> dict:
+    operator = (operator or "Operator").strip() or "Operator"
     by_name = {read["name"]: read for read in reads}
     sources: list[dict] = []
     source_ids: set[str] = set()
@@ -62,10 +64,10 @@ def build_report(reads: list[dict], *, generated_at: str, now: datetime, hosts: 
     panels.extend(_unavailable_panels(reads))
     overview_ids = [panel["id"] for panel in panels]
     cited = [sid for sid in (multica_source, github_source) if sid]
-    strips, strip_ids = _strips(by_name, now, cited, history)
+    strips, strip_ids = _strips(by_name, now, cited, history, operator)
     panels.extend(strips)
     overview_ids.extend(strip_ids)
-    callout = _callout(by_name, now)
+    callout = _callout(by_name, now, operator)
     panels.append(callout)
     overview_ids.append(callout["id"])
     loose = _loose_table(nexus)
@@ -150,11 +152,11 @@ def _fit(report: dict) -> dict:
     return report
 
 
-def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dict]) -> tuple[list[dict], list[str]]:
+def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dict], operator: str) -> tuple[list[dict], list[str]]:
     multica, github, hermes, agentctl, fleet = (reads.get(name) for name in ("multica", "github", "hermes", "agentctl", "fleetctl"))
     prometheus = reads.get("prometheus")
     snapshot = headline_snapshot(reads, now)
-    decisions = snapshot["decisions_for_david"]
+    decisions = snapshot["decisions_for_operator"]
     waiting = snapshot["decisions_waiting"]
     aging = snapshot["aging_reviews"]
     open_prs = snapshot["open_prs"]
@@ -171,8 +173,8 @@ def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dic
     first = _panel(
         "overview-now", "metric-strip", "What the fleet is showing",
         {"items": [
-            metric("Decisions for David", "decisions_for_david", decisions,
-                   "Inbox asks, red CI, requested changes, and paused watchdogs. Aging reviews are separate.",
+            metric(f"Decisions for {operator}", "decisions_for_operator", decisions,
+                   "Inbox asks, red CI on recently checked pull requests, requested changes, and paused watchdogs. Aging reviews are separate.",
                    _tone(decisions)),
             metric("Decisions waiting", "decisions_waiting", waiting, "Open ANX inbox asks", _tone(waiting)),
             metric("Aging reviews", "aging_reviews", aging, "Multica in_review older than 72h", _tone(aging)),
@@ -201,8 +203,8 @@ def _strips(reads: dict, now: datetime, source_ids: list[str], history: list[dic
     return [first, second], [first["id"], second["id"]]
 
 
-def _callout(reads: dict, now: datetime) -> dict:
-    lines = _brief_lines(reads, now)
+def _callout(reads: dict, now: datetime, operator: str) -> dict:
+    lines = _brief_lines(reads, now, operator)
     failed = [name for name, read in reads.items() if read and not read.get("ok")]
     if failed:
         lines.append("Unavailable: " + ", ".join(failed) + ". Unavailable is not healthy or empty.")
@@ -217,7 +219,7 @@ def _callout(reads: dict, now: datetime) -> dict:
         text = "\n".join(lines)
         tone = "critical" if any(not line.startswith("Unavailable:") for line in lines) else "warning"
     return _panel(
-        "needs-david", "callout", "Needs David now",
+        "needs-operator", "callout", f"Needs {operator} now",
         {"tone": tone, "label": "Operator attention", "text": text[:4000]},
         "unavailable" if failed else "current",
         _earliest(*[read for read in reads.values() if read]),
@@ -225,7 +227,7 @@ def _callout(reads: dict, now: datetime) -> dict:
     )
 
 
-def _brief_lines(reads: dict, now: datetime) -> list[str]:
+def _brief_lines(reads: dict, now: datetime, operator: str) -> list[str]:
     """Ranked attention lines. Each names a count and at most three examples. Zeros are omitted."""
     lines = []
     inbox = _inbox_items(reads)
@@ -238,17 +240,18 @@ def _brief_lines(reads: dict, now: datetime) -> list[str]:
         lines.append(f"{len(inbox)} decisions waiting in your ANX Inbox — oldest: {shown}")
     loose = _loose_items(reads)
     if loose is not None and loose:
-        david = [item for item in loose if str(item.get("next_actor") or "").lower() == "david"]
-        examples = ", ".join(item["title"][:48] for item in (david or loose)[:3])
+        owned = [item for item in loose if str(item.get("next_actor") or "").lower() == operator.lower()]
+        examples = ", ".join(item["title"][:48] for item in (owned or loose)[:3])
         lines.append(
-            f"{len(loose)} loose ends on the decisions board — {len(david)} next actor David "
+            f"{len(loose)} loose ends on the decisions board — {len(owned)} next actor {operator} "
             f"({examples}) — triage, don't read each"
         )
     red, changes = _pr_attention(reads, now)
     if red is not None and (red or changes):
         bits = []
         if red:
-            bits.append(f"{len(red)} non-draft PRs with red CI: {', '.join(item['native_id'] for item in red[:3])}")
+            shown = ", ".join(item["native_id"] for item in red[:3])
+            bits.append(f"{len(red)} non-draft PRs with red CI ({_ci_coverage(reads.get('github'))}): {shown}")
         if changes:
             bits.append(f"{len(changes)} requested changes: {', '.join(item['native_id'] for item in changes[:3])}")
         lines.append("; ".join(bits))
@@ -462,8 +465,11 @@ def _pr_table(read, now, add_source, aggregate) -> dict:
             })
     if aggregate and aggregate not in cited:
         cited.insert(0, aggregate)
+    title = "Non-draft pull requests"
+    if read and read.get("ok"):
+        title = f"Non-draft pull requests ({_ci_coverage(read)})"
     return _table(
-        "pr-ci", "Non-draft pull requests",
+        "pr-ci", title,
         ["Repository", "Pull request", "Title", "Age", "CI", "URL"], rows, cited,
         _fresh(read), _earliest(read),
     )
@@ -475,7 +481,13 @@ def _cron_chart(read: dict | None) -> dict:
     if not hosts:
         categories, series = ["cron"], {name: [None] for name in names}
     else:
-        categories = _unique_labels([host.get("label") or "host" for host in hosts])
+        labels = []
+        for host in hosts:
+            label = str(host.get("label") or "host")
+            if host.get("complete") is not True:
+                label = f"{label} (partial)"
+            labels.append(label)
+        categories = _unique_labels(labels)
         series = {name: [] for name in names}
         for host in hosts:
             if not host.get("ok"):
@@ -491,7 +503,7 @@ def _cron_chart(read: dict | None) -> dict:
                 series[name].append(counts[name])
     return _chart(
         "cron-health", "Cron health by host",
-        {"caption": "A job is counted once: missing workdir, then error, then paused with no reason. Intentional pauses are not called healthy.",
+        {"caption": _cron_caption(read),
          "palette": "forest",
          "option": {
              "legend": {"show": True},
@@ -566,7 +578,7 @@ def _queue_chart(read: dict | None) -> dict:
         data = [queues[name] if isinstance(queues.get(name), int) else None for name in names]
     return _chart(
         "fleetctl-queues", "fleetctl root causes by queue",
-        {"caption": "A missing queue is null, not zero. Contract is null when fleetctl does not emit that queue.",
+        {"caption": _queue_caption(read),
          "palette": "ocean",
          "option": {
              "xAxis": {"type": "category", "data": list(names)},
@@ -666,7 +678,7 @@ def _unavailable_panels(reads: list[dict]) -> list[dict]:
             continue
         panels.append(_panel(
             _ident(f"unavailable-{read['name']}"), "explanation", f"{read['name']} unavailable",
-            {"text": f"{read['name']} could not be read: {read.get('error') or 'unknown error'}. This does not establish health or an empty queue."},
+            {"text": f"{read['name']} could not be read: {scrub(read.get('error') or 'unknown error', 300)}. This does not establish health or an empty queue."},
             "unavailable", read.get("observed_at"), [],
         ))
     return panels
@@ -710,11 +722,9 @@ def _count(read: dict | None, predicate) -> int | None:
 
 
 def _problem_total(read: dict | None) -> int | None:
-    if not read or not read.get("ok"):
+    if not read or not read.get("ok") or not _hosts_complete(read):
         return None
     hosts = (read.get("meta") or {}).get("hosts") or []
-    if any(not host.get("ok") for host in hosts):
-        return None
     return sum(1 for host in hosts for row in host.get("rows") or [] if row.get("problems"))
 
 
@@ -738,9 +748,9 @@ def _stuck_total(read: dict | None) -> int | None:
 
 def headline_snapshot(reads: dict, now: datetime) -> dict:
     """Integer headline metrics. A missing key means that source was not read successfully."""
-    decisions = _decisions_for_david(reads, now)
+    decisions = _decisions_for_operator(reads, now)
     return {
-        "decisions_for_david": decisions,
+        "decisions_for_operator": decisions,
         "decisions_waiting": _inbox_count(reads),
         "aging_reviews": _aging_count(reads),
         "open_prs": _count(reads.get("github"), lambda item: github_phase(item, now) != "done"),
@@ -762,7 +772,7 @@ def record_history(history: list[dict], *, at: str, metrics: dict) -> list[dict]
     return kept[-50:]
 
 
-def _decisions_for_david(reads: dict, now: datetime) -> int | None:
+def _decisions_for_operator(reads: dict, now: datetime) -> int | None:
     inbox = _inbox_count(reads)
     red, changes = _pr_attention(reads, now)
     watchdogs = _watchdogs(reads)
@@ -846,7 +856,7 @@ def _watchdogs(reads: dict) -> list[dict] | None:
         return None
     found = []
     for host in (hermes.get("meta") or {}).get("hosts") or []:
-        if not host.get("ok"):
+        if not host.get("ok") or host.get("complete") is not True:
             return None
         for row in host.get("rows") or []:
             if row.get("watchdog") and row.get("paused"):
@@ -952,7 +962,46 @@ def _reachable(host: dict, hermes_row, agent_row) -> str:
 def _jobs(row) -> str:
     if not row or not row.get("ok") or not isinstance(row.get("jobs"), int):
         return "unknown"
+    if row.get("complete") is not True:
+        return f"{row['jobs']} (partial)"
     return str(row["jobs"])
+
+
+def _hosts_complete(read: dict) -> bool:
+    hosts = (read.get("meta") or {}).get("hosts") or []
+    return bool(hosts) and all(host.get("ok") and host.get("complete") is True for host in hosts)
+
+
+def _unchecked_hosts(read: dict | None) -> list[str]:
+    labels = []
+    for host in ((read or {}).get("meta") or {}).get("hosts") or []:
+        if host.get("complete") is not True:
+            labels.append(str(host.get("label") or "host"))
+    return labels
+
+
+def _cron_caption(read: dict | None) -> str:
+    caption = "A job is counted once: missing workdir, then error, then paused with no reason. Intentional pauses are not called healthy."
+    missed = _unchecked_hosts(read)
+    if missed:
+        caption += " Not fully checked: " + ", ".join(missed) + ". Per-host bars are not a fleet total."
+    return caption
+
+
+def _ci_coverage(read: dict | None) -> str:
+    count = ((read or {}).get("meta") or {}).get("ci_checked")
+    if isinstance(count, int) and not isinstance(count, bool):
+        return f"CI checked for {count} recently updated PRs"
+    return "CI coverage was not recorded"
+
+
+def _queue_caption(read: dict | None) -> str:
+    caption = "A missing queue is null, not zero. Contract is null when fleetctl does not emit that queue."
+    withheld = ((read or {}).get("meta") or {}).get("withheld")
+    if read and read.get("ok") and read.get("complete") is False:
+        note = scrub(withheld or "untrusted or withheld reports", 180)
+        caption += f" Incomplete: {note}. Present root causes are shown; absence is not resolved."
+    return caption
 
 
 def _int_cell(value) -> str:

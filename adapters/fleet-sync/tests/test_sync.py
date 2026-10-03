@@ -1,13 +1,19 @@
 import io
+import json
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from anx_client import AnxError
-from fleet_sync import _finish, _quiet_status, apply_plans, observation_already_recorded, validate_text
+from fleet_sync import (
+    _finish, _quiet_status, apply_plans, cards_from_state, merge_known,
+    observation_already_recorded, prune_cards, save_state, validate_text,
+)
 
 
 class _Client:
@@ -53,6 +59,66 @@ class ConflictTests(unittest.TestCase):
             code = _finish(summary, [{"name": "fleetctl", "ok": True}], quiet=True)
         self.assertEqual(code, 0)
         self.assertEqual(quiet.getvalue(), "")
+
+
+class _Ok:
+    def work_create(self, body):
+        return {"work": {"ref": "card:new"}}
+
+    def observe(self, ref, body):
+        return {}
+
+
+class _Lister:
+    def __init__(self, cards):
+        self.cards = cards
+
+    def work_list(self, source):
+        return self.cards
+
+
+class StateTests(unittest.TestCase):
+    def test_done_cards_older_than_30_days_are_pruned(self):
+        now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+        plan = {
+            "action": "observe", "create": False, "authority": "github", "connection_id": "github.com",
+            "native_id": "example/repo#1", "title": "example/repo#1", "owner": "Operator", "digest": "d",
+            "reader_id": "fleet-sync/github", "observed_at": "2026-08-01T00:00:00Z",
+            "facts": {"phase": "done", "title": "example/repo#1"},
+            "evidence": [{"ref": "fleet-sync:github:example/repo#1:absent"}],
+            "card_ref": "card:1", "reason": "absent",
+        }
+        known = {("github", "github.com", "example/repo#1"): {"ref": "card:1", "digest": None, "title": "t", "owner": "Operator"}}
+        apply_plans(_Ok(), [plan], known, now=datetime(2026, 8, 1, tzinfo=timezone.utc))
+        self.assertEqual(known[("github", "github.com", "example/repo#1")]["done_at"], "2026-08-01T00:00:00Z")
+        recent = {("github", "github.com", "example/repo#2"): {
+            "ref": "card:2", "digest": "e", "title": "t", "owner": "Operator",
+            "phase": "done", "done_at": "2026-09-20T00:00:00Z",
+        }}
+        known.update(recent)
+        prune_cards(known, now=now)
+        self.assertNotIn(("github", "github.com", "example/repo#1"), known)
+        self.assertIn(("github", "github.com", "example/repo#2"), known)
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "state.json")
+            save_state(path, {"dashboard_ref": "doc:1", "history": []}, known, now=now)
+            loaded = cards_from_state(json.loads(Path(path).read_text()))
+        self.assertEqual(set(loaded), {("github", "github.com", "example/repo#2")})
+
+    def test_merge_skips_a_card_done_for_more_than_30_days(self):
+        cards = [{
+            "ref": "card:old", "title": "old", "owner": "Operator", "phase": "done",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "source": {"authority": "github", "connection_id": "github.com", "native_id": "example/repo#1"},
+        }, {
+            "ref": "card:open", "title": "open", "owner": "Operator", "phase": "review",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "source": {"authority": "github", "connection_id": "github.com", "native_id": "example/repo#2"},
+        }]
+        known = {}
+        merge_known(_Lister(cards), known, ["github"], now=datetime(2026, 10, 4, tzinfo=timezone.utc))
+        self.assertNotIn(("github", "github.com", "example/repo#1"), known)
+        self.assertIn(("github", "github.com", "example/repo#2"), known)
 
 
 class QuietTests(unittest.TestCase):

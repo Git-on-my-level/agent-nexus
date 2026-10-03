@@ -8,14 +8,14 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from anx_client import AnxClient, AnxError
-from project import ADAPTER_VERSION, plan_reads
+from project import ADAPTER_VERSION, operator_name, plan_reads
 from readers.agentctl import read_agentctl
 from readers.fleetctl import read_fleetctl
-from readers.github import read_github
+from readers.github import confirm_disappeared, read_github
 from readers.hermes import read_hermes
 from readers.multica import read_multica
 from readers.nexus import read_nexus
@@ -35,6 +35,7 @@ READERS = {
 DEFAULT_CONFIG = Path.home() / ".config" / "anx-fleet-sync" / "config.json"
 DEFAULT_STATE = Path.home() / ".local" / "state" / "anx-fleet-sync" / "state.json"
 DASHBOARD_TITLE = "Fleet Dashboard"
+DONE_RETENTION = timedelta(days=30)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -58,15 +59,22 @@ def main(argv: list[str] | None = None) -> int:
     known = {} if args.dry_run else cards_from_state(state)
     if not args.dry_run:
         client = AnxClient(config.get("anx_binary") or "anx", config["base_url"], config["agent"], runner=runner)
-        merge_known(client, known, selected)
+        prune_cards(known, now=now)
+        merge_known(client, known, selected, now=now)
+        prune_cards(known, now=now)
     else:
         client = None
+    github_connection = str((config.get("github") or {}).get("connection_id") or "github.com")
+    for read in reads:
+        if read.get("name") == "github":
+            confirm_disappeared(runner, read, known, connection_id=github_connection)
     plans = plan_reads(reads, known, config, now=now)
     generated_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     snapshot = headline_snapshot({read["name"]: read for read in reads}, now)
     shown_history = record_history(list(state.get("history") or []), at=generated_at, metrics=snapshot)
     report = build_report(
         reads, generated_at=generated_at, now=now, hosts=config.get("hosts") or [], history=shown_history,
+        operator=operator_name(config),
     )
     node_bin = node_binary(config)
     validator = validator_script(config)
@@ -93,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     assert client is not None
     state["history"] = shown_history
-    summary = apply_plans(client, plans, known)
+    summary = apply_plans(client, plans, known, now=now)
     summary["readers"] = [_reader_summary(read) for read in reads]
     try:
         summary.update(publish(client, config, state, report, node_bin, validator))
@@ -113,11 +121,13 @@ def collect(config: dict, selected: list[str], now: datetime, runner: Runner | N
     return reads
 
 
-def apply_plans(client: AnxClient, plans: list[dict], known: dict) -> dict:
+def apply_plans(client: AnxClient, plans: list[dict], known: dict, *, now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
     summary = {"created": 0, "observations": 0, "skipped": 0, "closed": 0, "conflicts": 0, "errors": []}
     for plan in plans:
         if plan["action"] == "skip":
             summary["skipped"] += 1
+            _note_phase(known, plan, now)
             continue
         key = (plan["authority"], plan["connection_id"], plan["native_id"])
         ref = None
@@ -139,10 +149,12 @@ def apply_plans(client: AnxClient, plans: list[dict], known: dict) -> dict:
                 "title": plan["title"],
                 "owner": plan["owner"],
             }
+            _note_phase(known, plan, now)
         except AnxError as exc:
             if exc.code == "conflict" and ref and observation_already_recorded(client, ref, plan["digest"]):
                 summary["already_recorded"] = summary.get("already_recorded", 0) + 1
                 known[key] = {"ref": ref, "digest": plan["digest"], "title": plan["title"], "owner": plan["owner"]}
+                _note_phase(known, plan, now)
                 continue
             if exc.code == "conflict":
                 summary["conflicts"] += 1
@@ -237,7 +249,8 @@ def find_dashboard(documents: list[dict]) -> str | None:
     return None
 
 
-def merge_known(client: AnxClient, known: dict, selected: list[str]) -> None:
+def merge_known(client: AnxClient, known: dict, selected: list[str], *, now: datetime | None = None) -> None:
+    now = now or datetime.now(timezone.utc)
     authorities = {
         "multica": ["multica"],
         "github": ["github"],
@@ -261,8 +274,15 @@ def merge_known(client: AnxClient, known: dict, selected: list[str]) -> None:
             if source.get("authority") != authority or not native_id or not connection_id:
                 continue
             key = (authority, str(connection_id), str(native_id))
+            if key not in known and _stale_done(card, now):
+                continue
             current = known.get(key, {})
             current.setdefault("digest", None)
+            if str(card.get("phase") or "") == "done":
+                stamp = _done_stamp(card)
+                if stamp and _stamp_before(stamp, current.get("done_at")):
+                    current["done_at"] = stamp
+                    current["phase"] = "done"
             if not current.get("digest"):
                 latest = card.get("latest_observation")
                 if isinstance(latest, dict) and isinstance(latest.get("idempotency_key"), str) and latest["idempotency_key"]:
@@ -358,6 +378,96 @@ def parse_only(value: str) -> list[str]:
     return names
 
 
+def _note_phase(known: dict, plan: dict, now: datetime) -> None:
+    key = (plan["authority"], plan["connection_id"], plan["native_id"])
+    current = known.get(key)
+    if current is None:
+        return
+    phase = plan["facts"]["phase"]
+    current["phase"] = phase
+    if phase == "done":
+        current.setdefault("done_at", _format_stamp(now))
+    else:
+        current.pop("done_at", None)
+
+
+def prune_cards(known: dict, *, now: datetime) -> None:
+    """Drop cache entries for cards that have been done for more than 30 days."""
+    stale = [key for key, card in known.items() if isinstance(card, dict) and _stale_done(card, now)]
+    for key in stale:
+        del known[key]
+
+
+def _stale_done(card: dict, now: datetime) -> bool:
+    if str(card.get("phase") or "") != "done":
+        return False
+    parsed = _parse_stamp(card.get("done_at")) or _parse_stamp(_done_stamp(card) or "")
+    if parsed is None:
+        return False
+    return now - parsed > DONE_RETENTION
+
+
+def _done_stamp(card: dict) -> str | None:
+    if str(card.get("phase") or "") != "done":
+        return None
+    latest = card.get("latest_observation")
+    if isinstance(latest, dict):
+        stamp = _normalize_stamp(latest.get("observed_at"))
+        if stamp:
+            return stamp
+    return _normalize_stamp(card.get("updated_at")) or _normalize_stamp(card.get("done_at"))
+
+
+def _stamp_before(stamp: str, current: str | None) -> bool:
+    parsed = _parse_stamp(stamp)
+    if parsed is None:
+        return False
+    if not current:
+        return True
+    other = _parse_stamp(current)
+    return other is None or parsed < other
+
+
+def _state_card(key: tuple, value: dict) -> dict:
+    entry = {
+        "authority": key[0],
+        "connection_id": key[1],
+        "native_id": key[2],
+        "ref": value.get("ref"),
+        "digest": value.get("digest"),
+        "title": value.get("title"),
+        "owner": value.get("owner"),
+    }
+    if value.get("phase"):
+        entry["phase"] = value["phase"]
+    if value.get("done_at"):
+        entry["done_at"] = value["done_at"]
+    return entry
+
+
+def _format_stamp(now: datetime) -> str:
+    return now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _normalize_stamp(value) -> str | None:
+    parsed = _parse_stamp(value)
+    if parsed is None:
+        return None
+    return _format_stamp(parsed)
+
+
+def _parse_stamp(value) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
+
+
 def load_state(path: str) -> dict:
     file = Path(path).expanduser()
     if not file.is_file():
@@ -376,26 +486,29 @@ def cards_from_state(state: dict) -> dict:
             continue
         authority, connection, native = card.get("authority"), card.get("connection_id"), card.get("native_id")
         if authority and connection and native:
-            known[(authority, connection, native)] = {
+            entry = {
                 "ref": card.get("ref"),
                 "digest": card.get("digest"),
                 "title": card.get("title"),
                 "owner": card.get("owner"),
             }
+            if isinstance(card.get("phase"), str):
+                entry["phase"] = card["phase"]
+            if isinstance(card.get("done_at"), str):
+                entry["done_at"] = card["done_at"]
+            known[(authority, connection, native)] = entry
     return known
 
 
-def save_state(path: str, state: dict, known: dict) -> None:
+def save_state(path: str, state: dict, known: dict, *, now: datetime | None = None) -> None:
+    prune_cards(known, now=now or datetime.now(timezone.utc))
     file = Path(path).expanduser()
     file.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     payload = {
         "version": 1,
         "dashboard_ref": state.get("dashboard_ref"),
         "history": state.get("history") or [],
-        "cards": [
-            {"authority": key[0], "connection_id": key[1], "native_id": key[2], **value}
-            for key, value in sorted(known.items())
-        ],
+        "cards": [_state_card(key, value) for key, value in sorted(known.items())],
     }
     temporary = file.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

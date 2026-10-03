@@ -1,6 +1,7 @@
 {
   "base_url": "https://anx.example.invalid/ws/example-org/example-workspace",
   "agent": "fleet-sync",
+  "operator_name": "Operator",
   "topic": "fleet-operations",
   "anx_binary": "anx",
   "node_bin": "node",

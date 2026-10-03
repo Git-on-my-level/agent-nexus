@@ -24,6 +24,13 @@ MULTICA_PHASE = {
 }
 
 
+def operator_name(config: dict | None) -> str:
+    raw = ""
+    if isinstance(config, dict):
+        raw = str(config.get("operator_name") or "").strip()
+    return raw or "Operator"
+
+
 def canonical_facts(facts: dict) -> str:
     return json.dumps(facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -205,7 +212,7 @@ def _github(read: dict, known: dict, config: dict, now: datetime) -> list[dict]:
     if not read.get("ok"):
         return []
     connection = str((config.get("github") or {}).get("connection_id") or "github.com")
-    owner = str((config.get("github") or {}).get("owner") or "David")
+    owner = str((config.get("github") or {}).get("owner") or "").strip() or operator_name(config)
     board = config["boards"]["pull_requests"]
     plans = []
     seen = set()
@@ -226,8 +233,11 @@ def _github(read: dict, known: dict, config: dict, now: datetime) -> list[dict]:
         ), known))
         seen.add(item["native_id"])
     if read.get("complete"):
+        # Search lag: absent from this read is not enough. The reader confirms
+        # CLOSED or MERGED via `gh pr view` and lists those ids here.
+        confirmed = set((read.get("meta") or {}).get("confirmed_closed") or [])
         for native_id, card in _known_for(known, "github", connection).items():
-            if native_id not in seen:
+            if native_id not in seen and native_id in confirmed:
                 plans.append(_finish(_absent("github", connection, native_id, board, card, "github", now), known))
     return _stamp(plans, read)
 

@@ -43,7 +43,7 @@ Host-local sources do not get a `sources` entry. The visual-report schema requir
 
 Prometheus firing alerts are cards on the ops board (`authority` `prometheus`). Pending alerts are counted on the dashboard and do not become cards. A failed Prometheus or fleetctl read is an unavailable panel. It is not reported as zero alerts or a healthy fleet.
 
-The "Needs David now" panel is a short ranked brief: counts, and at most three examples per line. The per-item tables stay on the other tabs. "Decisions waiting" is the open inbox count. "Decisions for David" adds red CI, requested changes, and paused watchdogs. Multica reviews older than 72 hours are "Aging reviews" and are not added into that decision count. Loose-end cards are listed and not registered again.
+The "Needs <operator> now" panel is a short ranked brief: counts, and at most three examples per line. The name comes from `operator_name` in config and defaults to Operator. The per-item tables stay on the other tabs. "Decisions waiting" is the open inbox count. "Decisions for <operator>" adds red CI, requested changes, and paused watchdogs. The red-CI line names how many recently updated pull requests were checked, because CI is not fetched for every open pull request. Multica reviews older than 72 hours are "Aging reviews" and are not added into that decision count. Loose-end cards are listed and not registered again.
 
 ## Unattended run
 

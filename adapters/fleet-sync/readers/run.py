@@ -1,13 +1,30 @@
-"""Fixed-argv process execution. Never uses a shell."""
+"""Fixed-argv process execution. Never uses a local shell.
+
+ssh still asks the remote login shell to parse one command string. That string
+is built with shlex.quote so a remote argument cannot break out. $HOME is
+expanded only inside the quoted PATH script and in a double-quoted $HOME path
+that already matched a strict pattern.
+"""
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass
 
-REMOTE_PATH = "PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin"
+# Expanded by the remote shell when this script runs, then exec preserves
+# the remaining argv without a second parse.
+_PATH_SCRIPT = (
+    'PATH="$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin" exec "$@"'
+)
 SSH_OPTIONS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=10")
+# No leading dash: an alias must not be read as an ssh option.
+_ALIAS = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@:-]{0,127}$")
+# Config values that become remote arguments. No whitespace or shell syntax.
+_REMOTE_TOKEN = re.compile(r"^[A-Za-z0-9_./:@~+-][A-Za-z0-9_./:@~+-]*$")
+_HOME_PATH = re.compile(r"^\$HOME(?:/[A-Za-z0-9._~-]+)*$")
 # Whole fleet-sync run, including ssh reads and ANX writes. Per-command
 # timeouts are capped by whatever budget remains so a hung ssh cannot
 # outlive this.
@@ -85,10 +102,30 @@ class BudgetRunner:
         return self.inner(argv, timeout=capped, input_text=input_text)
 
 
+def valid_ssh_alias(alias: str) -> bool:
+    return bool(_ALIAS.fullmatch(alias or ""))
+
+
+def valid_remote_config(value: str) -> bool:
+    """True for a remote path or token. $HOME is allowed only as a path prefix."""
+    text = value or ""
+    return bool(_REMOTE_TOKEN.fullmatch(text) or _HOME_PATH.fullmatch(text))
+
+
+def _remote_word(arg: str) -> str:
+    if _HOME_PATH.fullmatch(arg):
+        # Double quotes so the remote shell expands HOME and nothing else.
+        return '"' + arg + '"'
+    return shlex.quote(arg)
+
+
 def ssh_argv(alias: str, remote_argv: list[str]) -> list[str]:
-    if not alias or any(char.isspace() for char in alias):
-        raise ValueError("ssh alias must be a single token")
-    return ["ssh", *SSH_OPTIONS, alias, "env", REMOTE_PATH, *remote_argv]
+    if not valid_ssh_alias(alias):
+        raise ValueError("ssh alias must be a strict token and must not start with '-'")
+    if not remote_argv or any(not isinstance(arg, str) or arg == "" for arg in remote_argv):
+        raise ValueError("remote command must be a list of non-empty strings")
+    remote = " ".join(["sh", "-c", shlex.quote(_PATH_SCRIPT), "fleet-sync", *(_remote_word(arg) for arg in remote_argv)])
+    return ["ssh", *SSH_OPTIONS, alias, remote]
 
 
 class HostExec:
@@ -102,11 +139,16 @@ class HostExec:
         if host.get("local"):
             return self.runner(argv, timeout=timeout, input_text=input_text)
         alias = str(host.get("ssh") or "")
+        try:
+            probe_argv = ssh_argv(alias, ["/usr/bin/true"])
+            command_argv = ssh_argv(alias, argv)
+        except ValueError as exc:
+            return RunResult(False, [alias], 1, "", "", str(exc))
         probe = self._reach.get(alias)
         if probe is None:
-            probe = self.runner(ssh_argv(alias, ["/usr/bin/true"]), timeout=15)
+            probe = self.runner(probe_argv, timeout=15)
             self._reach[alias] = probe
         if not probe.ok:
             message = probe.error or "ssh failed"
             return RunResult(False, probe.argv, probe.code, "", "", f"ssh {alias} failed: {message}")
-        return self.runner(ssh_argv(alias, argv), timeout=timeout, input_text=input_text)
+        return self.runner(command_argv, timeout=timeout, input_text=input_text)
