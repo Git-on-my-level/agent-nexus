@@ -89,6 +89,11 @@ export function isHumanNextActor(work, humanIds) {
   return humanIds.has(raw) || humanIds.has(bare);
 }
 
+/** A capped read is "12+", matching the Tasks list. */
+export function formatPartialCount(count, truncated) {
+  return `${Number(count) || 0}${truncated ? "+" : ""}`;
+}
+
 export function tasksQuery(filters = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {

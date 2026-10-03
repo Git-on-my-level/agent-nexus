@@ -6,6 +6,8 @@
   import { coreClient } from "$lib/coreClient";
   import {
     DOC_SCAN_CAP,
+    WORK_ROW_CAP,
+    formatPartialCount,
     loadOverview,
     loadPendingReports,
   } from "$lib/overview.js";
@@ -285,8 +287,8 @@
             href={workspaceHref("/tasks")}
             data-overview-work-total
           >
-            {model.work.total}{model.work.truncated ? "+" : ""}
-            {model.work.total === 1 ? "task" : "tasks"}
+            {formatPartialCount(model.work.total, model.work.truncated)}
+            {model.work.truncated || model.work.total !== 1 ? "tasks" : "task"}
           </a>
         {/if}
       </header>
@@ -302,7 +304,8 @@
       {:else}
         {#if model.work.truncated}
           <p class="px-3 pt-2 text-micro text-fg-muted">
-            Counts cover the 2,000 most recently updated tasks.
+            Counts cover the {WORK_ROW_CAP.toLocaleString("en-US")} most recently
+            updated tasks.
           </p>
         {/if}
         {#if model.work.matrix.rows.length === 0}
@@ -345,7 +348,12 @@
                             : 'text-fg-subtle'}"
                           href={workspaceHref(cell.href)}
                           data-overview-cell="{row.key ||
-                            'unknown'}:{cell.phase}">{cell.count}</a
+                            'unknown'}:{cell.phase}"
+                          >{formatPartialCount(
+                            cell.count,
+                            model.work.truncated,
+                          )}</a
+                        >
                         >
                       </td>
                     {/each}
@@ -363,7 +371,10 @@
               href={workspaceHref(model.work.blocked.href)}
             >
               <span class="tabular-nums text-fg"
-                >{model.work.blocked.count}</span
+                >{formatPartialCount(
+                  model.work.blocked.count,
+                  model.work.truncated,
+                )}</span
               >
               blocked
             </a>
@@ -392,11 +403,14 @@
                 data-overview-human-count
               >
                 <span class="tabular-nums text-fg"
-                  >{model.work.human.count}</span
+                  >{formatPartialCount(
+                    model.work.human.count,
+                    model.work.truncated,
+                  )}</span
                 >
-                {model.work.human.count === 1
-                  ? "task has a person as next actor"
-                  : "tasks have a person as next actor"}
+                {model.work.truncated || model.work.human.count !== 1
+                  ? "tasks have a person as next actor"
+                  : "task has a person as next actor"}
               </a>
               {#if model.work.human.items.length}
                 <ul class="mt-1 space-y-0.5">
@@ -426,7 +440,11 @@
                 <span
                   class="tabular-nums {bucket.count && bucket.key !== 'unknown'
                     ? 'text-warn-text'
-                    : 'text-fg'}">{bucket.count}</span
+                    : 'text-fg'}"
+                  >{formatPartialCount(
+                    bucket.count,
+                    model.work.truncated,
+                  )}</span
                 >
                 {bucket.label.toLowerCase()}
               </a>

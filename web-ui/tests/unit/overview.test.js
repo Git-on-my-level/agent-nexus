@@ -4,6 +4,7 @@ import { getGameDevStudioSeedData } from "../../scripts/game-dev-studio-seed-dat
 import {
   collectVisualReports,
   DOC_SCAN_CAP,
+  formatPartialCount,
   freshnessBuckets,
   humanActorIdSet,
   isHumanNextActor,
@@ -264,6 +265,9 @@ describe("overview work paging", () => {
     }));
     expect(listed.truncated).toBe(false);
     expect(listed.work).toHaveLength(1);
+    expect(formatPartialCount(4, true)).toBe("4+");
+    expect(formatPartialCount(0, true)).toBe("0+");
+    expect(formatPartialCount(4, false)).toBe("4");
   });
 
   it("refuses a response that is not a work list", async () => {
