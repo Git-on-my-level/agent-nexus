@@ -60,6 +60,9 @@ cat > "${CLI_TMP}" <<EOF
 package buildinfo
 
 var Current = "${VERSION}"
+
+// SourceRevision is populated by release builds or Go's embedded VCS metadata.
+var SourceRevision = "unknown"
 EOF
 sync_target "${CLI_TARGET}" "${CLI_TMP}"
 

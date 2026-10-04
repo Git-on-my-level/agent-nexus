@@ -1,8 +1,9 @@
 # ANX maintained skill sources
 
-This is the first managed-skill **primitive** slice. It does not yet configure
-all harnesses during host enrollment, verify a live session loaded a skill,
-connect an existing PM endpoint, or discover/upload project history.
+The CLI owns local installation and clean refresh of these bundled skills across
+detected agent harnesses. Host enrollment offers `anx skills sync`; this does not
+prove a live session loaded the skill, connect an existing PM endpoint, or
+discover/upload project history.
 
 ## One source, two roles
 
@@ -23,7 +24,47 @@ manifests, catalog and README alongside the binary. Archive checksums cover
 all of them. The files are portable instructions, with no install hooks,
 credentials, prompts, session records or executable code.
 
-## Supported harness delivery: compose with agentctl
+## ANX harness delivery
+
+Preview and apply the participant skill to detected harnesses:
+
+```sh
+anx skills sync --dry-run
+anx skills sync
+anx skills status
+```
+
+The CLI uses the shared `~/.agents/skills` root for Codex and OMP, plus the
+canonical user skill roots for Claude Code, Cursor, Hermes, Gemini CLI, Pi,
+Continue and OpenCode. It creates a skill directory only for a detected harness.
+The participant skill is installed by default. `anx skills sync --pm` also
+installs and remembers the optional PM skill; PM availability does not designate
+every agent on the host.
+
+ANX refreshes only clean marker-owned files. The marker records skill version,
+CLI version, source revision and content digest. Edited and unmanaged files stay
+untouched. `anx skills status` and `anx doctor` report per-harness state. Automatic
+refresh runs detached after a successful CLI upgrade and once per day after a
+mutating command. Disable it with `anx skills sync --no-auto-sync` or
+`ANX_SKILLS_AUTO_SYNC=0`.
+
+Known old skill names (`anx`, `anx-cli-agent`, `anx-cli-onboard`) and stale ANX
+content markers are reported with a digest. Adoption is plan-first:
+
+```sh
+anx skills adopt ~/.cursor/skills/anx-cli-agent
+anx skills adopt ~/.cursor/skills/anx-cli-agent --expected-digest sha256:<digest>
+```
+
+The first command reports the digest without writing. The confirmed command
+moves the old `SKILL.md` to a timestamped backup, then installs the managed
+participant skill.
+
+If a destination contains `.agentctl-skill.json`, ANX reports it as deferred and
+leaves it to agentctl. This allows an existing Skill Hub pack to remain the
+owner of that copy.
+
+## Optional agentctl Skill Hub delivery
 
 The inspected integration is agentctl source
 `7b2644ae8124ab5affbe7134eaaf45a0ad8e7dee`, whose managed-pack schema is v1.
@@ -65,12 +106,11 @@ agentctl skills update
 agentctl skills status
 ```
 
-Agentctl owns harness detection, canonical roots, provenance markers, strict
-validation and clean automatic refresh. The manifests target its current
-Claude, Codex, Cursor, Hermes and OMP delivery adapters; Codex/OMP share one root.
-This does not qualify actual load/activation in those harnesses. Multica and
-arbitrary providers use manual delivery until a reviewed adapter supports them.
-ANX intentionally contains no second harness-path catalog.
+The manifests target agentctl's current Claude, Codex, Cursor, Hermes and OMP
+delivery adapters; Codex/OMP share one root. Agentctl and ANX use independent
+ownership markers. If agentctl owns a copy, ANX defers to it. Neither manager's
+file digest proves actual load/activation in a native conversation. Multica and
+arbitrary providers can continue to use explicit manual delivery.
 
 Agentctl `auto-clean` updates unchanged owned content, preserving edited
 (`drifted`) and unmarked (`conflict`) content. Removed pack entries are not
@@ -93,14 +133,15 @@ anx skills configure --path ./anx-pm --role pm
 ```
 
 Configure writes only `SKILL.md` and its schema-v1 `.anx-skill.json` ownership
-marker. The marker records role, skill name, contract version, and content
-SHA-256. Existing parent aliases (including macOS `/tmp` and `/var`) are resolved
+marker. The marker records role, skill name, skill version, CLI version, source
+revision and content SHA-256. Existing parent aliases (including macOS `/tmp` and `/var`) are resolved
 once without creating missing parents. Results expose the absolute
 `requested_path` and canonical `path`; all operations use that canonical path.
 The destination directory and managed files themselves must not be symlinks. Unrelated files, including shared `AGENTS.md` instructions, are never
 read or changed. The marker is local maintenance evidence, not an authentication
 or permission grant. Re-running configure refreshes only unchanged owned content;
-there is no force flag or hidden maintenance during reads or enrollment.
+there is no force flag. Automatic refresh is a separate detached sync described
+above; status and verify never write.
 
 | State | Meaning | Configure | Verify exit |
 | --- | --- | --- | --- |
@@ -132,9 +173,9 @@ remain explicit unmanaged exports. Their optional writes retain the legacy
 semantics; `install skill --force` is a deliberate replacement of that exact
 file. They never create ownership markers or opt old installs into refresh.
 The old `anx-opinionated-onboarding` name is now `anx-participant`; there is no
-implicit deletion, relocation or adoption. Review custom instructions and use a
-new directory, or keep managing the old file yourself. Do not leave both old
-and new skills enabled without reviewing duplicate instructions.
+implicit deletion or relocation. Review custom instructions before explicitly
+adopting a recognized legacy copy. Do not leave both old and new skills enabled
+without reviewing duplicate instructions.
 
 Manual updates serialize ANX writers with `.anx-skill.lock`, validate bounded
 regular files and reject symlinks in the canonical destination or managed files. Do not edit a skill concurrently with
@@ -155,7 +196,7 @@ go run ./cmd/anx-docs-gen
 
 Tests use isolated temporary directories, including clean updates, idempotence,
 legacy/edited content preservation, wrong-manager and invalid-manifest refusal,
-symlinks, oversized files, locks, no-home/offline usage, unknown flags/providers,
-and separate installed-versus-loaded status. Real harness activation, live-user
-configuration, automatic enrollment setup and end-to-end native PM connection
-remain later qualification gates.
+symlinks, oversized files, locks, no-home/offline usage, harness detection,
+dry-run, adoption backups, auto-refresh scheduling and agentctl coexistence.
+Real harness activation, live-user configuration and end-to-end native PM
+connection remain later qualification gates.

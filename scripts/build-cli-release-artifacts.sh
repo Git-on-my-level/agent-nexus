@@ -26,6 +26,7 @@ EXPECTED_VERSION="$("${SCRIPT_DIR}/read-version.sh")"
 VERSION="${1:-${EXPECTED_VERSION}}"
 OUTPUT_DIR="${2:-dist}"
 DIST_DIR="${REPO_ROOT}/${OUTPUT_DIR}"
+SOURCE_REVISION="${GITHUB_SHA:-$(git -C "${REPO_ROOT}" rev-parse --verify HEAD)}"
 
 if [[ "${VERSION}" != "${EXPECTED_VERSION}" ]]; then
   echo "release version mismatch: requested ${VERSION}, repo VERSION is ${EXPECTED_VERSION}" >&2
@@ -69,7 +70,7 @@ for GOOS in linux darwin windows; do
       cd "${CLI_DIR}"
       CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" go build \
         -trimpath \
-        -ldflags="-s -w -X agent-nexus-cli/internal/buildinfo.Current=${VERSION}" \
+        -ldflags="-s -w -X agent-nexus-cli/internal/buildinfo.Current=${VERSION} -X agent-nexus-cli/internal/buildinfo.SourceRevision=${SOURCE_REVISION}" \
         -o "${STAGE_DIR}/${BIN_NAME}${BIN_EXT}" \
         ./cmd/anx )
 

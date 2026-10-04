@@ -26,7 +26,7 @@ func commandSideEffectClass(command string) string {
 		return "read_only"
 	}
 	if parts[0] == "skills" {
-		if len(parts) > 1 && parts[1] == "configure" {
+		if len(parts) > 1 && (parts[1] == "configure" || parts[1] == "sync" || parts[1] == "adopt") {
 			// Conservative: a string does not retain quoted argv boundaries,
 			// and repeated bool flags use their last value in the real parser.
 			return "local_operational_write"
@@ -144,16 +144,17 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		}
 	}
 	if command == "host enroll" {
-		if alias := anyString(root["workspace_alias"]); alias != "" {
-			prefix := []string{"anx"}
-			if dir := anyString(root["config_dir"]); dir != "" {
-				prefix = append(prefix, "--config-dir", dir)
-			}
-			actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
-			actions = append(actions, action("Check host", append(prefix, "--workspace", alias, "host", "status")...))
-		} else {
-			actions = append(actions, action("Check host", "anx", "host", "status"))
+		prefix := []string{"anx"}
+		if dir := anyString(root["config_dir"]); dir != "" {
+			prefix = append(prefix, "--config-dir", dir)
 		}
+		if alias := anyString(root["workspace_alias"]); alias != "" {
+			actions = append(actions, action("Make workspace default", append(append([]string{}, prefix...), "config", "use", alias)...))
+			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "--workspace", alias, "host", "status")...))
+		} else {
+			actions = append(actions, action("Check host", append(append([]string{}, prefix...), "host", "status")...))
+		}
+		actions = append(actions, action("Sync ANX skills", append(append([]string{}, prefix...), "skills", "sync")...))
 	}
 	if command == "host token" {
 		actions = append(actions, action("Check identity", "anx", "auth", "whoami"))

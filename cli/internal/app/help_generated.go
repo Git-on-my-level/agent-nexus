@@ -1068,6 +1068,7 @@ Onboarding:
   `+"`anx debug meta doc agent-guide`"+` for the prescriptive bundled agent guide.
   `+"`anx install skill --path ./SKILL.md`"+` to export the portable ANX participant skill.
   `+"`anx skills configure --path ./anx-participant --role participant --dry-run`"+` for managed local setup.
+  `+"`anx skills sync --dry-run`"+` to inspect cross-harness skill delivery.
 
 Global Flags:
   --json
@@ -1142,7 +1143,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return importUsageText() + "\n", true
 	}
 	if topic == "skills" || strings.HasPrefix(topic, "skills ") {
-		if topic == "skills" || topic == "skills configure" || topic == "skills status" || topic == "skills verify" {
+		if topic == "skills" || topic == "skills configure" || topic == "skills status" || topic == "skills verify" || topic == "skills sync" || topic == "skills adopt" {
 			return skillsUsageText() + "\n", true
 		}
 	}

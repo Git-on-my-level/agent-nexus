@@ -194,7 +194,7 @@ func preflightKnownCommandShape(args []string) error {
 	case "import":
 		return preflightSubcommand(args[1:], importSubcommandSpec)
 	case "skills":
-		return preflightSubcommand(args[1:], skillsSubcommandSpec)
+		return preflightSkillsArgs(args[1:])
 	case "install":
 		return preflightSubcommand(args[1:], installSubcommandSpec)
 	case "draft":
@@ -259,6 +259,31 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], derivedSubcommandSpec)
 	}
 	return nil
+}
+
+func preflightSkillsArgs(args []string) error {
+	if err := preflightSubcommand(args, skillsSubcommandSpec); err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	valueFlag := preflightFlagSpec{kind: preflightFlagString}
+	boolFlag := preflightFlagSpec{kind: preflightFlagBool}
+	var flags map[string]preflightFlagSpec
+	switch skillsSubcommandSpec.normalize(args[0]) {
+	case "configure":
+		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag, "dry-run": boolFlag}
+	case "status":
+		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag, "home": valueFlag}
+	case "verify":
+		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag}
+	case "sync":
+		flags = map[string]preflightFlagSpec{"dry-run": boolFlag, "pm": boolFlag, "no-pm": boolFlag, "auto-sync": boolFlag, "no-auto-sync": boolFlag, "home": valueFlag, "scheduled": boolFlag}
+	case "adopt":
+		flags = map[string]preflightFlagSpec{"expected-digest": valueFlag, "role": valueFlag}
+	}
+	return preflightFlagUsage(args[1:], flags)
 }
 
 func preflightSubcommand(args []string, spec subcommandSpec) error {

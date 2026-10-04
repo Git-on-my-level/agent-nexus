@@ -181,15 +181,27 @@ association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
 The bundled participant skill advertises `anx.participant.v7`; explicitly
-designated PMs can load the additional `anx.pm.v3` skill. Use `anx skills
+designated PMs can load the additional `anx.pm.v3` skill. After host enrollment,
+the CLI offers `anx skills sync`. Preview with `anx skills sync --dry-run`, then
+run `anx skills sync` to install or refresh clean managed copies for detected
+Claude Code, Codex/OMP, Cursor, Hermes, Gemini CLI, Pi, Continue and OpenCode
+setups. Use `--pm` to opt into the PM skill. `anx skills status` and `anx doctor`
+report state by harness. Edited or unmanaged content is preserved, and copies
+marked as agentctl-owned are deferred to agentctl. Legacy ANX copies are reported
+with their digest; `anx skills adopt <path>` shows the plan and only replaces one
+after the digest is confirmed, migrating it to the canonical harness path and
+keeping a timestamped backup in the legacy directory. Use `anx skills
 configure|status|verify --path <skill-directory> --role participant|pm` for
-versioned local ownership, clean refresh and read-only verification. Existing
-unmanaged or edited content is preserved. File verification never proves an
-existing session loaded the skill. Supported harness installation and auto-clean
-refresh compose with agentctl packs, not a second ANX harness catalog. See
-[managed skill sources and migration](../skills/README.md). Automatic enrollment
-setup, real harness activation and existing-PM endpoint connection remain later
-gates in the [adoption plan](../../docs/architecture/existing-agent-adoption.md).
+explicit local management and read-only verification.
+
+The CLI refreshes clean managed copies in a detached best-effort process after
+an upgrade and once per day after a mutating command. Disable this with
+`anx skills sync --no-auto-sync` or `ANX_SKILLS_AUTO_SYNC=0`. File verification
+never proves an existing session loaded the skill. Supported harness delivery
+composes with agentctl packs, not a second ANX harness catalog. See [managed
+skill sources and migration](../skills/README.md). Automatic enrollment setup,
+real harness activation and existing-PM endpoint connection remain later gates in the
+[adoption plan](../../docs/architecture/existing-agent-adoption.md).
 
 ## Runs from agentctl
 

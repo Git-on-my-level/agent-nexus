@@ -330,7 +330,7 @@ func sideEffectClass(cmd Command) string {
 		return "local_operational_write"
 	}
 	if strings.HasPrefix(cmd.CLIPath, "skills ") {
-		if cmd.CLIPath == "skills configure" {
+		if cmd.CLIPath == "skills configure" || cmd.CLIPath == "skills sync" || cmd.CLIPath == "skills adopt" {
 			return "local_operational_write"
 		}
 		return "read_only"

@@ -240,6 +240,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `import dedupe` (local-helper): Create exact and probable duplicate reports from a scan inventory with conservative skip recommendations.
 - `import plan` (local-helper): Build a conservative import plan that prefers collector threads, hub docs, dedupe-first writes, and low orphan rates.
 - `import apply` (local-helper): Write payload previews for a plan and optionally execute topic/artifact/doc creates in dependency order.
+- `skills sync` (local-helper): Inspect or maintain versioned local ANX skill files.
+- `skills adopt` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `skills configure` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `skills status` (local-helper): Inspect or maintain versioned local ANX skill files.
 - `skills verify` (local-helper): Inspect or maintain versioned local ANX skill files.
@@ -8424,33 +8426,97 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `skills sync`
+
+Inspect or maintain versioned local ANX skill files.
+
+```text
+Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
+
+Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
+
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption keeps the old
+SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
+
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.
+```
+
+## `skills adopt`
+
+Inspect or maintain versioned local ANX skill files.
+
+```text
+Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
+
+Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
+  anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
+  anx skills status --path <skill-directory> --role participant|pm
+  anx skills verify --path <skill-directory> --role participant|pm
+
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
+
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption keeps the old
+SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
+
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.
+```
+
 ## `skills configure`
 
 Inspect or maintain versioned local ANX skill files.
 
 ```text
-Managed ANX skill primitives (local files only)
+Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
 
 Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
   anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
   anx skills status --path <skill-directory> --role participant|pm
   anx skills verify --path <skill-directory> --role participant|pm
 
-Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
-unmanaged or edited files are preserved; there is no force or implicit adoption.
-Other files, shared instructions, credentials and harness settings are untouched.
-Dry-run and status perform no writes, network access or harness/history discovery.
-Verify checks the local version and bytes, not whether a harness/session loaded it.
-PM supplements the participant skill; configure both in separate directories.
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
-Status returns missing, unmanaged, current, outdated, drifted or conflict.
-Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
-and 1 for filesystem failures. Harness configuration and activation stay unknown.
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption keeps the old
+SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
 
-Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
-packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
-ANX source revision. ANX never edits that selection automatically. Arbitrary
-agents may consume the files manually; no supported-harness registry is required.
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.
 ```
 
 ## `skills status`
@@ -8458,28 +8524,30 @@ agents may consume the files manually; no supported-harness registry is required
 Inspect or maintain versioned local ANX skill files.
 
 ```text
-Managed ANX skill primitives (local files only)
+Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
 
 Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
   anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
   anx skills status --path <skill-directory> --role participant|pm
   anx skills verify --path <skill-directory> --role participant|pm
 
-Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
-unmanaged or edited files are preserved; there is no force or implicit adoption.
-Other files, shared instructions, credentials and harness settings are untouched.
-Dry-run and status perform no writes, network access or harness/history discovery.
-Verify checks the local version and bytes, not whether a harness/session loaded it.
-PM supplements the participant skill; configure both in separate directories.
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
-Status returns missing, unmanaged, current, outdated, drifted or conflict.
-Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
-and 1 for filesystem failures. Harness configuration and activation stay unknown.
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption keeps the old
+SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
 
-Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
-packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
-ANX source revision. ANX never edits that selection automatically. Arbitrary
-agents may consume the files manually; no supported-harness registry is required.
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.
 ```
 
 ## `skills verify`
@@ -8487,28 +8555,30 @@ agents may consume the files manually; no supported-harness registry is required
 Inspect or maintain versioned local ANX skill files.
 
 ```text
-Managed ANX skill primitives (local files only)
+Install and maintain ANX skills across detected harnesses, or inspect one explicit copy.
 
 Usage:
+  anx skills sync [--dry-run] [--pm|--no-pm] [--auto-sync|--no-auto-sync] [--home <dir>]
+  anx skills status [--home <dir>]
+  anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]
   anx skills configure --path <skill-directory> --role participant|pm [--dry-run]
   anx skills status --path <skill-directory> --role participant|pm
   anx skills verify --path <skill-directory> --role participant|pm
 
-Configure installs or refreshes only clean ANX-owned SKILL.md content. Existing
-unmanaged or edited files are preserved; there is no force or implicit adoption.
-Other files, shared instructions, credentials and harness settings are untouched.
-Dry-run and status perform no writes, network access or harness/history discovery.
-Verify checks the local version and bytes, not whether a harness/session loaded it.
-PM supplements the participant skill; configure both in separate directories.
+Sync detects installed harnesses and installs or refreshes only clean ANX-owned
+copies. It preserves unmanaged or edited files. --pm opts into the additional PM
+skill and remembers that choice. Automatic refresh is enabled by default and can
+be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
+writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
-Status returns missing, unmanaged, current, outdated, drifted or conflict.
-Verify exits 0 for current files, 3 for missing, 7 for outdated, 4 for conflicts,
-and 1 for filesystem failures. Harness configuration and activation stay unknown.
+Legacy skills are reported with their digest. Adoption is read-only until the
+printed digest is passed back with --expected-digest; adoption keeps the old
+SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+configure/verify remain available for arbitrary providers and paths. Harness
+activation remains unknown even when a managed copy is current.
 
-Supported harness delivery and auto-clean updates belong to agentctl Skill Hub
-packs. Select cli/skills/participant.json or cli/skills/pm.json from a reviewed
-ANX source revision. ANX never edits that selection automatically. Arbitrary
-agents may consume the files manually; no supported-harness registry is required.
+Managed copies record CLI version, source revision, skill version and content
+digest. Custom files, unrelated instructions and credentials are preserved.
 ```
 
 ## `plan step add`
