@@ -140,6 +140,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm turns heartbeat` (command): Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
 - `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
 - `pm turns release` (command): Lease owner returns a claimed turn to the queue.
+- `report render` (command): Materialize a visual report’s live panels from current, authorized workspace data.
 - `sessions get` (command): Read your own registered provider session and bounded activity; does not expose conversation history.
 - `sessions register` (command): Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
 - `work capabilities` (command): Read capabilities actually advertised by the authenticated central API.
@@ -4465,6 +4466,40 @@ Usage: anx pm turns release <ref> (or --turn-id <ref>) --from-file <path|->
 JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
+
+Use --json for one machine-readable envelope.
+```
+
+## `report render`
+
+Materialize a visual report’s live panels from current, authorized workspace data.
+
+```text
+Generated Help: report render
+
+- Command ID: `report.render`
+- CLI path: `report render`
+- HTTP: `GET /docs/{document_id}/report`
+- Side effect class: `read_only`
+- Stability: `beta`
+- Input mode: `none`
+- Why: Read the same live dashboard data shown to a workspace reader.
+- Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
+- Concepts: `docs`, `cards`, `evidence`
+- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
+
+Inputs:
+  Required:
+  - path `document_id`
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+Materialize a visual report’s live panels from current, authorized workspace data.
+
+Usage: anx report render <ref> (or --document-id <ref>)
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
 Use --json for one machine-readable envelope.
 ```

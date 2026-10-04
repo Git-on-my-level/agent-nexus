@@ -49,3 +49,7 @@ require (
 )
 
 replace agent-nexus-test-channels => ../tests/channels
+
+require agent-nexus-visualreport v0.0.0
+
+replace agent-nexus-visualreport => ../contracts/visualreport

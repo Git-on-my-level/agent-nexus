@@ -2673,6 +2673,42 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /docs/{document_id}/report:
+    get:
+      operationId: renderReport
+      summary: Materialize live panels from the current visual report revision
+      tags: [docs]
+      x-anx-surface: projection
+      x-anx-command-id: report.render
+      x-anx-cli-path: report render
+      x-anx-why: Read the same live dashboard data shown to a workspace reader.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted."
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, not_found, invalid_request, unavailable]
+      x-anx-concepts: [docs, cards, evidence]
+      x-anx-stability: beta
+      x-anx-agent-notes: >
+        Read-only. Both text and structured version 1 visual reports are supported.
+        Each live panel is independently materialized with status ok or unavailable,
+        observation time, data and an explicit truncated flag. Never infer zero work
+        from an unavailable or truncated panel. Queries are bounded to 2000 source
+        rows. Archived boards and their work are excluded. Private PM events remain private.
+      parameters:
+        - $ref: '#/components/parameters/DocumentID'
+      responses:
+        '200':
+          description: Live report panels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveReportResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
   /docs/{document_id}:
     get:
       operationId: getDocument
@@ -7100,6 +7136,57 @@ components:
       description: Base64 Ed25519 signature required for host self-access.
 
   schemas:
+    LiveReportResponse:
+      type: object
+      required: [document_ref, revision_ref, observed_at, panels]
+      properties:
+        document_ref: {type: string}
+        revision_ref: {type: string}
+        observed_at: {type: string, format: date-time}
+        panels:
+          type: array
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/LiveReportPanel'
+    LiveReportPanel:
+      type: object
+      required: [id, type, status, observed_at, truncated, data]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [live-initiatives, live-asks, live-work-mix, live-activity]}
+        status: {type: string, enum: [ok, unavailable]}
+        observed_at: {type: string, format: date-time}
+        truncated: {type: boolean}
+        message: {type: string}
+        data:
+          type: object
+          additionalProperties: true
+          description: >
+            Initiatives return items (ref, title, summary, progress {done,total}, needs,
+            priority, phase, board_ref, updated_at). Asks return items (id, title,
+            status, created_at, age_seconds, request_event_ref, response_text, responded_at).
+            Work mix returns group_by, total and buckets (key,label,count).
+            Activity returns items (ref,type,summary,actor_id,ts,count).
+    LiveReportQuery:
+      type: object
+      additionalProperties: false
+      description: >
+        Data-only query stored in a version 1 live panel's data field. Initiatives
+        allow board_refs, project_ref, limit, sort; work mix allows board_refs,
+        project_ref, group_by; asks allow limit, include_answered, answered_within_hours;
+        activity allows limit. No other field is allowed for that panel type.
+      properties:
+        board_refs:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: {type: string, pattern: '^board:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        project_ref: {type: string, pattern: '^topic:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        limit: {type: integer, minimum: 1, maximum: 100, default: 10}
+        sort: {type: string, enum: [priority, updated, title], default: priority}
+        group_by: {type: string, enum: [phase, board], default: phase}
+        include_answered: {type: boolean, default: false}
+        answered_within_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
     HumanInviteCreateRequest:
       type: object
       additionalProperties: false

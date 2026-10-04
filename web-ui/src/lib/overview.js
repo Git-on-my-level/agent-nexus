@@ -508,6 +508,7 @@ async function readReportDocument(client, doc) {
         resourceRouteSegment(doc, "document") ||
         id,
       report: parsed.report,
+      revision_ref: String(got?.revision?.ref ?? ""),
     };
   } catch (error) {
     return { error };

@@ -8518,6 +8518,42 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "refEdgesList"
   },
   {
+    "command_id": "report.render",
+    "cli_path": "report render",
+    "group": "report",
+    "method": "GET",
+    "path": "/docs/{document_id}/report",
+    "operation_id": "renderReport",
+    "summary": "Materialize live panels from the current visual report revision",
+    "why": "Read the same live dashboard data shown to a workspace reader.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "forbidden",
+      "not_found",
+      "invalid_request",
+      "unavailable"
+    ],
+    "concepts": [
+      "docs",
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.",
+    "path_params": [
+      "document_id"
+    ],
+    "go_method": "ReportRender",
+    "ts_method": "reportRender"
+  },
+  {
     "command_id": "runs.get",
     "cli_path": "runs get",
     "group": "runs",
@@ -11358,6 +11394,10 @@ export class AnxClient {
 
   refEdgesList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("ref_edges.list", {}, options);
+  }
+
+  reportRender(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("report.render", pathParams, options);
   }
 
   runsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

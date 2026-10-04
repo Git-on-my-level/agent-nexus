@@ -11,6 +11,7 @@
   } from "./reportLayout.js";
 
   let {
+    compact = false,
     node,
     panelsById,
     sources,
@@ -65,6 +66,7 @@
 
 {#snippet renderChild(child, childPath)}
   <ReportLayout
+    {compact}
     node={child}
     {panelsById}
     {sources}
@@ -81,6 +83,7 @@
   {#if node.type === "panel" && panel}
     <div class="report-layout-panel" data-report-layout="panel">
       <VisualReportPanel
+        {compact}
         {panel}
         {sources}
         freshness={getPanelFreshness(panel, now)}

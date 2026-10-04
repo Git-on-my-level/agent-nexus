@@ -1,10 +1,13 @@
 <script>
+  import LiveReportPanel from "./LiveReportPanel.svelte";
+  import { isLivePanel } from "$lib/liveReports.js";
   import ReportChart from "./ReportChart.svelte";
   import ReportDetails from "./ReportDetails.svelte";
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import { safeReportUrl } from "$lib/visualReports.js";
 
   let {
+    compact = false,
     panel,
     sources = [],
     freshness,
@@ -12,6 +15,10 @@
     oninspect,
   } = $props();
   const typeLabels = {
+    "live-initiatives": "Initiatives",
+    "live-asks": "Needs an answer",
+    "live-work-mix": "Open work",
+    "live-activity": "Recent activity",
     chart: "Visualization",
     "metric-strip": "Measures",
     callout: "Decision note",
@@ -74,7 +81,7 @@
       <p class="report-eyebrow">{typeLabels[panel.type]}</p>
       <h3 class="mt-1 text-meta font-semibold text-fg">{panel.title}</h3>
     </div>
-    {#if freshness !== "current"}
+    {#if freshness !== "current" && !isLivePanel(panel)}
       <!-- Current is the expected state; only call out evidence that needs care. -->
       <span class="report-state" class:report-state-warn={freshness === "stale"}
         >{stateLabels[freshness]}</span
@@ -83,7 +90,9 @@
   </header>
 
   <div class="report-panel-body">
-    {#if freshness === "unavailable"}
+    {#if isLivePanel(panel)}
+      <LiveReportPanel {panel} />
+    {:else if freshness === "unavailable"}
       <div class="report-unavailable">
         <span class="text-title text-fg-muted" aria-hidden="true">∅</span>
         <p class="font-medium text-fg">Evidence unavailable</p>
@@ -237,36 +246,38 @@
     {/if}
   </div>
 
-  <footer class="report-panel-footer">
-    <div class="report-provenance">
-      <ActorLabel
-        label={panel.author}
-        seed={panel.author}
-        size="xs"
-        nameClass="text-micro text-fg-muted"
-      />
-      <span class="report-provenance-tag" data-provenance={panel.provenance}
-        >{provenanceLabels[panel.provenance]}</span
-      >
-      <p class="text-micro text-fg-muted">
-        {freshness === "current" ? "Current · " : ""}Observed
-        <time datetime={panel.observed_at ?? undefined}
-          >{date(panel.observed_at)}</time
+  {#if !compact && !isLivePanel(panel)}
+    <footer class="report-panel-footer">
+      <div class="report-provenance">
+        <ActorLabel
+          label={panel.author}
+          seed={panel.author}
+          size="xs"
+          nameClass="text-micro text-fg-muted"
+        />
+        <span class="report-provenance-tag" data-provenance={panel.provenance}
+          >{provenanceLabels[panel.provenance]}</span
         >
-      </p>
-    </div>
-    <button
-      type="button"
-      class="report-evidence-button"
-      aria-expanded={evidenceOpen}
-      aria-controls={`report-evidence-${panel.id}`}
-      onclick={() => oninspect(panel.id)}
-      >Inspect evidence <span aria-hidden="true"
-        >{evidenceOpen ? "−" : "+"}</span
-      ></button
-    >
-  </footer>
-  {#if evidenceOpen}
+        <p class="text-micro text-fg-muted">
+          {freshness === "current" ? "Current · " : ""}Observed
+          <time datetime={panel.observed_at ?? undefined}
+            >{date(panel.observed_at)}</time
+          >
+        </p>
+      </div>
+      <button
+        type="button"
+        class="report-evidence-button"
+        aria-expanded={evidenceOpen}
+        aria-controls={`report-evidence-${panel.id}`}
+        onclick={() => oninspect(panel.id)}
+        >Inspect evidence <span aria-hidden="true"
+          >{evidenceOpen ? "−" : "+"}</span
+        ></button
+      >
+    </footer>
+  {/if}
+  {#if !compact && evidenceOpen}
     <div id={`report-evidence-${panel.id}`} class="report-evidence-detail">
       <h4 class="text-meta font-medium text-fg">Source evidence</h4>
       <p class="mt-1 text-micro text-fg-muted">

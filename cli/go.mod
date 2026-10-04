@@ -11,3 +11,7 @@ require (
 require github.com/pelletier/go-toml/v2 v2.2.3
 
 replace agent-nexus-contracts-go-client => ../contracts/gen/go
+
+require agent-nexus-visualreport v0.0.0
+
+replace agent-nexus-visualreport => ../contracts/visualreport

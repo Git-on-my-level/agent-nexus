@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `185`
+- Command operations: `186`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `167`
+- Missing recommended examples: `168`
 
 ## Baseline gap counts
 
@@ -270,6 +270,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `pm.turns.heartbeat` `POST /pm/turns/{turn_id}/heartbeat`
 - `pm.turns.release` `POST /pm/turns/{turn_id}/release`
 - `ref_edges.list` `GET /ref-edges`
+- `report.render` `GET /docs/{document_id}/report`
 - `runs.get` `GET /runs/{run_id}`
 - `runs.list` `GET /runs`
 - `runs.upsert` `POST /runs`

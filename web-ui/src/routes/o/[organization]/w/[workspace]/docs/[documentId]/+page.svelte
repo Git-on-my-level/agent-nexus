@@ -1715,7 +1715,11 @@
                 >
                   {#if visualReport.recognized}
                     {#if visualReport.report}
-                      <VisualReport report={visualReport.report} />
+                      <VisualReport
+                        report={visualReport.report}
+                        {documentId}
+                        revisionRef={displayedRevision?.ref ?? ""}
+                      />
                     {:else}
                       <div
                         class="rounded-md border border-warn/30 bg-warn-soft p-4"

@@ -7,6 +7,7 @@ import {
   swarmObservatoryReport,
   portfolioReviewReport,
 } from "../../src/lib/fixtures/expressiveReportExamples.js";
+import { liveDashboardExample } from "../../src/lib/fixtures/liveDashboardExample.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 import { validateReportLayout } from "../../src/lib/visualReportLayout.js";
 const parse = (report) => parseVisualReport(JSON.stringify(report));
@@ -18,11 +19,16 @@ describe("expressive composition", () => {
           visualReportExample,
           swarmObservatoryReport,
           portfolioReviewReport,
+          liveDashboardExample,
         ].flatMap((report) => report.panels.map((panel) => panel.type)),
       ),
     ).toEqual(new Set(VISUAL_REPORT_TYPES));
   });
-  for (const report of [swarmObservatoryReport, portfolioReviewReport]) {
+  for (const report of [
+    swarmObservatoryReport,
+    portfolioReviewReport,
+    liveDashboardExample,
+  ]) {
     it(`accepts ${report.title}`, () => {
       expect(parse(report).errors).toEqual([]);
     });

@@ -2,12 +2,21 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
+  import { coreClient } from "$lib/coreClient";
+  import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
 
-  let { report } = $props();
+  let { report, documentId = "", revisionRef = "", compact = false } = $props();
+  let liveObservations = $state(new Map());
+  let hasLive = $derived(report.panels.some(isLivePanel));
+  let observedPanels = $derived(
+    report.panels.map((panel) =>
+      withLiveObservation(panel, liveObservations.get(panel.id)),
+    ),
+  );
   let now = $state(Date.now());
   const freshnessOptions = [
     "all",
@@ -30,10 +39,12 @@
   );
   let evidence = $derived($page.url.searchParams.get("reportEvidence") ?? "");
   let panels = $derived(
-    report.panels.filter(
+    observedPanels.filter(
       (panel) =>
-        (project === "all" || panel.project_id === project) &&
-        (freshness === "all" || getPanelFreshness(panel, now) === freshness),
+        (compact || project === "all" || panel.project_id === project) &&
+        (compact ||
+          freshness === "all" ||
+          getPanelFreshness(panel, now) === freshness),
     ),
   );
   let panelsById = $derived(new Map(panels.map((panel) => [panel.id, panel])));
@@ -51,7 +62,7 @@
     ),
   );
   let staleCount = $derived(
-    report.panels.filter((panel) => getPanelFreshness(panel, now) === "stale")
+    observedPanels.filter((panel) => getPanelFreshness(panel, now) === "stale")
       .length,
   );
 
@@ -67,6 +78,67 @@
   function inspectPanel(id) {
     setFilter("reportEvidence", evidence === id ? "" : id);
   }
+  // Each definition/reader change starts a fresh read. Ignore late responses
+  // after navigation and drop old successful data immediately on a failed refresh.
+  $effect(() => {
+    const id = documentId;
+    const expectedRevision = revisionRef;
+    const livePanels = report.panels.filter(isLivePanel);
+    liveObservations = new Map();
+    if (!livePanels.length) return;
+    let disposed = false;
+    let inFlight = false;
+    async function refresh() {
+      if (inFlight || disposed) return;
+      inFlight = true;
+      let results;
+      try {
+        if (!id) throw new Error("A saved document is required.");
+        const response = await coreClient.renderReport(id);
+        if (
+          !Array.isArray(response?.panels) ||
+          (expectedRevision && response.revision_ref !== expectedRevision)
+        )
+          throw new Error("The report changed. Reload this document.");
+        results = new Map(response.panels.map((panel) => [panel.id, panel]));
+        for (const panel of livePanels) {
+          if (results.get(panel.id)?.type !== panel.type)
+            results.set(panel.id, {
+              status: "unavailable",
+              message: "The report changed. Reload this document.",
+              data: {},
+            });
+        }
+      } catch {
+        results = new Map(
+          livePanels.map((panel) => [
+            panel.id,
+            {
+              status: "unavailable",
+              message:
+                "Live data unavailable. Reload the document or check your access.",
+              data: {},
+            },
+          ]),
+        );
+      }
+      if (!disposed) liveObservations = results;
+      inFlight = false;
+    }
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 30_000);
+    const resume = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  });
   onMount(() => {
     const timer = window.setInterval(() => {
       now = Date.now();
@@ -78,25 +150,26 @@
 <section class="visual-report" aria-label="Visual report">
   <header class="report-heading">
     <div>
-      <p class="report-kicker">
-        Visual report <span>· v{report.schema_version}</span>
-      </p>
+      {#if !compact}<p class="report-kicker">
+          Visual report <span>· v{report.schema_version}</span>
+        </p>{/if}
       <h2>{report.title}</h2>
-      <p class="report-summary">{report.summary}</p>
+      {#if !compact}<p class="report-summary">{report.summary}</p>{/if}
     </div>
-    <div class="report-snapshot">
-      <span class="report-snapshot-dot" aria-hidden="true"></span><span
-        >Snapshot, not live<br /><time datetime={report.generated_at}
-          >{new Date(report.generated_at)
-            .toISOString()
-            .slice(0, 16)
-            .replace("T", " ")} UTC</time
-        ></span
-      >
-    </div>
+    {#if !compact}<div class="report-snapshot">
+        <span class="report-snapshot-dot" aria-hidden="true"></span><span
+          >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
+          /><time datetime={report.generated_at}
+            >{new Date(report.generated_at)
+              .toISOString()
+              .slice(0, 16)
+              .replace("T", " ")} UTC</time
+          ></span
+        >
+      </div>{/if}
   </header>
 
-  {#if !report.layout || report.projects.length > 1}
+  {#if !compact && (!report.layout || report.projects.length > 1)}
     <div class="report-projects" aria-label="Project overview">
       {#each report.projects as item}
         <button
@@ -117,38 +190,39 @@
     </div>
   {/if}
 
-  <div class="report-toolbar">
-    <div class="flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        class="report-all"
-        aria-pressed={project === "all"}
-        onclick={() => setFilter("reportProject", "all")}>All projects</button
+  {#if !compact}<div class="report-toolbar">
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="report-all"
+          aria-pressed={project === "all"}
+          onclick={() => setFilter("reportProject", "all")}>All projects</button
+        >
+        <p class="text-micro text-fg-muted" aria-live="polite">
+          {panels.length} of {report.panels.length} panels{staleCount
+            ? ` · ${staleCount} stale`
+            : ""}
+        </p>
+      </div>
+      <label class="report-filter-label"
+        >Freshness <select
+          aria-label="Filter by freshness"
+          value={freshness}
+          onchange={(event) =>
+            setFilter("reportFreshness", event.currentTarget.value)}
+          >{#each freshnessOptions as option}<option value={option}
+              >{option === "all"
+                ? "All evidence"
+                : option.charAt(0).toUpperCase() + option.slice(1)}</option
+            >{/each}</select
+        ></label
       >
-      <p class="text-micro text-fg-muted" aria-live="polite">
-        {panels.length} of {report.panels.length} panels{staleCount
-          ? ` · ${staleCount} stale`
-          : ""}
-      </p>
-    </div>
-    <label class="report-filter-label"
-      >Freshness <select
-        aria-label="Filter by freshness"
-        value={freshness}
-        onchange={(event) =>
-          setFilter("reportFreshness", event.currentTarget.value)}
-        >{#each freshnessOptions as option}<option value={option}
-            >{option === "all"
-              ? "All evidence"
-              : option.charAt(0).toUpperCase() + option.slice(1)}</option
-          >{/each}</select
-      ></label
-    >
-  </div>
+    </div>{/if}
 
   {#if panels.length}
     {#if report.layout}
       <ReportLayout
+        {compact}
         node={report.layout}
         {panelsById}
         sources={report.sources}
@@ -163,6 +237,7 @@
       <div class="report-grid" class:report-layout-remainder={report.layout}>
         {#each remainingPanels as panel (panel.id)}
           <VisualReportPanel
+            {compact}
             {panel}
             sources={report.sources}
             freshness={getPanelFreshness(panel, now)}
@@ -181,9 +256,11 @@
       >
     </div>
   {/if}
-  <p class="report-footnote">
-    Agent-assembled report · Source-linked claims · No automatic source refresh
-  </p>
+  {#if !compact}<p class="report-footnote">
+      {hasLive
+        ? "Live panels refresh from workspace data · Authored snapshots retain their observation time"
+        : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
+    </p>{/if}
 </section>
 
 <style>

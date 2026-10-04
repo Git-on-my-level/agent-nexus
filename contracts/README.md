@@ -47,3 +47,26 @@ Assert generated outputs match the repository (same as CI):
 ```
 
 CI runs `contract-check --committed` and fails when artifacts drift.
+
+## Visual reports
+
+`visualreport/` is the shared Go module for complete report validation, live query
+parsing, and the Markdown summary projection (`progress.done/total`, `needs[]`).
+Core imports it directly; the CLI import surface in `cli/internal/visualreport`
+forwards to it. Both modules use a local `replace`, as with `gen/go`.
+
+The browser entry point is `web-ui/src/lib/visualReports.js`. The committed corpus
+in `fixtures/visual-reports/` includes static layouts/charts, live queries, numeric
+spellings, URLs, ECMAScript whitespace, timestamps, and Markdown fence examples.
+Expected outcomes are fixed data, never recalculated by the check. Add regressions
+there when extending either validator. `make visualreport-check` runs the Go tests
+and compares the production Go and browser validators over every report. Existing
+contracts CI runs this gate through `scripts/contract-check`; browser CI compares
+both validators through `web-ui/Makefile` on every UI change. Go and Node are
+required for the check. Invalid reports stay inspectable as text; the live endpoint
+validates the entire envelope before executing queries.
+
+URLs require explicit HTTP(S), no credentials or whitespace, valid percent escapes,
+valid IP literals and ports, and canonical numeric IPv4 hosts. Escaped hostnames
+are rejected. Integral JSON numbers may use decimal or exponent notation. Report
+timestamps support RFC3339Nano (up to nine fractional digits).

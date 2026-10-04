@@ -1,5 +1,10 @@
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
+import {
+  LIVE_REPORT_TYPES,
+  isLivePanel,
+  validateLiveQuery,
+} from "./liveReports.js";
 
 // A presentation-only format carried in existing core document revisions.
 // Never interpret report strings as markup, code, component names, or fetch URLs.
@@ -16,6 +21,7 @@ export const VISUAL_REPORT_TYPES = Object.freeze([
   "metric-strip",
   "callout",
   "comparison",
+  ...LIVE_REPORT_TYPES,
 ]);
 export const VISUAL_REPORT_LIMITS = Object.freeze({
   bytes: 128 * 1024,
@@ -42,7 +48,7 @@ const PROVENANCE = ["reported", "verified", "illustrative"];
 const STATUS = ["complete", "pending", "unknown"];
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const TIMESTAMP =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -89,6 +95,16 @@ export function safeReportUrl(value) {
   try {
     const url = new URL(value);
     if (!url.hostname || url.username || url.password) return "";
+    if (/%(?![0-9a-f]{2})/i.test(value)) return "";
+    const authority = value.slice(value.indexOf("://") + 3).split(/[/?#]/)[0];
+    if (authority.includes("%")) return "";
+    const host = authority.replace(/:\d*$/, "");
+    if (
+      !host.startsWith("[") &&
+      /(?:^|\.)(?:[0-9]+|0x[0-9a-f]+)$/i.test(host) &&
+      host !== url.hostname
+    )
+      return "";
     return url.href;
   } catch {
     return "";
@@ -98,6 +114,7 @@ export function safeReportUrl(value) {
 /** Freshness describes observation age, never completion, availability, or health. */
 export function getPanelFreshness(panel, now = Date.now()) {
   if (!isRecord(panel)) return "unknown";
+  if (isLivePanel(panel) && !panel.live) return "unavailable";
   if (panel.freshness === "unavailable") return "unavailable";
   if (!FRESHNESS.includes(panel.freshness) || panel.freshness === "unknown")
     return "unknown";
@@ -345,6 +362,11 @@ function validateReport(report) {
     );
     const data = panel.data;
     const dataPath = `${path}.data`;
+    if (isLivePanel(panel)) {
+      for (const error of validateLiveQuery(panel.type, data))
+        add(dataPath, error);
+      return;
+    }
     switch (panel.type) {
       case "chart":
         for (const error of validateReportChart(data)) add(dataPath, error);

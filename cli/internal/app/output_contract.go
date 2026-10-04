@@ -89,7 +89,7 @@ func commandSideEffectClass(command string) string {
 			break
 		}
 		switch verb {
-		case "list", "get", "show", "search", "history", "context", "workspace", "summary", "status", "token-status", "whoami", "version", "help", "doctor", "capabilities", "inspect", "timeline", "messages", "content", "read", "walk", "check", "freshness", "explain", "validate":
+		case "list", "get", "show", "search", "history", "context", "workspace", "summary", "status", "token-status", "whoami", "version", "help", "doctor", "capabilities", "inspect", "timeline", "messages", "content", "read", "walk", "check", "freshness", "explain", "validate", "render":
 			return "read_only"
 		case "dispatch", "exec":
 			return "external_side_effect"

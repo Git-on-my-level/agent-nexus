@@ -27,6 +27,7 @@ hosted_default_commands:
   - "cards.revisions.get"
   - "cards.revisions.list"
   - "cards.timeline"
+  - "report.render"
   - "docs.get"
   - "docs.list"
   - "docs.search"
@@ -439,6 +440,9 @@ commands:
   "ops.usage.summary":
     classification: gated_admin
     reason: "unversioned usage summary is ops/quota telemetry"
+  "report.render":
+    classification: exposed_read
+    reason: "authorized live dashboard projection read"
   "ref_edges.list":
     classification: exposed_read
     reason: "reference edge inventory read"

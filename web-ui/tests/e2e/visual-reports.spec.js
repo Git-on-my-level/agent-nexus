@@ -8,6 +8,7 @@ import {
   swarmObservatoryReport,
   portfolioReviewReport,
 } from "../../src/lib/fixtures/expressiveReportExamples.js";
+import { liveDashboardExample } from "../../src/lib/fixtures/liveDashboardExample.js";
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 import { expectCleanLayout } from "../helpers/layoutAudit.js";
 import {
@@ -43,6 +44,7 @@ async function installReportDocument(page, report = cloneExample()) {
   const revision = {
     document_id: DOC_ID,
     revision_id: document.head_revision_id,
+    ref: "document_revision:dashboard-r1",
     revision_number: 1,
     content_type: "text",
     content_hash: "visual-report-content-hash",
@@ -810,5 +812,226 @@ test("composed report preserves keyboard, nested evidence, and filtered tab stat
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   expect(accessibility.violations).toEqual([]);
+  expectReadOnly(state);
+});
+
+function liveObservation() {
+  return {
+    document_ref: `document:${DOC_ID}`,
+    revision_ref: "document_revision:dashboard-r1",
+    observed_at: OBSERVED_AT.replace(/(?:\.\d+)?Z$/, ".123456789Z"),
+    panels: [
+      {
+        id: "initiatives",
+        type: "live-initiatives",
+        data: {
+          items: [
+            {
+              ref: "card:launch",
+              title: "Launch readiness",
+              summary: "The release is ready for the final review.",
+              progress: { done: 3, total: 7 },
+              priority: "p1",
+              phase: "in_progress",
+              needs: ["Needs David: choose the launch date"],
+            },
+            {
+              ref: "card:onboarding",
+              title: "Improve onboarding",
+              summary: "Help new teams reach their first useful dashboard.",
+              progress: { done: 5, total: 6 },
+              priority: "p2",
+              phase: "review",
+              needs: [],
+            },
+          ],
+        },
+      },
+      {
+        id: "asks",
+        type: "live-asks",
+        data: {
+          items: [
+            {
+              id: "ask-launch",
+              title: "Ship on Friday?",
+              status: "open",
+              age_seconds: 7200,
+            },
+            {
+              id: "completed:answered-theme",
+              title: "Which launch theme?",
+              status: "answered",
+              age_seconds: 86400,
+              response_text: "Lead with executive visibility.",
+            },
+          ],
+        },
+      },
+      {
+        id: "mix",
+        type: "live-work-mix",
+        data: {
+          total: 7,
+          group_by: "phase",
+          buckets: [
+            { key: "in_progress", label: "in progress", count: 4 },
+            { key: "review", label: "review", count: 2 },
+            { key: "blocked", label: "blocked", count: 1 },
+          ],
+        },
+      },
+      {
+        id: "activity",
+        type: "live-activity",
+        data: {
+          items: [
+            {
+              ref: "event:decision",
+              summary: "David answered: lead with executive visibility.",
+              ts: OBSERVED_AT,
+              count: 1,
+            },
+            {
+              ref: "event:phase",
+              summary: "Onboarding moved to review",
+              ts: OBSERVED_AT,
+              count: 1,
+            },
+            {
+              ref: "event:burst",
+              summary: "claude updated Initiatives · 7 edits",
+              ts: OBSERVED_AT,
+              count: 7,
+            },
+          ],
+        },
+      },
+    ].map((panel) => ({
+      ...panel,
+      status: "ok",
+      truncated: false,
+      observed_at: OBSERVED_AT.replace(/(?:\.\d+)?Z$/, ".123456789Z"),
+    })),
+  };
+}
+
+async function installLiveDashboard(page) {
+  const state = await installReportDocument(page, liveDashboardExample);
+  state.live = liveObservation();
+  state.liveReads = 0;
+  state.liveFailure = false;
+  await page.route(`**/docs/${DOC_ID}/report`, async (route) => {
+    state.liveReads++;
+    state.requests.push({
+      path: `/docs/${DOC_ID}/report`,
+      method: route.request().method(),
+    });
+    return route.fulfill({
+      status: state.liveFailure ? 403 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        state.liveFailure ? { error: { code: "forbidden" } } : state.live,
+      ),
+    });
+  });
+  return state;
+}
+
+for (const viewport of [
+  { width: 1440, height: 1100 },
+  { width: 390, height: 844 },
+]) {
+  test(`mixed live dashboard layout at ${viewport.width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const state = await installLiveDashboard(page);
+    await page.goto(DOC_PATH);
+    const report = reportRegion(page);
+    await expect(
+      report.getByRole("link", { name: "Launch readiness" }),
+    ).toBeVisible();
+    await expect(report).toContainText("3/7");
+    await expect(report).toContainText("Needs David: choose the launch date");
+    await expect(report).toContainText("2h old");
+    await expect(
+      report.getByRole("link", { name: "Which launch theme?" }),
+    ).toHaveAttribute(
+      "href",
+      /mailbox=handled&item=completed%3Aanswered-theme/,
+    );
+    await expect(report).toContainText("7 open tasks");
+    await expect(report).toContainText("This note is an authored snapshot.");
+    await expect(report.getByText(/Live as of/)).toHaveCount(4);
+    await expect(report).not.toContainText("No automatic source refresh");
+    await expect(
+      report.getByRole("progressbar", { name: "Launch readiness checklist" }),
+    ).toHaveAttribute("value", "3");
+    const scan = await new AxeBuilder({ page })
+      .include('[aria-label="Visual report"]')
+      .analyze();
+    expect(scan.violations).toEqual([]);
+    await expectNoClippedContent(page, "live dashboard");
+    await saveScreenshot(
+      viewport.width < 600 ? page : report,
+      testInfo,
+      `live-dashboard-${viewport.width}`,
+    );
+    expectReadOnly(state);
+  });
+}
+
+test("Current filter retains RFC3339Nano live panels", async ({ page }) => {
+  await installLiveDashboard(page);
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  await expect(
+    report.getByRole("link", { name: "Launch readiness" }),
+  ).toBeVisible();
+  await report
+    .getByLabel("Filter by freshness", { exact: true })
+    .selectOption("current");
+  await expect(
+    report.getByRole("link", { name: "Launch readiness" }),
+  ).toBeVisible();
+  await expect(report).toContainText("3/7");
+  await expect(report).toContainText("7 open tasks");
+});
+
+test("live panels refresh without changing the saved report and fail safely", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date(OBSERVED_AT) });
+  const state = await installLiveDashboard(page);
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  await expect(report).toContainText("3/7");
+  state.live.panels[0].data.items[0].progress.done = 4;
+  state.live.panels[0].truncated = true;
+  await page.clock.fastForward(31_000);
+  await expect(report).toContainText("4/7");
+  await expect(report).toContainText("Partial view.");
+  state.liveFailure = true;
+  await page.clock.fastForward(31_000);
+  await expect(report.getByText(/Live data unavailable/)).toHaveCount(4);
+  await expect(report).not.toContainText("4/7");
+  await expect(report).toContainText("This note is an authored snapshot.");
+  expect(state.liveReads).toBeGreaterThanOrEqual(3);
+  expectReadOnly(state);
+});
+
+test("live query data is withheld when the report head changed", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date(OBSERVED_AT) });
+  const state = await installLiveDashboard(page);
+  await page.goto(DOC_PATH);
+  const report = reportRegion(page);
+  await expect(report).toContainText("3/7");
+  state.live.revision_ref = "document_revision:dashboard-r2";
+  await page.clock.fastForward(31_000);
+  await expect(report.getByText(/Live data unavailable/)).toHaveCount(4);
+  await expect(report).not.toContainText("3/7");
   expectReadOnly(state);
 });

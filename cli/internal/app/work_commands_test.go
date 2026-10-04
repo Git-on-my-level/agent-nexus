@@ -28,6 +28,8 @@ func TestWorkUsageBeforeProfileResolution(t *testing.T) {
 		{[]string{"work", "list", "--limit", "0"}, "invalid_request"},
 		{[]string{"work", "list", "--limit", "abc"}, "invalid_flags"},
 		{[]string{"work", "get"}, "invalid_request"},
+		{[]string{"report", "render"}, "invalid_request"},
+		{[]string{"report", "render", "dashboard", "--sql", "x"}, "invalid_flags"},
 		{[]string{"work", "get", "first", "second"}, "invalid_args"},
 		{[]string{"work", "get", "../decisions"}, "invalid_request"},
 		{[]string{"work", "get", "id", "--work-id", "other"}, "invalid_request"},
@@ -77,6 +79,7 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 		method, path, query, body, response string
 	}{
 		{[]string{"work", "list", "--project-ref", "topic:launch", "--source", "github", "--owner", "actor:dev", "--phase", "review", "--freshness", "stale", "--limit", "2", "--cursor", "opaque+cursor"}, "GET", "/work", "cursor=opaque%2Bcursor&freshness=stale&limit=2&owner=actor%3Adev&phase=review&project_ref=topic%3Alaunch&source=github", "", `{"work":[],"next_cursor":"next"}`},
+		{[]string{"report", "render", "document:dashboard"}, "GET", "/docs/document:dashboard/report", "", "", `{"observed_at":"2026-10-04T00:00:00Z","panels":[]}`},
 		{[]string{"work", "get", "card:launch"}, "GET", "/work/card:launch", "", "", `{"work":{"ref":"card:launch","phase":"unknown"}}`},
 		{[]string{"work", "observations", "list", "card:launch", "--limit", "1", "--cursor", "next"}, "GET", "/work/card:launch/observations", "cursor=next&limit=1", "", `{"observations":[],"next_cursor":"older"}`},
 		{[]string{"work", "observations", "submit", "card:launch", "--from-file", "-"}, "POST", "/work/card:launch/observations", "", `{"observation":{"idempotency_key":"report-1","reader_id":"reader","reader_revision":"v1","observed_at":"2026-09-08T00:00:00Z","status":"reported","facts":{},"evidence":[]}}`, `{"duplicate":true,"observation":{"id":"obs-1"},"work":{"ref":"card:launch"}}`},

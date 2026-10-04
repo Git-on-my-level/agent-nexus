@@ -245,6 +245,18 @@ test("overview summarizes needs you, work, agents, and the preferred report", as
     page.getByRole("heading", { name: "Fleet Dashboard", exact: true }),
   ).toBeVisible();
 
+  const inlineReport = page.getByRole("region", { name: "Visual report" });
+  await expect(inlineReport.getByLabel("Filter by freshness")).toHaveCount(0);
+  await expect(
+    inlineReport.getByRole("button", { name: "All projects" }),
+  ).toHaveCount(0);
+  await expect(
+    inlineReport.getByRole("button", { name: "Inspect evidence" }),
+  ).toHaveCount(0);
+  await expect(inlineReport.locator(".report-footnote")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Open document", exact: true }),
+  ).toBeVisible();
   await page.locator("[data-overview-cell='github:in_progress']").click();
   await expect(page).toHaveURL(/\/tasks\?source=github&phase=in_progress/);
 });
