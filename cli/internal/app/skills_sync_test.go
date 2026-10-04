@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -87,6 +88,47 @@ func TestSkillsSyncDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestSkillsAppRunAcceptsEverySyncFlagForm(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		flag string
+		want string
+	}{
+		{name: "pm", flag: "--pm", want: "pm_enabled=true"},
+		{name: "no pm", flag: "--no-pm", want: "pm_enabled=false"},
+		{name: "auto sync", flag: "--auto-sync", want: "auto_sync=true"},
+		{name: "no auto sync", flag: "--no-auto-sync", want: "auto_sync=false"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			a := isolatedSkillsApp(home)
+			a.Stdout = &stdout
+			a.Stderr = &stderr
+			code := a.Run([]string{"skills", "sync", "--home", home, "--dry-run", tc.flag})
+			if code != 0 || !strings.Contains(stdout.String(), tc.want) {
+				t.Fatalf("App.Run rejected %s: exit=%d stdout=%s stderr=%s", tc.flag, code, stdout.String(), stderr.String())
+			}
+		})
+	}
+	var stdout, stderr bytes.Buffer
+	a := isolatedSkillsApp(home)
+	a.Stdout = &stdout
+	a.Stderr = &stderr
+	if code := a.Run([]string{"skills", "sync", "--home", home, "--scheduled"}); code != 0 {
+		t.Fatalf("App.Run rejected the detached --scheduled form: exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	preferences, exists, err := readSkillsSyncConfig(filepath.Join(home, ".config", "anx"))
+	if err != nil || !exists || preferences.LastAutoSyncAt == "" {
+		t.Fatalf("successful scheduled run did not record its completion: %+v exists=%t err=%v", preferences, exists, err)
+	}
+}
+
 func TestSkillsSyncReportsSharedLegacyRootOnce(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -163,7 +205,10 @@ func TestSkillsSyncRefreshesCleanCopiesAndPreservesEdits(t *testing.T) {
 func TestSkillsAdoptRequiresDigestAndKeepsBackup(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
-	dir := filepath.Join(home, "legacy", "anx-cli-agent")
+	if err := os.Mkdir(filepath.Join(home, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".cursor", "skills", "anx-cli-agent")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -193,16 +238,113 @@ func TestSkillsAdoptRequiresDigestAndKeepsBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	adoptedData := asMap(adopted.Data)
+	legacyDir := anyString(adoptedData["legacy_path"])
 	dir = anyString(adoptedData["path"])
+	canonical, err := resolveManagedSkillDirectory(filepath.Join(home, ".cursor", "skills", "anx-participant"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != canonical || anyString(adoptedData["canonical_path"]) != canonical {
+		t.Fatalf("legacy adoption did not migrate to the canonical skill path: %#v", adoptedData)
+	}
 	backup := anyString(adoptedData["backup_path"])
 	backupBytes, err := os.ReadFile(backup)
 	if err != nil || !bytes.Equal(backupBytes, old) {
 		t.Fatalf("legacy backup was not preserved: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(legacyDir, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy skill remains loadable after migration: %v", err)
+	}
 	assertSkillState(t, dir, participantFixture(t), "current")
 	installed, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 	if err != nil || !bytes.Equal(installed, []byte(participantFixture(t).Content)) {
 		t.Fatalf("managed skill was not installed: %v", err)
+	}
+	status, _, err := a.runSkillsStatus(nil, config.Resolved{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := asMap(status.Data)["skills"].([]managedSkillState)
+	if len(states) != 1 || states[0].Path != canonical || states[0].State != "current" {
+		t.Fatalf("status omitted the migrated managed copy: %#v", states)
+	}
+	markerPath := filepath.Join(canonical, managedSkillMarkerName)
+	markerBytes, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var marker managedSkillMarker
+	if err := json.Unmarshal(markerBytes, &marker); err != nil {
+		t.Fatal(err)
+	}
+	marker.CLIVersion = "older-cli"
+	markerBytes, err = json.Marshal(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(markerPath, markerBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status, _, err = a.runSkillsStatus(nil, config.Resolved{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states = asMap(status.Data)["skills"].([]managedSkillState)
+	if len(states) != 1 || states[0].State != "outdated" {
+		t.Fatalf("status did not report stale migrated provenance: %#v", states)
+	}
+	refreshed, _, err := a.runSkillsSync(nil, config.Resolved{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states = asMap(refreshed.Data)["skills"].([]managedSkillState)
+	if len(states) != 1 || states[0].State != "current" || !states[0].Changed {
+		t.Fatalf("sync did not refresh migrated copy: %#v", states)
+	}
+}
+
+func TestSkillsAdoptMigratesCodexLegacyRootToSharedCanonicalRoot(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	legacyDir := filepath.Join(home, ".codex", "skills", "anx")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := []byte("Use config use <profile> and auth register.\n")
+	if err := os.WriteFile(filepath.Join(legacyDir, "SKILL.md"), legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := isolatedSkillsApp(home)
+	plan, _, err := a.runSkillsAdopt([]string{legacyDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := resolveManagedSkillDirectory(filepath.Join(home, ".agents", "skills", "anx-participant"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := anyString(asMap(plan.Data)["canonical_path"]); got != canonical {
+		t.Fatalf("Codex legacy plan selected %q, want shared root %q", got, canonical)
+	}
+	digest := skills.Digest(legacy)
+	if _, _, err := a.runSkillsAdopt([]string{legacyDir, "--expected-digest", digest}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Codex legacy skill remains loadable after migration: %v", err)
+	}
+	status, _, err := a.runSkillsStatus(nil, config.Resolved{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := asMap(status.Data)["skills"].([]managedSkillState)
+	if len(states) != 2 {
+		t.Fatalf("shared Codex/OMP status omitted migrated skill: %#v", states)
+	}
+	for _, state := range states {
+		if state.State != "current" || state.Path != canonical {
+			t.Fatalf("migrated shared copy is not visible to %s status: %#v", state.Harness, state)
+		}
 	}
 }
 
@@ -251,12 +393,17 @@ func TestAutomaticSkillsRefreshLaunchIsDetachedAndDaily(t *testing.T) {
 	a.now = func() time.Time { return now }
 	launched := make(chan struct{}, 3)
 	workerRelease := make(chan struct{})
-	workerDone := make(chan struct{}, 2)
-	a.startSkillsRefresh = func(_, _, _ string) error {
+	workerDone := make(chan int, 2)
+	a.startSkillsRefresh = func(_, configDir, workerHome string) error {
 		launched <- struct{}{}
 		go func() {
 			<-workerRelease
-			workerDone <- struct{}{}
+			worker := isolatedSkillsApp(workerHome)
+			worker.now = func() time.Time { return now }
+			var stdout, stderr bytes.Buffer
+			worker.Stdout = &stdout
+			worker.Stderr = &stderr
+			workerDone <- worker.Run([]string{"--config-dir", configDir, "skills", "sync", "--scheduled", "--home", workerHome})
 		}()
 		return nil
 	}
@@ -275,15 +422,28 @@ func TestAutomaticSkillsRefreshLaunchIsDetachedAndDaily(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("daily refresh did not launch")
 	}
-	select {
-	case <-workerDone:
-		t.Fatal("detached refresh unexpectedly completed while held")
-	default:
+	configDir := filepath.Join(home, ".config", "anx")
+	if stored, exists, err := readSkillsSyncConfig(configDir); err != nil || exists && stored.LastAutoSyncAt != "" {
+		t.Fatalf("parent recorded a refresh before the worker succeeded: %+v exists=%t err=%v", stored, exists, err)
 	}
 	a.maybeScheduleSkillsRefresh("cards create", &commandResult{Data: map[string]any{"created": true}}, "")
 	select {
 	case <-launched:
 		t.Fatal("daily mutation launched a second refresh")
+	default:
+	}
+	close(workerRelease)
+	if code := <-workerDone; code != 0 {
+		t.Fatalf("scheduled worker failed: %d", code)
+	}
+	stored, exists, err := readSkillsSyncConfig(configDir)
+	if err != nil || !exists || stored.LastAutoSyncAt == "" {
+		t.Fatalf("successful worker did not record its completion: %+v exists=%t err=%v", stored, exists, err)
+	}
+	a.maybeScheduleSkillsRefresh("cards create", &commandResult{Data: map[string]any{"created": true}}, "")
+	select {
+	case <-launched:
+		t.Fatal("same-day mutation launched after successful refresh")
 	default:
 	}
 	a.maybeScheduleSkillsRefresh("update", &commandResult{Data: map[string]any{"updated": true}}, "")
@@ -292,12 +452,31 @@ func TestAutomaticSkillsRefreshLaunchIsDetachedAndDaily(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("successful CLI upgrade did not trigger an immediate refresh")
 	}
-	close(workerRelease)
-	<-workerDone
-	<-workerDone
-	stored, exists, err := readSkillsSyncConfig(filepath.Join(home, ".config", "anx"))
-	if err != nil || !exists || stored.LastAutoSyncAt == "" {
-		t.Fatalf("daily refresh timestamp was not recorded: %+v %v", stored, err)
+	if code := <-workerDone; code != 0 {
+		t.Fatalf("upgrade-triggered worker failed: %d", code)
+	}
+}
+
+func TestFailedScheduledSkillsRefreshDoesNotRecordCompletion(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".config", "anx")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, skillsSyncConfigName), []byte("{invalid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := isolatedSkillsApp(home)
+	var stdout, stderr bytes.Buffer
+	a.Stdout = &stdout
+	a.Stderr = &stderr
+	if code := a.Run([]string{"--config-dir", configDir, "skills", "sync", "--scheduled", "--home", home}); code == 0 {
+		t.Fatalf("invalid preferences unexpectedly allowed a scheduled refresh: stdout=%s", stdout.String())
+	}
+	content, err := os.ReadFile(filepath.Join(configDir, skillsSyncConfigName))
+	if err != nil || string(content) != "{invalid\n" {
+		t.Fatalf("failed refresh changed preferences or recorded completion: %q err=%v", content, err)
 	}
 }
 

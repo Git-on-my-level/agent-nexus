@@ -75,20 +75,16 @@ func (a *App) runSkills(args []string, cfg config.Resolved) (*commandResult, str
 	if sub != "configure" && sub != "verify" {
 		return nil, "skills", skillsSubcommandSpec.unknownError(sub)
 	}
-	fs := newSilentFlagSet(name)
-	var path, role trackedString
-	var dryRun trackedBool
-	fs.Var(&path, "path", "Explicit skill directory; no harness discovery")
-	fs.Var(&role, "role", "participant or pm")
-	if sub == "configure" {
-		fs.Var(&dryRun, "dry-run", "Inspect without writing")
-	}
-	if err := fs.Parse(args[1:]); err != nil {
+	parsed, err := parseSkillsFlags(sub, args[1:])
+	if err != nil {
 		return nil, name, errnorm.Usage("invalid_flags", err.Error())
 	}
-	if len(fs.Args()) > 0 {
+	if len(parsed.positionals) > 0 {
 		return nil, name, errnorm.Usage("invalid_args", "unexpected positional arguments")
 	}
+	path := parsed.stringValue("path")
+	role := parsed.stringValue("role")
+	dryRun := parsed.boolValue("dry-run")
 	if strings.TrimSpace(path.value) == "" || strings.TrimSpace(role.value) == "" {
 		return nil, name, errnorm.Usage("invalid_request", "--path <skill-directory> and --role participant|pm are required")
 	}
@@ -424,8 +420,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 
@@ -435,44 +432,19 @@ digest. Custom files, unrelated instructions and credentials are preserved.`)
 
 func init() {
 	for _, sub := range []string{"sync", "adopt", "configure", "status", "verify"} {
-		flags := []localHelperFlag{}
 		var examples []string
 		switch sub {
 		case "sync":
-			flags = []localHelperFlag{
-				{Name: "--dry-run", Description: "Inspect without writes."},
-				{Name: "--pm | --no-pm", Description: "Enable or disable optional PM skill delivery."},
-				{Name: "--auto-sync | --no-auto-sync", Description: "Enable or disable detached refresh."},
-				{Name: "--home <dir>", Description: "Use an alternate home directory."},
-			}
 			examples = []string{"anx skills sync --dry-run", "anx skills sync --pm"}
 		case "adopt":
-			flags = []localHelperFlag{
-				{Name: "--expected-digest <digest>", Description: "Confirm the digest shown by the read-only plan."},
-				{Name: "--role <role>", Description: "participant or pm; defaults to participant."},
-			}
 			examples = []string{"anx skills adopt ~/.codex/skills/anx"}
 		case "configure":
-			flags = []localHelperFlag{
-				{Name: "--path <skill-directory>", Description: "Explicit destination; no harness discovery."},
-				{Name: "--role <role>", Description: "participant or pm; PM supplements participant."},
-				{Name: "--dry-run", Description: "Inspect without writes."},
-			}
 			examples = []string{"anx skills configure --path ./anx-participant --role participant --dry-run"}
 		case "status":
-			flags = []localHelperFlag{
-				{Name: "--home <dir>", Description: "Use an alternate home directory."},
-				{Name: "--path <skill-directory>", Description: "Inspect one explicit local copy."},
-				{Name: "--role <role>", Description: "Required with --path; participant or pm."},
-			}
 			examples = []string{"anx skills status", "anx skills status --path ./anx-participant --role participant"}
 		case "verify":
-			flags = []localHelperFlag{
-				{Name: "--path <skill-directory>", Description: "Explicit destination; no harness discovery."},
-				{Name: "--role <role>", Description: "participant or pm."},
-			}
 			examples = []string{"anx skills verify --path ./anx-participant --role participant"}
 		}
-		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "skills " + sub, Summary: "Inspect or maintain versioned local ANX skill files.", JSONShape: "`schema_version`, `state`, `cli_version`, `source_revision`, `expected_sha256`, `observed_sha256`, `harness_configuration`, `session_activation`", Composition: "Local managed files preserve edited and agentctl-owned copies; session activation remains unknown.", Flags: flags, Examples: examples})
+		localHelperTopics = append(localHelperTopics, localHelperTopic{Path: "skills " + sub, Summary: "Inspect or maintain versioned local ANX skill files.", JSONShape: "`schema_version`, `state`, `cli_version`, `source_revision`, `expected_sha256`, `observed_sha256`, `harness_configuration`, `session_activation`", Composition: "Local managed files preserve edited and agentctl-owned copies; session activation remains unknown.", Flags: skillsLocalHelperFlags(sub), Examples: examples})
 	}
 }

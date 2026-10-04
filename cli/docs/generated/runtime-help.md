@@ -8448,8 +8448,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 
@@ -8479,8 +8480,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 
@@ -8510,8 +8512,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 
@@ -8541,8 +8544,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 
@@ -8572,8 +8576,9 @@ be disabled with --no-auto-sync or ANX_SKILLS_AUTO_SYNC=0. --dry-run performs no
 writes. Agentctl-owned copies are reported and left for agentctl to manage.
 
 Legacy skills are reported with their digest. Adoption is read-only until the
-printed digest is passed back with --expected-digest; adoption keeps the old
-SKILL.md as a timestamped backup. Status reports state per harness. Explicit
+printed digest is passed back with --expected-digest; adoption migrates the
+skill to the canonical harness path and keeps the old SKILL.md as a timestamped
+backup, leaving the legacy directory without a loadable skill. Status reports state per harness. Explicit
 configure/verify remain available for arbitrary providers and paths. Harness
 activation remains unknown even when a managed copy is current.
 

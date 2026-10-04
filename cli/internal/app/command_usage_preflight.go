@@ -268,22 +268,8 @@ func preflightSkillsArgs(args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	valueFlag := preflightFlagSpec{kind: preflightFlagString}
-	boolFlag := preflightFlagSpec{kind: preflightFlagBool}
-	var flags map[string]preflightFlagSpec
-	switch skillsSubcommandSpec.normalize(args[0]) {
-	case "configure":
-		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag, "dry-run": boolFlag}
-	case "status":
-		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag, "home": valueFlag}
-	case "verify":
-		flags = map[string]preflightFlagSpec{"path": valueFlag, "role": valueFlag}
-	case "sync":
-		flags = map[string]preflightFlagSpec{"dry-run": boolFlag, "pm": boolFlag, "no-pm": boolFlag, "auto-sync": boolFlag, "no-auto-sync": boolFlag, "home": valueFlag, "scheduled": boolFlag}
-	case "adopt":
-		flags = map[string]preflightFlagSpec{"expected-digest": valueFlag, "role": valueFlag}
-	}
-	return preflightFlagUsage(args[1:], flags)
+	command := skillsSubcommandSpec.normalize(args[0])
+	return preflightFlagUsage(args[1:], skillsPreflightFlagSpecs()["skills "+command])
 }
 
 func preflightSubcommand(args []string, spec subcommandSpec) error {
@@ -522,6 +508,9 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 	addLayer(derivedLifecyclePreflightSpecs())
 	addLayer(resourceRuntimePreflightSpecs())
 	for _, topic := range localHelperTopics {
+		if strings.HasPrefix(topic.Path, "skills ") {
+			continue
+		}
 		flags := map[string]preflightFlagSpec{}
 		for _, flag := range topic.Flags {
 			name, kind, ok := parseLocalHelperFlagSpec(flag.Name)
@@ -534,6 +523,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}
 	}
 	addLayer(manualPreflightFlagSpecs())
+	addLayer(skillsPreflightFlagSpecs())
 	return specs
 }
 

@@ -49,22 +49,20 @@ type legacySkillFinding struct {
 }
 
 func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult, string, error) {
-	fs := newSilentFlagSet("skills sync")
-	var dryRun, pm, noPM, autoSync, noAutoSync, scheduled trackedBool
-	var homeFlag trackedString
-	fs.Var(&dryRun, "dry-run", "Plan changes without writing files or preferences")
-	fs.Var(&pm, "pm", "Enable and install the PM skill alongside participant; remember this choice")
-	fs.Var(&noPM, "no-pm", "Disable PM skill delivery; remember this choice")
-	fs.Var(&autoSync, "auto-sync", "Enable daily automatic refresh")
-	fs.Var(&noAutoSync, "no-auto-sync", "Disable automatic refresh")
-	fs.Var(&homeFlag, "home", "Use an alternate home directory (primarily for isolated setups)")
-	fs.Var(&scheduled, "scheduled", "Internal detached refresh invocation")
-	if err := fs.Parse(args); err != nil {
+	parsed, err := parseSkillsFlags("sync", args)
+	if err != nil {
 		return nil, "skills sync", errnorm.Usage("invalid_flags", err.Error())
 	}
-	if len(fs.Args()) != 0 {
+	if len(parsed.positionals) != 0 {
 		return nil, "skills sync", errnorm.Usage("invalid_args", "unexpected positional arguments")
 	}
+	dryRun := parsed.boolValue("dry-run")
+	pm := parsed.boolValue("pm")
+	noPM := parsed.boolValue("no-pm")
+	autoSync := parsed.boolValue("auto-sync")
+	noAutoSync := parsed.boolValue("no-auto-sync")
+	scheduled := parsed.boolValue("scheduled")
+	homeFlag := parsed.stringValue("home")
 	if pm.set && noPM.set || autoSync.set && noAutoSync.set {
 		return nil, "skills sync", errnorm.Usage("invalid_request", "choose only one of --pm/--no-pm and --auto-sync/--no-auto-sync")
 	}
@@ -76,6 +74,9 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 	configDir, err := resolveSkillsConfigDir(home, cfg.ConfigDir)
 	if err != nil {
 		return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_config_invalid", "resolve ANX skills configuration directory", err)
+	}
+	if scheduled.value {
+		defer os.Remove(filepath.Join(configDir, ".skills-auto-sync.lock"))
 	}
 	preferences, _, err := readSkillsSyncConfig(configDir)
 	if err != nil {
@@ -152,7 +153,12 @@ func (a *App) runSkillsSync(args []string, cfg config.Resolved) (*commandResult,
 	if legacyErr != nil {
 		return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "scan known legacy ANX skills", legacyErr)
 	}
-	if !dryRun.value && !scheduled.value && (pm.set || noPM.set || autoSync.set || noAutoSync.set) {
+	if !dryRun.value && scheduled.value {
+		preferences.LastAutoSyncAt = a.clockNow().UTC().Format(time.RFC3339Nano)
+		if err := writeSkillsSyncConfig(configDir, preferences); err != nil {
+			return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_config_write_failed", "record successful automatic ANX skills refresh", err)
+		}
+	} else if !dryRun.value && (pm.set || noPM.set || autoSync.set || noAutoSync.set) {
 		if err := writeSkillsSyncConfig(configDir, preferences); err != nil {
 			return nil, "skills sync", errnorm.Wrap(errnorm.KindLocal, "skill_config_write_failed", "save ANX skills preferences", err)
 		}
@@ -171,17 +177,16 @@ func appendHarnessSkillStates(dst []managedSkillState, state managedSkillState, 
 }
 
 func (a *App) runSkillsStatus(args []string, cfg config.Resolved) (*commandResult, string, error) {
-	fs := newSilentFlagSet("skills status")
-	var pathFlag, roleFlag, homeFlag trackedString
-	fs.Var(&pathFlag, "path", "Explicit skill directory")
-	fs.Var(&roleFlag, "role", "participant or pm")
-	fs.Var(&homeFlag, "home", "Use an alternate home directory")
-	if err := fs.Parse(args); err != nil {
+	parsed, err := parseSkillsFlags("status", args)
+	if err != nil {
 		return nil, "skills status", errnorm.Usage("invalid_flags", err.Error())
 	}
-	if len(fs.Args()) != 0 {
+	if len(parsed.positionals) != 0 {
 		return nil, "skills status", errnorm.Usage("invalid_args", "unexpected positional arguments")
 	}
+	pathFlag := parsed.stringValue("path")
+	roleFlag := parsed.stringValue("role")
+	homeFlag := parsed.stringValue("home")
 	if pathFlag.set != roleFlag.set {
 		return nil, "skills status", errnorm.Usage("invalid_request", "--path and --role must be supplied together")
 	}
@@ -245,17 +250,16 @@ func (a *App) runSkillsStatus(args []string, cfg config.Resolved) (*commandResul
 }
 
 func (a *App) runSkillsAdopt(args []string) (*commandResult, string, error) {
-	fs := newSilentFlagSet("skills adopt")
-	var expectedDigest, roleFlag trackedString
-	fs.Var(&expectedDigest, "expected-digest", "Digest printed by the read-only adoption plan")
-	fs.Var(&roleFlag, "role", "participant or pm (default participant)")
 	positionals, flagArgs := splitSkillsAdoptArgs(args)
-	if err := fs.Parse(flagArgs); err != nil {
+	parsed, err := parseSkillsFlags("adopt", flagArgs)
+	if err != nil {
 		return nil, "skills adopt", errnorm.Usage("invalid_flags", err.Error())
 	}
 	if len(positionals) != 1 {
 		return nil, "skills adopt", errnorm.Usage("invalid_args", "usage: anx skills adopt <path> [--expected-digest sha256:<digest>] [--role participant|pm]")
 	}
+	expectedDigest := parsed.stringValue("expected-digest")
+	roleFlag := parsed.stringValue("role")
 	role := strings.TrimSpace(roleFlag.value)
 	if role == "" {
 		role = "participant"
@@ -286,6 +290,14 @@ func (a *App) runSkillsAdopt(args []string) (*commandResult, string, error) {
 	if !isLegacyANXSkill(target, digest, content) {
 		return nil, "skills adopt", errnorm.Local("conflict", "path does not contain a recognized legacy ANX skill")
 	}
+	home, err := a.skillHome("")
+	if err != nil {
+		return nil, "skills adopt", err
+	}
+	managedTarget, harnesses, err := canonicalAdoptionTarget(home, target, a, skill)
+	if err != nil {
+		return nil, "skills adopt", errnorm.Local("invalid_request", err.Error())
+	}
 	for _, marker := range []string{managedSkillMarkerName, ".agentctl-skill.json"} {
 		if _, markerErr := os.Lstat(filepath.Join(target, marker)); markerErr == nil {
 			return nil, "skills adopt", errnorm.Local("conflict", "skill directory already has an ownership marker; adoption refused")
@@ -295,8 +307,8 @@ func (a *App) runSkillsAdopt(args []string) (*commandResult, string, error) {
 	}
 	name := filepath.Base(target)
 	if expectedDigest.value == "" {
-		data := map[string]any{"state": "legacy", "path": target, "legacy_name": name, "content_sha256": digest, "requires_confirmation": true, "role": role}
-		return &commandResult{Data: data, Text: fmt.Sprintf("Legacy ANX skill found at %q (sha256 %s). Review it, then rerun anx skills adopt with --expected-digest %s.", target, digest, digest)}, "skills adopt", nil
+		data := map[string]any{"state": "legacy", "path": target, "canonical_path": managedTarget, "harnesses": harnesses, "legacy_name": name, "content_sha256": digest, "requires_confirmation": true, "role": role}
+		return &commandResult{Data: data, Text: fmt.Sprintf("Legacy ANX skill found at %q (sha256 %s); adoption will migrate it to %q. Review it, then rerun anx skills adopt with --expected-digest %s.", target, digest, managedTarget, digest)}, "skills adopt", nil
 	}
 	if !skillDigestPattern.MatchString(strings.TrimSpace(expectedDigest.value)) {
 		return nil, "skills adopt", errnorm.Usage("invalid_request", "--expected-digest must be a sha256:<64 lowercase hex> digest")
@@ -330,6 +342,24 @@ func (a *App) runSkillsAdopt(args []string) (*commandResult, string, error) {
 	if err := os.Rename(contentPath, backup); err != nil {
 		return nil, "skills adopt", errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "move legacy skill to timestamped backup", err)
 	}
+	if managedTarget != target {
+		if err := configureManagedSkill(managedTarget, skill); err != nil {
+			if restoreErr := os.Rename(backup, contentPath); restoreErr != nil {
+				err = fmt.Errorf("%v; restore legacy backup failed: %w", err, restoreErr)
+			}
+			return nil, "skills adopt", errnorm.Wrap(errnorm.KindLocal, "skill_write_failed", "install managed skill at canonical harness path", err)
+		}
+		state, err := inspectManagedSkill(managedTarget, skill)
+		if err != nil {
+			if restoreErr := os.Rename(backup, contentPath); restoreErr != nil {
+				err = fmt.Errorf("%v; restore legacy backup failed: %w", err, restoreErr)
+			}
+			return nil, "skills adopt", errnorm.Wrap(errnorm.KindLocal, "skill_read_failed", "verify migrated skill", err)
+		}
+		state.Changed = true
+		state.Delivery = "managed"
+		return &commandResult{Data: map[string]any{"state": "adopted", "path": managedTarget, "legacy_path": target, "canonical_path": managedTarget, "harnesses": harnesses, "legacy_name": name, "content_sha256": digest, "backup_path": backup, "skill": state}}, "skills adopt", nil
+	}
 	rollback := func(cause error) error {
 		_ = os.Remove(contentPath)
 		_ = os.Remove(filepath.Join(target, managedSkillMarkerName))
@@ -356,7 +386,7 @@ func (a *App) runSkillsAdopt(args []string) (*commandResult, string, error) {
 	}
 	state.Changed = true
 	state.Delivery = "managed"
-	return &commandResult{Data: map[string]any{"state": "adopted", "path": target, "legacy_name": name, "content_sha256": digest, "backup_path": backup, "skill": state}}, "skills adopt", nil
+	return &commandResult{Data: map[string]any{"state": "adopted", "path": managedTarget, "legacy_path": target, "canonical_path": managedTarget, "harnesses": harnesses, "legacy_name": name, "content_sha256": digest, "backup_path": backup, "skill": state}}, "skills adopt", nil
 }
 
 func splitSkillsAdoptArgs(args []string) (positionals, flags []string) {
@@ -370,7 +400,7 @@ func splitSkillsAdoptArgs(args []string) (positionals, flags []string) {
 		if strings.Contains(arg, "=") {
 			continue
 		}
-		if arg == "--expected-digest" || arg == "--role" {
+		if definition, ok := skillsFlagDefinitionFor("adopt", strings.TrimPrefix(arg, "--")); ok && definition.kind == preflightFlagString {
 			if index+1 < len(args) {
 				index++
 				flags = append(flags, args[index])
@@ -378,6 +408,42 @@ func splitSkillsAdoptArgs(args []string) (positionals, flags []string) {
 		}
 	}
 	return positionals, flags
+}
+
+func canonicalAdoptionTarget(home, legacyPath string, a *App, skill skills.Skill) (string, []string, error) {
+	targets := detectSkillHarnesses(home, a.Getenv, a.skillsLookPath())
+	legacyRoot := filepath.Dir(filepath.Clean(legacyPath))
+	for _, target := range targets {
+		if sameSkillsPath(legacyRoot, target.Root) {
+			canonical, err := resolveManagedSkillDirectory(filepath.Join(target.Root, skill.Name))
+			return canonical, target.Harnesses, err
+		}
+	}
+	if sameSkillsPath(legacyRoot, filepath.Join(home, ".codex", "skills")) {
+		for _, target := range targets {
+			for _, harness := range target.Harnesses {
+				if harness == "codex" {
+					canonical, err := resolveManagedSkillDirectory(filepath.Join(target.Root, skill.Name))
+					return canonical, target.Harnesses, err
+				}
+			}
+		}
+	}
+	return "", nil, fmt.Errorf("legacy skill path must be a direct child of a supported harness skills directory")
+}
+
+func sameSkillsPath(left, right string) bool {
+	canonical := func(path string) string {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return filepath.Clean(path)
+		}
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+			return filepath.Clean(resolved)
+		}
+		return filepath.Clean(abs)
+	}
+	return canonical(left) == canonical(right)
 }
 
 func inspectDetectedSkillStates(targets []skillHarnessTarget, roles []string) ([]managedSkillState, error) {
@@ -487,16 +553,24 @@ func (a *App) skillsLookPath() func(string) (string, error) {
 
 func resolveSkillsConfigDir(home, configured string) (string, error) {
 	configured = strings.TrimSpace(configured)
+	path := configured
 	if configured != "" {
 		if !filepath.IsAbs(configured) || filepath.Clean(configured) != configured {
 			return "", fmt.Errorf("ANX_CONFIG_DIR must be an absolute clean path")
 		}
-		return configured, nil
-	}
-	if strings.TrimSpace(home) == "" {
+	} else if strings.TrimSpace(home) == "" {
 		return "", fmt.Errorf("home directory is unavailable")
+	} else {
+		path = filepath.Join(home, ".config", "anx")
 	}
-	return filepath.Join(home, ".config", "anx"), nil
+	resolved, err := resolveManagedSkillDirectory(path)
+	if err != nil {
+		return "", err
+	}
+	if err := skillPathWithoutSymlinks(resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
 }
 
 func readSkillsSyncConfig(dir string) (skillsSyncConfig, bool, error) {
@@ -782,35 +856,45 @@ func (a *App) maybeScheduleSkillsRefresh(command string, result *commandResult, 
 	lockPath := filepath.Join(configDir, ".skills-auto-sync.lock")
 	lock, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return
+		}
+		info, statErr := os.Stat(lockPath)
+		if statErr != nil || time.Since(info.ModTime()) < 15*time.Minute {
+			return
+		}
+		if os.Remove(lockPath) != nil {
+			return
+		}
+		lock, err = os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return
+		}
+	}
+	if err := lock.Close(); err != nil {
+		_ = os.Remove(lockPath)
 		return
 	}
-	_ = lock.Close()
-	defer os.Remove(lockPath)
 	preferences, _, err = readSkillsSyncConfig(configDir)
 	if err != nil || !automaticSkillsSyncEnabled(a, preferences) {
+		_ = os.Remove(lockPath)
 		return
 	}
 	if !updated && preferences.LastAutoSyncAt != "" {
 		last, parseErr := time.Parse(time.RFC3339Nano, preferences.LastAutoSyncAt)
 		if parseErr == nil && last.UTC().Format("2006-01-02") == now.Format("2006-01-02") {
+			_ = os.Remove(lockPath)
 			return
 		}
-	}
-	previous := preferences
-	preferences.LastAutoSyncAt = now.Format(time.RFC3339Nano)
-	if err := writeSkillsSyncConfig(configDir, preferences); err != nil {
-		return
 	}
 	executable, err := os.Executable()
 	if err == nil && a.startSkillsRefresh != nil {
 		err = a.startSkillsRefresh(executable, configDir, home)
+	} else if err == nil {
+		err = fmt.Errorf("detached skills refresh is unavailable")
 	}
 	if err != nil {
-		if previous.LastAutoSyncAt == "" {
-			_ = os.Remove(filepath.Join(configDir, skillsSyncConfigName))
-		} else {
-			_ = writeSkillsSyncConfig(configDir, previous)
-		}
+		_ = os.Remove(lockPath)
 	}
 }
 

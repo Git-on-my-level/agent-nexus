@@ -56,9 +56,10 @@ anx skills adopt ~/.cursor/skills/anx-cli-agent
 anx skills adopt ~/.cursor/skills/anx-cli-agent --expected-digest sha256:<digest>
 ```
 
-The first command reports the digest without writing. The confirmed command
-moves the old `SKILL.md` to a timestamped backup, then installs the managed
-participant skill.
+The first command reports the digest and canonical destination without writing.
+The confirmed command moves the old `SKILL.md` to a timestamped backup, installs
+the managed participant skill at the harness's canonical `anx-participant`
+path, and leaves the legacy directory without a loadable `SKILL.md`.
 
 If a destination contains `.agentctl-skill.json`, ANX reports it as deferred and
 leaves it to agentctl. This allows an existing Skill Hub pack to remain the
