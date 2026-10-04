@@ -1545,10 +1545,16 @@ func (a *App) runDocsCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, "docs create", err
 		}
 		if dryRun {
-			return dryRunResult("docs create", "docs.create", nil, nil, body), "docs create", nil
+			result := dryRunResult("docs create", "docs.create", nil, nil, body)
+			result.Warnings = reportContentWarning(reportBodyContent(asMap(body)))
+			return result, "docs create", nil
 		}
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "docs create", "docs.create", nil, nil, body)
-		return addResourceURLToResult(cfg, "docs.create", result), "docs create", callErr
+		result = addResourceURLToResult(cfg, "docs.create", result)
+		if result != nil {
+			result.Warnings = reportContentWarning(reportBodyContent(asMap(body)))
+		}
+		return result, "docs create", callErr
 	case "put":
 		result, callErr := a.runDocsPutCommand(ctx, args[1:], cfg)
 		return result, "docs put", callErr

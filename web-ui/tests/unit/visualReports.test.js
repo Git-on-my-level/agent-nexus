@@ -8,6 +8,7 @@ import {
   getPanelFreshness,
   parseVisualReport,
   safeReportUrl,
+  visualReportContentText,
 } from "../../src/lib/visualReports.js";
 import {
   VISUAL_REPORT_EXAMPLE_OBSERVED_AT,
@@ -67,6 +68,14 @@ describe("visual report document parser", () => {
       new Set(VISUAL_REPORT_TYPES.slice(0, 6)),
     );
     expect(parse(result.report)).toEqual(result);
+  });
+
+  it("serializes structured document content before parsing", () => {
+    expect(
+      parseVisualReport(visualReportContentText(visualReportExample)),
+    ).toEqual({ recognized: true, report: visualReportExample, errors: [] });
+    expect(visualReportContentText(null)).toBe("");
+    expect(visualReportContentText(undefined)).toBe("");
   });
 
   it.each([

@@ -201,6 +201,11 @@ func proposalPreviewResult(targetCommandID string, method string, path string, p
 		"body":              cloneMap(body),
 		"apply_command":     applyCommand,
 	}
+	if targetCommandID == "docs.revisions.create" {
+		data["applied"] = false
+		data["head_unchanged"] = true
+		data["message"] = "Revision proposal staged; the document head is unchanged."
+	}
 	if strings.TrimSpace(diffText) != "" {
 		data["diff"] = map[string]any{
 			"format": "unified",
@@ -208,8 +213,12 @@ func proposalPreviewResult(targetCommandID string, method string, path string, p
 		}
 	}
 
+	opening := "Proposal staged successfully."
+	if targetCommandID == "docs.revisions.create" {
+		opening = "Revision proposal staged; the document head is unchanged."
+	}
 	lines := []string{
-		"Proposal staged successfully.",
+		opening,
 		"Proposal ID: " + proposalID,
 		"Target command: " + targetCommandID,
 		"Method: " + strings.ToUpper(strings.TrimSpace(method)),

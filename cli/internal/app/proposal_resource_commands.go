@@ -221,6 +221,7 @@ func (a *App) runDocsReviseCommand(ctx context.Context, args []string, cfg confi
 		_, result, err := a.commitProposal(ctx, input.proposalID, cfg, "docs.revisions.create")
 		return result, err
 	}
+	warnings := reportContentWarning(reportBodyContent(input.body))
 
 	if input.apply {
 		body := input.body
@@ -254,7 +255,11 @@ func (a *App) runDocsReviseCommand(ctx context.Context, args []string, cfg confi
 		if err := validateDocsRevisionBody(body, "docs revise"); err != nil {
 			return nil, err
 		}
-		return a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs revise", "docs.revisions.create", "document_id", input.documentID, documentIDLookupSpec, nil, body)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "docs revise", "docs.revisions.create", "document_id", input.documentID, documentIDLookupSpec, nil, body)
+		if result != nil {
+			result.Warnings = warnings
+		}
+		return result, callErr
 	}
 
 	resolvedID, currentBody, body, err := a.prepareDocsRevisionBody(ctx, cfg, input.documentID, input.body)
@@ -268,5 +273,7 @@ func (a *App) runDocsReviseCommand(ctx context.Context, args []string, cfg confi
 		return nil, err
 	}
 	applyCommand := "anx docs revise --apply --proposal-id " + draft.DraftID
-	return proposalPreviewResult("docs.revisions.create", "POST", resolveCommandPath("docs.revisions.create", map[string]string{"document_id": resolvedID}, nil), map[string]string{"document_id": resolvedID}, body, draft.DraftID, draftPath, diffText, applyCommand), nil
+	result := proposalPreviewResult("docs.revisions.create", "POST", resolveCommandPath("docs.revisions.create", map[string]string{"document_id": resolvedID}, nil), map[string]string{"document_id": resolvedID}, body, draft.DraftID, draftPath, diffText, applyCommand)
+	result.Warnings = warnings
+	return result, nil
 }

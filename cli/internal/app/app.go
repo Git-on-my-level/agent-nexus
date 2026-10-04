@@ -138,6 +138,7 @@ func (a *App) Run(args []string) int {
 		subPeek = remaining[1]
 	}
 	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
+		(cmdPeek == "report" && subPeek != "publish" && subPeek != "render") ||
 		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
@@ -209,6 +210,9 @@ func (a *App) Run(args []string) int {
 		}
 	}
 	warnings, repairs := resultWarnings(identity.Command, normalizedArgs, value)
+	if result != nil && len(result.Warnings) > 0 {
+		warnings = append(result.Warnings, warnings...)
+	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
 	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Warnings: warnings, NextActions: actions}); err != nil {
 		return 1
@@ -224,6 +228,9 @@ func needsAgentIdentity(args []string) bool {
 		return false
 	}
 	if args[0] == "debug" && len(args) > 1 && args[1] == "meta" {
+		return false
+	}
+	if args[0] == "report" && len(args) > 1 && (args[1] == "schema" || args[1] == "validate") {
 		return false
 	}
 	switch args[0] {
@@ -250,6 +257,7 @@ type commandResult struct {
 	Data       any
 	Text       string
 	RawWritten bool
+	Warnings   []output.Warning
 }
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {

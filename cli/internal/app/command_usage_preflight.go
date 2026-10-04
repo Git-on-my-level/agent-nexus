@@ -33,7 +33,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		name := "work " + args[1]
 		return name, preflightFlagUsage(args[2:], preflightFlagSpecs()[name])
 	}
-	if isWorkCommandRoot(args[0]) {
+	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		if len(args) >= 2 && args[0] == "pm" && (args[1] == "serve" || args[1] == "ask") {
 			commandName := "pm " + args[1]
 			if err := preflightFlagUsage(args[2:], preflightFlagSpecs()[commandName]); err != nil {
@@ -191,6 +191,12 @@ func preflightKnownCommandShape(args []string) error {
 				}
 			}
 		}
+	case "report":
+		if len(args) > 1 && reportSubcommandSpec.normalize(args[1]) == "render" {
+			_, err := parseWorkCommand(args)
+			return err
+		}
+		return preflightSubcommand(args[1:], reportSubcommandSpec)
 	case "events":
 		return preflightSubcommand(args[1:], eventsSubcommandSpec)
 	case "inbox":
@@ -310,6 +316,9 @@ func preflightFlagUsage(args []string, spec map[string]preflightFlagSpec) error 
 		if arg == "--" {
 			break
 		}
+		if arg == "-" {
+			continue
+		}
 		if !strings.HasPrefix(arg, "-") {
 			continue
 		}
@@ -377,7 +386,7 @@ func preflightRootCommands() map[string]struct{} {
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
 		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "read": {}, "url": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
-		"api": {}, "help": {}, "--help": {}, "-h": {},
+		"api": {}, "report": {}, "help": {}, "--help": {}, "-h": {},
 	}
 }
 

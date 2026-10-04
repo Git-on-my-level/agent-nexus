@@ -68,7 +68,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, err := a.runAwait(ctx, args[1:], cfg)
 		return "await", result, err
 	}
-	if isWorkCommandRoot(args[0]) {
+	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err
 	}
@@ -99,6 +99,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return name, result, err
 	case "meta":
 		result, name, err := a.runMeta(ctx, args[1:], cfg)
+		return name, result, err
+	case "report":
+		name, result, err := a.runReportCommand(ctx, args[1:], cfg)
 		return name, result, err
 	case "notifications":
 		result, name, err := a.runNotificationsCommand(ctx, args[1:], cfg)

@@ -23,6 +23,15 @@ const (
 	MaxErrors = 20
 )
 
+var panelTypes = []string{
+	"explanation", "evidence-table", "milestone-timeline", "dependency-diagram",
+	"metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison",
+	"live-initiatives", "live-asks", "live-work-mix", "live-activity",
+}
+
+// PanelTypes returns the panel types accepted by the shared visual-report contract.
+func PanelTypes() []string { return append([]string(nil), panelTypes...) }
+
 const jsSpacePattern = `[\x09-\x0d\x20\x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]`
 
 var (
@@ -371,7 +380,7 @@ func (v *validator) report(r map[string]any) {
 		}
 		v.text(item["title"], p+".title", 200, false)
 		v.text(item["author"], p+".author", 200, false)
-		v.enum(item["type"], p+".type", "explanation", "evidence-table", "milestone-timeline", "dependency-diagram", "metric-chart", "artifact-preview", "chart", "metric-strip", "callout", "comparison", "live-initiatives", "live-asks", "live-work-mix", "live-activity")
+		v.enum(item["type"], p+".type", panelTypes...)
 		v.enum(item["provenance"], p+".provenance", "reported", "verified", "illustrative")
 		v.enum(item["freshness"], p+".freshness", "current", "stale", "unknown", "unavailable")
 		v.timestamp(item["observed_at"], p+".observed_at", true)
