@@ -3,8 +3,9 @@
 Visual reports turn an existing ANX text document into a bounded, inspectable
 operator report. Authors supply JSON data; the web UI owns rendering. Core remains
 the source of truth, and normal document revisions, authorization, history, and
-optimistic concurrency still apply. This is a UI presentation format, not a new
-core resource, API contract, agent runtime, or proof of external truth.
+optimistic concurrency still apply. This is a presentation format carried by existing documents. Core materializes
+optional live queries; authored snapshots remain attributed claims, not proof of
+external truth.
 
 ## Author and publish a report
 
@@ -84,7 +85,7 @@ Command spellings and transport behavior come from
 [`cli/docs/generated/runtime-help.md`](../../cli/docs/generated/runtime-help.md)
 (`docs create`, `docs get`, `docs revise`) and the existing CLI helpers. The
 ordinary HTTP equivalents remain `POST /docs`, `GET /docs/{document_id}`, and
-`POST /docs/{document_id}/revisions`; no shared contract changes are required.
+`POST /docs/{document_id}/revisions`. Live readback uses `GET /docs/{document_id}/report`.
 
 ## Workspace Overview
 
@@ -97,6 +98,105 @@ opts to be preferred by a title that starts with `Dashboard` or
 boundary, so `Dashboard notes` qualifies and `Dashboarding` does not).
 Preferred reports sort ahead of newer reports that do not opt in. This is a
 title convention only; it is not a tag, a new document kind, or a core field.
+
+## Live dashboards
+
+Schema version stays **1**. Static panels and live panels share the same project
+and layout grammar. A live panel’s `data` is a query, not an observation. Keep the
+usual metadata fields for compatibility, using `observed_at: null`,
+`freshness: "unknown"`, `provenance: "reported"`, and `source_ids: []`. The reader
+replaces freshness and observation time with the authorized materialization.
+The panel’s `project_id` groups presentation; use `data.project_ref` to scope a
+query to an actual workspace project (a topic).
+
+| Type | Query fields | Default |
+| --- | --- | --- |
+| `live-initiatives` | `board_refs`, `project_ref`, `limit`, `sort` | All active boards; 10 rows; priority then newest update |
+| `live-asks` | `limit`, `include_answered`, `answered_within_hours` | 10 oldest open asks, reviews and escalations; no answers |
+| `live-work-mix` | `board_refs`, `project_ref`, `group_by` | Open work by phase; `group_by: "board"` also supported |
+| `live-activity` | `limit` | 10 newest meaningful events, with same-actor board edits collapsed within five minutes |
+
+Limits are 1–100 displayed rows, at most 16 unique `board:<handle>` refs, and
+1–720 hours for recent answers (168 by default). Sort is `priority`, `updated`,
+or `title`. Other fields, URLs, and null query values are rejected. Archived or
+trashed boards and their cards are excluded; `done` and `cancelled` phases are
+closed. Checklist progress counts `- [ ]`, `- [x]`, and `- [X]` outside fenced
+code; no checklist means unknown progress, not zero completed work. The first
+nonempty prose line and every `Needs <human>:` line remain visible.
+
+The UI refreshes every 30 seconds while visible and immediately on returning to
+the tab. Every live panel shows **Live as of** with the actual read time. Failed
+refreshes remove previous successful values. Readers without access see an
+unavailable panel; other live panels and authored snapshots remain usable.
+Materialization is bounded to 2,000 rows per source (1,000 boards). A displayed-row
+limit or a source cap sets `truncated: true` and shows **Partial view**. This is
+not a complete workspace count. Open asks outside the bounded event history may
+be omitted; the partial flag preserves that uncertainty. Activity includes new
+asks, PM decision proposals, answers, phase changes, completion, and collapsed edits.
+Decision proposals are read through the same authorized service as the PM API;
+activity shows the work title and creation time without copying private instructions.
+Private PM history is filtered using ordinary event access rules.
+
+Agents read the same projection:
+
+```sh
+anx report render document:YOUR-DASHBOARD --json
+# Same workspace authentication and access rules as other reads:
+# GET /docs/document:YOUR-DASHBOARD/report
+```
+
+The response includes `document_ref`, `revision_ref`, `observed_at`, and only the
+live `panels`. Each panel has `id`, `type`, `status` (`ok` or `unavailable`),
+`observed_at`, `truncated`, and `data`. Never treat an unavailable panel as an
+empty workspace. Rendering is read-only and does not append a document revision.
+The endpoint uses the current head query; a Docs historical revision whose ref
+no longer matches the head fails safely instead of showing data for another
+query definition.
+
+A minimal mixed dashboard:
+
+```json
+{
+  "kind": "anx.visual-report",
+  "schema_version": 1,
+  "title": "Workspace dashboard",
+  "summary": "Current initiatives with our authored focus alongside them.",
+  "generated_at": "2026-10-04T12:00:00Z",
+  "projects": [{ "id": "workspace", "title": "Workspace", "summary": "Our priorities", "outcome": "Ship the launch" }],
+  "sources": [],
+  "panels": [
+    {
+      "id": "initiatives", "project_id": "workspace", "type": "live-initiatives",
+      "title": "In flight", "author": "Workspace", "provenance": "reported",
+      "observed_at": null, "freshness": "unknown", "source_ids": [],
+      "data": { "limit": 7, "sort": "priority" }
+    },
+    {
+      "id": "focus", "project_id": "workspace", "type": "callout",
+      "title": "Our focus", "author": "Product team", "provenance": "reported",
+      "observed_at": "2026-10-04T12:00:00Z", "freshness": "current", "source_ids": [],
+      "data": { "tone": "info", "text": "Launch first, then measure adoption. This is an authored snapshot." }
+    }
+  ],
+  "layout": {
+    "type": "grid", "columns": 2,
+    "children": [{ "type": "panel", "panel_id": "initiatives" }, { "type": "panel", "panel_id": "focus" }]
+  }
+}
+```
+
+For all four live types in one layout, export the checked-in example:
+
+```sh
+node --input-type=module -e 'import { liveDashboardExample } from "./web-ui/src/lib/fixtures/liveDashboardExample.js"; console.log(JSON.stringify(liveDashboardExample, null, 2))' > dashboard.json
+node web-ui/scripts/validate-visual-report.mjs dashboard.json
+anx docs create --topic topic:YOUR-TOPIC --title "Dashboard" --body-file dashboard.json
+```
+
+The JS validator and core query parser run the same accepted/rejected fixtures in
+`contracts/fixtures/live-report-queries.json`. The publishing validator in
+SCA-597 can reuse these fixtures for CLI validation. `LiveInitiatives.svelte` is
+the shared display component for report rows and SCA-595’s Overview initiatives.
 
 ## Version 1 shape
 

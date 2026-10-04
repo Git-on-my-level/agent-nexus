@@ -1830,6 +1830,17 @@ var CommandRegistry = []CommandSpec{
 		Concepts:  []string{"refs", "inspection"},
 	},
 	{
+		CommandID:  "report.render",
+		CLIPath:    "report render",
+		Group:      "report",
+		Method:     "GET",
+		Path:       "/docs/{document_id}/report",
+		PathParams: []string{"document_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"docs", "cards", "evidence"},
+	},
+	{
 		CommandID:  "runs.get",
 		CLIPath:    "runs get",
 		Group:      "runs",
@@ -2985,6 +2996,10 @@ func (c *Client) PmTurnsRelease(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) RefEdgesList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ref_edges.list", nil, opts)
+}
+
+func (c *Client) ReportRender(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "report.render", pathParams, opts)
 }
 
 func (c *Client) RunsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

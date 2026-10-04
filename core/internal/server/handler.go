@@ -1467,6 +1467,8 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
 			}
 			return routeAccessRequirement{}
+		case strings.HasSuffix(remainder, "/report"):
+			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: r.Method == http.MethodGet}
 		case strings.HasSuffix(remainder, "/history"):
 			if r.Method == http.MethodGet {
 				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
@@ -1508,6 +1510,20 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		remainder := strings.TrimPrefix(r.URL.Path, "/docs/")
 		if remainder == "" {
 			writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
+			return
+		}
+
+		if strings.HasSuffix(remainder, "/report") {
+			documentID := strings.TrimSuffix(remainder, "/report")
+			if r.Method != http.MethodGet {
+				writeError(w, 405, "method_not_allowed", "only GET is supported")
+				return
+			}
+			if documentID == "" || strings.Contains(documentID, "/") {
+				writeError(w, 404, "not_found", "endpoint not found")
+				return
+			}
+			handleRenderReport(w, r, opts, documentID)
 			return
 		}
 

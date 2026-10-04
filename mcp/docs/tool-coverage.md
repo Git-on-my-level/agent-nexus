@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 185
+- Command count: 186
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -27,6 +27,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ops | 3 |
 | pm | 24 |
 | ref-edges | 1 |
+| report | 1 |
 | runs | 3 |
 | secret | 6 |
 | sessions | 2 |
@@ -39,7 +40,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 68 |
+| exposed_read | 69 |
 | exposed_write | 63 |
 | gated_admin | 21 |
 | gated_sensitive | 12 |
@@ -53,8 +54,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 131 | exposed_read + exposed_write + adapted |
-| hosted default | 59 | explicit read-only private-app allowlist |
+| standalone default | 132 | exposed_read + exposed_write + adapted |
+| hosted default | 60 | explicit read-only private-app allowlist |
 | gated | 33 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 21 | not represented as direct MCP tools in v1 |
@@ -210,6 +211,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | pm.turns.heartbeat | pm | POST | /pm/turns/{turn_id}/heartbeat | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | pm.turns.release | pm | POST | /pm/turns/{turn_id}/release | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | ref_edges.list | ref-edges | GET | /ref-edges | exposed_read | reference edge inventory read |
+| report.render | report | GET | /docs/{document_id}/report | exposed_read | authorized live dashboard projection read |
 | runs.get | runs | GET | /runs/{run_id} | exposed_read | run reports are workspace presence data |
 | runs.list | runs | GET | /runs | exposed_read | run reports are workspace presence data |
 | runs.upsert | runs | POST | /runs | unsupported_other | runs are reported by local launchers through anx runs ingest, not by MCP clients |

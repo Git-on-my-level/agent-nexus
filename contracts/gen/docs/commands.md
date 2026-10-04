@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `185`
+- Commands: `186`
 
 ## `actors.create`
 
@@ -1851,6 +1851,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `refs`, `inspection`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ ref_edges }`.
+
+## `report.render`
+
+- CLI path: `report render`
+- HTTP: `GET /docs/{document_id}/report`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read the same live dashboard data shown to a workspace reader.
+- Concepts: `docs`, `cards`, `evidence`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
+- Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; static panels are omitted.
+- Agent notes: Read-only. Both text and structured version 1 visual reports are supported. Each live panel is independently materialized with status ok or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Queries are bounded to 2000 source rows. Archived boards and their work are excluded. Private PM events remain private.
 
 ## `runs.get`
 

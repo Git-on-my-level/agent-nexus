@@ -542,7 +542,11 @@
           </p>
         {/if}
         <div class="px-1 py-2" data-overview-report={selectedReport.id}>
-          <VisualReport report={selectedReport.report} />
+          <VisualReport
+            report={selectedReport.report}
+            documentId={selectedReport.id}
+            revisionRef={selectedReport.revision_ref ?? ""}
+          />
         </div>
       {/if}
     </section>

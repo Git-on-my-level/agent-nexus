@@ -202,6 +202,7 @@ export declare class AnxClient {
     pmTurnsHeartbeat(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmTurnsRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     refEdgesList(options?: RequestOptions): Promise<InvokeResult>;
+    reportRender(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsList(options?: RequestOptions): Promise<InvokeResult>;
     runsUpsert(options?: RequestOptions): Promise<InvokeResult>;

@@ -2,12 +2,21 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount } from "svelte";
+  import { coreClient } from "$lib/coreClient";
+  import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
   import { getPanelFreshness } from "$lib/visualReports.js";
   import VisualReportPanel from "./VisualReportPanel.svelte";
   import ReportLayout from "./ReportLayout.svelte";
   import { layoutPanelIds } from "./reportLayout.js";
 
-  let { report } = $props();
+  let { report, documentId = "", revisionRef = "" } = $props();
+  let liveObservations = $state(new Map());
+  let hasLive = $derived(report.panels.some(isLivePanel));
+  let observedPanels = $derived(
+    report.panels.map((panel) =>
+      withLiveObservation(panel, liveObservations.get(panel.id)),
+    ),
+  );
   let now = $state(Date.now());
   const freshnessOptions = [
     "all",
@@ -30,7 +39,7 @@
   );
   let evidence = $derived($page.url.searchParams.get("reportEvidence") ?? "");
   let panels = $derived(
-    report.panels.filter(
+    observedPanels.filter(
       (panel) =>
         (project === "all" || panel.project_id === project) &&
         (freshness === "all" || getPanelFreshness(panel, now) === freshness),
@@ -51,7 +60,7 @@
     ),
   );
   let staleCount = $derived(
-    report.panels.filter((panel) => getPanelFreshness(panel, now) === "stale")
+    observedPanels.filter((panel) => getPanelFreshness(panel, now) === "stale")
       .length,
   );
 
@@ -67,6 +76,67 @@
   function inspectPanel(id) {
     setFilter("reportEvidence", evidence === id ? "" : id);
   }
+  // Each definition/reader change starts a fresh read. Ignore late responses
+  // after navigation and drop old successful data immediately on a failed refresh.
+  $effect(() => {
+    const id = documentId;
+    const expectedRevision = revisionRef;
+    const livePanels = report.panels.filter(isLivePanel);
+    liveObservations = new Map();
+    if (!livePanels.length) return;
+    let disposed = false;
+    let inFlight = false;
+    async function refresh() {
+      if (inFlight || disposed) return;
+      inFlight = true;
+      let results;
+      try {
+        if (!id) throw new Error("A saved document is required.");
+        const response = await coreClient.renderReport(id);
+        if (
+          !Array.isArray(response?.panels) ||
+          (expectedRevision && response.revision_ref !== expectedRevision)
+        )
+          throw new Error("The report changed. Reload this document.");
+        results = new Map(response.panels.map((panel) => [panel.id, panel]));
+        for (const panel of livePanels) {
+          if (results.get(panel.id)?.type !== panel.type)
+            results.set(panel.id, {
+              status: "unavailable",
+              message: "The report changed. Reload this document.",
+              data: {},
+            });
+        }
+      } catch {
+        results = new Map(
+          livePanels.map((panel) => [
+            panel.id,
+            {
+              status: "unavailable",
+              message:
+                "Live data unavailable. Reload the document or check your access.",
+              data: {},
+            },
+          ]),
+        );
+      }
+      if (!disposed) liveObservations = results;
+      inFlight = false;
+    }
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 30_000);
+    const resume = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  });
   onMount(() => {
     const timer = window.setInterval(() => {
       now = Date.now();
@@ -86,7 +156,8 @@
     </div>
     <div class="report-snapshot">
       <span class="report-snapshot-dot" aria-hidden="true"></span><span
-        >Snapshot, not live<br /><time datetime={report.generated_at}
+        >{hasLive ? "Live workspace + snapshots" : "Snapshot, not live"}<br
+        /><time datetime={report.generated_at}
           >{new Date(report.generated_at)
             .toISOString()
             .slice(0, 16)
@@ -182,7 +253,9 @@
     </div>
   {/if}
   <p class="report-footnote">
-    Agent-assembled report · Source-linked claims · No automatic source refresh
+    {hasLive
+      ? "Live panels refresh from workspace data · Authored snapshots retain their observation time"
+      : "Agent-assembled report · Source-linked claims · No automatic source refresh"}
   </p>
 </section>
 

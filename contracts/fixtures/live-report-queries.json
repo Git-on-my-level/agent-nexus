@@ -1,0 +1,200 @@
+[
+  {
+    "name": "empty",
+    "type": "live-initiatives",
+    "data": {},
+    "valid": true
+  },
+  {
+    "name": "boards",
+    "type": "live-initiatives",
+    "data": {
+      "board_refs": [
+        "board:launch"
+      ],
+      "project_ref": "topic:launch",
+      "sort": "updated",
+      "limit": 100
+    },
+    "valid": true
+  },
+  {
+    "name": "title",
+    "type": "live-initiatives",
+    "data": {
+      "sort": "title"
+    },
+    "valid": true
+  },
+  {
+    "name": "mix",
+    "type": "live-work-mix",
+    "data": {
+      "group_by": "board"
+    },
+    "valid": true
+  },
+  {
+    "name": "asks",
+    "type": "live-asks",
+    "data": {
+      "include_answered": true,
+      "answered_within_hours": 720,
+      "limit": 1
+    },
+    "valid": true
+  },
+  {
+    "name": "activity",
+    "type": "live-activity",
+    "data": {
+      "limit": 10
+    },
+    "valid": true
+  },
+  {
+    "name": "url",
+    "type": "live-activity",
+    "data": {
+      "url": "https://example.test"
+    },
+    "valid": false
+  },
+  {
+    "name": "array",
+    "type": "live-asks",
+    "data": [],
+    "valid": false
+  },
+  {
+    "name": "null",
+    "type": "live-asks",
+    "data": null,
+    "valid": false
+  },
+  {
+    "name": "null-field",
+    "type": "live-asks",
+    "data": {
+      "limit": null
+    },
+    "valid": false
+  },
+  {
+    "name": "limit-zero",
+    "type": "live-asks",
+    "data": {
+      "limit": 0
+    },
+    "valid": false
+  },
+  {
+    "name": "fraction",
+    "type": "live-activity",
+    "data": {
+      "limit": 1.5
+    },
+    "valid": false
+  },
+  {
+    "name": "limit-high",
+    "type": "live-activity",
+    "data": {
+      "limit": 101
+    },
+    "valid": false
+  },
+  {
+    "name": "limit-string",
+    "type": "live-activity",
+    "data": {
+      "limit": "2"
+    },
+    "valid": false
+  },
+  {
+    "name": "boards-null",
+    "type": "live-initiatives",
+    "data": {
+      "board_refs": null
+    },
+    "valid": false
+  },
+  {
+    "name": "board-url",
+    "type": "live-initiatives",
+    "data": {
+      "board_refs": [
+        "https://example.test"
+      ]
+    },
+    "valid": false
+  },
+  {
+    "name": "board-duplicate",
+    "type": "live-initiatives",
+    "data": {
+      "board_refs": [
+        "board:a",
+        "board:a"
+      ]
+    },
+    "valid": false
+  },
+  {
+    "name": "empty-project",
+    "type": "live-initiatives",
+    "data": {
+      "project_ref": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "project-type",
+    "type": "live-initiatives",
+    "data": {
+      "project_ref": "document:a"
+    },
+    "valid": false
+  },
+  {
+    "name": "sort",
+    "type": "live-initiatives",
+    "data": {
+      "sort": "sql"
+    },
+    "valid": false
+  },
+  {
+    "name": "group",
+    "type": "live-work-mix",
+    "data": {
+      "group_by": "source"
+    },
+    "valid": false
+  },
+  {
+    "name": "cross-type",
+    "type": "live-work-mix",
+    "data": {
+      "limit": 4
+    },
+    "valid": false
+  },
+  {
+    "name": "bool",
+    "type": "live-asks",
+    "data": {
+      "include_answered": "true"
+    },
+    "valid": false
+  },
+  {
+    "name": "window",
+    "type": "live-asks",
+    "data": {
+      "answered_within_hours": 721
+    },
+    "valid": false
+  }
+]

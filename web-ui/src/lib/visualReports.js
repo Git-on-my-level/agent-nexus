@@ -1,5 +1,10 @@
 import { validateReportLayout } from "./visualReportLayout.js";
 import { validateReportChart } from "./visualReportCharts.js";
+import {
+  LIVE_REPORT_TYPES,
+  isLivePanel,
+  validateLiveQuery,
+} from "./liveReports.js";
 
 // A presentation-only format carried in existing core document revisions.
 // Never interpret report strings as markup, code, component names, or fetch URLs.
@@ -16,6 +21,7 @@ export const VISUAL_REPORT_TYPES = Object.freeze([
   "metric-strip",
   "callout",
   "comparison",
+  ...LIVE_REPORT_TYPES,
 ]);
 export const VISUAL_REPORT_LIMITS = Object.freeze({
   bytes: 128 * 1024,
@@ -98,6 +104,7 @@ export function safeReportUrl(value) {
 /** Freshness describes observation age, never completion, availability, or health. */
 export function getPanelFreshness(panel, now = Date.now()) {
   if (!isRecord(panel)) return "unknown";
+  if (isLivePanel(panel) && !panel.live) return "unavailable";
   if (panel.freshness === "unavailable") return "unavailable";
   if (!FRESHNESS.includes(panel.freshness) || panel.freshness === "unknown")
     return "unknown";
@@ -345,6 +352,11 @@ function validateReport(report) {
     );
     const data = panel.data;
     const dataPath = `${path}.data`;
+    if (isLivePanel(panel)) {
+      for (const error of validateLiveQuery(panel.type, data))
+        add(dataPath, error);
+      return;
+    }
     switch (panel.type) {
       case "chart":
         for (const error of validateReportChart(data)) add(dataPath, error);

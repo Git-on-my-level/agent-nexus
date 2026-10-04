@@ -1009,3 +1009,19 @@ session_participation:
     - Native and source-owned tasks use the same nonlocking participation records and retain their existing authority.
     - Per-record caller sequences order writes; identical retries do not extend leases, and stale or conflicting sequences fail.
     - Enrolled host namespace is resolved from the authenticated agent; supplied host scope cannot impersonate another host.
+
+# Additive presentation format carried in existing document revisions.
+visual_report_live_panels:
+  schema_version: 1
+  types: [live-initiatives, live-asks, live-work-mix, live-activity]
+  query_schema: anx-openapi.yaml#/components/schemas/LiveReportQuery
+  materialized_schema: anx-openapi.yaml#/components/schemas/LiveReportResponse
+  rules:
+    - Static and live panels share projects and the existing layout grammar.
+    - Live panel data declares a query, never a stored observation or fetch URL.
+    - Reports keep author, provenance, observed_at, freshness and source_ids for compatibility; live observations come only from materialization.
+    - Work is open when phase is neither done nor cancelled and lifecycle is active; its board must be active.
+    - Checklist parsing counts Markdown dash checkboxes outside fenced code, including uppercase X.
+    - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
+    - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
+    - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.

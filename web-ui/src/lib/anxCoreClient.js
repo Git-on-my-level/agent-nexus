@@ -322,6 +322,11 @@ const pb = (pathParams, body) => ({
 const p = (pathParams) => ({ pathParams });
 
 const adapterCommandTable = [
+  [
+    "renderReport",
+    "report.render",
+    (documentId) => p(pathParams({ document_id: documentId })),
+  ],
   ["listWork", "work.list", (filters) => ({ options: q(filters) })],
   ["getWork", "work.get", (ref) => p(pathParams({ card_ref: ref }))],
   ["createWork", "work.create", (payload) => ({ options: b(payload) }), true],
