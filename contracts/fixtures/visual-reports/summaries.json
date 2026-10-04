@@ -112,5 +112,25 @@
       "total": 1
     },
     "needs": []
+  },
+  {
+    "name": "checked task with continuation text",
+    "markdown": "- [x]\n  continuation",
+    "summary": "continuation",
+    "progress": {
+      "done": 1,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "unchecked task with continuation text",
+    "markdown": "- [ ]\n  continuation",
+    "summary": "continuation",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
   }
 ]

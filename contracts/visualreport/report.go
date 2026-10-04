@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
-
-	"golang.org/x/net/idna"
 )
 
 const (
@@ -302,7 +300,10 @@ func safeDNSHost(host string) bool {
 				return false
 			}
 		}
-		if strings.HasPrefix(label, "xn--") && !roundTripsPunycode(label) {
+		// Keep the core validator intentionally narrower than WHATWG URL
+		// parsing. The UI has its own IDNA implementation, and some A-labels
+		// are rejected by browser URL validation.
+		if strings.HasPrefix(label, "xn--") {
 			return false
 		}
 	}
@@ -315,17 +316,9 @@ func safeDNSHost(host string) bool {
 	return true
 }
 
-func roundTripsPunycode(label string) bool {
-	decoded, err := idna.Lookup.ToUnicode(label)
-	if err != nil || decoded == label {
-		return false
-	}
-	encoded, err := idna.Lookup.ToASCII(decoded)
-	return err == nil && strings.EqualFold(encoded, label)
-}
 func (v *validator) url(value any, path string) {
 	if !safeURL(value) {
-		v.add(path, "must be an absolute HTTP(S) URL without credentials and use an ASCII hostname (punycode internationalized domains)")
+		v.add(path, "must be an absolute HTTP(S) URL without credentials and use an ASCII hostname; internationalized domains are not supported in report URLs yet")
 	}
 }
 func numeric(value any) (float64, bool) {

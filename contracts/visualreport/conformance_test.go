@@ -51,11 +51,13 @@ func TestURLHostAllowlist(t *testing.T) {
 		ok   bool
 	}{
 		{name: "LDH and one trailing dot", url: "https://a-b.example./", ok: true},
-		{name: "round-tripping A-label", url: "https://xn--bcher-kva.example/", ok: true},
+		{name: "punycode A-label", url: "https://xn--bcher-kva.example/", ok: false},
 		{name: "canonical IPv4", url: "https://192.0.2.1/", ok: true},
 		{name: "bracketed IPv6", url: "https://[2001:db8::1]/", ok: true},
 		{name: "invalid A-label", url: "https://xn--/", ok: false},
-		{name: "A-label disallowed by IDNA", url: "https://xn--a-ecp.example/", ok: false},
+		{name: "A-label rejected by browser IDNA lookup", url: "https://xn--a-ecp.example/", ok: false},
+		{name: "A-label accepted by Go but rejected by browser", url: "https://xn--exb4j.example/", ok: false},
+		{name: "another A-label accepted by Go but rejected by browser", url: "https://xn--oxbiscj9nkj3jtk.example/", ok: false},
 		{name: "empty label", url: "https://example..com/", ok: false},
 		{name: "leading hyphen", url: "https://-bad.example/", ok: false},
 		{name: "trailing hyphen", url: "https://bad-.example/", ok: false},
@@ -73,11 +75,11 @@ func TestURLHostAllowlist(t *testing.T) {
 	}
 }
 
-func TestURLRejectionExplainsPunycode(t *testing.T) {
+func TestURLRejectionExplainsInternationalizedDomainsUnsupported(t *testing.T) {
 	v := validator{}
 	v.url("https://bücher.example/", "source.url")
-	if len(v.errors) != 1 || !strings.Contains(v.errors[0], "punycode") {
-		t.Fatalf("error should tell agents to use punycode: %v", v.errors)
+	if len(v.errors) != 1 || !strings.Contains(v.errors[0], "internationalized domains are not supported in report URLs yet") {
+		t.Fatalf("error should explain that internationalized domains are unsupported: %v", v.errors)
 	}
 }
 

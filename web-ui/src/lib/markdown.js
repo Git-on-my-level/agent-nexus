@@ -23,13 +23,16 @@ export function countMarkdownTaskProgress(source) {
       if (token?.type === "code") continue;
       if (token?.type === "list") {
         for (const item of token.items ?? []) {
-          // Marked's GFM task tokenizer leaves a checkbox-only list item as a
-          // regular item. Keep counting that established empty-task case from
-          // the parser's already-classified list item.
-          const emptyTask = /^\[([ xX])\]\s*$/.exec(item.text ?? "");
-          if (item.task || emptyTask) {
+          // Marked's GFM task tokenizer does not recognize a checkbox-only
+          // first line when the list item continues on the next line. The
+          // CommonMark list AST still gives us the item boundary, so recognize
+          // a task marker at the start of that item's text as well.
+          const leadingTask = /^\[([ xX])\](?=$|[ \t\n])/.exec(item.text ?? "");
+          if (item.task || leadingTask) {
             progress.total++;
-            if (item.checked || emptyTask?.[1]?.toLowerCase() === "x")
+            if (
+              item.task ? item.checked : leadingTask?.[1]?.toLowerCase() === "x"
+            )
               progress.done++;
           }
           visit(item.tokens);

@@ -6952,11 +6952,25 @@
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--bcher-kva.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
     "recognized": true,
     "valid": true,
-    "go_valid": true
+    "go_valid": false
   },
   {
     "name": "A-label rejected by browser IDNA lookup",
     "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--a-ecp.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "A-label rejected by browser IDNA lookup: xn--exb4j",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--exb4j.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
+    "recognized": true,
+    "valid": false,
+    "go_valid": false
+  },
+  {
+    "name": "A-label rejected by browser IDNA lookup: xn--oxbiscj9nkj3jtk",
+    "content": "{\"kind\":\"anx.visual-report\",\"schema_version\":1,\"title\":\"Report\",\"summary\":\"Current work\",\"generated_at\":\"2026-10-04T10:00:00Z\",\"projects\":[{\"id\":\"workspace\",\"title\":\"Workspace\",\"summary\":\"Summary\",\"outcome\":\"Ship\"}],\"sources\":[{\"id\":\"source\",\"label\":\"Source\",\"kind\":\"evidence\",\"observed_at\":null,\"url\":\"http://xn--oxbiscj9nkj3jtk.example/\"}],\"panels\":[{\"id\":\"panel\",\"project_id\":\"workspace\",\"type\":\"explanation\",\"title\":\"Context\",\"author\":\"ANX\",\"provenance\":\"reported\",\"observed_at\":null,\"freshness\":\"unavailable\",\"source_ids\":[],\"data\":{\"text\":\"Evidence needed\"}}]}",
     "recognized": true,
     "valid": false,
     "go_valid": false
