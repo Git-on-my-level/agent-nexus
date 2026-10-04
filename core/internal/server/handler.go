@@ -20,6 +20,7 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
+	"agent-nexus-core/internal/series"
 	"agent-nexus-core/internal/server/stream"
 )
 
@@ -170,6 +171,7 @@ type handlerOptions struct {
 	pmHandler                      http.Handler
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
+	seriesStore                    *series.Store
 	authStore                      *auth.Store
 	runStore                       *commandcenter.Store
 	agentChanges                   *agentChangeHub
@@ -673,7 +675,11 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 			}
 			// Unsupported routes are rejected by their handlers. Do not create a
 			// provisional run before that rejection (or bypass read-only policy).
-			if requirement.supported && !attachRunAttribution(w, r, opts) {
+			attributed := requirement.supported
+			if p, ok := cachedAuthenticatedPrincipal(r); ok && p.SeriesAdapter != "" {
+				attributed = false
+			}
+			if attributed && !attachRunAttribution(w, r, opts) {
 				return
 			}
 			handler(w, r)
@@ -1006,6 +1012,9 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		handleRevokeInvite(w, r, opts, inviteID)
 	})
 
+	for _, path := range []string{"/adapters", "/adapters/", "/series", "/series/"} {
+		registerRoute(path, seriesRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSeriesRoutes(w, r, opts) })
+	}
 	registerRoute("/auth/token", exactRouteAccess(routeAccessPublicAuthCeremony, routeMutationAuthAccessCeremony, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
@@ -2605,6 +2614,20 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A scoped token cannot reach any other surface, including auth ceremonies
+		// or streams. All grant checks are repeated inside the point transaction.
+		if opts.authStore != nil {
+			if token, err := parseBearerToken(strings.TrimSpace(r.Header.Get("Authorization"))); err == nil {
+				if principal, err := opts.authStore.AuthenticateAccessToken(r.Context(), token); err == nil && principal.SeriesAdapter != "" {
+					parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+					if r.Method != http.MethodPost || len(parts) != 3 || parts[0] != "series" || parts[1] == "" || parts[2] != "points" {
+						writeError(w, 403, "forbidden", "series-write tokens can only push declared series points")
+						return
+					}
+					cacheAuthenticatedPrincipal(r, &principal)
+				}
+			}
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")

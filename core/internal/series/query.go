@@ -1,0 +1,201 @@
+package series
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+)
+
+type Observation struct {
+	TS    string   `json:"ts"`
+	Value *float64 `json:"value,omitempty"`
+	State *string  `json:"state,omitempty"`
+}
+type Stream struct {
+	Labels     map[string]string `json:"labels"`
+	Points     []Observation     `json:"points"`
+	LastPoint  string            `json:"last_point,omitempty"`
+	Stale      bool              `json:"stale"`
+	StaleSince string            `json:"stale_since,omitempty"`
+}
+type Result struct {
+	Definition
+	Adapter          string   `json:"adapter"`
+	Host             string   `json:"host"`
+	HostID           string   `json:"host_id"`
+	AgentID          string   `json:"agent_id"`
+	ExpectedInterval int64    `json:"expected_interval_seconds"`
+	LastPush         *string  `json:"last_push"`
+	RevokedAt        *string  `json:"revoked_at"`
+	Streams          []Stream `json:"streams"`
+	Resolution       string   `json:"resolution"`
+}
+
+func (s Store) List(ctx context.Context) ([]Result, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id ORDER BY s.name LIMIT 1000`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Result{}
+	for rows.Next() {
+		var r Result
+		if err = rows.Scan(&r.Name, &r.Kind, &r.Unit, &r.Adapter, &r.Host, &r.HostID, &r.AgentID, &r.ExpectedInterval, &r.LastPush, &r.RevokedAt); err != nil {
+			return nil, err
+		}
+		r.Streams = []Stream{}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+func (s Store) Query(ctx context.Context, name string, labels map[string]string, window, step time.Duration, agg string, now time.Time) (Result, error) {
+	out := Result{Streams: []Stream{}, Resolution: "raw"}
+	if _, err := Labels(labels); err != nil {
+		return out, err
+	}
+	if window < time.Second || window > 3650*24*time.Hour || step < time.Second || step > 3650*24*time.Hour || (window+step-1)/step > MaxBuckets {
+		return out, fmt.Errorf("%w: range/step must yield at most 200 buckets", ErrInvalid)
+	}
+	allowed := map[string]bool{"last": true, "avg": true, "sum": true, "min": true, "max": true, "count": true}
+	if !allowed[agg] {
+		return out, ErrInvalid
+	}
+	// Reads compact first so idle adapters still honor retention on their next read.
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+	if err = compact(ctx, tx, now); err != nil {
+		return out, err
+	}
+	err = tx.QueryRowContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id WHERE s.name=?`, name).Scan(&out.Name, &out.Kind, &out.Unit, &out.Adapter, &out.Host, &out.HostID, &out.AgentID, &out.ExpectedInterval, &out.LastPush, &out.RevokedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, ErrNotFound
+	}
+	if err != nil {
+		return out, err
+	}
+	if out.Kind == "state" && agg != "last" && agg != "count" {
+		return out, fmt.Errorf("%w: state aggregation must be last or count", ErrInvalid)
+	}
+	since := now.Add(-window).UnixNano()
+	end := now.UnixNano()
+	stepNS := step.Nanoseconds()
+	if window > Retention {
+		if step < 24*time.Hour || step%(24*time.Hour) != 0 {
+			return out, fmt.Errorf("%w: ranges older than 90d require whole-day steps", ErrInvalid)
+		}
+		out.Resolution = "daily+raw"
+		since = since / Day * Day
+		end = (end/Day+1)*Day - 1
+	}
+	filter := ""
+	args := []any{name}
+	keys := []string{}
+	for key := range labels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		filter += ` AND json_extract(labels,?)=?`
+		args = append(args, `$."`+key+`"`, labels[key])
+	}
+	// Select at most 100 label sets, then aggregate within each bucket in SQL.
+	groups, err := tx.QueryContext(ctx, `SELECT labels FROM series_labels WHERE series=?`+filter+` ORDER BY labels LIMIT 100`, args...)
+	if err != nil {
+		return out, err
+	}
+	labelSets := []string{}
+	for groups.Next() {
+		var l string
+		if err = groups.Scan(&l); err != nil {
+			groups.Close()
+			return out, err
+		}
+		labelSets = append(labelSets, l)
+	}
+	err = groups.Err()
+	groups.Close()
+	if err != nil {
+		return out, err
+	}
+	for _, l := range labelSets {
+		stream := Stream{Labels: map[string]string{}, Points: []Observation{}, Stale: true}
+		if err = json.Unmarshal([]byte(l), &stream.Labels); err != nil {
+			return out, err
+		}
+		var last sql.NullInt64
+		if err = tx.QueryRowContext(ctx, `SELECT MAX(ts) FROM (SELECT MAX(ts) ts FROM series_points WHERE series=? AND labels=? UNION ALL SELECT MAX(last_ts) ts FROM series_daily WHERE series=? AND labels=?)`, name, l, name, l).Scan(&last); err != nil {
+			return out, err
+		}
+		if last.Valid {
+			stream.LastPoint = time.Unix(0, last.Int64).UTC().Format(time.RFC3339Nano)
+			staleAt := time.Unix(0, last.Int64).Add(time.Duration(out.ExpectedInterval) * 2 * time.Second)
+			stream.Stale = now.After(staleAt) || out.RevokedAt != nil
+			if stream.Stale {
+				if out.RevokedAt != nil {
+					revoked, err := time.Parse(time.RFC3339Nano, *out.RevokedAt)
+					if err == nil && revoked.Before(staleAt) {
+						staleAt = revoked
+					}
+				}
+				stream.StaleSince = staleAt.UTC().Format(time.RFC3339Nano)
+			}
+		}
+		// A daily rollup is an explicit one-day observation. Historical query edges
+		// cover complete UTC days and expose resolution so clients do not imply raw precision.
+		rows, err := tx.QueryContext(ctx, `WITH obs AS (
+    SELECT ts,1 n,value total,value low,value high,ts last_ts,value last_value,state last_state FROM series_points WHERE series=? AND labels=? AND ts>=? AND ts<=?
+    UNION ALL SELECT day,n,total,low,high,last_ts,last_value,last_state FROM series_daily WHERE series=? AND labels=? AND day>=? AND day<=?
+   ), bucketed AS (SELECT *,MIN(((ts-?)/?),?) bucket FROM obs)
+   SELECT MIN(ts),SUM(n),SUM(total),MIN(low),MAX(high),
+    (SELECT b.last_value FROM bucketed b WHERE b.bucket=a.bucket ORDER BY b.last_ts DESC LIMIT 1),
+    (SELECT b.last_state FROM bucketed b WHERE b.bucket=a.bucket ORDER BY b.last_ts DESC LIMIT 1)
+   FROM bucketed a GROUP BY bucket ORDER BY bucket LIMIT 200`, name, l, since, end, name, l, since, end, since, stepNS, int((window+step-1)/step)-1)
+		if err != nil {
+			return out, err
+		}
+		for rows.Next() {
+			var ts, n int64
+			var total, low, high, value sql.NullFloat64
+			var state sql.NullString
+			if err = rows.Scan(&ts, &n, &total, &low, &high, &value, &state); err != nil {
+				rows.Close()
+				return out, err
+			}
+			p := Observation{TS: time.Unix(0, ts).UTC().Format(time.RFC3339Nano)}
+			switch agg {
+			case "avg":
+				value = sql.NullFloat64{Float64: total.Float64 / float64(n), Valid: total.Valid}
+			case "sum":
+				value = total
+			case "min":
+				value = low
+			case "max":
+				value = high
+			case "count":
+				value = sql.NullFloat64{Float64: float64(n), Valid: true}
+			}
+			if value.Valid {
+				v := value.Float64
+				p.Value = &v
+			}
+			if out.Kind == "state" && agg == "last" && state.Valid {
+				p.State = &state.String
+			}
+			stream.Points = append(stream.Points, p)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return out, err
+		}
+		out.Streams = append(out.Streams, stream)
+	}
+	return out, tx.Commit()
+}

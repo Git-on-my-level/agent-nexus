@@ -33,6 +33,21 @@ func commandSideEffectClass(command string) string {
 		}
 		return "local_operational_write"
 	}
+	if parts[0] == "series" {
+		if len(parts) > 1 && parts[1] == "push" {
+			if strings.Contains(command, "--from-command") {
+				return "external_side_effect"
+			}
+			return "remote_coordination_write"
+		}
+		return "read_only"
+	}
+	if parts[0] == "adapters" {
+		if len(parts) > 1 && parts[1] == "list" {
+			return "read_only"
+		}
+		return "remote_coordination_write"
+	}
 	if parts[0] == "api" {
 		return "external_side_effect"
 	}

@@ -320,6 +320,9 @@ func parseHelp(content []byte) (HelpRegistry, error) {
 }
 
 func sideEffectClass(cmd Command) string {
+	if cmd.CommandID == "series.query" || cmd.CommandID == "series.show" || cmd.CommandID == "series.list" || cmd.CommandID == "adapters.list" {
+		return "read_only"
+	}
 	if strings.HasPrefix(cmd.CLIPath, "config ") {
 		if cmd.CLIPath == "config show" || cmd.CLIPath == "config workspaces" {
 			return "read_only"

@@ -886,6 +886,27 @@ var migrations = []migration{
 		},
 	},
 	{Version: 43, AfterApply: applyMigration43ReportIndexes},
+	{Version: 44, AfterApply: applyMigration44SeriesTokenScope, Statements: []string{
+		`CREATE TABLE series_adapters (name TEXT PRIMARY KEY, description TEXT NOT NULL, agent_id TEXT NOT NULL REFERENCES agents(id), host_id TEXT NOT NULL REFERENCES hosts(id), expected_interval INTEGER NOT NULL, created_at TEXT NOT NULL, revoked_at TEXT, deleted_at TEXT, last_push TEXT);`,
+		`CREATE TABLE series_definitions (name TEXT PRIMARY KEY, adapter TEXT NOT NULL REFERENCES series_adapters(name), unit TEXT NOT NULL, kind TEXT NOT NULL);`,
+		`CREATE TABLE series_labels (series TEXT NOT NULL REFERENCES series_definitions(name) ON DELETE CASCADE, labels TEXT NOT NULL, PRIMARY KEY(series,labels));`,
+		`CREATE TABLE series_points (series TEXT NOT NULL, labels TEXT NOT NULL, ts INTEGER NOT NULL, value REAL, state TEXT, received_day INTEGER NOT NULL, PRIMARY KEY(series,labels,ts), FOREIGN KEY(series,labels) REFERENCES series_labels(series,labels) ON DELETE CASCADE);`,
+		`CREATE INDEX series_points_time ON series_points(ts);`,
+		`CREATE TABLE series_daily (series TEXT NOT NULL, labels TEXT NOT NULL, day INTEGER NOT NULL, n INTEGER NOT NULL, total REAL, low REAL, high REAL, last_ts INTEGER NOT NULL, last_value REAL, last_state TEXT, PRIMARY KEY(series,labels,day), FOREIGN KEY(series,labels) REFERENCES series_labels(series,labels) ON DELETE CASCADE);`,
+		`CREATE TABLE series_ingestion_days (day INTEGER PRIMARY KEY, n INTEGER NOT NULL);`,
+	}},
+}
+
+func applyMigration44SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='auth_access_tokens'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return nil
+	} // Legacy partial workspace migrations omit auth tables.
+	_, err := tx.ExecContext(ctx, `ALTER TABLE auth_access_tokens ADD COLUMN series_adapter TEXT REFERENCES series_adapters(name)`)
+	return err
 }
 
 func applyMigration43ReportIndexes(ctx context.Context, tx *sql.Tx) error {

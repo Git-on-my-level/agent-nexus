@@ -19,6 +19,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "help", nil
 	}
 
+	if args[0] == "series" || args[0] == "adapters" {
+		p, err := parseSeriesCommand(args)
+		return p.group + " " + p.verb, err
+	}
 	if args[0] == "debug" {
 		if len(args) < 2 || !isDiagnosticGroup(args[1]) {
 			return "debug", errnorm.Usage("unknown_subcommand", "unknown debug group")

@@ -41,3 +41,18 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 - Prefer fresh context from durable evidence. Prior sessions are provenance/recovery clues for unfinished or unreflected work; resume/history support must be observed, never assumed.
 - When using agentctl, label work `anx.card.<card-slug>` to link run evidence. Native execution remains with the user's harness. Use compact text output for reading, `--json` for scripts, and returned next actions rather than guessed refs.
 - PM designation requires the richer anx-pm skill and an explicit user designation. It grants no new source-write, private-history, approval, or execution authority.
+
+## Live dashboard data
+
+Prefer ANX live queries for workspace facts. For external data, use a declared
+host-local adapter and pushed series; core must never fetch external URLs or
+hold source credentials. Ask a human or explicitly granted auth-admin to declare
+name, description, owning enrolled agent, expected interval and allowed series
+with `anx adapters declare --body-file adapter.json` before any push. As the owner,
+use `anx series push <name> <value> [--label k=v]` or
+`anx series push <name> --from-command -- <cmd>`. The CLI exchanges your host-agent
+token for a short-lived series-write token, restricted to the declared series.
+Bind panels through `source: {series, labels?, range?, agg?}` and put any static
+fallback in `{as_of, data}`. Expose adapter, host, last push, stale state and the
+fallback's original as-of time. Source scripts and schedules live in
+`adapters/series/`; the full guide is `docs/live-series.md`.

@@ -73,6 +73,8 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return name, result, err
 	}
 	switch args[0] {
+	case "series", "adapters":
+		return a.runSeriesCommand(ctx, args, cfg)
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err

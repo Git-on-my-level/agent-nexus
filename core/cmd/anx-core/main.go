@@ -31,6 +31,7 @@ import (
 	"agent-nexus-core/internal/router"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
+	"agent-nexus-core/internal/series"
 	"agent-nexus-core/internal/server"
 	"agent-nexus-core/internal/server/stream"
 	"agent-nexus-core/internal/sidecar"
@@ -520,6 +521,7 @@ func main() {
 		server.WithReadinessCheck("sidecars", "sidecar_unavailable", "sidecar readiness check failed", sidecarHost.Ready),
 		server.WithActorRegistry(actorRegistry),
 		server.WithAuthStore(authStore),
+		server.WithSeriesStore(&series.Store{DB: workspace.DB(), Auth: authStore}),
 		server.WithRunStore(commandcenter.NewStore(workspace.DB(), commandcenter.SQLIdentities{DB: workspace.DB()})),
 		server.WithWorkspaceHumanGrantVerifier(workspaceHumanGrantVerifier),
 		server.WithWorkspaceManagedAgentGrantVerifier(workspaceManagedGrantVerifier),
@@ -664,6 +666,11 @@ func main() {
 		go publisher.Run(maintenanceCtx)
 		fmt.Printf("heartbeat publisher: enabled (url=%s, workspace_id=%s, identity=%s, interval=%s)\n", heartbeatURL, workspaceID, serviceIdentityID, heartbeatInterval)
 	}
+	go runDailyAtUTC(maintenanceCtx, 3, 15, func(jobCtx context.Context) {
+		if err := (&series.Store{DB: workspace.DB(), Auth: authStore}).Compact(jobCtx, time.Now().UTC()); err != nil {
+			fmt.Fprintf(os.Stderr, "series retention: %v\n", err)
+		}
+	})
 	go runDailyAtUTC(maintenanceCtx, 3, 0, func(jobCtx context.Context) {
 		deleted, err := authStore.PurgeConsumedGrantJTIs(jobCtx, workspaceHumanGrantReplayRetention)
 		if err != nil {

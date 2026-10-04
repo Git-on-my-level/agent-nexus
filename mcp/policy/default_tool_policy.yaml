@@ -641,3 +641,30 @@ commands:
   "work.refresh.request":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
+  "adapters.list":
+    classification: gated_admin
+    reason: "Inspect explicitly declared series grants; administration is required by core."
+  "adapters.declare":
+    classification: gated_admin
+    reason: "Explicitly grant a host agent permission to write named series; core rechecks administration transactionally."
+  "adapters.revoke":
+    classification: gated_admin
+    reason: "Withdraw a series grant; requires current workspace administration."
+  "adapters.delete":
+    classification: gated_admin
+    reason: "Delete declared series history; requires current workspace administration."
+  "adapters.token":
+    classification: gated_sensitive
+    reason: "Return a short-lived credential for the owning enrolled agent; never expose by default."
+  "series.list":
+    classification: exposed_read
+    reason: "Read declared numeric/state series metadata and source provenance."
+  "series.show":
+    classification: exposed_read
+    reason: "Read bounded series observations and freshness."
+  "series.query":
+    classification: exposed_read
+    reason: "Read range/step-bounded series observations with explicit label filters and aggregation."
+  "series.push":
+    classification: unsupported_shell_shaped
+    reason: "Use the enrolled host CLI for scoped token exchange and optional source command execution."

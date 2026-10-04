@@ -1,4 +1,5 @@
 <script>
+  import SeriesReportPanel from "./SeriesReportPanel.svelte";
   import LiveReportPanel from "./LiveReportPanel.svelte";
   import { isLivePanel } from "$lib/liveReports.js";
   import ReportChart from "./ReportChart.svelte";
@@ -21,6 +22,8 @@
     "live-activity": "Recent activity",
     chart: "Visualization",
     "metric-strip": "Measures",
+    metric: "Measure",
+    table: "Table",
     callout: "Decision note",
     comparison: "Comparison",
     explanation: "Context",
@@ -46,12 +49,15 @@
   );
   let maximum = $derived(
     panel.type === "metric-chart"
-      ? Math.max(1, ...panel.data.points.map((point) => point.value ?? 0))
+      ? Math.max(
+          1,
+          ...(panel.data.points ?? []).map((point) => point.value ?? 0),
+        )
       : 1,
   );
   function claimsForSource(sourceId) {
     if (panel.type === "evidence-table")
-      return panel.data.rows
+      return (panel.data.rows ?? [])
         .filter((row) => row.source_ids.includes(sourceId))
         .map((row) => row.cells[0]);
     if (panel.type === "milestone-timeline")
@@ -90,7 +96,9 @@
   </header>
 
   <div class="report-panel-body">
-    {#if isLivePanel(panel)}
+    {#if panel.source}
+      <SeriesReportPanel {panel} {freshness} />
+    {:else if isLivePanel(panel)}
       <LiveReportPanel {panel} />
     {:else if freshness === "unavailable"}
       <div class="report-unavailable">
@@ -109,11 +117,13 @@
       {/if}
       {#if panel.type === "chart"}
         <ReportChart data={panel.data} title={panel.title} />
+      {:else if panel.type === "metric"}
+        <p class="text-title">{panel.data.value} {panel.data.unit ?? ""}</p>
       {:else if ["metric-strip", "callout", "comparison"].includes(panel.type)}
         <ReportDetails {panel} />
       {:else if panel.type === "explanation"}
         <p class="report-explanation">{panel.data.text}</p>
-      {:else if panel.type === "evidence-table"}
+      {:else if ["evidence-table", "table"].includes(panel.type)}
         <!-- Keyboard access is required for horizontally scrollable tables. -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div

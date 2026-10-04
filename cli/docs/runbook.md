@@ -800,3 +800,7 @@ anx docs ingest /path/to/knowledge-base \
   --source https://github.com/example/knowledge-base/blob/main
 anx docs search "NOW.md" --knowledge --limit 20
 ```
+
+## Live dashboard series
+
+Prefer native live queries. Declare external-data adapters before pushing, and keep third-party credentials on the enrolled owner host. See `../../docs/live-series.md` and `../../adapters/series/README.md` for commands, scripts, grants and schedules.

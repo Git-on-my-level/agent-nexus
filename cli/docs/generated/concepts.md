@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Concepts: `33`
+- Concepts: `34`
 
 ## `actors`
 
@@ -218,6 +218,20 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.trash`
   - `docs.unarchive`
   - `report.render`
+
+## `documents`
+
+- Commands: `9`
+- Command IDs:
+  - `adapters.declare`
+  - `adapters.delete`
+  - `adapters.list`
+  - `adapters.revoke`
+  - `adapters.token`
+  - `series.list`
+  - `series.push`
+  - `series.query`
+  - `series.show`
 
 ## `events`
 

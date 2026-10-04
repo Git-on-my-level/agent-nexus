@@ -224,3 +224,7 @@ development mode. See the canonical OpenAPI for request/response envelopes.
 - `host_enrollment_token_consumed` has no authenticated principal actor: metadata identifies `token_id`, destination `host_id` and `host_key_id`, with `issuer_principal_id` and `issuer_actor_id` recorded separately. No token secret or public key bytes enter audit metadata.
 
 The canonical shapes and error codes are in `contracts/anx-openapi.yaml`. See the CLI runbook for the default fleet setup flow.
+
+## Declared live series
+
+See `../../docs/live-series.md` for adapter declaration, scoped token exchange, bounded queries, caps, retention, panel sources and fallback semantics. The canonical paths and JSON schemas are in `contracts/anx-openapi.yaml`.

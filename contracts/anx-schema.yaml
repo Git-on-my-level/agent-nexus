@@ -1031,3 +1031,22 @@ visual_report_live_panels:
     - Asks include ask, review and escalate requests, with optional answers from the last 168 hours by default.
     - Activity includes new asks, authorized PM decision proposals, answers, phase changes and completion; card edit bursts for the same actor and board within five minutes collapse.
     - Bounded or limited results declare truncated; source read failures are unavailable, never empty success.
+
+# Push-only data, declared before use; no external URL or credential lives in core.
+live_series:
+  kinds: [gauge, counter, state]
+  aggregations: [last, avg, sum, min, max, count]
+  raw_retention_days: 90
+  caps: {series: 1000, label_keys: 8, label_sets_per_series: 100, points_per_day: 100000, query_buckets: 200}
+  rules:
+    - Humans and explicitly granted auth-admins declare, list, revoke and delete workspace-local adapters.
+    - Adapters belong to an active enrolled host agent and declare all writable series.
+    - Series-write tokens use the existing access-token store, are scoped to one adapter, have no refresh token and allow only point pushes.
+    - Grant, owner, host, token expiry and revocation are rechecked inside each write transaction.
+    - Exact point retries are idempotent; same-timestamp raw corrections are permitted and count toward the daily ingestion cap.
+    - An adapter's owning agent can exchange its ordinary authenticated token for a short-lived series-write token.
+    - Revoked adapters cannot be reactivated; deletion retains the grant tombstone and invalidates outstanding tokens.
+    - Raw points older than 90 days are compacted into daily count, sum, min, max and last rollups; state rollups preserve last state.
+    - Query range and step are bounded, labels are exact-match filters, and query results expose provenance and per-label freshness.
+    - Series are stale when now minus the latest observation exceeds twice the adapter expected_interval.
+    - Chart, metric, metric-strip and table panels bind source series and may carry a timestamped static fallback.
