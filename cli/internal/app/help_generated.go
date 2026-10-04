@@ -34,6 +34,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
 	{Path: "topics", Description: "Discuss and coordinate around a topic, project, incident, or decision"},
 	{Path: "boards", Description: "Track active work with boards, columns, and cards"},
+	{Path: "overview", Description: "Read the executive Overview projection shown in the web UI"},
 	{Path: "workspace", Description: "Summarize workspace boards and counts for first-run orientation"},
 	{Path: "docs", Description: "Create and revise durable context and institutional knowledge"},
 	{Path: "cards", Description: "Create, discuss, assign, move, revise, and resolve work cards"},
@@ -1089,6 +1090,9 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if text, ok := planHelpText(topic); ok {
 		return text, true
 	}
+	if topic == "report" {
+		return "Visual reports\n\nCommands: anx report schema; anx report validate <file|->; anx report publish <file> --topic <topic> --title <title>; anx report render <document>.\n", true
+	}
 	if text, ok := workHelpText(topic); ok {
 		return text, true
 	}
@@ -1230,13 +1234,18 @@ Core commands:
 
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
 	}
+	if topic == "overview" {
+		return "Executive Overview\n\nUsage: anx overview [--json]\n\nReads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.\n", true
+	}
 	if topic == "workspace" {
 		return strings.TrimSpace(`Workspace orientation surface
 
 Use this group for first-run workspace orientation before drilling into topics, boards, cards, docs, or inbox.
 
 Core commands:
-  workspace summary    Summarize boards plus compact card/doc/inbox counts.
+  workspace summary    Summarize active boards plus card/doc/inbox counts.
+  workspace dashboard list             Read validated report choices.
+  workspace dashboard set <doc|none>    Pin a dashboard or return to newest report.
 
 Tip: default text is intended for quick agent readbacks. Use `+"`--json`"+` only when code or scripts need to parse the summary.`) + "\n", true
 	}

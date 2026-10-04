@@ -132,6 +132,12 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "secret":
 		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)
 		return name, result, err
+	case "overview":
+		if len(args) != 1 {
+			return "overview", nil, errnorm.Usage("invalid_args", "anx overview takes no arguments")
+		}
+		result, err := a.invokeTypedJSON(ctx, cfg, "overview", "overview.get", nil, nil, nil)
+		return "overview", result, err
 	case "workspace":
 		result, name, err := a.runWorkspaceCommand(ctx, args[1:], cfg)
 		return name, result, err

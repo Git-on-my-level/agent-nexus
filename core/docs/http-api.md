@@ -238,3 +238,35 @@ The existing live-initiatives report projection retains `progress` and `needs[]`
 Report hydration joins cards, metadata, latest good/attempt observations, board labels and thread privacy in one query for the bounded candidate set (up to 2,000 rows). Plan enrichment uses one plan query plus at most one fact query per referenced resource kind, independent of card/step count. Batch ref resolution uses at most four initial kind queries, one plan query and four linked-fact queries. These paths never call `GetWork` per row or ref. The general `ListWork` read path is unchanged.
 
 `POST /refs/resolve` accepts `{refs:[...]}` (max 200). Results are `{items:[{ref,resolvable,kind?,title?,status?,phase?,owner?,progress?,url?}]}` in input order, retaining duplicates. Native card/document URLs are workspace-relative UI paths; topics and boards omit url because they have no current UI detail surface. Unknown, trashed or inaccessible refs return only `{ref,resolvable:false}`. Native handles and internal ids resolve for cards, docs/documents, topics and boards. Plan-derived progress and status honor the requesting principal's access to every referenced resource. Responses are read-only and uncached.
+## Executive Overview and workspace dashboard
+
+`GET /overview` is the shared projection behind the web UI and `anx overview
+--json`. It returns Needs you (open asks, actionable PM decisions, blocked work
+and human next actors), the selected dashboard, open initiatives with Markdown
+checklist progress, active work records/counts, and agent presence. Archived
+cards, boards and topics do not contribute. Initiatives share the live report
+projection: `progress.done/total`, `needs[]`, phase, board and update time.
+The browser opens each card using its typed ref.
+
+`PUT /workspace/dashboard` accepts `{ "document_ref": "document:<handle>" }`
+and pins an active visual-report document accepted by the full shared validator. `{ "document_ref": null }` clears the
+pin. The selection survives restarts. An archived, deleted or unreadable pin
+falls back to the newest valid active report; the pin remains available for clearing.
+
+`GET /work` also returns `archived_refs` for card aliases excluded by card or
+parent-board or project-topic lifecycle. Inbox clients use these to exclude related PM activity
+from Watching. Archived resources remain accessible through explicit lifecycle
+list reads and the web UI Archive view. Watching groups all card edits by their
+board and orders asks/answers and done/blocked transitions before routine edits.
+
+Overview bulk-loads active work and observation metadata once. Its dashboard
+contains only the selected validated report and `has_more` when unread candidates
+remain. `GET /workspace/dashboard/reports` (`anx workspace dashboard list`) loads
+selector candidates on demand. Pin acceptance, selection and CLI publishing share
+`contracts/visualreport`; renderer conformance covers static and live panels.
+Both dashboard responses include each report's selected head `revision_ref`, so
+live data from a later revision cannot render under an earlier definition.
+The Overview resolves a `?dashboard=<id-or-handle>` bookmark on load, without
+requiring focus on the report selector.
+Initiatives expose `needs[]` and use the live report summary parser, ignoring
+fenced examples and counting empty Markdown checkbox lines.

@@ -2013,6 +2013,10 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	})
 
+	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
+	registerRoute("/workspace/dashboard/reports", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleListWorkspaceDashboardReports(w, r, opts) })
+	registerRoute("/workspace/dashboard", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPut), func(w http.ResponseWriter, r *http.Request) { handleSetWorkspaceDashboard(w, r, opts) })
+
 	registerRoute("/home/unread", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		handleGetHomeUnread(w, r, opts)
 	})

@@ -80,6 +80,35 @@ describe("update digests", () => {
     );
   });
 
+  it("preserves older asks, answers and phase transitions after routine edits, including other actors", () => {
+    const event = (type, actor_id = "claude", payload = {}) => ({
+      type,
+      actor_id,
+      payload,
+      refs: ["card:pilot"],
+    });
+    const digest = updateDigest(
+      [
+        event("card_updated"),
+        event("card_created"),
+        event("document_revised"),
+        event("human_attention_requested", "claude", { kind: "ask" }),
+        event("human_attention_responded"),
+        event("card_moved", "claude", { column_key: "blocked" }),
+        event("card_moved", "david", { column_key: "done" }),
+      ],
+      { actorName: (id) => id, maxActors: 1 },
+    );
+    expect(digest).toContain("asked");
+    expect(digest).toContain("answered an ask");
+    expect(digest).toContain("to blocked");
+    expect(digest).toContain("david moved");
+    expect(digest).toContain("to done");
+    expect(digest.indexOf("answered an ask")).toBeLessThan(
+      digest.indexOf("updated"),
+    );
+  });
+
   it("calls the reader You and drops a role from a name", () => {
     const events = [
       { type: "card_updated", actor_id: "actor-maya", refs: ["card:a"] },
@@ -296,4 +325,21 @@ describe("inbox context", () => {
     });
     expect(pickProgressNote([], "actor-omar")).toBeNull();
   });
+});
+
+it("collapses repeated agent edits into distinct cards on the subject", () => {
+  const events = ["a", "a", "b", "b", "b"].map((card, index) => ({
+    id: String(index),
+    type: "card_updated",
+    actor_id: "claude",
+    refs: [`card:${card}`],
+  }));
+  expect(
+    updateDigest(events, {
+      actorName: () => "claude",
+      isAgent: () => true,
+      groupRef: "board:omi",
+      titleFor: () => "Omi · Initiatives",
+    }),
+  ).toBe("claude reorganized Omi · Initiatives: 2 cards");
 });

@@ -180,6 +180,7 @@ export declare class AnxClient {
     opsBlobUsageRebuild(options?: RequestOptions): Promise<InvokeResult>;
     opsHealth(options?: RequestOptions): Promise<InvokeResult>;
     opsUsageSummary(options?: RequestOptions): Promise<InvokeResult>;
+    overviewGet(options?: RequestOptions): Promise<InvokeResult>;
     planSet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     planShow(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     pmActionsAcknowledge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -247,4 +248,6 @@ export declare class AnxClient {
     workPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workRefreshRequest(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    workspaceDashboardList(options?: RequestOptions): Promise<InvokeResult>;
+    workspaceDashboardSet(options?: RequestOptions): Promise<InvokeResult>;
 }

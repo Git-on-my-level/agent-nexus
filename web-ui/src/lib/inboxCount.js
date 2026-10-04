@@ -1,5 +1,10 @@
+import { humanActorIdSet } from "$lib/humanActors.js";
 import { get, writable } from "svelte/store";
-import { selectedActorId } from "$lib/actorSession";
+import {
+  selectedActorId,
+  actorRegistry,
+  principalRegistry,
+} from "$lib/actorSession";
 import { buildInboxRows, filterMailbox } from "$lib/inboxMailbox.js";
 import { coreClient } from "$lib/coreClient";
 import { liveWorkspaceEvents } from "$lib/liveWorkspaceEvents.js";
@@ -80,6 +85,7 @@ function countFrom(sources, overlay) {
     work: sources.work,
     inboxItems: applyResponseOverlay(sources.inboxItems, overlay),
     currentActorId: get(selectedActorId) || "",
+    humanIds: humanActorIdSet(get(actorRegistry), get(principalRegistry)),
   });
   return filterMailbox(rows, "needs-you").length;
 }

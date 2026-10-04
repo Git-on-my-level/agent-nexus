@@ -27,12 +27,13 @@ describe("navigation model", () => {
         group.items.map((item) => item.label),
       ]),
     ).toEqual([
-      ["Settings", ["Access", "Secrets", "Integrations"]],
+      ["Settings", ["Archive", "Access", "Secrets", "Integrations"]],
       // Infrastructure surfaces, explicitly labelled rather than reachable
       // only by URL.
       ["Diagnostics", ["Audit", "Threads"]],
     ]);
     expect(settingsNavItems.map((item) => item.label)).toEqual([
+      "Archive",
       "Access",
       "Secrets",
       "Integrations",

@@ -282,10 +282,18 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		return
 	}
 
+	payload, err := loadOpenInbox(r, opts, now)
+	if err != nil {
+		writeError(w, 500, "internal_error", "failed to load inbox projections")
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func loadOpenInbox(r *http.Request, opts handlerOptions, now time.Time) (map[string]any, error) {
 	threads, _, err := opts.primitiveStore.ListThreads(r.Context(), primitives.ThreadListFilter{})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load threads")
-		return
+		return nil, err
 	}
 	threadIDs := make([]string, 0, len(threads))
 	for _, thread := range threads {
@@ -293,16 +301,12 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 	}
 	states, err := loadTopicProjectionStates(r.Context(), opts, threadIDs)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projection status")
-		return
+		return nil, err
 	}
-
 	projected, err := opts.primitiveStore.ListDerivedInboxItems(r.Context(), primitives.DerivedInboxListFilter{})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox projections")
-		return
+		return nil, err
 	}
-
 	payloadItems := make([]map[string]any, 0, len(projected))
 	for _, item := range projected {
 		payload := payloadFromDerivedInboxItem(item)
@@ -310,13 +314,30 @@ func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions)
 		payloadItems = append(payloadItems, payload)
 	}
 	payloadItems = filterAccessibleInboxItems(r, opts, payloadItems, projected)
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":               "open",
-		"items":                payloadItems,
-		"generated_at":         now.Format(time.RFC3339Nano),
-		"projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs),
-	})
+	if store, ok := opts.primitiveStore.(interface {
+		HiddenSubjectRefs(context.Context) (map[string]bool, error)
+	}); ok {
+		hidden, err := store.HiddenSubjectRefs(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		visible := payloadItems[:0]
+		for _, item := range payloadItems {
+			refs, _ := extractStringSlice(item["related_refs"])
+			hide := false
+			for _, ref := range refs {
+				if hidden[ref] {
+					hide = true
+					break
+				}
+			}
+			if !hide {
+				visible = append(visible, item)
+			}
+		}
+		payloadItems = visible
+	}
+	return map[string]any{"status": "open", "items": payloadItems, "generated_at": now.Format(time.RFC3339Nano), "projection_freshness": aggregateTopicProjectionFreshness(states, threadIDs)}, nil
 }
 
 func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOptions, inboxItemID string) {

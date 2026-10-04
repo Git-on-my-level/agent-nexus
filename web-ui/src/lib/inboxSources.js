@@ -6,16 +6,22 @@ import { coreClient } from "$lib/coreClient";
  */
 export async function listAllPages(fetchPage, key, maxPages = 8) {
   const collected = [];
+  const archived = new Set();
   let cursor;
   let more = false;
   for (let page = 0; page < maxPages; page += 1) {
     const result = await fetchPage(cursor);
     collected.push(...(Array.isArray(result?.[key]) ? result[key] : []));
+    for (const ref of result?.archived_refs || []) archived.add(ref);
     cursor = result?.next_cursor || "";
     more = Boolean(cursor) || result?.has_more === true;
     if (!cursor) break;
   }
-  return { [key]: collected, has_more: more && Boolean(cursor) };
+  return {
+    [key]: collected,
+    has_more: more && Boolean(cursor),
+    archived_refs: [...archived],
+  };
 }
 
 /**
@@ -31,12 +37,12 @@ export async function listAllPages(fetchPage, key, maxPages = 8) {
  *   open items, completed items, unread updates (unread updates resolve to
  *   null when skipped)
  */
-export function loadInboxSources({
+export async function loadInboxSources({
   withHistory = true,
   client = coreClient,
 } = {}) {
   const skipped = Promise.resolve(null);
-  return Promise.allSettled([
+  const results = await Promise.allSettled([
     listAllPages(
       (cursor) => client.listPmDecisions({ limit: 50, cursor }),
       "items",
@@ -57,6 +63,15 @@ export function loadInboxSources({
     ),
     withHistory ? client.getHomeUnread() : skipped,
   ]);
+  const hidden = new Set(results[2]?.value?.archived_refs || []);
+  for (const index of [0, 1]) {
+    if (results[index].status === "fulfilled" && results[index].value?.items) {
+      results[index].value.items = results[index].value.items.filter(
+        (item) => !hidden.has(item.work_ref),
+      );
+    }
+  }
+  return results;
 }
 
 /** Open and completed inbox items merged by id (completed wins). */

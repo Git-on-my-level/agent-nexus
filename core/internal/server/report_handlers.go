@@ -68,6 +68,7 @@ type reportReader struct {
 	now              time.Time
 	labels           map[string]string
 	visibility       map[string]bool
+	hidden           map[string]bool
 	work             []map[string]any
 	boards           map[string]map[string]any
 	workScopes       map[string]reportWorkRead
@@ -297,6 +298,16 @@ func (reader *reportReader) loadEvents() {
 		return
 	}
 	reader.eventsRead = true
+	if store, ok := reader.opts.primitiveStore.(interface {
+		HiddenSubjectRefs(context.Context) (map[string]bool, error)
+	}); ok {
+		var err error
+		reader.hidden, err = store.HiddenSubjectRefs(reader.r.Context())
+		if err != nil {
+			reader.eventsErr = err
+			return
+		}
+	}
 	cursor := ""
 	for count := 0; count < reports.MaxRows; {
 		page, err := reader.opts.primitiveStore.ListEventsPage(reader.r.Context(), primitives.EventListFilter{Types: []string{"human_attention_requested", "human_attention_responded", "card_moved", "card_resolved", "card_closed", "card_updated"}, Limit: 200, Cursor: cursor})
@@ -317,6 +328,9 @@ func (reader *reportReader) loadEvents() {
 // Hide archived subjects and PM history using the same resource and thread rules
 // as ordinary reads. Canonical refs may be handles or internal historical ids.
 func (reader *reportReader) activeRef(ref string) bool {
+	if reader.hidden[ref] {
+		return false
+	}
 	if allowed, ok := reader.visibility[ref]; ok {
 		return allowed
 	}
@@ -346,8 +360,11 @@ func (reader *reportReader) activeRef(ref string) bool {
 		}
 		row, err = store.GetWork(reader.r.Context(), value)
 		if err == nil {
-			if board := anyString(row["board_ref"]); board != "" && !reader.activeRef(board) {
-				return false
+			for _, parent := range []string{anyString(row["board_ref"]), anyString(row["project_ref"])} {
+				if parent != "" && !reader.activeRef(parent) {
+					reader.visibility[ref] = false
+					return false
+				}
 			}
 		}
 	case "thread":

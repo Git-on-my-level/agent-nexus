@@ -50,6 +50,12 @@ export const settingsNavGroups = [
     label: "Settings",
     items: [
       {
+        label: "Archive",
+        href: "/archive",
+        icon: "docs",
+        hint: "Archived work and context",
+      },
+      {
         label: "Access",
         href: "/access",
         icon: "access",

@@ -1,5 +1,6 @@
+import { humanActorIdSet } from "$lib/humanActors.js";
+export { humanActorIdSet, isHumanNextActor } from "$lib/humanActors.js";
 import { rosterSummary } from "$lib/agentPresence.js";
-import { filterTopLevelDocuments } from "$lib/documentVisibility.js";
 import {
   buildInboxRows,
   filterMailbox,
@@ -7,7 +8,6 @@ import {
   inboxRowBadge,
   rowWaitMs,
 } from "$lib/inboxMailbox.js";
-import { loadInboxSources } from "$lib/inboxSources.js";
 import {
   dedupeWorkBySource,
   label,
@@ -84,23 +84,6 @@ export function unavailableSection(error, fallback = "This did not load.") {
  * @param {object[]} [actors]
  * @param {object[]} [principals]
  */
-export function humanActorIdSet(actors = [], principals = []) {
-  const ids = new Set();
-  for (const actor of Array.isArray(actors) ? actors : []) {
-    const tags = Array.isArray(actor?.tags)
-      ? actor.tags.map((tag) => String(tag).toLowerCase())
-      : [];
-    const id = String(actor?.id ?? actor?.actor_id ?? "").trim();
-    if (id && tags.includes("human")) ids.add(id);
-  }
-  for (const principal of Array.isArray(principals) ? principals : []) {
-    if (String(principal?.principal_kind ?? "").toLowerCase() !== "human")
-      continue;
-    const id = String(principal?.actor_id ?? "").trim();
-    if (id) ids.add(id);
-  }
-  return ids;
-}
 
 function directoryPageIncomplete(value) {
   if (!value || typeof value !== "object") return false;
@@ -136,14 +119,6 @@ export function settleHumanDirectory(actorsResult, principalsResult) {
     ),
     incomplete,
   };
-}
-
-export function isHumanNextActor(work, humanIds) {
-  const raw = String(work?.next_actor ?? "").trim();
-  if (!raw || !humanIds) return false;
-  if (raw.toLowerCase() === "human" || /^human:/i.test(raw)) return true;
-  const bare = raw.replace(/^actor:/i, "");
-  return humanIds.has(raw) || humanIds.has(bare);
 }
 
 /** A capped read is "12+", matching the Tasks list. */
@@ -255,10 +230,6 @@ export function selectVisualReports(entries = []) {
     (entry) => entry?.report,
   );
   return [...valid].sort((a, b) => {
-    const prefer =
-      Number(isPreferredDashboardTitle(b?.title)) -
-      Number(isPreferredDashboardTitle(a?.title));
-    if (prefer) return prefer;
     const aMs = Date.parse(a?.updated_at ?? "");
     const bMs = Date.parse(b?.updated_at ?? "");
     const aTime = Number.isFinite(aMs) ? aMs : Number.NEGATIVE_INFINITY;
@@ -356,104 +327,6 @@ export function needsYouFromSources(
   };
 }
 
-async function loadNeedsYou(client, now) {
-  const results = await loadInboxSources({ withHistory: false, client });
-  const failed = results
-    .slice(0, 4)
-    .find((result) => result.status === "rejected");
-  if (failed) throw failed.reason;
-  const value = (index, key) => results[index].value?.[key] || [];
-  return needsYouFromSources(
-    {
-      decisions: value(0, "items"),
-      actions: value(1, "items"),
-      work: value(2, "work"),
-      inboxItems: value(3, "items"),
-      truncated: results.some(
-        (result) =>
-          result.status === "fulfilled" &&
-          (result.value?.has_more === true ||
-            Boolean(result.value?.next_cursor)),
-      ),
-    },
-    now,
-  );
-}
-
-async function loadHumanIds(client) {
-  const [actorsResult, principalsResult] = await Promise.allSettled([
-    client.listActors?.({ limit: 200 }) ?? Promise.resolve({ actors: [] }),
-    client.listPrincipals?.({ limit: 200 }) ??
-      Promise.resolve({ principals: [] }),
-  ]);
-  return settleHumanDirectory(actorsResult, principalsResult);
-}
-
-async function loadWork(client, now) {
-  const [{ work, truncated }, humanIds] = await Promise.all([
-    listWorkPages((query) => client.listWork(query)),
-    loadHumanIds(client).then(
-      (directory) => ({ status: "ok", ...directory }),
-      (error) => ({
-        status: "unavailable",
-        message: sectionMessage(error, "People could not be loaded."),
-      }),
-    ),
-  ]);
-  const records = dedupeWorkBySource(work).records;
-  const matrix = workMatrix(records);
-  const blocked = records.filter((item) => item?.phase === "blocked");
-  const human =
-    humanIds.status === "ok"
-      ? {
-          status: "ok",
-          incomplete: Boolean(humanIds.incomplete),
-          count: records.filter((item) => isHumanNextActor(item, humanIds.ids))
-            .length,
-          href: tasksQuery({ human: "1" }),
-          items: records
-            .filter((item) => isHumanNextActor(item, humanIds.ids))
-            .slice(0, PREVIEW_LIMIT)
-            .map(previewWork),
-        }
-      : {
-          status: "unavailable",
-          message: humanIds.message,
-          href: tasksQuery({ human: "1" }),
-          count: null,
-          items: [],
-        };
-  return {
-    status: "ok",
-    total: records.length,
-    truncated,
-    matrix,
-    blocked: {
-      count: blocked.length,
-      href: tasksQuery({ phase: "blocked" }),
-      items: blocked.slice(0, PREVIEW_LIMIT).map(previewWork),
-    },
-    human,
-    freshness: freshnessBuckets(records, now),
-  };
-}
-
-async function loadAgents(client) {
-  const result = await client.listAgents();
-  const agents = result?.agents;
-  if (!Array.isArray(agents)) {
-    throw new Error("Agent roster was not returned.");
-  }
-  const summary = rosterSummary(agents);
-  return {
-    status: "ok",
-    working: summary.working,
-    waiting: summary.waiting_on_human,
-    stale: summary.stale,
-    href: "/agents",
-  };
-}
-
 async function mapPool(items, limit, fn) {
   const out = new Array(items.length);
   let next = 0;
@@ -479,10 +352,6 @@ async function mapPool(items, limit, fn) {
  */
 export function orderDocumentsForReportScan(documents = []) {
   return [...(Array.isArray(documents) ? documents : [])].sort((a, b) => {
-    const prefer =
-      Number(isPreferredDashboardTitle(b?.title)) -
-      Number(isPreferredDashboardTitle(a?.title));
-    if (prefer) return prefer;
     const aMs = Date.parse(a?.updated_at ?? "");
     const bMs = Date.parse(b?.updated_at ?? "");
     const aTime = Number.isFinite(aMs) ? aMs : Number.NEGATIVE_INFINITY;
@@ -555,42 +424,6 @@ export async function collectVisualReports(documents, read) {
   };
 }
 
-function reportReadFailure(failures) {
-  return failures === 1
-    ? "A document could not be read."
-    : `${failures} documents could not be read.`;
-}
-
-async function loadReports(client) {
-  const listed = await client.listDocuments({
-    state: ["active"],
-    limit: DOC_SCAN_CAP,
-  });
-  if (!Array.isArray(listed?.documents)) {
-    throw new Error("Document list was not returned.");
-  }
-  const documents = filterTopLevelDocuments(listed.documents).slice(
-    0,
-    DOC_SCAN_CAP,
-  );
-  const scan = await collectVisualReports(documents, (doc) =>
-    readReportDocument(client, doc),
-  );
-  if (scan.failures && scan.reports.length === 0) {
-    throw new Error(reportReadFailure(scan.failures));
-  }
-  return {
-    status: "ok",
-    reports: scan.reports,
-    pending: scan.pending,
-    truncated: Boolean(listed?.next_cursor),
-    scanned: scan.scanned,
-    warning: scan.failures
-      ? "Some documents could not be read, so this list may be incomplete."
-      : "",
-  };
-}
-
 /** Read the documents skipped on the first paint, once the selector opens. */
 export async function loadPendingReports(client, pending = [], existing = []) {
   const reads = await mapPool(Array.isArray(pending) ? pending : [], 6, (doc) =>
@@ -611,21 +444,56 @@ export async function loadPendingReports(client, pending = [], existing = []) {
   };
 }
 
-async function guard(run, fallback) {
-  try {
-    return await run();
-  } catch (error) {
-    return unavailableSection(error, fallback);
-  }
-}
-
-/** Four independent reads. One failure does not zero out the others. */
+/** The core snapshot is shared with `anx overview --json`. */
 export async function loadOverview(client, { now = Date.now() } = {}) {
-  const [needsYou, work, agents, reports] = await Promise.all([
-    guard(() => loadNeedsYou(client, now), "Needs you could not be loaded."),
-    guard(() => loadWork(client, now), "Tasks could not be loaded."),
-    guard(() => loadAgents(client), "Agents could not be loaded."),
-    guard(() => loadReports(client), "Reports could not be loaded."),
-  ]);
-  return { needsYou, work, agents, reports };
+  const snapshot = await client.getOverview();
+  const records = dedupeWorkBySource(snapshot.work.items).records;
+  const blocked = records.filter((item) => item.phase === "blocked");
+  return {
+    needsYou: {
+      ...snapshot.needs_you,
+      rows: snapshot.needs_you.rows.slice(0, PREVIEW_LIMIT),
+    },
+    initiatives: snapshot.initiatives,
+    reports: {
+      ...snapshot.dashboard,
+      reports: (snapshot.dashboard.reports || []).flatMap((entry) => {
+        const parsed = parseVisualReport(JSON.stringify(entry.report));
+        return parsed.report ? [{ ...entry, report: parsed.report }] : [];
+      }),
+    },
+    agents:
+      snapshot.agents.status === "ok"
+        ? {
+            status: "ok",
+            ...(() => {
+              const summary = rosterSummary(snapshot.agents.items);
+              return {
+                working: summary.working,
+                waiting: summary.waiting_on_human,
+                stale: summary.stale,
+                href: "/agents",
+              };
+            })(),
+          }
+        : snapshot.agents,
+    work: {
+      status: snapshot.work.status,
+      total: records.length,
+      truncated: false,
+      matrix: workMatrix(records),
+      blocked: {
+        count: blocked.length,
+        href: tasksQuery({ phase: "blocked" }),
+        items: blocked.slice(0, PREVIEW_LIMIT).map(previewWork),
+      },
+      human: {
+        status: "ok",
+        count: snapshot.work.human_count,
+        items: [],
+        href: tasksQuery({ human: "1" }),
+      },
+      freshness: freshnessBuckets(records, now),
+    },
+  };
 }

@@ -42,6 +42,12 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "api" {
 		return "external_side_effect"
 	}
+	if command == "workspace dashboard set" {
+		return "remote_coordination_write"
+	}
+	if parts[0] == "overview" {
+		return "read_only"
+	}
 	if parts[0] == "version" || parts[0] == "doctor" || parts[0] == "workspace" || parts[0] == "read" || parts[0] == "url" || parts[0] == "concepts" || parts[0] == "primitives" || parts[0] == "provenance" {
 		return "read_only"
 	}

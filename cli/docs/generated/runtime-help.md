@@ -28,6 +28,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `auth` (group): Inspect the enrolled host and derived-agent identity
 - `topics` (group): Discuss and coordinate around a topic, project, incident, or decision
 - `boards` (group): Track active work with boards, columns, and cards
+- `overview` (group): Read the executive Overview projection shown in the web UI
 - `workspace` (group): Summarize workspace boards and counts for first-run orientation
 - `docs` (group): Create and revise durable context and institutional knowledge
 - `cards` (group): Create, discuss, assign, move, revise, and resolve work cards
@@ -963,6 +964,18 @@ Global flags:
 Tip: `anx help <command path>` for full command-level generated details.
 ```
 
+## `overview`
+
+Read the executive Overview projection shown in the web UI
+
+```text
+Executive Overview
+
+Usage: anx overview [--json]
+
+Reads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.
+```
+
 ## `workspace`
 
 Summarize workspace boards and counts for first-run orientation
@@ -973,7 +986,9 @@ Workspace orientation surface
 Use this group for first-run workspace orientation before drilling into topics, boards, cards, docs, or inbox.
 
 Core commands:
-  workspace summary    Summarize boards plus compact card/doc/inbox counts.
+  workspace summary    Summarize active boards plus card/doc/inbox counts.
+  workspace dashboard list             Read validated report choices.
+  workspace dashboard set <doc|none>    Pin a dashboard or return to newest report.
 
 Tip: default text is intended for quick agent readbacks. Use `--json` only when code or scripts need to parse the summary.
 ```
