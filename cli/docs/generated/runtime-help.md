@@ -8150,7 +8150,7 @@ Local Help: report publish
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Validate, publish, read back, and revalidate a visual report document.
-- Composition: Creates in the topic thread or revises a matching visual report. An explicit --doc resolves exactly; replacing another document requires --replace.
+- Composition: Creates a topic-linked document or revises a matching visual report. An explicit --doc resolves exactly; replacing another document requires --replace.
 - JSON body: `doc_ref`, optional `web_url`, `title`, `action`, `panel_count`, `validated`
 - Examples:
   - `anx report publish ./dashboard.json --topic topic:launch`

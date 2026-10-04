@@ -56,7 +56,7 @@ func init() {
 		localHelperTopic{
 			Path: "report publish", Summary: "Validate, publish, read back, and revalidate a visual report document.",
 			JSONShape:   "`doc_ref`, optional `web_url`, `title`, `action`, `panel_count`, `validated`",
-			Composition: "Creates in the topic thread or revises a matching visual report. An explicit --doc resolves exactly; replacing another document requires --replace.",
+			Composition: "Creates a topic-linked document or revises a matching visual report. An explicit --doc resolves exactly; replacing another document requires --replace.",
 			Examples:    []string{"anx report publish ./dashboard.json --topic topic:launch", "anx report publish ./dashboard.json --topic topic:launch --title \"Fleet Dashboard\" --doc doc:fleet-dashboard --replace"},
 			Flags: []localHelperFlag{
 				{Name: "<file>", Description: "Visual report JSON path."},
@@ -286,7 +286,7 @@ func (a *App) runReportPublish(ctx context.Context, args []string, cfg config.Re
 		return nil, errnorm.Usage("invalid_request", "visual report title is required")
 	}
 
-	docs, topicID, threadID, err := a.listDocumentsForReportTopic(ctx, cfg, input.topic)
+	docs, topicID, err := a.listDocumentsForReportTopic(ctx, cfg, input.topic)
 	if err != nil {
 		return nil, err
 	}
@@ -337,11 +337,6 @@ func (a *App) runReportPublish(ctx context.Context, args []string, cfg config.Re
 	var revisionID string
 	if target == nil {
 		body := docsCreateBodyFromFlags(docTitle, "", input.topic, "", nil)
-		if doc, ok := body["document"].(map[string]any); ok {
-			doc["subject_ref"] = input.topic
-			doc["refs"] = uniqueStrings([]string{input.topic})
-			doc["thread_id"] = threadID
-		}
 		body["content_type"] = "text"
 		body["content"] = contentText
 		body["request_key"] = reportCreateRequestKey(topicID, docTitle)
@@ -439,49 +434,19 @@ func (a *App) runReportPublish(ctx context.Context, args []string, cfg config.Re
 	return result, nil
 }
 
-func (a *App) listDocumentsForReportTopic(ctx context.Context, cfg config.Resolved, topic string) ([]any, string, string, error) {
+func (a *App) listDocumentsForReportTopic(ctx context.Context, cfg config.Resolved, topic string) ([]any, string, error) {
 	topicID := strings.TrimPrefix(strings.TrimSpace(topic), "topic:")
 	if topicID == "" {
-		return nil, "", "", errnorm.Usage("invalid_request", "`--topic` must name an existing topic")
+		return nil, "", errnorm.Usage("invalid_request", "`--topic` must name an existing topic")
 	}
-	topicResult, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "report publish", "topics.get", "topic_id", topicID, topicIDLookupSpec, nil, nil)
+	workspaceResult, err := a.invokeTypedJSONWithIDResolution(ctx, cfg, "report publish", "topics.workspace", "topic_id", topicID, topicIDLookupSpec, nil, nil)
 	if err != nil {
-		return nil, "", "", err
+		return nil, "", err
 	}
-	topicData := extractNestedMap(commandResultBody(topicResult), "topic")
+	workspace := commandResultBody(workspaceResult)
+	topicData := asMap(workspace["topic"])
 	topicID = firstNonEmpty(anyString(topicData["id"]), topicID)
-	threadID := strings.TrimSpace(anyString(topicData["thread_id"]))
-	if threadID == "" {
-		return nil, "", "", errnorm.Usage("invalid_request", "could not resolve the topic backing thread")
-	}
-	var docs []any
-	cursor := ""
-	seen := map[string]bool{}
-	for page := 0; page < 100; page++ {
-		query := []queryParam{}
-		addSingleQuery(&query, "thread_id", threadID)
-		addSingleQuery(&query, "limit", "1000")
-		addSingleQuery(&query, "cursor", cursor)
-		result, callErr := a.invokeTypedJSON(ctx, cfg, "report publish", "docs.list", nil, query, nil)
-		if callErr != nil {
-			return nil, "", "", callErr
-		}
-		body := commandResultBody(result)
-		docs = append(docs, asSlice(body["documents"])...)
-		next := firstNonEmpty(anyString(body["next_cursor"]), anyString(body["cursor_next"]))
-		if next == "" {
-			break
-		}
-		if seen[next] {
-			return nil, "", "", errnorm.Usage("invalid_response", "document list returned a repeated cursor")
-		}
-		seen[next] = true
-		cursor = next
-		if page == 99 {
-			return nil, "", "", errnorm.Usage("invalid_response", "document list exceeded the pagination safety limit")
-		}
-	}
-	return docs, topicID, threadID, nil
+	return asSlice(workspace["documents"]), topicID, nil
 }
 
 func findExplicitReportDocuments(docs []any, key string) []map[string]any {

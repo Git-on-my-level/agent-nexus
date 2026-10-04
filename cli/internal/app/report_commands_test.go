@@ -90,13 +90,8 @@ func TestReportPublishCreatesTextDocumentAndValidatesReadback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","ref":"topic:launch","thread_id":"thread_1","title":"Launch"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			if got := r.URL.Query().Get("thread_id"); got != "thread_1" {
-				t.Fatalf("expected topic-scoped docs list, got thread_id=%q", got)
-			}
-			_, _ = w.Write([]byte(`{"documents":[]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","ref":"topic:launch","thread_id":"thread_1","title":"Launch"},"documents":[]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
 			if err := json.NewDecoder(r.Body).Decode(&createdBody); err != nil {
 				t.Fatalf("decode report document create: %v", err)
@@ -105,8 +100,14 @@ func TestReportPublishCreatesTextDocumentAndValidatesReadback(t *testing.T) {
 				t.Fatalf("expected text content type, got %q", got)
 			}
 			doc := asMap(createdBody["document"])
-			if doc["thread_id"] != "thread_1" {
-				t.Fatalf("expected created document in topic thread, got %#v", doc)
+			if _, has := doc["thread_id"]; has {
+				t.Fatalf("document must use its own backing thread, got %#v", doc)
+			}
+			if doc["subject_ref"] != "topic:topic_1" {
+				t.Fatalf("expected topic subject ref, got %#v", doc)
+			}
+			if refs := asSlice(doc["refs"]); len(refs) != 1 || refs[0] != "topic:topic_1" {
+				t.Fatalf("expected topic relation in document refs, got %#v", doc["refs"])
 			}
 			requestKey := anyStringValue(createdBody["request_key"])
 			if requestKey == "" || requestKey != reportCreateRequestKey("topic_1", "Release report") {
@@ -150,10 +151,8 @@ func TestReportPublishRevisesMatchingTitleWithinTopic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","ref":"topic:launch","thread_id":"thread_1","title":"Launch"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
 			creates++
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_2"}}`))
@@ -201,10 +200,8 @@ func TestReportPublishExplicitDocDoesNotFuzzyMatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
 		case r.Method == http.MethodPost:
 			writes++
 			t.Errorf("unexpected write while resolving an inexact --doc")
@@ -235,10 +232,8 @@ func TestReportPublishRequiresReplaceForExplicitProseDoc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","content_type":"text","content":"plain prose"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
@@ -280,10 +275,8 @@ func TestReportPublishAutomaticMatchSkipsProseDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_notes":
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report"},"revision":{"revision_id":"rev_notes","content_type":"text","content":"plain prose"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
@@ -312,8 +305,9 @@ func TestReportPublishAutomaticMatchSkipsProseDocument(t *testing.T) {
 	payload := assertEnvelopeOK(t, runCLIForTest(t, home, nil, nil, []string{
 		"--json", "--base-url", server.URL, "report", "publish", file, "--topic", "topic:topic_1",
 	}))
-	if asMap(payload["result"])["action"] != "created" || anyStringValue(asMap(createBody["document"])["thread_id"]) != "thread_1" || revisions != 0 {
-		t.Fatalf("expected create in topic thread without revising prose: result=%#v body=%#v revisions=%d", payload["result"], createBody, revisions)
+	createdDoc := asMap(createBody["document"])
+	if asMap(payload["result"])["action"] != "created" || createdDoc["thread_id"] != nil || createdDoc["subject_ref"] != "topic:topic_1" || revisions != 0 {
+		t.Fatalf("expected separate document thread with topic relation and no prose revision: result=%#v body=%#v revisions=%d", payload["result"], createBody, revisions)
 	}
 }
 
@@ -331,10 +325,8 @@ func TestReportPublishRejectsReadbackThatDoesNotMatchWrittenRevision(t *testing.
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
-				case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-					_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"}}`))
-				case r.Method == http.MethodGet && r.URL.Path == "/docs":
-					_, _ = w.Write([]byte(`{"documents":[]}`))
+				case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+					_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[]}`))
 				case r.Method == http.MethodPost && r.URL.Path == "/docs":
 					_, _ = w.Write([]byte(`{"document":{"id":"doc_1","ref":"document:release-report"},"revision":{"revision_id":"rev_written"}}`))
 				case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1/revisions/rev_written":
@@ -367,10 +359,8 @@ func TestReportPublishRejectsAmbiguousAutomaticReportMatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"}}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/docs":
-			_, _ = w.Write([]byte(`{"documents":[{"id":"doc_1","title":"Release report"},{"id":"doc_2","title":"Release report"}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","title":"Release report"},{"id":"doc_2","title":"Release report"}]}`))
 		case r.Method == http.MethodGet && (r.URL.Path == "/docs/doc_1" || r.URL.Path == "/docs/doc_2"):
 			docID := strings.TrimPrefix(r.URL.Path, "/docs/")
 			_, _ = w.Write([]byte(`{"document":{"id":` + mustJSONString(t, docID) + `,"title":"Release report"},"revision":{"revision_id":"rev_1","content_type":"text","content":` + mustJSONString(t, minimalVisualReport) + `}}`))
