@@ -43,6 +43,17 @@ export const VISUAL_REPORT_LIMITS = Object.freeze({
 });
 export const VISUAL_REPORT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/** Serialize structured document content before applying the text parser. */
+export function visualReportContentText(content) {
+  if (typeof content === "string") return content;
+  if (content === null || content === undefined) return "";
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return "";
+  }
+}
+
 const FRESHNESS = ["current", "stale", "unknown", "unavailable"];
 const PROVENANCE = ["reported", "verified", "illustrative"];
 const STATUS = ["complete", "pending", "unknown"];

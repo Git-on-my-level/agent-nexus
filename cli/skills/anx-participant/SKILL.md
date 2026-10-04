@@ -29,6 +29,7 @@ Every ANX reader is a CEO by default: lead with outcomes, decisions and evidence
 
 - A card is a human-level initiative or outcome that can span executor tasks and outlive them. Keep issues, PRs and run detail in their source; link them as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card. Never mirror an issue tracker 1:1.
 - Put status in a short plain-language summary, checklist or `anx.visual-report` dashboard/chart. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate as you approach that budget.
+- For a human-facing dashboard, read `anx report schema`, then publish with `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`. It validates the report, writes a text document, and verifies the saved revision.
 - Ask only for a human decision (direction, money, risk or an irreversible choice). Recommend one answer, offer at most 2–3 alternatives, and batch related questions. Do not also block the card or set `next_actor` to the human for the same ask. Keep `next_actor` on the agent and advance after the answer using its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Lead with the outcome and what needs the human, then details. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.
 

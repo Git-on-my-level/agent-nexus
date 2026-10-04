@@ -13,6 +13,7 @@ import {
   listWorkPages,
   needsYouFromSources,
   orderDocumentsForReportScan,
+  parseReportDocumentContent,
   selectVisualReports,
   settleHumanDirectory,
   tasksQuery,
@@ -380,6 +381,14 @@ describe("overview needs you", () => {
 });
 
 describe("dev seed fleet dashboard", () => {
+  it("recognizes structured reports from document readback", async () => {
+    const { visualReportExample } =
+      await import("../../src/lib/fixtures/visualReportExample.js");
+    const parsed = parseReportDocumentContent(visualReportExample);
+    expect(parsed.recognized).toBe(true);
+    expect(parsed.report).toEqual(visualReportExample);
+  });
+
   it("seeds a preferred visual report document", () => {
     const seed = getGameDevStudioSeedData();
     const document = seed.documents.find(

@@ -9,7 +9,10 @@
   import ResourceShareMenu from "$lib/components/ResourceShareMenu.svelte";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
-  import { parseVisualReport } from "$lib/visualReports.js";
+  import {
+    parseVisualReport,
+    visualReportContentText,
+  } from "$lib/visualReports.js";
   import DocumentMarkdownEditor from "$lib/components/DocumentMarkdownEditor.svelte";
   import { dismissOnEscape } from "$lib/actions/dismissOnEscape.js";
   import { inlineEditEscape } from "$lib/actions/inlineEditEscape.js";
@@ -210,7 +213,9 @@
   });
 
   let displayedContent = $derived(
-    selectedRevision?.content ?? headRevision?.content ?? "",
+    visualReportContentText(
+      selectedRevision?.content ?? headRevision?.content ?? "",
+    ),
   );
   let displayedRevision = $derived(selectedRevision ?? headRevision);
   let visualReport = $derived(parseVisualReport(displayedContent));

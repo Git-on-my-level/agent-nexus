@@ -981,6 +981,7 @@ Domain model:
   topics   Discuss and coordinate around a topic.
   boards   Track active work with columns and cards.
   docs     Maintain durable context and institutional knowledge.
+  report   Validate and publish human-readable visual reports.
   debug threads  Inspect backing timelines when diagnosing low-level state.
 
 Usage:
@@ -1005,6 +1006,7 @@ Core Commands:
   work          Query commitments, context, freshness, refresh and capabilities
   pm            Query PM context, decisions, conversations and action receipts
   workspace     Summarize workspace boards and counts for first-run orientation
+  report        Validate and publish visual report documents
   read          Read an ANX resource from a URL or typed ref
   url           Print a shareable ANX URL for a resource
   api call      Perform an arbitrary HTTP API request

@@ -12,74 +12,34 @@ external truth.
 1. Read the underlying evidence through authorized tools. Record the actual
    observation time and links; do not replace old observation times with the time
    you generated a report.
-2. Write one raw JSON object matching schema version 1 below. Do not wrap it in
-   Markdown fences. Keep actual project observations separate from illustrative
-   examples, and state the outcome and remaining qualification boundaries.
-3. Validate locally before writing to an authorized workspace. From the repository
-   root, export and validate the checked-in public example:
+2. Read the supported panel types, limits, and minimal example with
+   `anx report schema`. Write one raw JSON object matching schema version 1 below.
+   Keep actual observations separate from illustrative examples, and state the
+   outcome and remaining qualification boundaries.
+3. Validate the file locally before publishing:
 
    ```sh
-   node --input-type=module - <<'JS'
-   import { writeFileSync } from 'node:fs';
-   import { parseVisualReport } from './web-ui/src/lib/visualReports.js';
-   import { visualReportExampleContent } from './web-ui/src/lib/fixtures/visualReportExample.js';
-   const parsed = parseVisualReport(visualReportExampleContent);
-   if (!parsed.report) throw new Error(parsed.errors.join('\n'));
-   writeFileSync('/tmp/anx-report.json', visualReportExampleContent + '\n');
-   console.log(`Validated ${parsed.report.panels.length} panels`);
-   JS
+   anx report validate /path/to/report.json
+   cat /path/to/report.json | anx report validate -
    ```
 
-   For your own file, use the local validator from the repository root. It exits
-   nonzero for malformed, unsupported, or oversized reports and prints bounded JSON
-   diagnostics. File and stdin inputs use the same parser as the web UI:
+   The command is available with only the `anx` binary and returns bounded
+   diagnostics for malformed, unsupported, or oversized reports.
+4. Publish to an existing, authorized topic:
 
    ```sh
-   node web-ui/scripts/validate-visual-report.mjs /tmp/anx-report.json
-   cat /tmp/anx-report.json | node web-ui/scripts/validate-visual-report.mjs -
+   anx report publish /path/to/report.json --topic topic:YOUR-TOPIC
+   anx report publish /path/to/report.json --topic topic:YOUR-TOPIC --title "Fleet Dashboard" --doc doc:fleet-dashboard
    ```
 
-4. Use the existing `docs create` helper. Replace the topic placeholder with an
-   authorized, existing topic. Check the resolved actor/workspace first. A dry run
-   builds the request without sending it:
-
-   ```sh
-   anx docs create --topic topic:YOUR-TOPIC --title "Project report" --body-file /tmp/anx-report.json --dry-run
-   anx --json docs create --topic topic:YOUR-TOPIC --title "Project report" --body-file /tmp/anx-report.json
-   ```
-
-   These flags create a normal `content_type: "text"` document whose `content` is
-   the JSON **string**. Do not change the outer content type to `structured` or
-   store the report as an executable artifact. Save the returned document ref.
-
-5. Read it back, validate the returned text, and open that document in Docs:
-
-   ```sh
-   anx docs get doc:YOUR-DOCUMENT --format md > /tmp/anx-report-readback.json
-   ```
-
-   ```sh
-   node web-ui/scripts/validate-visual-report.mjs /tmp/anx-report-readback.json
-   ```
-
-   Run the local validation command against the readback file. In Docs, the
-   recognized valid document renders as a visual report; its source remains
-   inspectable. Verify the project filter, outcome, panel metadata, and evidence.
-   An unsupported or malformed report keeps a safe text/source fallback.
-
-6. Revise the same document rather than creating a second source of truth:
-
-   ```sh
-   anx docs revise doc:YOUR-DOCUMENT --body-file /tmp/anx-report.json
-   anx docs revise --apply --proposal-id YOUR-PROPOSAL-ID
-   ```
-
-   `docs revise` stages a diff proposal by default. Apply only within the caller's
-   authorization. An already-authorized immediate revision can instead use
-   `anx docs revise doc:YOUR-DOCUMENT --apply --body-file /tmp/anx-report.json`.
-   The helper discovers the current base revision; the existing API enforces
-   `if_base_revision`. A conflict requires a fresh read and reconciliation, not a
-   blind overwrite. Read back and revalidate the new head after a successful write.
+   `report publish` validates before writing, stores `content_type: "text"`, and
+   reuses a document with the same title/slug in that topic. With `--doc`, it
+   revises that document directly. It reads the head back, validates it again, and
+   prints the document ref and web URL when known. This avoids the proposal-only
+   default of `docs revise` for an agent that intends to publish immediately.
+5. Open the document in Docs and check its project filter, outcome, panel metadata,
+   and evidence. The Overview prefers report titles beginning with `Dashboard` or
+   `Fleet Dashboard`; the saved report remains an ordinary text document.
 
 Command spellings and transport behavior come from
 [`cli/docs/generated/runtime-help.md`](../../cli/docs/generated/runtime-help.md)

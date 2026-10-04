@@ -18,7 +18,10 @@ import {
   workKey,
 } from "$lib/pm/presentation.js";
 import { resourceRouteSegment } from "$lib/resourceIdentity.js";
-import { parseVisualReport } from "$lib/visualReports.js";
+import {
+  parseVisualReport,
+  visualReportContentText,
+} from "$lib/visualReports.js";
 
 /** `GET /work` page size (contract maximum) and how many rows Overview will read. */
 export const WORK_PAGE_LIMIT = 200;
@@ -495,9 +498,7 @@ async function readReportDocument(client, doc) {
   try {
     const got = await client.getDocument(id);
     const content = got?.revision?.content;
-    const parsed = parseVisualReport(
-      typeof content === "string" ? content : "",
-    );
+    const parsed = parseReportDocumentContent(content);
     const document = got?.document ?? doc;
     return {
       id,
@@ -513,6 +514,10 @@ async function readReportDocument(client, doc) {
   } catch (error) {
     return { error };
   }
+}
+
+export function parseReportDocumentContent(content) {
+  return parseVisualReport(visualReportContentText(content));
 }
 
 /**

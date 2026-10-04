@@ -13,3 +13,5 @@ const (
 type Result = shared.Result
 
 func Validate(content []byte) Result { return shared.Validate(content) }
+
+func PanelTypes() []string { return shared.PanelTypes() }

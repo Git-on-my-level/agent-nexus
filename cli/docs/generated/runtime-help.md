@@ -233,6 +233,9 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
 - `pm ask` (local-helper): Create a PM conversation and post one human question.
 - `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
+- `report schema` (local-helper): Print the visual report types, limits, and minimal example.
+- `report validate` (local-helper): Validate a visual report file or stdin against the renderer's schema.
+- `report publish` (local-helper): Validate, publish, read back, and revalidate a visual report document.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `work context` (command): Compose work, a bounded observation page and refresh status using read-only requests.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
@@ -371,6 +374,7 @@ Executive workspace
 
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source; link that detail as evidence. Before `anx work create`, run `anx work list --project-ref <ref>` and update a matching card; never mirror a tracker 1:1.
 - Put status in a short plain-language card summary, checklist, or `anx.visual-report` dashboard/chart, not a stream of cards or notes. Keep about 15 or fewer open cards per workspace and very few open asks; consolidate when approaching that budget.
+- For a human-facing dashboard, read `anx report schema`, then run `anx report publish <file> --topic <topic-ref> [--title <title>] [--doc <doc-ref>]`; it validates the report, writes a text document, and verifies the saved revision. `--doc` is an exact ref; use `--replace` only when intentionally replacing a non-report document.
 - Ask only for a decision that belongs to the human (direction, money, risk or an irreversible choice). Recommend one answer, give at most 2–3 alternatives, and batch related decisions into one ask. Do not also block the card or set its `next_actor` to the human for that same question; that duplicates the Inbox item. Keep `next_actor` on the agent and advance after the answer with its response event as evidence, for example `anx work done <card> --evidence event:<response_event_id>`.
 - Write for a busy executive: lead with the outcome and what needs them, then add detail. Example: 12 PRs + 4 Multica issues for one project → 1 card with a checklist and links, not 16 cards.
 
@@ -8085,6 +8089,84 @@ Flags:
 Global flags:
   Global flags can appear before or after the command path.
   Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report schema`
+
+Print the visual report types, limits, and minimal example.
+
+```text
+Local Help: report schema
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Print the visual report types, limits, and minimal example.
+- Composition: Pure local helper; no credentials or network required.
+- JSON body: `kind`, `schema_version`, `panel_types`, `limits`, `example`
+- Examples:
+  - `anx report schema`
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report schema ... ; anx --json report schema ... ; anx report schema ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report validate`
+
+Validate a visual report file or stdin against the renderer's schema.
+
+```text
+Local Help: report validate
+
+- Kind: `local helper`
+- Side effect class: `read_only`
+- Summary: Validate a visual report file or stdin against the renderer's schema.
+- Composition: Pure local helper using the same report contract as the web renderer.
+- JSON body: `recognized`, `valid`, `errors`, `panel_count`
+- Examples:
+  - `anx report validate ./dashboard.json`
+  - `cat dashboard.json | anx report validate -`
+
+Flags:
+  <file|->                     Report JSON path, or - to read stdin.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report validate ... ; anx --json report validate ... ; anx report validate ... --json (last two: JSON envelope on stdout)
+  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `report publish`
+
+Validate, publish, read back, and revalidate a visual report document.
+
+```text
+Local Help: report publish
+
+- Kind: `local helper`
+- Side effect class: `remote_coordination_write`
+- Summary: Validate, publish, read back, and revalidate a visual report document.
+- Composition: Creates a topic-linked document or revises a matching visual report. An explicit --doc resolves exactly; replacing another document requires --replace.
+- JSON body: `doc_ref`, optional `web_url`, `title`, `action`, `panel_count`, `validated`
+- Examples:
+  - `anx report publish ./dashboard.json --topic topic:launch`
+  - `anx report publish ./dashboard.json --topic topic:launch --title "Fleet Dashboard" --doc doc:fleet-dashboard --replace`
+
+Flags:
+  <file>                       Visual report JSON path.
+  --topic <ref>                Existing topic to anchor the report.
+  --title <text>               Document title; defaults to the report title.
+  --doc <ref>                  Existing document in the topic to revise.
+  --replace                    Allow replacing an explicitly selected non-report document.
+
+
+Global flags:
+  Global flags can appear before or after the command path.
+  Examples: anx report publish ... ; anx --json report publish ... ; anx report publish ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
