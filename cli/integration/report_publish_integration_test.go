@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -70,6 +71,94 @@ func TestReportPublishUsesTopicRefsAndIsRetrySafe(t *testing.T) {
 	afterRepublish := reportHistory(t, h, "report-publisher", firstDocID)
 	if len(afterRepublish) != len(beforeRepublish)+1 {
 		t.Fatalf("republish history changed from %d to %d revisions, want one new revision", len(beforeRepublish), len(afterRepublish))
+	}
+}
+
+func TestReportPublishArchivedDocumentNeedsExplicitUnarchive(t *testing.T) {
+	h := newLiveCoreHarness(t)
+	h.enrollHost(t, "report-publisher")
+
+	topicID := createReportTopic(t, h, "archived-"+runToken())
+	reportPath := filepath.Join(t.TempDir(), "report.json")
+	writeReportFixture(t, reportPath, reportFixture(t, "Archived lifecycle report", "The report is still visible after archive recovery."))
+
+	first := runReportPublish(t, h, "report-publisher", reportPath, topicID)
+	if got := reportAction(t, first); got != "created" {
+		t.Fatalf("first publish action = %q, want created: %s", got, first.Stdout)
+	}
+	firstDocs := reportTopicDocuments(t, h, "report-publisher", topicID)
+	if len(firstDocs) != 1 {
+		t.Fatalf("first publish linked %d documents, want 1", len(firstDocs))
+	}
+	archivedDoc, _ := firstDocs[0].(map[string]any)
+	archivedRef := mustStringPath(t, first.Payload, "result.doc_ref")
+	if ref, ok := archivedDoc["ref"].(string); ok && ref != "" {
+		archivedRef = ref
+	}
+	h.runCLIExpectOK(t, "report-publisher", nil, "docs", "archive", archivedRef)
+
+	explicit := h.runCLI(t, "report-publisher", nil, "report", "publish", reportPath, "--topic", "topic:"+topicID, "--doc", archivedRef)
+	if explicit.ExitCode == 0 || explicit.Payload["ok"] != false {
+		t.Fatalf("explicit archived publish unexpectedly succeeded: %s", explicit.Stdout)
+	}
+	if got := mustStringPath(t, explicit.Payload, "error.code"); got != "archived_report_document" {
+		t.Fatalf("explicit archived publish code = %q, want archived_report_document: %s", got, explicit.Stdout)
+	}
+	command := "anx docs unarchive " + archivedRef
+	if !strings.Contains(mustStringPath(t, explicit.Payload, "error.message"), command) {
+		t.Fatalf("archived-doc error omitted repair command %q: %s", command, explicit.Stdout)
+	}
+	actions, _ := getPathValue(explicit.Payload, "error.next_actions")
+	actionRows, _ := actions.([]any)
+	if len(actionRows) != 1 {
+		t.Fatalf("expected one unarchive repair action: %s", explicit.Stdout)
+	}
+	actionRow, _ := actionRows[0].(map[string]any)
+	argv, _ := actionRow["argv"].([]any)
+	argvText := make([]string, 0, len(argv))
+	for _, arg := range argv {
+		argText, _ := arg.(string)
+		argvText = append(argvText, argText)
+	}
+	if got := strings.Join(argvText, " "); got != command {
+		t.Fatalf("repair next action = %q, want %q: %s", got, command, explicit.Stdout)
+	}
+
+	second := runReportPublish(t, h, "report-publisher", reportPath, topicID)
+	if got := reportAction(t, second); got != "created" {
+		t.Fatalf("automatic publish after archive action = %q, want created: %s", got, second.Stdout)
+	}
+	secondRef := mustStringPath(t, second.Payload, "result.doc_ref")
+	if secondRef == archivedRef {
+		t.Fatalf("automatic publish reused archived document %q", archivedRef)
+	}
+
+	activeDocs := reportTopicDocuments(t, h, "report-publisher", topicID)
+	activeCount := 0
+	archivedFound := false
+	for _, raw := range activeDocs {
+		doc, _ := raw.(map[string]any)
+		ref, _ := doc["ref"].(string)
+		state, _ := doc["state"].(string)
+		if ref == archivedRef && state == "archived" {
+			archivedFound = true
+		}
+		if state == "active" {
+			activeCount++
+			if ref != secondRef {
+				t.Fatalf("unexpected active report ref %q, want %q", ref, secondRef)
+			}
+		}
+	}
+	if !archivedFound || activeCount != 1 {
+		t.Fatalf("expected archived original plus one active replacement, found %d topic docs: %#v", activeCount, activeDocs)
+	}
+	retry := runReportPublish(t, h, "report-publisher", reportPath, topicID)
+	if got := reportAction(t, retry); got != "revised" {
+		t.Fatalf("retry after replacement action = %q, want revised: %s", got, retry.Stdout)
+	}
+	if got := mustStringPath(t, retry.Payload, "result.doc_ref"); got != secondRef {
+		t.Fatalf("retry selected %q, want active replacement %q", got, secondRef)
 	}
 }
 

@@ -152,7 +152,7 @@ func TestReportPublishRevisesMatchingTitleWithinTopic(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard","state":"active"}]}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
 			creates++
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_2"}}`))
@@ -201,7 +201,7 @@ func TestReportPublishExplicitDocDoesNotFuzzyMatch(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard"}]}`))
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:fleet-dashboard","handle":"fleet-dashboard","title":"Fleet Dashboard","state":"active"}]}`))
 		case r.Method == http.MethodPost:
 			writes++
 			t.Errorf("unexpected write while resolving an inexact --doc")
@@ -226,6 +226,72 @@ func TestReportPublishExplicitDocDoesNotFuzzyMatch(t *testing.T) {
 	}
 }
 
+func TestReportPublishExplicitArchivedDocRequiresUnarchive(t *testing.T) {
+	t.Parallel()
+	var reads, writes int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:release-report","handle":"release-report","title":"Release report","state":"archived"}]}`))
+		case r.Method == http.MethodGet || r.Method == http.MethodPost:
+			if r.Method == http.MethodGet {
+				reads++
+			} else {
+				writes++
+			}
+			t.Errorf("archived explicit target must be rejected before read/write: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected report publish request %s %s", r.Method, r.URL.String())
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	file := filepath.Join(home, "report.json")
+	if err := os.WriteFile(file, []byte(minimalVisualReport), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	response := assertEnvelopeError(t, runCLIForTest(t, home, nil, nil, []string{
+		"--json", "--base-url", server.URL, "report", "publish", file, "--topic", "topic:topic_1", "--doc", "document:release-report",
+	}))
+	err := asMap(response["error"])
+	command := "anx docs unarchive document:release-report"
+	details := asMap(err["details"])
+	if anyStringValue(err["code"]) != "archived_report_document" ||
+		!strings.Contains(anyStringValue(err["message"]), command) ||
+		!strings.Contains(anyStringValue(details["hint"]), command) || reads != 0 || writes != 0 {
+		t.Fatalf("expected explicit archived-doc repair without read/write: response=%#v reads=%d writes=%d", response, reads, writes)
+	}
+	actions := asSlice(err["next_actions"])
+	if len(actions) != 1 {
+		t.Fatalf("expected exact unarchive repair action %q, got %#v", command, actions)
+	}
+	argv := asSlice(asMap(actions[0])["argv"])
+	argvText := make([]string, 0, len(argv))
+	for _, arg := range argv {
+		argvText = append(argvText, anyStringValue(arg))
+	}
+	if strings.Join(argvText, " ") != command {
+		t.Fatalf("expected exact unarchive repair action %q, got %#v", command, actions)
+	}
+}
+
+func TestFindAutomaticReportDocumentsOnlyReturnsActiveMatches(t *testing.T) {
+	docs := []any{
+		map[string]any{"id": "archived", "title": "Release report", "state": "archived"},
+		map[string]any{"id": "trashed", "title": "Release report", "state": "trashed"},
+		map[string]any{"id": "active", "title": "Release report", "state": "active"},
+		map[string]any{"id": "unknown", "title": "Release report"},
+	}
+	matches := findAutomaticReportDocuments(docs, "Release report")
+	if len(matches) != 1 || reportDocumentID(matches[0]) != "active" {
+		t.Fatalf("expected only active matching reports, got %#v", matches)
+	}
+}
+
 func TestReportPublishRequiresReplaceForExplicitProseDoc(t *testing.T) {
 	t.Parallel()
 	var writes int
@@ -233,7 +299,7 @@ func TestReportPublishRequiresReplaceForExplicitProseDoc(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes"}]}`))
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes","state":"active"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_1":
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_1","ref":"document:notes","handle":"notes","title":"Notes","head_revision_id":"rev_1"},"revision":{"revision_id":"rev_1","content_type":"text","content":"plain prose"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs/doc_1/revisions":
@@ -276,7 +342,7 @@ func TestReportPublishAutomaticMatchSkipsProseDocument(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report"}]}`))
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report","state":"active"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/docs/doc_notes":
 			_, _ = w.Write([]byte(`{"document":{"id":"doc_notes","ref":"document:release-report","handle":"release-report","title":"Release report"},"revision":{"revision_id":"rev_notes","content_type":"text","content":"plain prose"}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/docs":
@@ -360,7 +426,7 @@ func TestReportPublishRejectsAmbiguousAutomaticReportMatch(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/topics/topic_1/workspace":
-			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","title":"Release report"},{"id":"doc_2","title":"Release report"}]}`))
+			_, _ = w.Write([]byte(`{"topic":{"id":"topic_1","thread_id":"thread_1"},"documents":[{"id":"doc_1","title":"Release report","state":"active"},{"id":"doc_2","title":"Release report","state":"active"}]}`))
 		case r.Method == http.MethodGet && (r.URL.Path == "/docs/doc_1" || r.URL.Path == "/docs/doc_2"):
 			docID := strings.TrimPrefix(r.URL.Path, "/docs/")
 			_, _ = w.Write([]byte(`{"document":{"id":` + mustJSONString(t, docID) + `,"title":"Release report"},"revision":{"revision_id":"rev_1","content_type":"text","content":` + mustJSONString(t, minimalVisualReport) + `}}`))
