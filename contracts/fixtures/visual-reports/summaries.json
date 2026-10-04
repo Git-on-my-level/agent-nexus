@@ -52,5 +52,25 @@
     "needs": [
       "Needs operator: approve"
     ]
+  },
+  {
+    "name": "fenced example inside padded list item",
+    "markdown": "-   Container\n    ```markdown\n    - [x] Example\n    Needs David: example\n    ```\n- [ ] Real task",
+    "summary": "-   Container",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
+  },
+  {
+    "name": "fenced example inside nested list container",
+    "markdown": "- Parent\n  -   Nested\n      ```markdown\n      - [x] Example\n      Needs David: example\n      ```\n  - [ ] Real nested task",
+    "summary": "- Parent",
+    "progress": {
+      "done": 0,
+      "total": 1
+    },
+    "needs": []
   }
 ]

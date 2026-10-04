@@ -192,6 +192,15 @@ describe("markdown", () => {
     expect(renderMarkdown("~~strikethrough~~")).toContain("<del");
   });
 
+  it("keeps fenced list examples out of task controls", () => {
+    const html = renderMarkdown(
+      "-   Container\n    ```markdown\n    - [x] Example\n    ```\n- [ ] Real task",
+    );
+
+    expect(html.match(/type="checkbox"/g) ?? []).toHaveLength(1);
+    expect(html).toContain("- [x] Example");
+  });
+
   it("normalizes outbound links with safe rel and target attributes", () => {
     const result = renderMarkdown("[link](https://example.com)");
 

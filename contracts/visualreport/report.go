@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
+
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -29,6 +31,8 @@ var (
 	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
 	timestampPattern  = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$`)
 	reportKindPattern = regexp.MustCompile(`"kind"` + jsSpacePattern + `*:` + jsSpacePattern + `*"anx\.visual-report[^"\r\n]*"`)
+	ipv4NumberPattern = regexp.MustCompile(`(?i)^(?:[0-9]+|0x[0-9a-f]*)$`)
+	whatwgIDNA        = idna.New(idna.MapForLookup(), idna.Transitional(false), idna.StrictDomainName(false), idna.CheckHyphens(false), idna.BidiRule())
 )
 
 type Result struct {
@@ -265,10 +269,18 @@ func safeURL(value any) bool {
 		return false
 	}
 
+	// Browsers run DNS hosts through UTS #46 before accepting them. Go's
+	// net/url parser does not, and otherwise accepts disallowed IDNA code
+	// points such as joiners without valid context.
+	asciiHost, err := whatwgIDNA.ToASCII(host)
+	if err != nil {
+		return false
+	}
+
 	// Numeric host suffixes are IPv4 in WHATWG URL. Require canonical dotted
 	// decimal so Go and the browser cannot interpret the same hostname differently.
-	tail := host[strings.LastIndex(host, ".")+1:]
-	if _, err := strconv.ParseUint(tail, 0, 64); err == nil || regexp.MustCompile(`^[0-9]+$`).MatchString(tail) {
+	tail := asciiHost[strings.LastIndex(asciiHost, ".")+1:]
+	if ipv4NumberPattern.MatchString(tail) {
 		addr, err := netip.ParseAddr(host)
 		if err != nil || !addr.Is4() {
 			return false

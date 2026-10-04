@@ -158,6 +158,43 @@ type Progress struct {
 
 var checkbox = regexp.MustCompile(`^\s*-\s+\[([ xX])\](?:\s|$)`)
 var needsLine = regexp.MustCompile(`(?i)^Needs\s+[^:]+:`)
+var listItemMarker = regexp.MustCompile(`^(?:[*+-]|[0-9]{1,9}[.)])[ \t]+`)
+
+type listContainer struct {
+	contentIndent int
+}
+
+// listItemIndent returns the absolute column where a list item's content
+// begins. CommonMark permits up to three spaces before a marker and uses one
+// to four columns of padding after it.
+func listItemIndent(raw string, parentIndent int) (int, bool) {
+	indent := len(raw) - len(strings.TrimLeft(raw, " "))
+	if indent < parentIndent || indent-parentIndent > 3 {
+		return 0, false
+	}
+	match := listItemMarker.FindStringIndex(raw[indent:])
+	if match == nil {
+		return 0, false
+	}
+	markerEnd := indent + match[1]
+	markerStart := indent
+	for markerStart < len(raw) && raw[markerStart] == ' ' {
+		markerStart++
+	}
+	markerWidth := 1
+	if raw[markerStart] >= '0' && raw[markerStart] <= '9' {
+		markerWidth = 0
+		for i := markerStart; i < markerEnd && raw[i] >= '0' && raw[i] <= '9'; i++ {
+			markerWidth++
+		}
+		markerWidth++ // ordered-list delimiter
+	}
+	padding := markerEnd - indent - markerWidth
+	if padding > 4 {
+		padding = 1
+	}
+	return indent + markerWidth + padding, true
+}
 
 // Ignore fenced examples; they are not commitments. Preserve plain text for the UI.
 func Summary(markdown string) (string, Progress, []string) {
@@ -166,13 +203,33 @@ func Summary(markdown string) (string, Progress, []string) {
 	needs := []string{}
 	var fence byte
 	fenceLength := 0
+	containers := []listContainer{}
 	for _, raw := range strings.Split(markdown, "\n") {
 		line := strings.TrimSpace(raw)
-		// CommonMark: at most three spaces of indentation; closing fences use
-		// the same character, at least the opening length, and no info string.
 		indent := len(raw) - len(strings.TrimLeft(raw, " "))
+		if fence == 0 {
+			for len(containers) > 0 && indent < containers[len(containers)-1].contentIndent {
+				containers = containers[:len(containers)-1]
+			}
+			parentIndent := 0
+			if len(containers) > 0 {
+				parentIndent = containers[len(containers)-1].contentIndent
+			}
+			if contentIndent, ok := listItemIndent(raw, parentIndent); ok {
+				containers = append(containers, listContainer{contentIndent: contentIndent})
+			}
+		}
+		// CommonMark fence indentation is measured after removing list item
+		// container indentation; a four-space raw indent may therefore be zero.
+		effectiveIndent := indent
 		markerLine := strings.TrimLeft(raw, " ")
-		if indent <= 3 && len(markerLine) >= 3 && (markerLine[0] == '`' || markerLine[0] == '~') {
+		if len(containers) > 0 && indent >= containers[len(containers)-1].contentIndent {
+			effectiveIndent -= containers[len(containers)-1].contentIndent
+			markerLine = strings.TrimLeft(raw[containers[len(containers)-1].contentIndent:], " ")
+		}
+		// CommonMark permits at most three spaces of indentation; closers use
+		// the opening character and length and cannot have an info string.
+		if effectiveIndent <= 3 && len(markerLine) >= 3 && (markerLine[0] == '`' || markerLine[0] == '~') {
 			marker := markerLine[0]
 			length := 0
 			for length < len(markerLine) && markerLine[length] == marker {
