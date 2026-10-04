@@ -200,7 +200,8 @@ func BenchmarkQueryCapacity(b *testing.B) {
 	// 100,000/day budget, 1,000 series and up to 100 label sets; time only queries.
 	for _, tc := range []struct{ points, labels int }{{MaxPointsPerDay, 1}, {91 * MaxPointsPerDay, 1}, {91 * MaxPointsPerDay, MaxLabelSets}} {
 		b.Run(fmt.Sprintf("points-%d-labels-%d", tc.points, tc.labels), func(b *testing.B) {
-			s, human, _, _ := fixtureAt(b, b.TempDir())
+			root := b.TempDir()
+			s, human, _, _ := fixtureAt(b, root)
 			ctx := context.Background()
 			now := time.Now().UTC().Truncate(time.Second)
 			for first := 2; first < MaxSeries; first += 100 {
@@ -212,6 +213,9 @@ func BenchmarkQueryCapacity(b *testing.B) {
 					b.Fatal(err)
 				}
 			}
+			// Bulk-load a v50 workspace, then run the real upgrade/backfill. Setup
+			// and index creation stay outside timing; no synthetic summary cache.
+			removeRecentRollupMigration(b, s)
 			tx, err := s.DB.BeginTx(ctx, nil)
 			if err != nil {
 				b.Fatal(err)
@@ -235,11 +239,12 @@ func BenchmarkQueryCapacity(b *testing.B) {
 			if err := tx.Commit(); err != nil {
 				b.Fatal(err)
 			}
+			s = reopenStore(b, s, root)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				r, err := s.Query(ctx, "builds", nil, Retention, DefaultStep(Retention), "sum", now)
-				if err != nil || len(r.Streams) != tc.labels {
+				if err != nil || len(r.Streams) != tc.labels || r.Resolution != "daily" {
 					b.Fatalf("capacity query: %d streams %v", len(r.Streams), err)
 				}
 				var count int

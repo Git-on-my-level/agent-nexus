@@ -3,6 +3,7 @@ package server
 import (
 	"agent-nexus-core/internal/series"
 	reports "agent-nexus-visualreport"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -36,6 +37,9 @@ func (reader *reportReader) materializeSeries(panel reports.Panel) map[string]an
 	}
 	r, err := reader.opts.seriesStore.Query(reader.r.Context(), source.Series, source.Labels, window, step, agg, reader.now)
 	if err != nil {
+		if errors.Is(err, series.ErrCapacity) {
+			out["message"] = "Select fewer labels or a shorter range to show this panel."
+		}
 		return out
 	}
 	labels := source.Labels

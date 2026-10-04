@@ -43,8 +43,11 @@ Recognized retry storms are rejected before body reads or database access.
 
 Raw observations older than 90 days compact into daily count/sum/min/max/last
 rollups in the daily maintenance job. Queries use read-only snapshots and never
-compact data or acquire the workspace write lock. Uncompacted raw data remains
-queryable alongside daily rollups. Daily rollups are retained forever
+compact data or acquire the workspace write lock. Recent-day summaries are
+updated in the point transaction, including exact retries, corrections and
+out-of-order points. Day-sized steps scan matching summaries and archived rollups
+once, aggregating weighted buckets without raw scans or per-bucket payload joins.
+Admission and indexed freshness reads are batched across labels. Daily rollups are retained forever
 with no expiry, per David's 2026-10-05 decision. Rollup updates and raw deletion
 commit as one atomic checkpoint; interrupted or replayed compaction cannot count
 a sample twice. Historical queries use whole UTC
@@ -59,20 +62,41 @@ historical ranges first round up to whole days, then choose a whole-day step.
 Raw corrections and out-of-order samples must stay within the 90-day backfill
 window; rolled-up observations cannot be rewritten.
 
+Raw aggregation is limited to 4,096 observations across all matching label sets.
+Dense ranges of at least one day automatically use a whole-day step and report
+`resolution: daily`. Daily queries cover complete UTC days, including partial
+current-day data. Shorter dense ranges return `series_capacity`; select fewer
+labels, shorten the range or request a daily step. Daily aggregation is capped at
+20,000 summary rows across both recent and archived summaries; narrower ranges
+or label filters are required beyond that bound. These are query safety limits,
+independent of commercial quotas.
+
 The reproducible capacity benchmark seeds 1,000 declared series and measures
 queries over 100,000 and 9,100,000 raw points, with either one or 100 label sets.
 The larger case covers 91 UTC ingestion-day budgets in a rolling 90-day window.
-Fixture setup is excluded from the query timing:
+The fixture upgrades a v50 workspace through the production migration, including
+backfill and indexes. Fixture setup is excluded from the query timing:
 
 ```sh
 cd core
 GOMAXPROCS=2 go test ./internal/series -run '^$' -bench '^BenchmarkQueryCapacity$' -benchtime=1x
 ```
 
+Fast benchmarks also cover the full query safety limits: 20,000 daily summary
+rows across recent and archived history (both sum and last), and 4,096 raw points
+across 100 label sets. These use the production workspace and driver:
+
+```sh
+GOMAXPROCS=2 go test ./internal/series -run '^$' -bench 'Benchmark(Daily|Raw)QuerySafetyCapacity' -benchtime=5x
+```
+
 `TestQueryReadSnapshotDoesNotTakeWriteLock` pauses an actual query while an
 immediate human mutation commits, then checks the reader's snapshot. Separate
 tests verify indexed range scans and matching aggregates before and after
 maintenance, including a UTC day split between raw points and a daily rollup.
+`TestDailyAndAdaptiveQueriesAvoidRawAggregation` guards the daily path in CI:
+day-sized queries touch no raw rows, and automatic downsampling reads at most
+the bounded preflight before switching to summaries.
 
 ## Panel binding
 

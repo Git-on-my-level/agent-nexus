@@ -4,6 +4,7 @@ package series
 
 import (
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/storage"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -32,6 +33,8 @@ const MaxRequestsPerMinute = 2400
 const MaxAdapterRequestsPerMinute = 1200
 const MaxConcurrentRequests = 4
 const MaxAdapterConcurrentRequests = 2
+const MaxRawQueryPoints = 4096
+const MaxDailyQueryRows = 20000
 
 type Definition struct {
 	Name string `json:"name"`
@@ -181,7 +184,7 @@ func (s Store) Remove(ctx context.Context, name string, deleteData bool, actor a
 		event = "adapter_deleted"
 		// Workspace SQLite deliberately does not enable foreign-key cascades.
 		// Delete dependents explicitly before allowing a series name to be reused.
-		for _, table := range []string{"series_points", "series_daily", "series_labels"} {
+		for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels"} {
 			if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE series IN (SELECT name FROM series_definitions WHERE adapter=?)`, name); err != nil {
 				return err
 			}
@@ -264,6 +267,16 @@ func compact(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	}
 	_, err = tx.ExecContext(ctx, `DELETE FROM series_points WHERE ts<?`, cutoff)
 	if err != nil {
+		return err
+	}
+	// Remove retired summaries and rebuild only the partially retained UTC day.
+	// This keeps live + archived disjoint, even at a non-midnight cutoff.
+	cutoffDay := cutoff / Day * Day
+	if _, err = tx.ExecContext(ctx, `DELETE FROM series_live_daily WHERE day<=?`, cutoffDay); err != nil {
+		return err
+	}
+	boundary := strings.Replace(storage.SeriesLiveDailyBackfillSQL, "FROM series_points GROUP BY", "FROM series_points WHERE ts>=? AND ts<? GROUP BY", 1)
+	if _, err = tx.ExecContext(ctx, boundary, cutoff, cutoffDay+Day); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `DELETE FROM series_ingestion_days WHERE day<?`, now.UnixNano()/Day-2)

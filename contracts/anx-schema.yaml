@@ -1090,7 +1090,7 @@ live_series:
   aggregations: [last, avg, sum, min, max, count]
   raw_retention_days: 90
   daily_rollup_lifetime: forever
-  caps: {series: 1000, label_keys: 8, label_value_utf8_bytes: 128, label_sets_per_series: 100, points_per_day: 100000, push_requests_per_minute: 2400, adapter_push_requests_per_minute: 1200, concurrent_pushes: 4, adapter_concurrent_pushes: 2, query_buckets: 200, query_range_days: 3650, query_step_min_seconds: 1, query_step_max_days: 3650, out_of_order_days: 90, future_skew_seconds: 300}
+  caps: {series: 1000, label_keys: 8, label_value_utf8_bytes: 128, label_sets_per_series: 100, points_per_day: 100000, push_requests_per_minute: 2400, adapter_push_requests_per_minute: 1200, concurrent_pushes: 4, adapter_concurrent_pushes: 2, query_buckets: 200, query_range_days: 3650, query_step_min_seconds: 1, query_step_max_days: 3650, raw_query_points: 4096, daily_query_rows: 20000, out_of_order_days: 90, future_skew_seconds: 300}
   rules:
     - Safety bounds apply to self-hosted and all other deployments independently of commercial quotas.
     - Humans and explicitly granted auth-admins declare, list, revoke and delete workspace-local adapters.
@@ -1106,7 +1106,9 @@ live_series:
     - Raw points older than 90 days are compacted into daily count, sum, min, max and last rollups; state rollups preserve last state.
     - Rollup update and raw deletion form one atomic idempotent checkpoint; daily rollups have no expiry.
     - Query range and step are bounded, labels are exact-match filters, and query results expose provenance and per-label freshness.
-    - Queries use read-only snapshots and indexed grouped scans; rollup compaction runs separately in maintenance, never during a query or push.
+    - Queries use read-only snapshots; steps of at least one day read daily summaries maintained atomically with raw writes, never raw observations. Retention compaction runs separately in maintenance.
+    - Raw aggregation examines at most 4096 observations per query. Dense ranges of at least one day downsample to whole UTC days; shorter dense ranges require a narrower range or label filter.
+    - Daily aggregation examines at most 20000 summary rows per query; larger requests require a narrower range or label filter. These safety bounds are independent of commercial quotas.
     - Default query steps round up to fit the bucket limit; historical ranges round up to whole days before choosing a whole-day step.
     - Series are stale when now minus the latest observation exceeds twice the adapter expected_interval.
     - Chart, metric, metric-strip and table panels bind source series and may carry a timestamped static fallback.

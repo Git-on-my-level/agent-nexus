@@ -949,6 +949,13 @@ var migrations = []migration{
 	{Version: 50, Statements: []string{
 		`CREATE TABLE series_request_budgets (scope TEXT NOT NULL, minute INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(scope,minute));`,
 	}},
+	{Version: 51, Statements: []string{
+		seriesLiveDailyTableSQL,
+		SeriesLiveDailyBackfillSQL,
+		`CREATE INDEX series_points_daily_value ON series_points(series,labels,(ts/86400000000000)*86400000000000,value);`,
+		seriesLiveDailyInsertSQL,
+		seriesLiveDailyUpdateSQL,
+	}},
 }
 
 func applyMigration49SeriesTokenScope(ctx context.Context, tx *sql.Tx) error {

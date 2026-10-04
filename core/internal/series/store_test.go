@@ -57,7 +57,7 @@ func fixtureAt(t testing.TB, root string) (Store, auth.Principal, auth.Principal
 	return s, human, owner, writer
 }
 
-func reopenStore(t *testing.T, s Store, root string) Store {
+func reopenStore(t testing.TB, s Store, root string) Store {
 	t.Helper()
 	if err := s.DB.Close(); err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestGrantScopeRevocationAndAudit(t *testing.T) {
 	if err := s.Remove(ctx, "collector", true, human); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"series_points", "series_daily", "series_labels"} {
+	for _, table := range []string{"series_points", "series_live_daily", "series_daily", "series_labels"} {
 		var n int
 		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil || n != 0 {
 			t.Fatalf("delete left %s: %d %v", table, n, err)

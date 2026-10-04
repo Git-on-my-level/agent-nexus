@@ -72,6 +72,29 @@ LEFT JOIN series_points p ON p.series=? AND p.labels=? AND p.ts=g.last_ts
 LEFT JOIN series_daily d ON d.series=? AND d.labels=? AND d.day=(g.last_ts/?)*?
 ORDER BY g.ts LIMIT 200`
 
+// Count only budget+1 indexed rows; admission must not scan the oversized input
+// that it is intended to avoid. The budget is shared by all matching label sets.
+func overQueryBudget(ctx context.Context, tx *sql.Tx, name string, labels []string, since, end int64, daily bool) (bool, error) {
+	encoded, err := json.Marshal(labels)
+	if err != nil {
+		return false, err
+	}
+	limit := MaxRawQueryPoints
+	query := `SELECT COUNT(*) FROM (SELECT 1 FROM series_points WHERE series=? AND labels IN (SELECT value FROM json_each(?)) AND ts>=? AND ts<=? LIMIT ?)`
+	args := []any{name, string(encoded), since, end}
+	if daily {
+		limit = MaxDailyQueryRows
+		query = `SELECT COUNT(*) FROM (
+ SELECT 1 FROM series_live_daily WHERE series=? AND labels IN (SELECT value FROM json_each(?)) AND day>=? AND day<=?
+ UNION ALL SELECT 1 FROM series_daily WHERE series=? AND labels IN (SELECT value FROM json_each(?)) AND day>=? AND day<=? LIMIT ?)`
+		args = append(args, name, string(encoded), since, end)
+	}
+	args = append(args, limit+1)
+	var n int
+	err = tx.QueryRowContext(ctx, query, args...).Scan(&n)
+	return n > limit, err
+}
+
 func (s Store) List(ctx context.Context) ([]Result, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT s.name,s.kind,s.unit,d.name,h.slug,h.id,d.agent_id,d.expected_interval,d.last_push,d.revoked_at FROM series_definitions s JOIN series_adapters d ON d.name=s.adapter JOIN hosts h ON h.id=d.host_id ORDER BY s.name LIMIT 1000`)
 	if err != nil {
@@ -121,14 +144,10 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	}
 	since := now.Add(-window).UnixNano()
 	end := now.UnixNano()
-	stepNS := step.Nanoseconds()
 	if window > Retention {
 		if step < 24*time.Hour || step%(24*time.Hour) != 0 {
 			return out, fmt.Errorf("%w: ranges older than 90d require whole-day steps", ErrInvalid)
 		}
-		out.Resolution = "daily+raw"
-		since = since / Day * Day
-		end = (end/Day+1)*Day - 1
 	}
 	filter := ""
 	args := []any{name}
@@ -141,7 +160,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 		filter += ` AND json_extract(labels,?)=?`
 		args = append(args, `$."`+key+`"`, labels[key])
 	}
-	// Select at most 100 label sets, then aggregate within each bucket in SQL.
+	// Select at most 100 label sets before bounded raw or daily aggregation.
 	groups, err := tx.QueryContext(ctx, `SELECT labels FROM series_labels WHERE series=?`+filter+` ORDER BY labels LIMIT 100`, args...)
 	if err != nil {
 		return out, err
@@ -160,15 +179,58 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	if err != nil {
 		return out, err
 	}
+	daily := step >= 24*time.Hour
+	if !daily {
+		over, err := overQueryBudget(ctx, tx, name, labelSets, since, end, false)
+		if err != nil {
+			return out, err
+		}
+		if over {
+			if window < 24*time.Hour {
+				return out, fmt.Errorf("%w: raw query limit is 4096 observations; narrow the range or labels, or use a daily step", ErrCapacity)
+			}
+			daily = true
+			step = ((step + 24*time.Hour - 1) / (24 * time.Hour)) * 24 * time.Hour
+		}
+	}
+	if daily {
+		out.Resolution = "daily"
+		since = since / Day * Day
+		end = (end/Day+1)*Day - 1
+		over, err := overQueryBudget(ctx, tx, name, labelSets, since, end, true)
+		if err != nil {
+			return out, err
+		}
+		if over {
+			return out, fmt.Errorf("%w: daily query limit is 20000 summary rows; narrow the range or labels", ErrCapacity)
+		}
+	}
+	stepNS := step.Nanoseconds()
+	var summaries map[string][]Observation
+	if daily {
+		summaries, err = dailyPoints(ctx, tx, name, labelSets, since, end, stepNS, int((window+step-1)/step)-1, out.Kind, agg)
+		if err != nil {
+			return out, err
+		}
+	}
+	latest, err := lastPoints(ctx, tx, name, labelSets)
+	if err != nil {
+		return out, err
+	}
+	var raw *sql.Stmt
+	if !daily {
+		raw, err = tx.PrepareContext(ctx, bucketQuery)
+		if err != nil {
+			return out, err
+		}
+		defer raw.Close()
+	}
 	for _, l := range labelSets {
 		stream := Stream{Labels: map[string]string{}, Points: []Observation{}, Stale: true}
 		if err = json.Unmarshal([]byte(l), &stream.Labels); err != nil {
 			return out, err
 		}
-		var last sql.NullInt64
-		if err = tx.QueryRowContext(ctx, `SELECT MAX(ts) FROM (SELECT MAX(ts) ts FROM series_points WHERE series=? AND labels=? UNION ALL SELECT last_ts ts FROM (SELECT last_ts FROM series_daily WHERE series=? AND labels=? ORDER BY day DESC LIMIT 1))`, name, l, name, l).Scan(&last); err != nil {
-			return out, err
-		}
+		last := latest[l]
 		if last.Valid {
 			stream.LastPoint = time.Unix(0, last.Int64).UTC().Format(time.RFC3339Nano)
 			staleAt := time.Unix(0, last.Int64).Add(time.Duration(out.ExpectedInterval) * 2 * time.Second)
@@ -185,7 +247,14 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 		}
 		// A daily rollup is an explicit one-day observation. Historical query edges
 		// cover complete UTC days and expose resolution so clients do not imply raw precision.
-		rows, err := tx.QueryContext(ctx, bucketQuery, window > Retention, Day, Day, name, l, since, end, name, l, since, end, since, stepNS, int((window+step-1)/step)-1, name, l, name, l, Day, Day)
+		if daily {
+			if points := summaries[l]; points != nil {
+				stream.Points = points
+			}
+			out.Streams = append(out.Streams, stream)
+			continue
+		}
+		rows, err := raw.QueryContext(ctx, false, Day, Day, name, l, since, end, name, l, since, end, since, stepNS, int((window+step-1)/step)-1, name, l, name, l, Day, Day)
 		if err != nil {
 			return out, err
 		}
