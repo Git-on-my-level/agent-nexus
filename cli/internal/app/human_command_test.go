@@ -154,6 +154,76 @@ func TestHumanCommandFromFileCreatesEvent(t *testing.T) {
 	}
 }
 
+func TestHumanCommandFromFileRejectsLongProposalBeforeNetworkWrite(t *testing.T) {
+	t.Parallel()
+
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	path := filepath.Join(t.TempDir(), "long-proposal.md")
+	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: \"" + strings.Repeat("x", 241) + "\"\n---\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := assertEnvelopeError(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--as", "agent-a", "ask", "--from-file", path,
+	}))
+	errObj, _ := payload["error"].(map[string]any)
+	message := anyStringValue(errObj["message"])
+	if !strings.Contains(message, "entry 1") || !strings.Contains(message, "241 Unicode characters") || !strings.Contains(message, "240") {
+		t.Fatalf("expected indexed proposal length error, got %q", message)
+	}
+	if requests != 0 {
+		t.Fatalf("invalid frontmatter made %d network requests", requests)
+	}
+}
+
+func TestHumanCommandFromFileDryRunValidatesWithoutNetworkRequest(t *testing.T) {
+	t.Parallel()
+
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	writeDerivedAgentFixture(t, home, "agent-a", `{"agent":"agent-a","username":"agent.alpha","actor_id":"actor_asker","access_token":"token-a","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+	path := filepath.Join(t.TempDir(), "request.md")
+	content := "---\ntitle: Confirm launch\nsubject_ref: card:launch\nthread_id: thr1\nrecommended_response: Ship it\nproposals:\n  - Wait\n---\nDetails\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := assertEnvelopeOK(t, runCLIForTest(t, home, map[string]string{}, nil, []string{
+		"--json", "--base-url", server.URL, "--as", "agent-a", "ask", "--from-file", path, "--dry-run",
+	}))
+	result, _ := payload["result"].(map[string]any)
+	if result["dry_run"] != true {
+		t.Fatalf("expected dry-run result, got %#v", result)
+	}
+	if requests != 0 {
+		t.Fatalf("dry-run made %d network requests", requests)
+	}
+}
+
+func TestAskHelpDocumentsResponseLimitsAndDryRun(t *testing.T) {
+	text := humanUsageText()
+	for _, expected := range []string{"1–6 distinct responses", "240 Unicode characters", "--dry-run", "without sending it"} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("ask help missing %q: %s", expected, text)
+		}
+	}
+}
+
 func TestHumanCommandFromFileRequiresFrontmatterFields(t *testing.T) {
 	t.Parallel()
 

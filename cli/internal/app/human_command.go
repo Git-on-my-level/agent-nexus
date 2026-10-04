@@ -12,8 +12,10 @@ import (
 const humanAttentionRequestedEventType = "human_attention_requested"
 
 func humanUsageText() string {
-	return strings.TrimSpace(`Ask an operator: anx ask|review|escalate "<title>" --recommend "<answer>" [--alt "<other>"] [--subject-ref <ref>].
+	return strings.TrimSpace(`Ask an operator: anx ask|review|escalate "<title>" --recommend "<answer>" [--alt "<other>"] [--subject-ref <ref>] [--dry-run].
 Subject defaults to the current card. Use --from-file <path.md> for a Markdown request with frontmatter.
+The recommended response and each alternative are trimmed, empty entries are dropped, and exact duplicates are removed. Supply 1–6 distinct responses; each may contain at most 240 Unicode characters.
+Use --dry-run to validate and preview the request without sending it.
 The result contains an ask id and a runnable anx await next action.`)
 }
 
@@ -78,6 +80,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		fromFileFlag            trackedString
 		recommendedResponseFlag trackedString
 		proposalFlags           trackedStrings
+		dryRunFlag              trackedBool
 	)
 	fs.Var(&threadIDFlag, "thread-id", "Backing thread id")
 	fs.Var(&subjectRefFlag, "subject-ref", "Subject typed ref")
@@ -95,6 +98,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&fromFileFlag, "from-file", "Markdown file with YAML frontmatter for the human attention request")
 	fs.Var(&recommendedResponseFlag, "recommend", "First (recommended) response proposal for operators")
 	fs.Var(&proposalFlags, "alt", "Additional response proposal (repeatable)")
+	fs.Var(&dryRunFlag, "dry-run", "Validate and render the request without sending it")
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -280,6 +284,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	if err := validateEventsCreateInput(bodyMap, kind); err != nil {
 		return nil, err
+	}
+	if dryRunFlag.set && dryRunFlag.value {
+		return dryRunResult(kind, "events.create", nil, nil, bodyMap), nil
 	}
 	result, err := a.invokeTypedJSON(ctx, cfg, kind, "events.create", nil, nil, bodyMap)
 	if err != nil {

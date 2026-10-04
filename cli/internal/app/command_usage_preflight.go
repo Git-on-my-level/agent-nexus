@@ -406,6 +406,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"requester-actor-id": {kind: preflightFlagString}, "requester-agent-id": {kind: preflightFlagString},
 			"requester-label": {kind: preflightFlagString}, "coverage-hint": {kind: preflightFlagString},
 			"severity": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
+			"dry-run": {kind: preflightFlagBool},
 		}})
 	}
 	// Lowest precedence: lifecycle verbs derived from the resource registry.

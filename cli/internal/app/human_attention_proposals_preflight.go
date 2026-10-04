@@ -43,7 +43,7 @@ func normalizeHumanAttentionResponseProposalsList(raw any) ([]string, error) {
 			continue
 		}
 		if utf8.RuneCountInString(s) > humanAttentionResponseProposalMaxRunes {
-			return nil, fmt.Errorf("entry exceeds %d characters", humanAttentionResponseProposalMaxRunes)
+			return nil, fmt.Errorf("entry %d has %d Unicode characters; maximum is %d", idx+1, utf8.RuneCountInString(s), humanAttentionResponseProposalMaxRunes)
 		}
 		seen[s] = struct{}{}
 		out = append(out, s)
