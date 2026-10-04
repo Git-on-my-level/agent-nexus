@@ -1293,7 +1293,7 @@ Core commands:
 Tip: derived commands are operational helpers, not the source of truth.`) + "\n", true
 	}
 	if topic == "overview" {
-		return "Executive Overview\n\nUsage: anx overview [--json]\n\nReads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.\n", true
+		return "Executive Overview\n\nUsage: anx overview [--json]\n       anx overview changes [--json]\n\nChanges reads the digest without advancing the viewer visit baseline.\n\nReads Needs you, the selected dashboard, active initiatives and work details from the same core projection as the web UI.\n", true
 	}
 	if topic == "workspace" {
 		return strings.TrimSpace(`Workspace orientation surface

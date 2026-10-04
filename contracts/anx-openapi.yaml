@@ -4815,7 +4815,7 @@ paths:
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: overview.get
-      x-anx-agent-notes: Use anx overview --json to inspect the same executive projection as the web UI.
+      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
       x-anx-cli-path: overview
       x-anx-why: Read the same active-work Overview projection used by the web UI.
       x-anx-input-mode: none
@@ -4837,6 +4837,30 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+
+  /overview/changes:
+    get:
+      operationId: getOverviewChanges
+      summary: Read bounded changes since this principal last viewed Overview
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: overview.changes
+      x-anx-agent-notes: Read-only; never advances the baseline. First visit returns null since and empty items.
+      x-anx-cli-path: overview changes
+      x-anx-why: Read a compact digest of completed steps, health transitions, answered asks and new decisions.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: Returns the principal-scoped bounded change digest.
+      x-anx-error-codes: [auth_required, invalid_token]
+      x-anx-concepts: [home, cards]
+      x-anx-stability: beta
+      responses:
+        '200':
+          description: Changes relative to the previous Overview visit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OverviewChanges' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
 
   /workspace/dashboard/reports:
     get:
@@ -9984,12 +10008,26 @@ components:
         status: {type: string}
         phase: {type: string}
         owner: {type: string}
+        owner_display: {type: string}
+        board:
+          type: object
+          required: [ref, title]
+          properties:
+            ref: {type: string}
+            title: {type: string}
+        priority: {type: string}
+        last_moved_at: {type: string, format: date-time}
+        next_step:
+          type: object
+          required: [title]
+          properties:
+            title: {type: string}
         progress:
           type: object
           properties:
             done: {type: integer}
             total: {type: integer}
-        url: {type: string}
+        url: {type: string, description: "Workspace-relative route; hosted clients prefix /o/<org>/w/<ws>. Absolute source URLs are used as-is."}
 
     Card:
       type: object
@@ -11423,6 +11461,7 @@ components:
       additionalProperties: true
       properties:
         generated_at: { type: string, format: date-time }
+        since_you_last_looked: { $ref: '#/components/schemas/OverviewChanges' }
         work:
           type: object
           required: [status, total, human_count, items]
@@ -11431,7 +11470,8 @@ components:
             total: { type: integer }
             human_count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/Work' } }
-          description: Active cards on active boards and active project topics with exact counts and full work records.
+            truncated: { type: boolean }
+          description: Visible active work from at most 2000 candidates; counts describe the bounded visible set.
         initiatives:
           type: object
           required: [status, count, items]
@@ -11439,6 +11479,7 @@ components:
             status: { type: string }
             count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/OverviewInitiative' } }
+            truncated: { type: boolean }
         needs_you:
           type: object
           required: [status, count, rows, href]
@@ -11472,8 +11513,11 @@ components:
 
     OverviewInitiative:
       type: object
-      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at]
+      required: [ref, title, summary, progress, priority, needs, phase, board_ref, updated_at, plan_state, health, geometry]
       properties:
+        plan_state: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/PlanState' }]}
+        health: { $ref: '#/components/schemas/InitiativeHealth' }
+        geometry: {type: object, nullable: true, allOf: [{ $ref: '#/components/schemas/InitiativeGeometry' }]}
         ref: { type: string }
         title: { type: string }
         summary: { type: string, description: First prose line outside fenced examples, using the shared report summary parser. }
@@ -11488,6 +11532,49 @@ components:
           properties:
             done: { type: integer }
             total: { type: integer }
+    InitiativeHealth:
+      type: object
+      required: [status, reason]
+      properties:
+        status: {type: string, enum: [on_track, stalled, blocked]}
+        reason: {type: string}
+    InitiativeGeometry:
+      type: object
+      required: [shape, nodes, total_nodes, collapsed_nodes]
+      properties:
+        shape: {type: string, enum: [chain, dag, lanes]}
+        total_nodes: {type: integer}
+        collapsed_nodes: {type: integer}
+        nodes:
+          type: array
+          maxItems: 24
+          items:
+            type: object
+            required: [id, status, layer, after]
+            properties:
+              id: {type: string}
+              status: {type: string, enum: [done, active, blocked, not_started]}
+              layer: {type: integer}
+              after: {type: array, items: {type: string}}
+    OverviewChanges:
+      type: object
+      required: [since, generated_at, items, truncated]
+      properties:
+        since: {type: string, format: date-time, nullable: true}
+        generated_at: {type: string, format: date-time}
+        truncated: {type: boolean}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [kind, ref, title]
+            properties:
+              kind: {type: string, enum: [step_completed, initiative_stalled, initiative_blocked, ask_answered, decision_created]}
+              ref: {type: string}
+              title: {type: string}
+              step_id: {type: string}
+              ts: {type: string, format: date-time}
     OverviewAttentionRow:
       type: object
       required: [id, title, source, href]

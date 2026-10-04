@@ -236,8 +236,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `overview`
 
-- Commands: `1`
+- Commands: `2`
 - Command IDs:
+  - `overview.changes` (`overview changes`)
   - `overview.get` (`overview`)
 
 ## `plan`

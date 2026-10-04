@@ -151,11 +151,12 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, name, err := a.runSecretCommand(ctx, args[1:], cfg)
 		return name, result, err
 	case "overview":
-		if len(args) != 1 {
-			return "overview", nil, errnorm.Usage("invalid_args", "anx overview takes no arguments")
+		name, id, err := parseOverviewCommand(args)
+		if err != nil {
+			return name, nil, err
 		}
-		result, err := a.invokeTypedJSON(ctx, cfg, "overview", "overview.get", nil, nil, nil)
-		return "overview", result, err
+		result, err := a.invokeTypedJSON(ctx, cfg, name, id, nil, nil, nil)
+		return name, result, err
 	case "workspace":
 		result, name, err := a.runWorkspaceCommand(ctx, args[1:], cfg)
 		return name, result, err
@@ -459,4 +460,14 @@ func shouldAutoAttachAuth(requestPath string) bool {
 		return false
 	}
 	return true
+}
+
+func parseOverviewCommand(args []string) (string, string, error) {
+	if len(args) == 1 {
+		return "overview", "overview.get", nil
+	}
+	if len(args) == 2 && args[1] == "changes" {
+		return "overview changes", "overview.changes", nil
+	}
+	return "overview", "", errnorm.Usage("invalid_args", "usage: anx overview [changes]")
 }

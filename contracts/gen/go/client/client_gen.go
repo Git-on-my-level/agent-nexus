@@ -1662,6 +1662,17 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"ops.blob.usage.rebuild", "ops.health"},
 	},
 	{
+		CommandID: "overview.changes",
+		CLIPath:   "overview changes",
+		Group:     "overview",
+		Method:    "GET",
+		Path:      "/overview/changes",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"home", "cards"},
+		Adjacent:  []string{"overview.get"},
+	},
+	{
 		CommandID: "overview.get",
 		CLIPath:   "overview",
 		Group:     "overview",
@@ -1670,6 +1681,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"home", "documents", "cards"},
+		Adjacent:  []string{"overview.changes"},
 	},
 	{
 		CommandID:  "plan.set",
@@ -3180,6 +3192,10 @@ func (c *Client) OpsHealth(ctx context.Context, opts RequestOptions) (*http.Resp
 
 func (c *Client) OpsUsageSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "ops.usage.summary", nil, opts)
+}
+
+func (c *Client) OverviewChanges(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "overview.changes", nil, opts)
 }
 
 func (c *Client) OverviewGet(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

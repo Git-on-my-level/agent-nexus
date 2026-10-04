@@ -1,0 +1,66 @@
+{
+  "plan_state": {
+    "steps": [
+      {
+        "id": "design",
+        "status": "done",
+        "resolvable": false
+      },
+      {
+        "id": "build",
+        "status": "not_started",
+        "resolvable": false
+      }
+    ],
+    "progress": {
+      "done": 1,
+      "total": 2
+    },
+    "critical_path": [
+      "build"
+    ],
+    "next_steps": [
+      "build"
+    ],
+    "shape": "chain",
+    "health": "on_track",
+    "last_movement_at": "2026-10-04T12:00:00Z"
+  },
+  "progress": {
+    "done": 1,
+    "total": 2
+  },
+  "health": {
+    "status": "on_track",
+    "reason": "Work is progressing."
+  },
+  "geometry": {
+    "shape": "chain",
+    "nodes": [
+      {
+        "id": "design",
+        "status": "done",
+        "layer": 0,
+        "after": []
+      },
+      {
+        "id": "build",
+        "status": "not_started",
+        "layer": 1,
+        "after": [
+          "design"
+        ]
+      }
+    ],
+    "total_nodes": 2,
+    "collapsed_nodes": 0
+  },
+  "ref": "card:initiative",
+  "title": "Initiative",
+  "summary": "",
+  "priority": "none",
+  "needs": [],
+  "phase": "backlog",
+  "board_ref": "board:portfolio",
+  "updated_at": "2026-10-04T12:00:00Z"
+}

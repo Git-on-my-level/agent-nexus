@@ -113,10 +113,31 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			}
 		}
 	}
-	payload, err := store.Overview(r.Context(), humanIDs, agentNames)
+	now := time.Now().UTC()
+	var payload map[string]any
+	var err error
+	visitStore, scoped := opts.primitiveStore.(overviewVisitStore)
+	if scoped {
+		payload, err = visitStore.OverviewVisible(r.Context(), humanIDs, agentNames, planVisibility(r, opts), now, planStalledAfter())
+	} else {
+		payload, err = store.Overview(r.Context(), humanIDs, agentNames)
+	}
 	if err != nil {
 		writeError(w, 500, "internal_error", "overview could not be loaded")
 		return
+	}
+	visitWork, _ := payload["_visit_work"].([]map[string]any)
+	delete(payload, "_visit_work")
+	if scoped {
+		digest, e := visitStore.OverviewChanges(r.Context(), overviewPrincipal(r), visitWork, payload["work"].(map[string]any)["truncated"] == true, planVisibility(r, opts), now)
+		if e == nil {
+			e = appendOverviewDecisions(r, opts, &digest, now)
+		}
+		if e != nil {
+			writeError(w, 500, "internal_error", "overview changes could not be loaded")
+			return
+		}
+		payload["since_you_last_looked"] = digest
 	}
 	work := payload["work"].(map[string]any)
 	items := work["items"].([]map[string]any)
@@ -127,12 +148,12 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	work["items"] = public
 	needs := payload["needs_you"].(map[string]any)
 	rows := needs["rows"].([]map[string]any)
-	inbox, err := loadOpenInbox(r, opts, time.Now().UTC())
+	inbox, err := loadOpenInboxItems(r, opts)
 	if err != nil {
 		needs["status"] = "unavailable"
 		needs["message"] = "Needs you could not be loaded."
 	} else {
-		for _, item := range inbox["items"].([]map[string]any) {
+		for _, item := range inbox {
 			rows = append([]map[string]any{{"id": "inbox:" + anyString(item["id"]), "title": firstNonEmptyString(anyString(item["title"]), "Request"), "source": anyString(item["requester_label"]), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape("inbox:"+anyString(item["id"]))}}, rows...)
 		}
 	}
@@ -186,5 +207,12 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			payload["agents"] = map[string]any{"status": "ok", "items": roster}
 		}
 	}
+	if scoped && r.URL.Path == "/overview" {
+		if err = visitStore.RecordOverviewVisit(r.Context(), overviewPrincipal(r), visitWork, now); err != nil {
+			writeError(w, 500, "internal_error", "overview visit could not be recorded")
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, 200, payload)
 }

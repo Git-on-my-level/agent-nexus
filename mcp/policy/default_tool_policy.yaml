@@ -39,6 +39,7 @@ hosted_default_commands:
   - "events.list"
   - "home.unread"
   - "overview.get"
+  - "overview.changes"
   - "workspace.dashboard.list"
   - "inbox.get"
   - "inbox.list"
@@ -660,6 +661,9 @@ commands:
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
 
+  "overview.changes":
+    classification: exposed_read
+    reason: "Principal-scoped bounded visit digest; reads without advancing the baseline."
   "overview.get":
     classification: exposed_read
     reason: "Executive Overview projection shared with the web UI and CLI."

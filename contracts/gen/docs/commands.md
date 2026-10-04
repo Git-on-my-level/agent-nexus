@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `206`
+- Commands: `207`
 
 ## `actors.create`
 
@@ -1660,6 +1660,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns usage envelope JSON.
 
+## `overview.changes`
+
+- CLI path: `overview changes`
+- HTTP: `GET /overview/changes`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read a compact digest of completed steps, health transitions, answered asks and new decisions.
+- Concepts: `home`, `cards`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns the principal-scoped bounded change digest.
+- Agent notes: Read-only; never advances the baseline. First visit returns null since and empty items.
+
 ## `overview.get`
 
 - CLI path: `overview`
@@ -1671,7 +1684,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `documents`, `cards`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns the workspace Overview projection.
-- Agent notes: Use anx overview --json to inspect the same executive projection as the web UI.
+- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
 
 ## `plan.set`
 

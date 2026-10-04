@@ -1,12 +1,14 @@
 package primitives
 
 import (
+	"agent-nexus-core/internal/plans"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -195,11 +197,48 @@ func (s *Store) SetWorkspaceDashboard(ctx context.Context, actor, id string) err
 }
 
 func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNames map[string]bool) (map[string]any, error) {
-	result := map[string]any{"generated_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	work, err := s.ListAllWork(ctx)
+	result, err := s.OverviewVisible(ctx, humanIDs, agentNames, nil, time.Now().UTC(), 0)
+	if result != nil {
+		delete(result, "_visit_work")
+	}
+	return result, err
+}
+
+// overviewWork shares the bounded report projection and its joined privacy context.
+func (s *Store) overviewWork(ctx context.Context, visible func(string, string) bool, now time.Time, threshold time.Duration, includeClosed bool) ([]map[string]any, bool, error) {
+	page, err := s.ListReportWork(ctx, ReportWorkFilter{Limit: 2000, IncludeClosed: includeClosed})
+	if err != nil {
+		return nil, false, err
+	}
+	work := []map[string]any{}
+	for _, w := range page.Work {
+		b := page.Boards[anyStringValue(w["board_ref"])]
+		thread := firstNonEmptyString(anyStringValue(w["thread_id"]), anyStringValue(w["parent_thread_id"]))
+		if visible == nil || (visible(b.ThreadID, b.PrivateOwner) && visible(thread, page.PrivateOwners[anyStringValue(w["id"])])) {
+			work = append(work, w)
+		}
+	}
+	sort.Slice(work, func(i, j int) bool {
+		a, b := anyStringValue(work[i]["updated_at"]), anyStringValue(work[j]["updated_at"])
+		if a == b {
+			return anyStringValue(work[i]["id"]) > anyStringValue(work[j]["id"])
+		}
+		return a > b
+	})
+	if err = s.EnrichCardPlans(ctx, work, visible, now, threshold); err != nil {
+		return nil, false, err
+	}
+	return work, page.Truncated, nil
+}
+
+func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time, threshold time.Duration) (map[string]any, error) {
+	result := map[string]any{"generated_at": now.Format(time.RFC3339Nano)}
+	work, truncated, err := s.overviewWork(ctx, visible, now, threshold, true)
 	if err != nil {
 		return nil, err
 	}
+	result["_visit_work"] = work
+	activeWork := []map[string]any{}
 	initiatives := []map[string]any{}
 	needs := []map[string]any{}
 	humanCount := 0
@@ -210,6 +249,7 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 		if phase == "done" || phase == "cancelled" {
 			continue
 		}
+		activeWork = append(activeWork, w)
 		summary, progress, summaryNeeds := visualreport.Summary(anyStringValue(w["summary"]))
 		needsHuman := []string{}
 		for _, line := range summaryNeeds {
@@ -224,7 +264,13 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 		ask := strings.Join(needsHuman, " · ")
 		ref := anyStringValue(w["ref"])
 		href := "/tasks/" + url.PathEscape(strings.TrimPrefix(ref, "card:"))
-		initiatives = append(initiatives, map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"]})
+		initiative := map[string]any{"ref": ref, "title": w["title"], "summary": summary, "progress": progress, "priority": firstNonEmptyString(anyStringValue(w["priority"]), "none"), "needs": needsHuman, "phase": phase, "board_ref": w["board_ref"], "updated_at": w["updated_at"], "plan_state": nil, "geometry": nil, "health": initiativeHealth(w)}
+		if state, ok := w["plan_state"].(plans.State); ok {
+			initiative["plan_state"] = state
+			initiative["progress"] = state.Progress
+			initiative["geometry"] = plans.TileGeometry(w["plan"].(plans.Plan), state)
+		}
+		initiatives = append(initiatives, initiative)
 		if human {
 			humanCount++
 		}
@@ -232,8 +278,8 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 			needs = append(needs, map[string]any{"id": "task:" + ref, "title": w["title"], "source": firstNonEmptyString(ask, anyStringValue(w["next_action"]), "Waiting on you"), "href": href, "badge": map[string]any{"label": firstNonEmptyString(ask, "Needs you"), "tone": "warn"}})
 		}
 	}
-	result["work"] = map[string]any{"status": "ok", "total": len(work), "human_count": humanCount, "items": work}
-	result["initiatives"] = map[string]any{"status": "ok", "count": len(initiatives), "items": initiatives}
+	result["work"] = map[string]any{"status": "ok", "total": len(activeWork), "human_count": humanCount, "items": activeWork, "truncated": truncated}
+	result["initiatives"] = map[string]any{"status": "ok", "count": len(initiatives), "items": initiatives, "truncated": truncated}
 	result["needs_you"] = map[string]any{"status": "ok", "count": len(needs), "rows": needs, "href": "/inbox?mailbox=needs-you"}
 	dashboard, err := s.dashboard(ctx, false)
 	if err != nil {
@@ -241,4 +287,24 @@ func (s *Store) Overview(ctx context.Context, humanIDs map[string]bool, agentNam
 	}
 	result["dashboard"] = dashboard
 	return result, nil
+}
+
+func initiativeHealth(w map[string]any) map[string]any {
+	status := "on_track"
+	if state, ok := w["plan_state"].(plans.State); ok {
+		status = state.Health
+	} else if w["phase"] == "blocked" {
+		status = "blocked"
+	}
+	reason := "Work is progressing."
+	switch status {
+	case "blocked":
+		reason = "A step on a critical path is blocked."
+		if w["plan_state"] == nil {
+			reason = "Initiative is blocked."
+		}
+	case "stalled":
+		reason = "No movement within the configured stall threshold."
+	}
+	return map[string]any{"status": status, "reason": reason}
 }
